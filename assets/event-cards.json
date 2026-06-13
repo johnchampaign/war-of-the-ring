@@ -1,0 +1,1746 @@
+{
+  "_meta": {
+    "generatedBy": "scripts/build-event-cards.mjs",
+    "authority": "Base 96 event cards isolated from asset-urls.json by excluding expansion tags. id/name/side/deck/initiative/collector are reliable; text/combat/playableVia are EMPTY pending the vision (crop_cards.py) pass.",
+    "counts": [
+      "FreePeoples/Character: 24",
+      "FreePeoples/Strategy: 24",
+      "Shadow/Character: 24",
+      "Shadow/Strategy: 24"
+    ],
+    "total": 96,
+    "notes": [
+      "Duplicate collector number for sh-char-08: \"Candles of Corpses\" and \"The Nazgul Strike!\" — both kept with a/b suffix; verify the true numbering on the cards."
+    ]
+  },
+  "cards": [
+    {
+      "id": "fp-char-01",
+      "name": "Elven Cloaks",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 1,
+      "initiative": 3,
+      "sheetId": "7",
+      "region": [
+        0.444444,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-02",
+      "name": "Elven Rope",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 2,
+      "initiative": 3,
+      "sheetId": "7",
+      "region": [
+        0.555556,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-03",
+      "name": "Phial of Galadriel",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 3,
+      "initiative": 3,
+      "sheetId": "7",
+      "region": [
+        0.888889,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-04",
+      "name": "Smeagol Helps Nice Master",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 4,
+      "initiative": 3,
+      "sheetId": "7",
+      "region": [
+        0.222222,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-05",
+      "name": "Mithril Coat and Sting",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 5,
+      "initiative": 6,
+      "sheetId": "7",
+      "region": [
+        0.666667,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-06",
+      "name": "Axe and Bow",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 6,
+      "initiative": 4,
+      "sheetId": "7",
+      "region": [
+        0.888889,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-07",
+      "name": "Horn of Gondor",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 7,
+      "initiative": 4,
+      "sheetId": "7",
+      "region": [
+        0,
+        0.8,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-08",
+      "name": "Wizard's Staff",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 8,
+      "initiative": 3,
+      "sheetId": "7",
+      "region": [
+        0.555556,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-09",
+      "name": "Athelas",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 9,
+      "initiative": 4,
+      "sheetId": "7",
+      "region": [
+        0.777778,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-10",
+      "name": "There is Another Way",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 10,
+      "initiative": 6,
+      "sheetId": "7",
+      "region": [
+        0,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-11",
+      "name": "I Will Go Alone",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 11,
+      "initiative": null,
+      "sheetId": "7",
+      "region": [
+        0.222222,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-12",
+      "name": "Bilbo's Song",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 12,
+      "initiative": 6,
+      "sheetId": "7",
+      "region": [
+        0,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-13",
+      "name": "Mirror of Galadriel",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 13,
+      "initiative": 6,
+      "sheetId": "7",
+      "region": [
+        0.555556,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-14",
+      "name": "Challenge of the King",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 14,
+      "initiative": 2,
+      "sheetId": "7",
+      "region": [
+        0.111111,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-15",
+      "name": "Gwaihir the Windlord",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 15,
+      "initiative": null,
+      "sheetId": "2064",
+      "region": [
+        0.888889,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-16",
+      "name": "We Prove the Swifter",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 16,
+      "initiative": null,
+      "sheetId": "7",
+      "region": [
+        0.333333,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-17",
+      "name": "There and Back Again",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 17,
+      "initiative": 3,
+      "sheetId": "2006",
+      "region": [
+        0.888889,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-18",
+      "name": "The Eagles are Coming!",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 18,
+      "initiative": 6,
+      "sheetId": "7",
+      "region": [
+        0.333333,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-19",
+      "name": "The Ents Awake: Treebeard",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 19,
+      "initiative": 3,
+      "sheetId": "7",
+      "region": [
+        0.222222,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-20",
+      "name": "The Ents Awake: Huorns",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 20,
+      "initiative": 3,
+      "sheetId": "7",
+      "region": [
+        0.111111,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-21",
+      "name": "The Ents Awake: Entmoot",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 21,
+      "initiative": 5,
+      "sheetId": "7",
+      "region": [
+        0.666667,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-22",
+      "name": "Dead Men of Dunharrow",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 22,
+      "initiative": 2,
+      "sheetId": "7",
+      "region": [
+        0.222222,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-23",
+      "name": "House of the Stewards",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 23,
+      "initiative": 3,
+      "sheetId": "2064",
+      "region": [
+        0,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-char-24",
+      "name": "The Grey Company",
+      "side": "FreePeoples",
+      "deck": "Character",
+      "collector": 24,
+      "initiative": 3,
+      "sheetId": "7",
+      "region": [
+        0.666667,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-01",
+      "name": "The Last Battle",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 1,
+      "initiative": 3,
+      "sheetId": "1957",
+      "region": [
+        0.666667,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-02",
+      "name": "A Power too Great",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 2,
+      "initiative": 5,
+      "sheetId": "1941",
+      "region": [
+        0.888889,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-03",
+      "name": "The Power of Tom Bombadil",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 3,
+      "initiative": 3,
+      "sheetId": "1941",
+      "region": [
+        0.555556,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-04",
+      "name": "Book of Mazarbul",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 4,
+      "initiative": 3,
+      "sheetId": "2055",
+      "region": [
+        0.333333,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-05",
+      "name": "The Spirit of Mordor",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 5,
+      "initiative": 1,
+      "sheetId": "1941",
+      "region": [
+        0.777778,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-06",
+      "name": "Faramir's Rangers",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 6,
+      "initiative": 6,
+      "sheetId": "1941",
+      "region": [
+        0,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-07",
+      "name": "Fear! Fear! Foes!",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 7,
+      "initiative": 6,
+      "sheetId": "1957",
+      "region": [
+        0.111111,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-08",
+      "name": "Wisdom of Elrond",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 8,
+      "initiative": 4,
+      "sheetId": "1941",
+      "region": [
+        0.111111,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-09",
+      "name": "The Red Arrow",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 9,
+      "initiative": 1,
+      "sheetId": "1941",
+      "region": [
+        0.666667,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-10",
+      "name": "Help Unlooked For",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 10,
+      "initiative": 5,
+      "sheetId": "1941",
+      "region": [
+        0.222222,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-11",
+      "name": "Paths of the Woses",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 11,
+      "initiative": 2,
+      "sheetId": "1941",
+      "region": [
+        0.777778,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-12",
+      "name": "Through a Day and a Night",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 12,
+      "initiative": 4,
+      "sheetId": "1941",
+      "region": [
+        0,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-13",
+      "name": "Cirdan's Ships",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 13,
+      "initiative": 2,
+      "sheetId": "1941",
+      "region": [
+        0.555556,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-14",
+      "name": "Guards of the Citadel",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 14,
+      "initiative": 2,
+      "sheetId": "1941",
+      "region": [
+        0.111111,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-15",
+      "name": "Celeborn's Galadhrim",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 15,
+      "initiative": 3,
+      "sheetId": "1957",
+      "region": [
+        0.444444,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-16",
+      "name": "Riders of Theoden",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 16,
+      "initiative": 3,
+      "sheetId": "1941",
+      "region": [
+        0.111111,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-17",
+      "name": "Grimbeorn the Old, Son of Beorn",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 17,
+      "initiative": 1,
+      "sheetId": "1941",
+      "region": [
+        0,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-18",
+      "name": "Imrahil of Dol Amroth",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 18,
+      "initiative": 6,
+      "sheetId": "1941",
+      "region": [
+        0.333333,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-19",
+      "name": "King Brand's Men",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 19,
+      "initiative": 6,
+      "sheetId": "1957",
+      "region": [
+        0.555556,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-20",
+      "name": "Swords in Eriador",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 20,
+      "initiative": 3,
+      "sheetId": "1941",
+      "region": [
+        0.333333,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-21",
+      "name": "Kindred of Glorfindel",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 21,
+      "initiative": 3,
+      "sheetId": "1941",
+      "region": [
+        0.444444,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-22",
+      "name": "Dain Ironfoot's Guard",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 22,
+      "initiative": 3,
+      "sheetId": "1957",
+      "region": [
+        0.666667,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-23",
+      "name": "Eomer, Son of Eomund",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 23,
+      "initiative": 3,
+      "sheetId": "1941",
+      "region": [
+        0.777778,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "fp-str-24",
+      "name": "Thranduil's Archers",
+      "side": "FreePeoples",
+      "deck": "Strategy",
+      "collector": 24,
+      "initiative": 3,
+      "sheetId": "1941",
+      "region": [
+        0.888889,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-01",
+      "name": "Shelob's Lair",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 1,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.555556,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-02",
+      "name": "The Ring is Mine!",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 2,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.222222,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-03",
+      "name": "On, On They Went",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 3,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.111111,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-04",
+      "name": "Give it to Uss!",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 4,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.555556,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-05",
+      "name": "Orc Patrol",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 5,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.222222,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-06",
+      "name": "Isildur's Bane",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 6,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.222222,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-07",
+      "name": "Foul Thing from the Deep",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 7,
+      "initiative": 4,
+      "sheetId": "1942",
+      "region": [
+        0.444444,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-08",
+      "name": "Candles of Corpses",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 8,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-08b",
+      "name": "The Nazgul Strike!",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 8,
+      "initiative": 6,
+      "sheetId": "1942",
+      "region": [
+        0.111111,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-09",
+      "name": "Nazgul Search",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 9,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.777778,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-10",
+      "name": "Cruel Weather",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 10,
+      "initiative": 3,
+      "sheetId": "1958",
+      "region": [
+        0.111111,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-12",
+      "name": "Morgul Wound",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 12,
+      "initiative": 6,
+      "sheetId": "2056",
+      "region": [
+        0.666667,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-13",
+      "name": "Lure of the Ring",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 13,
+      "initiative": 4,
+      "sheetId": "1942",
+      "region": [
+        0.555556,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-14",
+      "name": "The Breaking of the Fellowship",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 14,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.888889,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-15",
+      "name": "Worn with Sorrow and Toil",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 15,
+      "initiative": 1,
+      "sheetId": "1942",
+      "region": [
+        0.555556,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-16",
+      "name": "Flocks of Crebain",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 16,
+      "initiative": 4,
+      "sheetId": "1942",
+      "region": [
+        0.333333,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-17",
+      "name": "Balrog of Moria",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 17,
+      "initiative": 2,
+      "sheetId": "2056",
+      "region": [
+        0.777778,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-18",
+      "name": "The Lidless Eye",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 18,
+      "initiative": 1,
+      "sheetId": "1942",
+      "region": [
+        0.444444,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-19",
+      "name": "Dreadful Spells",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 19,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.222222,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-20",
+      "name": "Grond, Hammer of the Underworld",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 20,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-21",
+      "name": "The Palantir of Orthanc",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 21,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.333333,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-22",
+      "name": "Wormtongue",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 22,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.444444,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-23",
+      "name": "The Ringwraiths Are Abroad",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 23,
+      "initiative": 1,
+      "sheetId": "1942",
+      "region": [
+        0.444444,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-char-24",
+      "name": "The Black Captain Commands",
+      "side": "Shadow",
+      "deck": "Character",
+      "collector": 24,
+      "initiative": 3,
+      "sheetId": "1942",
+      "region": [
+        0.666667,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-01",
+      "name": "Return to Valinor",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 1,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0.111111,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-02",
+      "name": "The Fighting Uruk-hai",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 2,
+      "initiative": 7,
+      "sheetId": "48",
+      "region": [
+        0.888889,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-03",
+      "name": "Denethor's Folly",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 3,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0.444444,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-04",
+      "name": "The Day Without Dawn",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 4,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0.777778,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-05",
+      "name": "Threats and Promises",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 5,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0.222222,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-06",
+      "name": "Stormcrow",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 6,
+      "initiative": 7,
+      "sheetId": "48",
+      "region": [
+        0.555556,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-07",
+      "name": "Shadows Gather",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 7,
+      "initiative": null,
+      "sheetId": "48",
+      "region": [
+        0.333333,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-08",
+      "name": "The Shadow Lengthens",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 8,
+      "initiative": null,
+      "sheetId": "48",
+      "region": [
+        0.111111,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-09",
+      "name": "The Shadow is Moving",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 9,
+      "initiative": null,
+      "sheetId": "48",
+      "region": [
+        0,
+        0.6,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-10",
+      "name": "Corsairs of Umbar",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 10,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0.333333,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-11",
+      "name": "Rage of the Dunlendings",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 11,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0.888889,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-12",
+      "name": "Return of the Witch-king",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 12,
+      "initiative": null,
+      "sheetId": "48",
+      "region": [
+        0,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-13",
+      "name": "Half-orcs and Goblin-men",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 13,
+      "initiative": 7,
+      "sheetId": "48",
+      "region": [
+        0.777778,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-14",
+      "name": "Olog-hai",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 14,
+      "initiative": 7,
+      "sheetId": "48",
+      "region": [
+        0.555556,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-15",
+      "name": "Hill-Trolls",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 15,
+      "initiative": 7,
+      "sheetId": "48",
+      "region": [
+        0.888889,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-16",
+      "name": "A New Power is Rising",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 16,
+      "initiative": 7,
+      "sheetId": "48",
+      "region": [
+        0.111111,
+        0,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-17",
+      "name": "Many Kings to the Service of Mordor",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 17,
+      "initiative": 7,
+      "sheetId": "48",
+      "region": [
+        0.222222,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-18",
+      "name": "The King is Revealed",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 18,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0.111111,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-19",
+      "name": "Shadows on the Misty Mountains",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 19,
+      "initiative": 7,
+      "sheetId": "48",
+      "region": [
+        0.444444,
+        0.4,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-20",
+      "name": "Orcs Multiplying Again",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 20,
+      "initiative": 7,
+      "sheetId": "2069",
+      "region": [
+        0.666667,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-21",
+      "name": "Hordes From the East",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 21,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-22",
+      "name": "Monsters Roused",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 22,
+      "initiative": 3,
+      "sheetId": "2010",
+      "region": [
+        0.333333,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-23",
+      "name": "Musterings of Long-planned War",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 23,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0.444444,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    },
+    {
+      "id": "sh-str-24",
+      "name": "Pits of Mordor",
+      "side": "Shadow",
+      "deck": "Strategy",
+      "collector": 24,
+      "initiative": 3,
+      "sheetId": "48",
+      "region": [
+        0.777778,
+        0.2,
+        0.111111,
+        0.2
+      ],
+      "playableVia": null,
+      "text": "",
+      "combat": ""
+    }
+  ]
+}
