@@ -1,0 +1,142 @@
+{
+  "_meta": {
+    "authority": "Read verbatim from the base-game character cards (TTS sheet crops, collector set /11 companions + /3 minions; LoME/expansion variants excluded). Stats (level/leadership/nation/dieBonus) and ability text are card-accurate.",
+    "source": "crop_cards.py crops of the publisher sheets (asset-urls.json); cross-checked vs rulebook p.24-25, p.34, p.37.",
+    "fields": "level: number | 'inf' | 0. leadership: number. nation: nation id this character can ACTIVATE by ending movement in its City/Stronghold ('any' = any FP nation). dieBonus: +action dice while in play. guide: ability usable only while Guide. abilities: usable while OUT of the Fellowship / in play.",
+    "verify": [
+      "strider.nation: base Strider's lower-right activation icon was ambiguous in the crop; rulebook p.34 lists only Gandalf/Aragorn/Merry/Pippin as 'any', so Strider activates a single nation (provisionally 'north') — confirm via the card icon in the calibration/content-audit tab."
+    ]
+  },
+
+  "companions": {
+    "gandalf-grey": {
+      "name": "Gandalf the Grey", "title": "The Grey Wanderer",
+      "level": 3, "leadership": 1, "nation": "any", "dieBonus": 0,
+      "startsInFellowship": true, "upgradeTo": "gandalf-white",
+      "guide": "After you use an Event Action die result to play an Event card, you may immediately draw an Event card from the deck matching the type of that card.",
+      "abilities": [
+        { "name": "Captain of the West", "text": "If Gandalf is in a battle, add one to the Combat Strength of the Free Peoples Army (you can still roll a maximum of 5 Combat dice)." },
+        { "name": "Emissary from the West", "text": "If Gandalf is not in the Fellowship, he can be replaced by Gandalf the White (instructions on the Gandalf the White card)." }
+      ]
+    },
+    "strider": {
+      "name": "Strider", "title": "Ranger of the North",
+      "level": 3, "leadership": 1, "nation": "north", "dieBonus": 0,
+      "startsInFellowship": true, "upgradeTo": "aragorn",
+      "guide": "You may use any of your Action die results to hide a revealed Fellowship.",
+      "abilities": [
+        { "name": "Captain of the West", "text": "If Strider is in a battle, add one to the Combat Strength of the Free Peoples Army (you can still roll a maximum of 5 Combat dice)." },
+        { "name": "Heir to Isildur", "text": "If Strider is not in the Fellowship, he can be replaced by Aragorn (instructions on the Aragorn card)." }
+      ]
+    },
+    "boromir": {
+      "name": "Boromir", "title": "Son of Denethor",
+      "level": 2, "leadership": 1, "nation": "gondor", "dieBonus": 0,
+      "startsInFellowship": true,
+      "guide": null,
+      "abilities": [
+        { "name": "Captain of the West", "text": "If Boromir is in a battle, add one to the Combat Strength of the Free Peoples Army (you can still roll a maximum of 5 Combat dice)." },
+        { "name": "High Warden of the White Tower", "text": "If Boromir is in an unconquered Gondor City or Stronghold, use any Action die result to advance the Gondor Nation one step on the Political Track." }
+      ]
+    },
+    "legolas": {
+      "name": "Legolas", "title": "Son of Thranduil",
+      "level": 2, "leadership": 1, "nation": "elves", "dieBonus": 0,
+      "startsInFellowship": true,
+      "guide": null,
+      "abilities": [
+        { "name": "Captain of the West", "text": "If Legolas is in a battle, add one to the Combat Strength of the Free Peoples Army (you can still roll a maximum of 5 Combat dice)." },
+        { "name": "Prince of Mirkwood", "text": "If Legolas is in an unconquered Elven Stronghold, you may use any Action die result to advance the Elven Nation one step on the Political Track." }
+      ]
+    },
+    "gimli": {
+      "name": "Gimli", "title": "Son of Gloin",
+      "level": 2, "leadership": 1, "nation": "dwarves", "dieBonus": 0,
+      "startsInFellowship": true,
+      "guide": null,
+      "abilities": [
+        { "name": "Captain of the West", "text": "If Gimli is in a battle, add one to the Combat Strength of the Free Peoples Army (you can still roll a maximum of 5 Combat dice)." },
+        { "name": "Dwarf of Erebor", "text": "If Gimli is in Erebor, and Erebor is unconquered, you may use any Action die result to advance the Dwarven Nation one step on the Political Track." }
+      ]
+    },
+    "meriadoc": {
+      "name": "Meriadoc Brandybuck", "title": "Hobbit Companion",
+      "level": 1, "leadership": 1, "nation": "any", "dieBonus": 0,
+      "startsInFellowship": true,
+      "guide": "During the Hunt, if the Hunt damage is one or more, separate Meriadoc from the Fellowship to reduce the Hunt damage by one.",
+      "abilities": [
+        { "name": "Take Them Alive!", "text": "If Meriadoc is eliminated while in the Fellowship, immediately place him in play again as if he was just separated from the Fellowship. This special ability cannot be used if the Fellowship is on the Mordor Track." }
+      ]
+    },
+    "peregrin": {
+      "name": "Peregrin Took", "title": "Hobbit Companion",
+      "level": 1, "leadership": 1, "nation": "any", "dieBonus": 0,
+      "startsInFellowship": true,
+      "guide": "During the Hunt, if the Hunt damage is one or more, separate Peregrin from the Fellowship to reduce the Hunt damage by one.",
+      "abilities": [
+        { "name": "Take Them Alive!", "text": "If Peregrin is eliminated while in the Fellowship, immediately place him in play again as if he was just separated from the Fellowship. This special ability cannot be used if the Fellowship is on the Mordor Track." }
+      ]
+    }
+  },
+
+  "upgrades": {
+    "aragorn": {
+      "name": "Aragorn", "title": "Heir to Isildur", "replaces": "strider",
+      "level": 3, "leadership": 2, "nation": "any", "dieBonus": 1,
+      "entersVia": "Will of the West",
+      "enterCondition": "If Strider is in Minas Tirith, Dol Amroth, or Pelargir, and that Settlement is unconquered, you may use one Will of the West Action die result to replace Strider with Aragorn.",
+      "abilities": [
+        { "name": "Captain of the West", "text": "If Aragorn is in a battle, add one to the Combat Strength of the Free Peoples Army (you can still roll a maximum of 5 Combat dice)." }
+      ]
+    },
+    "gandalf-white": {
+      "name": "Gandalf the White", "title": "Emissary from the West", "replaces": "gandalf-grey",
+      "level": 3, "leadership": 1, "nation": "any", "dieBonus": 1,
+      "entersVia": "Will of the West",
+      "enterCondition": "If Gandalf the Grey has been eliminated or has left the Fellowship, and any Minion is (or has been) in play, you may use one Will of the West Action die result to play Gandalf the White. If Gandalf the Grey is in play, replace him; otherwise, place Gandalf the White in Fangorn or in an unconquered Elven Stronghold.",
+      "abilities": [
+        { "name": "Shadowfax", "text": "If Gandalf the White is moving alone or with one Hobbit, his Level is considered 4 (for purposes of movement only)." },
+        { "name": "The White Rider", "text": "If Gandalf the White is in a battle, at the start of the battle you can forfeit his Leadership to negate all Nazgul Leadership (including that of the Witch-king) for the duration of that battle." }
+      ]
+    }
+  },
+
+  "gollum": {
+    "name": "Gollum", "title": "Slave of the Ring",
+    "level": 0, "leadership": 0, "nation": null, "dieBonus": 0,
+    "becomesGuide": "As soon as there are no Companions in the Fellowship, immediately add Gollum to the Fellowship. Gollum becomes the Guide of the Fellowship.",
+    "guide": "Standard numbered Hunt tiles with a 'Reveal' icon do not reveal the Fellowship. If the Fellowship is not revealed as an effect of the Hunt, you may choose to reveal it to reduce the Hunt damage by one (to a minimum of zero)."
+  },
+
+  "minions": {
+    "witch-king": {
+      "name": "The Witch-king", "title": "The Black Captain",
+      "level": "inf", "leadership": 2, "nation": "sauron", "dieBonus": 1,
+      "entersVia": "Muster",
+      "enterCondition": "If Sauron and at least one Free Peoples Nation are 'At War,' you may use one Muster Action die result to place the Witch-king in any region with a Shadow Army that includes at least one Sauron unit.",
+      "onEnter": "Activate all Free Peoples Nations.",
+      "abilities": [
+        { "name": "Sorcerer", "text": "If the Witch-king is in a battle and you use a Combat card during the first round of the battle, after doing so you may immediately draw an Event card from the deck matching the type of that card." }
+      ]
+    },
+    "mouth-of-sauron": {
+      "name": "The Mouth of Sauron", "title": "Lieutenant of Barad-dur",
+      "level": 3, "leadership": 2, "nation": "sauron", "dieBonus": 1,
+      "entersVia": "Muster",
+      "enterCondition": "If the Fellowship is on the Mordor Track or all the Free Peoples Nations are 'At War,' you may use one Muster Action die result to place the Mouth of Sauron in any region with an unconquered Sauron Stronghold.",
+      "abilities": [
+        { "name": "Messenger of the Dark Tower", "text": "Once per turn, you may use a Muster Action die result as an Army Action die result instead." }
+      ]
+    },
+    "saruman": {
+      "name": "Saruman", "title": "Corrupted Wizard",
+      "level": 0, "leadership": 1, "nation": "isengard", "dieBonus": 1,
+      "entersVia": "Muster",
+      "enterCondition": "If Isengard is 'At War' and Orthanc is unconquered, you may use one Muster Action die result to place Saruman in Orthanc. Saruman cannot leave Orthanc.",
+      "abilities": [
+        { "name": "The Voice of Saruman", "text": "As long as Orthanc is under your control and not under siege, you may use a Muster Action die result to recruit one Regular Isengard unit in every Isengard Settlement or to replace two Regular Isengard units in Orthanc with two Elite units." },
+        { "name": "Servants of the White Hand", "text": "Each Isengard Elite unit is considered to be a Leader as well as an Army unit for all movement and combat purposes." }
+      ]
+    }
+  }
+}
