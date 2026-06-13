@@ -168,6 +168,9 @@ export interface GameState {
     fellowshipDeclaredOrMovedThisTurn: boolean;
     fpUsedElvenRingThisTurn: boolean;
     shadowUsedElvenRingThisTurn: boolean;
+    /** Set in phase 1 from last turn's Fellowship moves: forces Shadow to place
+     *  ≥1 Hunt die this turn (rules-spec §3 phase 3). */
+    huntMin1ThisTurn: boolean;
   };
   pendingChoice: PendingChoice | null;
   /** Winner once decided. */

@@ -101,6 +101,7 @@ export function createGame({ seed }: SetupOptions): GameState {
       fellowshipDeclaredOrMovedThisTurn: false,
       fpUsedElvenRingThisTurn: false,
       shadowUsedElvenRingThisTurn: false,
+      huntMin1ThisTurn: false,
     },
     pendingChoice: null,
     winner: null,

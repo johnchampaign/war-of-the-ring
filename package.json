@@ -15,7 +15,7 @@
     "copy-assets": "node scripts/copy-dev-assets.mjs",
     "audit:layout": "node scripts/audit-layout.mjs",
     "verify:setup": "vite-node scripts/verify-setup.mjs",
-    "test": "node scripts/audit-layout.mjs && vite-node scripts/verify-setup.mjs"
+    "test": "node scripts/audit-layout.mjs && vite-node scripts/verify-setup.mjs && vite-node scripts/tournament.mjs --games 40"
   },
   "dependencies": {
     "digital-boardgame-framework": "^0.9.1",
