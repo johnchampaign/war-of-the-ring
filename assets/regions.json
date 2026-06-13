@@ -1,0 +1,1517 @@
+{
+  "_meta": {
+    "generatedBy": "scripts/extract-regions.mjs",
+    "source": "TTS Workshop mod \"War of the Ring 2E (Scripted by DevKev)\" (1831369203), LuaScript Regions table",
+    "trust": "NODE LIST ONLY is reliable. The region NAMES/ids are trustworthy; the gameplay fields (nation/settlement/vp/side/control/starting) are an UNRELIABLE mod author table (or snapshot) and MUST be re-derived from the rulebook before any engine use.",
+    "knownIssues": [
+      "Gameplay fields are NOT canonical. Clear example: Erebor is tagged Nation=Sauron / Shadow-controlled, but it is a DWARVEN Stronghold (rulebook p.16). nation/side/control are not to be trusted.",
+      "Mod `Settlement` has errors: e.g. \"Dale\" tagged Fortification, but rulebook p.10 says the ONLY fortifications are Osgiliath and Fords of Isen.",
+      "Mod `starting` units disagree with rulebook p.16-17 (e.g. Rivendell mod=3 Elite vs rulebook=2 Elite). Rulebook is authority for setup.",
+      "AUTHORITATIVE re-derivation plan: nation membership from the colored map (p.9); settlement type from p.10-11; VP from p.11/44; starting units from the Army Setup diagram (p.16-17).",
+      "adjacency is empty: to be transcribed from the rulebook map (authority on borders) in a focused, tool-verified pass.",
+      "Region SET still needs confirming as exactly the base-game board (expansions add cards/figures, not regions, but confirm)."
+    ],
+    "regionCount": 107,
+    "rawEntriesScanned": 185
+  },
+  "regions": {
+    "erebor": {
+      "name": "Erebor",
+      "nation": "Sauron",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 2,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "iron-hills": {
+      "name": "Iron Hills",
+      "nation": "Dwarves",
+      "settlement": "City",
+      "vp": 1,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 2,
+        "elite": 0,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "carrock": {
+      "name": "Carrock",
+      "nation": "The North",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 2,
+        "elite": 0,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "dale": {
+      "name": "Dale",
+      "nation": null,
+      "settlement": "Fortification",
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "ered-luin": {
+      "name": "Ered Luin",
+      "nation": "Dwarves",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 2,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "andrast": {
+      "name": "Andrast",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "anfalas": {
+      "name": "Anfalas",
+      "nation": "Gondor",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "angmar": {
+      "name": "Angmar",
+      "nation": "Sauron",
+      "settlement": "City",
+      "vp": 1,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "arnor": {
+      "name": "Arnor",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "ash-mountains": {
+      "name": "Ash Mountains",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "barad-dur": {
+      "name": "Barad~Dur",
+      "nation": "Sauron",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "bree": {
+      "name": "Bree",
+      "nation": "The North",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 1,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "buchland": {
+      "name": "Buchland",
+      "nation": "The North",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "cardolan": {
+      "name": "Cardolan",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "dagorlad": {
+      "name": "Dagorlad",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 5,
+        "elite": 1,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "dead-marshes": {
+      "name": "Dead Marshes",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "dimrill-dale": {
+      "name": "Dimrill Dale",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "dol-amroth": {
+      "name": "Dol Amroth",
+      "nation": "Gondor",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 3,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "dol-guldur": {
+      "name": "Dol Guldur",
+      "nation": "Sauron",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 5,
+        "elite": 1,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "druadan-forest": {
+      "name": "Druadan Forest",
+      "nation": "Gondor",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "druwaith-iaur": {
+      "name": "Druwaith Iaur",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "eagles-eyrie": {
+      "name": "Eagles' Eyrie",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "east-harondor": {
+      "name": "East Harondor",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "east-rhun": {
+      "name": "East Rhun",
+      "nation": "Southron/Easterling",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "eastemnet": {
+      "name": "Eastemnet",
+      "nation": "Rohan",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "eastern-brown-lands": {
+      "name": "Eastern Brown Lands",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "eastern-emyn-muil": {
+      "name": "Eastern Emyn Muil",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "eastern-mirkwood": {
+      "name": "Eastern Mirkwood",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "edoras": {
+      "name": "Edoras",
+      "nation": "Rohan",
+      "settlement": "City",
+      "vp": 1,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 1,
+        "elite": 1,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "enedwaith": {
+      "name": "Enedwaith",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "erech": {
+      "name": "Erech",
+      "nation": "Gondor",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "ettenmoors": {
+      "name": "Ettenmoors",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "evendim": {
+      "name": "Evendim",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "fangorn": {
+      "name": "Fangorn",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "far-harad": {
+      "name": "Far Harad",
+      "nation": "Southron/Easterling",
+      "settlement": "City",
+      "vp": 1,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "folde": {
+      "name": "Folde",
+      "nation": "Rohan",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "fords-of-bruinen": {
+      "name": "Fords of Bruinen",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "fords-of-isen": {
+      "name": "Fords of Isen",
+      "nation": "Rohan",
+      "settlement": "Fortification",
+      "vp": 0,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 2,
+        "elite": 0,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "forlindon": {
+      "name": "Forlindon",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "gap-of-rohan": {
+      "name": "Gap of Rohan",
+      "nation": "Isengard",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 6,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "gladden-fields": {
+      "name": "Gladden Fields",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "goblins-gate": {
+      "name": "Goblin's Gate",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "gorgoroth": {
+      "name": "Gorgoroth",
+      "nation": "Sauron",
+      "settlement": null,
+      "vp": 0,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 4,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "grey-havens": {
+      "name": "Grey Havens",
+      "nation": "Elves",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 1,
+        "elite": 1,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "harlindon": {
+      "name": "Harlindon",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "helms-deep": {
+      "name": "Helm's Deep",
+      "nation": "Rohan",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 1,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "high-pass": {
+      "name": "High Pass",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "hollin": {
+      "name": "Hollin",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "khand": {
+      "name": "Khand",
+      "nation": "Southron/Easterling",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "lamedon": {
+      "name": "Lamedon",
+      "nation": "Gondor",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "lorien": {
+      "name": "Lorien",
+      "nation": "Elves",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 1,
+        "elite": 2,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "lossarnach": {
+      "name": "Lossarnach",
+      "nation": "Gondor",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "minas-morgul": {
+      "name": "Minas Morgul",
+      "nation": "Sauron",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 5,
+        "elite": 1,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "minas-tirith": {
+      "name": "Minas Tirith",
+      "nation": "Gondor",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 3,
+        "elite": 1,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "minbiriath": {
+      "name": "Minbiriath",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "morannon": {
+      "name": "Morannon",
+      "nation": "Sauron",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 1,
+        "elite": 1,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "moria": {
+      "name": "Moria",
+      "nation": "Sauron",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 2,
+        "elite": 1,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "mount-gram": {
+      "name": "Mount Gram",
+      "nation": "Sauron",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "mount-gundabad": {
+      "name": "Mount Gundabad",
+      "nation": "Sauron",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 4,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "narrows-of-the-forest": {
+      "name": "Narrows of the Forest",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "near-harad": {
+      "name": "Near Harad",
+      "nation": "Southron/Easterling",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "noman-lands": {
+      "name": "Noman-Lands",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "north-anduin-vale": {
+      "name": "North Anduin Vale",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "north-downs": {
+      "name": "North Downs",
+      "nation": "The North",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 1,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "north-dunland": {
+      "name": "North Dunland",
+      "nation": "Isengard",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "north-ered-luin": {
+      "name": "North Ered Luin",
+      "nation": "Dwarves",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "north-ithilien": {
+      "name": "North Ithilien",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 5,
+        "elite": 1,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "north-rhun": {
+      "name": "North Rhun",
+      "nation": "Southron/Easterling",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 4,
+        "elite": 1,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "northern-dorwinion": {
+      "name": "Northern Dorwinion",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "northern-mirkwood": {
+      "name": "Northern Mirkwood",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "northern-rhovanion": {
+      "name": "Northern Rhovanion",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "nurn": {
+      "name": "Nurn",
+      "nation": "Sauron",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "old-ford": {
+      "name": "Old Ford",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "old-forest": {
+      "name": "Old Forest",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "old-forest-road": {
+      "name": "Old Forest Road",
+      "nation": "The North",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "orthanc": {
+      "name": "Orthanc",
+      "nation": "Isengard",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 4,
+        "elite": 1,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "osgiliath": {
+      "name": "Osgiliath",
+      "nation": null,
+      "settlement": "Fortification",
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 2,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "parth-celebrant": {
+      "name": "Parth Celebrant",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "pelargir": {
+      "name": "Pelargir",
+      "nation": "Gondor",
+      "settlement": "City",
+      "vp": 1,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 1,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "rhosgobel": {
+      "name": "Rhosgobel",
+      "nation": "The North",
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "rivendell": {
+      "name": "Rivendell",
+      "nation": "Elves",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 0,
+        "elite": 3,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "south-andium-vale": {
+      "name": "South Andium Vale",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "south-downs": {
+      "name": "South Downs",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "south-dunland": {
+      "name": "South Dunland",
+      "nation": "Isengard",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "south-ered-luin": {
+      "name": "South Ered Luin",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "south-ithilien": {
+      "name": "South Ithilien",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 3,
+        "elite": 1,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "south-rhun": {
+      "name": "South Rhun",
+      "nation": "Southron/Easterling",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "southern-dorwinion": {
+      "name": "Southern Dorwinion",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "southern-murkwood": {
+      "name": "Southern Murkwood",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "southern-rhovanion": {
+      "name": "Southern Rhovanion",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "tharbad": {
+      "name": "Tharbad",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "the-shire": {
+      "name": "The Shire",
+      "nation": "The North",
+      "settlement": "City",
+      "vp": 1,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 1,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "tower-hills": {
+      "name": "Tower Hills",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "trollshaws": {
+      "name": "Trollshaws",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "umbar": {
+      "name": "Umbar",
+      "nation": "Southron/Easterling",
+      "settlement": "Stronghold",
+      "vp": 2,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 5,
+        "elite": 1,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "vale-of-the-carnen": {
+      "name": "Vale of the Carnen",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "vale-of-the-celduin": {
+      "name": "Vale of the Celduin",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "weather-hills": {
+      "name": "Weather Hills",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "west-harondor": {
+      "name": "West Harondor",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 3,
+        "elite": 1,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "westemnet": {
+      "name": "Westemnet",
+      "nation": "Rohan",
+      "settlement": "Town",
+      "vp": 0,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 0,
+        "elite": 1,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "western-brown-lands": {
+      "name": "Western Brown Lands",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "western-emyn-muil": {
+      "name": "Western Emyn Muil",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "western-mirkwood": {
+      "name": "Western Mirkwood",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "withered-heath": {
+      "name": "Withered Heath",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": null,
+      "control": null,
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "woodland-realm": {
+      "name": "Woodland Realm",
+      "nation": "Elves",
+      "settlement": null,
+      "vp": 2,
+      "side": "FreePeoples",
+      "control": "FreePeoples",
+      "starting": {
+        "regular": 1,
+        "elite": 2,
+        "leader": 1
+      },
+      "adjacency": []
+    },
+    "shadow-stronghold-1": {
+      "name": "Shadow Stronghold 1",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    },
+    "shadow-stronghold-2": {
+      "name": "Shadow Stronghold 2",
+      "nation": null,
+      "settlement": null,
+      "vp": 0,
+      "side": "Shadow",
+      "control": "Shadow",
+      "starting": {
+        "regular": 0,
+        "elite": 0,
+        "leader": 0
+      },
+      "adjacency": []
+    }
+  }
+}
