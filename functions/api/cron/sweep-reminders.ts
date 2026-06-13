@@ -3,13 +3,16 @@
 // external pinger, or `curl` from CI). It emails the player who's been on the
 // clock too long — the gap request-driven reminders miss when NO client is open.
 //
-// Auth: if CRON_SECRET is set, the caller must pass ?key=<secret> (or an
-// Authorization: Bearer header). Without RESEND_API_KEY the sweep still runs but
+// Auth: if CRON_SECRET is set, the caller must present it — as the `x-cron-key`
+// header (what the reminder-cron Worker sends), a `?key=` param, or an
+// Authorization: Bearer header. Without RESEND_API_KEY the sweep still runs but
 // the notifier is a no-op (handy for a dry run). More specific than the catch-all
 // [[path]].ts, so this file wins the /api/cron/sweep-reminders route.
 import { makeCronServer, type Env } from '../../_lib/server';
 
-const OLDER_THAN_MS = 15 * 60 * 1000; // remind once a seat has been idle 15 min
+// Nudge a seat only once it's been on the clock a good while — async PvP, not a
+// chess clock. The framework marks a turn reminded so it won't re-nag each sweep.
+const OLDER_THAN_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -19,7 +22,9 @@ interface Ctx { request: Request; env: Env; }
 export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
   if (env.CRON_SECRET) {
     const url = new URL(request.url);
-    const provided = url.searchParams.get('key') ?? (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+    const provided = request.headers.get('x-cron-key')
+      ?? url.searchParams.get('key')
+      ?? (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
     if (provided !== env.CRON_SECRET) return json({ error: 'forbidden' }, 403);
   }
   try {

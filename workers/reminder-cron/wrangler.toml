@@ -1,0 +1,15 @@
+# Stale-turn-reminder cron Worker (pattern from Axis & Allies / Star Wars Rebellion).
+# Pings the Pages sweep endpoint; the Pages Function holds the Supabase/Resend creds.
+name = "wotr-reminder-cron"
+main = "index.ts"
+compatibility_date = "2025-09-01"
+
+# Every 30 minutes; the sweep nudges a player once their turn has been idle ≥ 6h,
+# so this cadence adds at most half an hour of observation lag.
+[triggers]
+crons = ["*/30 * * * *"]
+
+[vars]
+SWEEP_URL = "https://war-of-the-ring.pages.dev/api/cron/sweep-reminders"
+# CRON_KEY is set as a secret (must match the Pages CRON_SECRET):
+#   npx wrangler secret put CRON_KEY --config workers/reminder-cron/wrangler.toml
