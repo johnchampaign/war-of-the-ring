@@ -1,0 +1,26 @@
+# Dependencies / build
+node_modules/
+dist/
+.wrangler/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# --- Publisher copyright: NEVER commit ---
+# Rulebooks, FAQ, expansion PnPs (Ares Games)
+*.pdf
+# Tabletop Simulator mod exports / extracted publisher art
+*.json.ttsmod
+vmod_extracted/
+tts_extracted/
+# Runtime asset catalog + any downloaded/extracted art (regenerated locally)
+public/dev-assets/
+public/art-cache/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.local
