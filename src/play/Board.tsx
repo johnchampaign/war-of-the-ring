@@ -13,7 +13,8 @@ const NATION_COLOR: Record<string, string> = {
   dwarves: '#7a5230', elves: '#5fbf6a', gondor: '#2f4f9e', north: '#7fb6e6',
   rohan: '#2e7d4f', isengard: '#c9b037', sauron: '#a83232', southrons: '#d98a3d',
 };
-const regions = (mapData as { regions: Record<string, { nation: Nation | null; settlement: string | null; vp: number }> }).regions;
+const regions = (mapData as { regions: Record<string, { name?: string; nation: Nation | null; settlement: string | null; vp: number }> }).regions;
+const rName = (id: RegionId): string => regions[id]?.name ?? id;
 
 const polyPath = (poly: { x: number; y: number }[]) =>
   poly.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + ' Z';
@@ -63,6 +64,7 @@ export function Board({ view, onPickRegion, highlights }: {
       {boardArt && <image href={boardArt} x={0} y={0} width={W} height={H} preserveAspectRatio="none" />}
       {regionEls.map((e) => e && (
         <g key={e.id} onClick={() => onPickRegion?.(e.id)} style={{ cursor: onPickRegion ? 'pointer' : 'default' }}>
+          <title>{rName(e.id)}{e.def?.settlement ? ` — ${e.def.settlement}` : ''}</title>
           <path d={polyPath(e.poly)} fill={e.fill}
             fillOpacity={boardArt ? (hl.selected === e.id ? 0.3 : hl.destinations?.has(e.id) || hl.sources?.has(e.id) ? 0.18 : 0) : (hl.selected === e.id ? 0.75 : 0.5)}
             stroke={hl.selected === e.id ? '#fff200' : hl.destinations?.has(e.id) ? '#ffd23f' : hl.sources?.has(e.id) ? '#5dff7a' : '#3a3a3a'}
