@@ -26,8 +26,17 @@ function unitTotal(r: GameState['regions'][string]): { fp: number; shadow: numbe
   return { fp, shadow };
 }
 
-export function Board({ view, onPickRegion }: { view: GameState; onPickRegion?: (id: RegionId) => void }) {
+export interface BoardHighlights {
+  sources?: Set<RegionId>;       // regions you can act FROM (green)
+  selected?: RegionId | null;    // the chosen source (bright)
+  destinations?: Set<RegionId>;  // valid targets for the chosen source (yellow)
+}
+
+export function Board({ view, onPickRegion, highlights }: {
+  view: GameState; onPickRegion?: (id: RegionId) => void; highlights?: BoardHighlights;
+}) {
   const W = mapImage.width, H = mapImage.height;
+  const hl = highlights ?? {};
 
   const regionEls = useMemo(() => regionIds.map((id) => {
     const poly = regionPolygon(id);
@@ -48,7 +57,10 @@ export function Board({ view, onPickRegion }: { view: GameState; onPickRegion?: 
       <rect x={0} y={0} width={W} height={H} fill="#9fb8cf" />
       {regionEls.map((e) => e && (
         <g key={e.id} onClick={() => onPickRegion?.(e.id)} style={{ cursor: onPickRegion ? 'pointer' : 'default' }}>
-          <path d={polyPath(e.poly)} fill={e.fill} fillOpacity={0.5} stroke="#3a3a3a" strokeWidth={1.2} />
+          <path d={polyPath(e.poly)} fill={e.fill}
+            fillOpacity={hl.selected === e.id ? 0.75 : 0.5}
+            stroke={hl.selected === e.id ? '#fff200' : hl.destinations?.has(e.id) ? '#ffd23f' : hl.sources?.has(e.id) ? '#5dff7a' : '#3a3a3a'}
+            strokeWidth={hl.selected === e.id || hl.destinations?.has(e.id) ? 4 : hl.sources?.has(e.id) ? 3 : 1.2} />
           {/* settlement marker */}
           {e.def?.settlement && (
             <rect x={e.poly[0]!.x - 5} y={e.poly[0]!.y - 5} width={10} height={10}
