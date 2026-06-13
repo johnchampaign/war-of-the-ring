@@ -20,4 +20,8 @@ export type WotrAction =
   | { kind: 'moveArmy'; from: RegionId; to: RegionId }   // Army die
   | { kind: 'attack'; from: RegionId; to: RegionId }      // Army die
   | { kind: 'skipDie'; face: DieFace } // discard a die, no effect
-  | { kind: 'pass' };            // yield to opponent, no die spent
+  | { kind: 'pass' }             // yield to opponent, no die spent
+  // Interactive combat sub-machine (resolving a PendingChoice).
+  | { kind: 'chooseCasualties'; plan: 'regularsFirst' | 'elitesFirst' }
+  | { kind: 'combatContinue'; cont: boolean }  // attacker: continue or cease
+  | { kind: 'combatRetreat'; retreat: boolean }; // defender: retreat or stand

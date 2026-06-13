@@ -10,6 +10,7 @@
 import type { GameState, Side, DieFace, Deck } from './types';
 import { poolSize, rollPool } from './dice';
 import { checkMilitaryVictory, checkRingVictory } from './victory';
+import { combatStep } from './combat';
 import { log } from './log';
 
 const opponent = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
@@ -59,6 +60,12 @@ const noDiceLeft = (state: GameState): boolean =>
 export function advance(state: GameState): void {
   for (;;) {
     if (state.winner) { state.phase = 'gameOver'; return; }
+    if (state.pendingChoice) return;              // await the choice owner
+    if (state.pendingCombat) {                    // drive the battle sub-machine
+      combatStep(state);
+      if (state.pendingChoice) return;
+      continue;                                   // combat finished -> resume phases
+    }
     switch (state.phase) {
       case 'recover':
         runRecover(state);

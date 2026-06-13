@@ -11,7 +11,7 @@ import { moveFellowship, hideFellowship, declareFellowship, enterMordor, MORDOR_
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
-import { resolveBattle, attackTargets } from '../engine/combat';
+import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, canRetreat } from '../engine/combat';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import type { DieFace, Nation } from '../engine/types';
@@ -24,6 +24,8 @@ const opp = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 
 /** Who must act now, or null at an automatic phase (caller should advance()). */
 function currentActor(state: GameState): Side | null {
+  if (state.winner) return null;
+  if (state.pendingChoice) return state.pendingChoice.owner; // combat / other choices
   switch (state.phase) {
     case 'fellowship': return 'fp';
     case 'huntAllocation': return 'shadow';
@@ -35,6 +37,20 @@ function currentActor(state: GameState): Side | null {
 function legalActions(state: GameState, actor: Side): WotrAction[] {
   if (currentActor(state) !== actor) return [];
   const fs = state.fellowship;
+  // Combat / other pending choices take precedence over the phase.
+  if (state.pendingChoice) {
+    switch (state.pendingChoice.kind) {
+      case 'combatCasualties':
+        return [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
+      case 'combatContinue':
+        return [{ kind: 'combatContinue', cont: true }, { kind: 'combatContinue', cont: false }];
+      case 'combatRetreat':
+        return canRetreat(state)
+          ? [{ kind: 'combatRetreat', retreat: true }, { kind: 'combatRetreat', retreat: false }]
+          : [{ kind: 'combatRetreat', retreat: false }];
+      default: return [];
+    }
+  }
   switch (state.phase) {
     case 'fellowship': {
       const acts: WotrAction[] = [{ kind: 'skipFellowshipPhase' }];
@@ -156,7 +172,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'actionResolution');
       if (armySide(state, action.from) !== actor) throw new Error('No attacking army');
       if (!consumeOneOf(state, actor, ['army', 'armyMuster'])) throw new Error('No Army die');
-      resolveBattle(state, actor, action.from, action.to); passResolutionTurn(state, actor); break;
+      startBattle(state, actor, action.from, action.to); break; // finishCombat resumes the turn
+    // --- interactive combat choices (resolving state.pendingChoice) ---
+    case 'chooseCasualties':
+      requireChoice(state, 'combatCasualties', actor); resolveCasualties(state, action.plan); break;
+    case 'combatContinue':
+      requireChoice(state, 'combatContinue', actor); resolveContinue(state, action.cont); break;
+    case 'combatRetreat':
+      requireChoice(state, 'combatRetreat', actor); resolveRetreat(state, action.retreat); break;
     case 'skipDie':
       requirePhase(state, 'actionResolution');
       if (!consumeDie(state, actor, action.face)) throw new Error(`No ${action.face} die`);
@@ -172,6 +195,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
 
 function requirePhase(state: GameState, phase: GameState['phase']): void {
   if (state.phase !== phase) throw new Error(`Action requires phase ${phase}, in ${state.phase}`);
+}
+
+function requireChoice(state: GameState, kind: string, actor: Side): void {
+  if (!state.pendingChoice || state.pendingChoice.kind !== kind) throw new Error(`No pending ${kind} choice`);
+  if (state.pendingChoice.owner !== actor) throw new Error('Not your choice');
 }
 
 function consumeOneOf(state: GameState, side: Side, faces: DieFace[]): boolean {

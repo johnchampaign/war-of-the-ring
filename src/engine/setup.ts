@@ -104,6 +104,7 @@ export function createGame({ seed }: SetupOptions): GameState {
       huntMin1ThisTurn: false,
     },
     pendingChoice: null,
+    pendingCombat: null,
     winner: null,
     winReason: null,
     log: [{ turn: 1, side: null, kind: 'setup', msg: 'Game created.' }],

@@ -140,6 +140,26 @@ export interface PendingChoice {
   data?: unknown;
 }
 
+// An interactive battle in progress (rules-spec §7). The combat sub-machine
+// pauses with a PendingChoice for casualty selection, the cease decision, and the
+// retreat decision; `step` is where to resume.
+export type CombatStep =
+  | 'beginRound' | 'attackerCasualties' | 'defenderCasualties'
+  | 'continueDecision' | 'retreatDecision';
+
+export interface PendingCombat {
+  attacker: Side;
+  defender: Side;
+  from: RegionId;
+  to: RegionId;
+  round: number;
+  fortified: boolean;
+  step: CombatStep;
+  /** Hits scored this round (attacker's hits land on the defender, vice versa). */
+  atkHits: number;
+  defHits: number;
+}
+
 // --- The whole game state ------------------------------------------------
 export interface GameState {
   schemaVersion: 1;
@@ -173,6 +193,8 @@ export interface GameState {
     huntMin1ThisTurn: boolean;
   };
   pendingChoice: PendingChoice | null;
+  /** An interactive battle in progress, or null. */
+  pendingCombat: PendingCombat | null;
   /** Winner once decided. */
   winner: Side | null;
   winReason: string | null;
