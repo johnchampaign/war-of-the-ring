@@ -14,6 +14,7 @@ import {
 import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, canRetreat } from '../engine/combat';
 import { resolveHuntDamage } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
+import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import type { DieFace, Nation } from '../engine/types';
 import { getHandler, canPlayCard } from '../engine/handlers/registry';
@@ -94,6 +95,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       if (hasMuster) {
         for (const n of advanceableNations(state, actor)) acts.push({ kind: 'diplomaticAction', nation: n });
         acts.push(...recruitTargets(state, actor));
+        if (actor === 'shadow') {
+          for (const m of MINION_IDS) {
+            if (canBringMinion(state, m)) { const r = entryRegion(state, m); if (r) acts.push({ kind: 'bringMinion', minion: m, region: r }); }
+          }
+        }
       }
       if (hasArmy) {
         for (const [from, to] of moveTargets(state, actor)) acts.push({ kind: 'moveArmy', from, to });
@@ -169,6 +175,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
       if (!consumeOneOf(state, actor, ['muster', 'armyMuster'])) throw new Error('No Muster die');
       if (!recruit(state, action.nation, action.region, action.regular, action.elite)) throw new Error('Illegal recruit');
+      passResolutionTurn(state, actor); break;
+    case 'bringMinion':
+      requirePhase(state, 'actionResolution');
+      if (actor !== 'shadow') throw new Error('Only Shadow brings Minions');
+      if (!consumeOneOf(state, actor, ['muster', 'armyMuster'])) throw new Error('No Muster die');
+      if (!bringMinion(state, action.minion, action.region)) throw new Error('Cannot bring that Minion');
       passResolutionTurn(state, actor); break;
     case 'moveArmy':
       requirePhase(state, 'actionResolution');
