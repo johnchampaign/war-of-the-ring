@@ -56,7 +56,13 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
   } catch (e) {
     if (e instanceof ConflictError) return json({ error: 'conflict', reason: (e as Error).message }, 409);
     const msg = (e as Error).message ?? 'error';
-    const status = /not configured|token|seat|unauthor/i.test(msg) ? 400 : 500;
+    // Client-fault errors (bad/expired token, wrong seat, out-of-turn, illegal
+    // action) -> 4xx; everything else -> 500.
+    let status = 500;
+    if (/not configured/i.test(msg)) status = 503;            // server not set up
+    else if (/your turn|not .*turn|out of turn/i.test(msg)) status = 409; // re-fetch & re-decide
+    else if (/token|seat|unauthor|invalid/i.test(msg)) status = 403;
+    else if (/illegal|cannot|no .*die|requires phase|not in hand|not playable/i.test(msg)) status = 422;
     return json({ error: msg }, status);
   }
 };
