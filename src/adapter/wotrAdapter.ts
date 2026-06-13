@@ -12,6 +12,7 @@ import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
 import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, canRetreat } from '../engine/combat';
+import { resolveHuntDamage } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import type { DieFace, Nation } from '../engine/types';
@@ -48,6 +49,12 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return canRetreat(state)
           ? [{ kind: 'combatRetreat', retreat: true }, { kind: 'combatRetreat', retreat: false }]
           : [{ kind: 'combatRetreat', retreat: false }];
+      case 'huntDamage':
+        return [
+          { kind: 'huntDamage', mode: 'corruption' },
+          { kind: 'huntDamage', mode: 'guide' },
+          { kind: 'huntDamage', mode: 'random' },
+        ];
       default: return [];
     }
   }
@@ -180,6 +187,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'combatContinue', actor); resolveContinue(state, action.cont); break;
     case 'combatRetreat':
       requireChoice(state, 'combatRetreat', actor); resolveRetreat(state, action.retreat); break;
+    case 'huntDamage':
+      requireChoice(state, 'huntDamage', actor); resolveHuntDamage(state, action.mode); break;
     case 'skipDie':
       requirePhase(state, 'actionResolution');
       if (!consumeDie(state, actor, action.face)) throw new Error(`No ${action.face} die`);

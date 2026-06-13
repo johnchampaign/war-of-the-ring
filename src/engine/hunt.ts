@@ -1,77 +1,118 @@
-// The Hunt for the Ring (rules-spec §10-11). Simplified for the first playable
-// loop: Hunt damage is applied to Corruption (the casualty-vs-corruption choice
-// and re-roll conditions are auto-resolved here — see deviation note — and become
-// real prompts / full modelling in a later increment).
-import type { GameState, HuntState } from './types';
-import { STANDARD_TILE_LIST, type HuntTileDef } from './data';
+// The Hunt for the Ring (rules-spec §10-11). Hunt damage is now resolved
+// INTERACTIVELY: the Free Peoples player chooses to absorb it as Corruption or to
+// take a Companion casualty (the Guide, or a random Companion) — a real
+// PendingChoice (replaces the D6 auto-resolution). Re-roll conditions (a
+// Shadow-controlled Stronghold / Shadow Army / Nazgûl in the Ring-bearers'
+// region) are modelled. Still simplified: the Guide's special abilities and
+// "play on the table" damage-cancel cards aren't applied before this choice yet.
+import type { GameState } from './types';
+import { STANDARD_TILE_LIST, REGIONS, levelOf, type HuntTileDef } from './data';
 import { withRng } from './rng';
+import { settlementController, armySide } from './armies';
 import { log } from './log';
 
-/** Draw one tile from the active Hunt Pool (standard tiles). Reshuffles standard
- *  tiles when the pool empties (rules-spec §10). Returns the tile def. */
 function drawTile(state: GameState): HuntTileDef {
   const h = state.hunt;
-  if (h.pool.length === 0) {
-    // Return all standard (drawn) tiles to the pool.
-    h.pool = h.drawn.slice();
-    h.drawn = [];
-  }
-  const idx = withRng(state, (rng) => {
-    const pick = rng.int(h.pool.length);
-    return h.pool.splice(pick, 1)[0]!;
-  });
+  if (h.pool.length === 0) { h.pool = h.drawn.slice(); h.drawn = []; }
+  const idx = withRng(state, (rng) => h.pool.splice(rng.int(h.pool.length), 1)[0]!);
   h.drawn.push(idx);
   return STANDARD_TILE_LIST[idx]!;
 }
 
-/** Apply a drawn tile's effect to the Fellowship. `successes` is the Hunt-roll
- *  success count (for Eye tiles). */
-function applyTile(state: GameState, tile: HuntTileDef, successes: number): void {
+/** Extra failed-die re-rolls available to the Shadow this Hunt (rules-spec §10):
+ *  +1 each for a Shadow-controlled Stronghold, a Shadow Army, and a Nazgûl in the
+ *  Ring-bearers' region. */
+function huntRerolls(state: GameState): number {
+  const loc = state.fellowship.location;
+  const r = state.regions[loc]!;
+  let rr = 0;
+  if (REGIONS[loc]!.settlement === 'Stronghold' && settlementController(state, loc) === 'shadow') rr++;
+  if (armySide(state, loc) === 'shadow') rr++;
+  if (r.nazgul > 0 || r.characters.includes('witch-king')) rr++;
+  return rr;
+}
+
+/** Apply a drawn tile. Damage>0 with Companions present sets a PendingChoice;
+ *  otherwise applies directly. Reveal is applied with the resolution. */
+function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): void {
   const fs = state.fellowship;
   let damage = 0;
   if (typeof tile.value === 'number') damage = tile.value;
   else if (tile.value === 'eye') damage = successes;
   else if (tile.value === 'die') damage = withRng(state, (rng) => rng.rollDie(6));
 
-  if (damage < 0) {
-    fs.corruption = Math.max(0, fs.corruption + damage); // negative = heal
+  if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (tile.reveal) fs.hidden = false; return; }
+  if (damage === 0) { if (tile.reveal) fs.hidden = false; return; }
+
+  if (fs.companions.length > 0) {
+    // Interactive: FP chooses casualty vs Corruption.
+    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal: !!tile.reveal } };
+    log(state, null, 'hunt', `Hunt damage ${damage} pending (FP: casualty or Corruption)`);
   } else {
-    // DEVIATION (auto-resolve): apply all Hunt damage to Corruption. The
-    // take-a-Companion-casualty option and re-roll conditions are modelled in a
-    // later increment; here damage -> Corruption keeps the loop terminating.
     fs.corruption = Math.min(12, fs.corruption + damage);
+    if (tile.reveal) fs.hidden = false;
+    log(state, null, 'hunt', `Hunt damage ${damage} -> Corruption ${fs.corruption}`);
   }
-  if (tile.reveal) fs.hidden = false;
-  log(state, null, 'hunt', `Hunt tile ${tile.value}${tile.reveal ? ' (reveal)' : ''} → damage ${damage}, corruption ${fs.corruption}`);
 }
 
-/** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track.
- *  Rolls Hunt Level dice (+1 each per FP die already in the Hunt Box); on ≥1
- *  success draws and applies a tile. */
+/** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. */
 export function resolveHunt(state: GameState): void {
-  const h: HuntState = state.hunt;
+  const h = state.hunt;
   const level = Math.min(5, h.box);
+  const bonus = h.fpDiceInBox;     // dice already in the box (before this move's die)
+  h.fpDiceInBox += 1;              // this move's FP die enters the Hunt Box
   if (level <= 0) return;
-  const bonus = h.fpDiceInBox;
+  const rerolls = huntRerolls(state);
   const successes = withRng(state, (rng) => {
-    let s = 0;
-    for (let i = 0; i < level; i++) {
-      const raw = rng.rollDie(6);
-      if (raw === 1) continue;            // 1 always fails
-      if (raw + bonus >= 6) s++;          // success on 6+ after the +1/FP-die bonus
-    }
-    return s;
+    let hits = 0, failed = 0;
+    for (let i = 0; i < level; i++) { const d = rng.rollDie(6); if (d !== 1 && d + bonus >= 6) hits++; else failed++; }
+    for (let i = 0; i < Math.min(rerolls, failed); i++) { const d = rng.rollDie(6); if (d !== 1 && d + bonus >= 6) hits++; }
+    return hits;
   });
-  if (successes >= 1) applyTile(state, drawTile(state), successes);
+  if (successes >= 1) applyHuntTile(state, drawTile(state), successes);
 }
 
-/** Resolve a step on the Mordor Track: draw a tile directly (no Hunt roll).
- *  Advances one Mordor step unless the tile has a Stop icon (standard tiles
- *  don't), per rules-spec §11. */
+/** Resolve a step on the Mordor Track: advance (unless Stop) then draw + apply a
+ *  tile directly (no Hunt roll). */
 export function resolveMordorStep(state: GameState): void {
   const fs = state.fellowship;
   if (fs.mordor === null) return;
+  state.hunt.fpDiceInBox += 1; // the FP die still enters the Hunt Box
   const tile = drawTile(state);
-  applyTile(state, tile, Math.min(5, state.hunt.box));
   if (!tile.stop) fs.mordor = Math.min(5, fs.mordor + 1);
+  applyHuntTile(state, tile, Math.min(5, state.hunt.box));
+}
+
+/** Resolve the FP's Hunt-damage choice (PendingChoice 'huntDamage'). */
+export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide' | 'random'): void {
+  const fs = state.fellowship;
+  const d = state.pendingChoice!.data as { damage: number; reveal: boolean };
+  state.pendingChoice = null;
+  let remaining = d.damage;
+  if (mode !== 'corruption' && fs.companions.length > 0) {
+    const victim = mode === 'guide'
+      ? (fs.companions.includes(fs.guide) ? fs.guide : fs.companions[0]!)
+      : withRng(state, (rng) => rng.pick(fs.companions));
+    const level = eliminateCompanionInline(state, victim);
+    remaining = Math.max(0, remaining - level); // excess still becomes Corruption
+  }
+  if (remaining > 0) fs.corruption = Math.min(12, fs.corruption + remaining);
+  if (d.reveal) fs.hidden = false;
+  log(state, null, 'hunt', `Hunt resolved (mode ${mode}); corruption ${fs.corruption}, hidden ${fs.hidden}`);
+}
+
+// Local copy to avoid a fellowship<->hunt import cycle at module scope.
+function eliminateCompanionInline(state: GameState, id: string): number {
+  const fs = state.fellowship;
+  const i = fs.companions.indexOf(id);
+  if (i < 0) return 0;
+  fs.companions.splice(i, 1);
+  if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
+  // Reassign Guide: highest-Level remaining Companion, else Gollum.
+  if (!fs.companions.includes(fs.guide)) {
+    fs.guide = fs.companions.length
+      ? fs.companions.reduce((b, c) => (levelOf(c) > levelOf(b) ? c : b), fs.companions[0]!)
+      : 'gollum';
+  }
+  return levelOf(id);
 }

@@ -24,4 +24,6 @@ export type WotrAction =
   // Interactive combat sub-machine (resolving a PendingChoice).
   | { kind: 'chooseCasualties'; plan: 'regularsFirst' | 'elitesFirst' }
   | { kind: 'combatContinue'; cont: boolean }  // attacker: continue or cease
-  | { kind: 'combatRetreat'; retreat: boolean }; // defender: retreat or stand
+  | { kind: 'combatRetreat'; retreat: boolean } // defender: retreat or stand
+  // Hunt damage resolution (FP): absorb as Corruption, or lose a Companion.
+  | { kind: 'huntDamage'; mode: 'corruption' | 'guide' | 'random' };

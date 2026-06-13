@@ -1,10 +1,33 @@
 // Fellowship movement, declaring, hiding, and entering Mordor (rules-spec §9-11).
 // Simplified for the first playable loop; the declare target is chosen by the
 // caller (the AI pushes toward Mordor).
-import type { GameState, RegionId } from './types';
-import { REGIONS } from './data';
+import type { GameState, RegionId, CharacterId } from './types';
+import { REGIONS, levelOf, COMPANIONS } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
 import { log } from './log';
+
+/** Highest-Level Companion in the Fellowship becomes Guide; Gollum if none. */
+export function reassignGuide(state: GameState): void {
+  const fs = state.fellowship;
+  if (fs.companions.length === 0) { fs.guide = 'gollum'; return; }
+  if (fs.companions.includes(fs.guide)) return; // current guide still present
+  let best = fs.companions[0]!;
+  for (const c of fs.companions) if (levelOf(c) > levelOf(best)) best = c;
+  fs.guide = best;
+}
+
+/** Eliminate a Companion from the Fellowship (permanent), reassigning the Guide.
+ *  Returns the eliminated Companion's Level. */
+export function eliminateCompanion(state: GameState, id: CharacterId): number {
+  const fs = state.fellowship;
+  const i = fs.companions.indexOf(id);
+  if (i < 0) return 0;
+  fs.companions.splice(i, 1);
+  if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
+  reassignGuide(state);
+  log(state, null, 'hunt', `${COMPANIONS[id]?.name ?? id} eliminated; guide now ${fs.guide}`);
+  return levelOf(id);
+}
 
 export const MORDOR_ENTRANCES: RegionId[] = ['morannon', 'minas-morgul'];
 
@@ -44,12 +67,11 @@ export function moveFellowship(state: GameState): void {
   const fs = state.fellowship;
   if (!fs.hidden) return;
   if (fs.mordor !== null) {
-    resolveMordorStep(state);
+    resolveMordorStep(state); // adds the FP die to the Hunt Box internally
   } else {
     fs.progress += 1;
-    resolveHunt(state);
+    resolveHunt(state);       // ditto
   }
-  state.hunt.fpDiceInBox += 1;
   state.flags.fellowshipDeclaredOrMovedThisTurn = true;
   log(state, null, 'fellowship', `Fellowship moved (progress ${fs.progress}, mordor ${fs.mordor ?? '-'})`);
 }
