@@ -10,7 +10,7 @@
 //    Companion for Corruption only in the danger zone); heal via events.
 //  - Shadow: allocate the Hunt hard, mobilize nations to War, muster and press
 //    attacks on Free Peoples Cities/Strongholds for Military-victory VP.
-import type { GameState, Side, RegionId } from '../engine/types';
+import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS } from '../engine/data';
@@ -54,6 +54,10 @@ function score(state: GameState, actor: Side, a: WotrAction): number {
   switch (a.kind) {
     case 'moveFellowship': return fs.corruption >= 11 ? 8 : 65;       // push hard, ease off at the brink
     case 'hideFellowship': return 85;                                  // must hide to keep moving
+    case 'separateCompanion': {                                        // rouse a passive nation
+      const passiveFp = (['dwarves', 'gondor', 'north', 'rohan'] as Nation[]).some((n) => state.nations[n].step > 0 && !state.nations[n].active);
+      return passiveFp && fs.corruption < 6 ? 40 : 12;
+    }
     case 'attack': {
       const fromU = unitCount(state, a.from), toU = unitCount(state, a.to);
       if (fromU < toU) return -50;                                     // don't attack uphill

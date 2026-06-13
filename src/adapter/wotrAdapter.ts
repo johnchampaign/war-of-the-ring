@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, MORDOR_ENTRANCES } from '../engine/fellowship';
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
@@ -82,6 +82,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       if (actor === 'fp' && faces.has('character')) {
         if (fs.hidden) acts.push({ kind: 'moveFellowship' });
         else acts.push({ kind: 'hideFellowship' });
+        if (fs.mordor === null) for (const c of fs.companions) acts.push({ kind: 'separateCompanion', companion: c });
       }
       if (faces.has('event')) {
         if (state.cards[actor].draw.character.length) acts.push({ kind: 'drawEvent', deck: 'character' });
@@ -145,6 +146,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (actor !== 'fp') throw new Error('Only FP hides the Fellowship');
       if (!consumeDie(state, 'fp', 'character')) throw new Error('No Character die');
       hideFellowship(state); passResolutionTurn(state, actor); break;
+    case 'separateCompanion':
+      requirePhase(state, 'actionResolution');
+      if (actor !== 'fp') throw new Error('Only FP separates Companions');
+      if (!consumeDie(state, 'fp', 'character')) throw new Error('No Character die');
+      if (!separateCompanion(state, action.companion)) throw new Error('Cannot separate that Companion');
+      passResolutionTurn(state, actor); break;
     case 'drawEvent':
       requirePhase(state, 'actionResolution');
       if (!consumeDie(state, actor, 'event')) throw new Error('No Event die');

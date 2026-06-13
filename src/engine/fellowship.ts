@@ -1,9 +1,12 @@
 // Fellowship movement, declaring, hiding, and entering Mordor (rules-spec §9-11).
 // Simplified for the first playable loop; the declare target is chosen by the
 // caller (the AI pushes toward Mordor).
-import type { GameState, RegionId, CharacterId } from './types';
+import type { GameState, RegionId, CharacterId, Nation } from './types';
+import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
+import { activateNation, advancePolitical } from './politics';
+import { settlementController } from './armies';
 import { log } from './log';
 
 /** Highest-Level Companion in the Fellowship becomes Guide; Gollum if none. */
@@ -101,6 +104,63 @@ export function declareFellowship(state: GameState, target: RegionId): void {
     fs.corruption = Math.max(0, fs.corruption - 1);
   }
   log(state, null, 'fellowship', `Fellowship declared at ${fs.location} (corruption ${fs.corruption})`);
+}
+
+/** Nations a Companion can activate (its own, or all FP if its card shows "any"). */
+function activatableNations(id: CharacterId): Nation[] {
+  const n = COMPANIONS[id]?.nation;
+  if (!n || n === 'any') return [...FP_NATIONS];
+  return [n as Nation];
+}
+
+/** BFS for the nearest region within `maxMove` steps satisfying `pred`. */
+function nearestMatch(from: RegionId, maxMove: number, pred: (id: RegionId) => boolean): RegionId | null {
+  if (pred(from)) return from;
+  const seen = new Set([from]);
+  let frontier = [from];
+  for (let depth = 1; depth <= maxMove && frontier.length; depth++) {
+    const next: RegionId[] = [];
+    for (const r of frontier) for (const a of REGIONS[r]?.adjacency ?? []) {
+      if (seen.has(a)) continue;
+      seen.add(a);
+      if (pred(a)) return a;
+      next.push(a);
+    }
+    frontier = next;
+  }
+  return null;
+}
+
+/** Separate one Companion from the Fellowship (Character die; forbidden on the
+ *  Mordor Track). The Companion moves up to (Progress + Level) regions toward the
+ *  nearest City/Stronghold of a Nation it can activate that isn't yet At War, and
+ *  activates + advances that Nation on arrival. Separation is permanent. */
+export function separateCompanion(state: GameState, id: CharacterId): boolean {
+  const fs = state.fellowship;
+  if (fs.mordor !== null || !fs.companions.includes(id)) return false;
+  const maxMove = fs.progress + levelOf(id);
+  const nations = activatableNations(id);
+  const isTarget = (r: RegionId): boolean => {
+    const def = REGIONS[r]!;
+    return !!def.nation && nations.includes(def.nation as Nation)
+      && (def.settlement === 'City' || def.settlement === 'Stronghold')
+      && settlementController(state, r) !== 'shadow'
+      && state.nations[def.nation as Nation].step > 0; // activation still useful
+  };
+  const dest = nearestMatch(fs.location, maxMove, isTarget) ?? fs.location;
+  // remove from Fellowship
+  fs.companions.splice(fs.companions.indexOf(id), 1);
+  reassignGuide(state);
+  // place on the map
+  state.characters.inPlay[id] = dest;
+  state.regions[dest]!.characters.push(id);
+  // activate + advance the destination Nation if it's one this Companion rouses
+  const dn = REGIONS[dest]!.nation as Nation | null;
+  if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
+    activateNation(state, dn); advancePolitical(state, dn, 1);
+  }
+  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);
+  return true;
 }
 
 /** Enter Mordor: only when the figure is at Morannon or Minas Morgul. Places the
