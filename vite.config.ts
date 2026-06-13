@@ -8,6 +8,9 @@ import { versionStamp } from 'digital-boardgame-framework/vite';
 export default defineConfig(() => ({
   base: '/',
   plugins: [react(), versionStamp()],
+  // dedupe React so the framework's useGame hook doesn't hit two React copies
+  // (integration-guide gotcha).
+  resolve: { dedupe: ['react', 'react-dom'] },
   build: {
     target: 'es2022',
   },

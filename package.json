@@ -15,9 +15,10 @@
     "copy-assets": "node scripts/copy-dev-assets.mjs",
     "audit:layout": "node scripts/audit-layout.mjs",
     "verify:setup": "vite-node scripts/verify-setup.mjs",
-    "test": "node scripts/audit-layout.mjs && vite-node scripts/verify-setup.mjs && vite-node scripts/tournament.mjs --games 40 --fp random --shadow random"
+    "test": "node scripts/audit-layout.mjs && vite-node scripts/verify-setup.mjs && vite-node scripts/tournament.mjs --games 40 --fp random --shadow random && vite-node scripts/smoke-server.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "digital-boardgame-framework": "^0.9.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

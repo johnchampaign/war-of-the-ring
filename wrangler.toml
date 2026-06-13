@@ -1,0 +1,7 @@
+# Cloudflare Pages config. pages_build_output_dir is LOAD-BEARING: without it
+# wrangler silently ignores this whole file, so nodejs_compat never applies and
+# the Supabase store fails at runtime (integration-guide gotcha).
+name = "war-of-the-ring"
+compatibility_date = "2024-09-01"
+pages_build_output_dir = "dist"
+compatibility_flags = ["nodejs_compat"]

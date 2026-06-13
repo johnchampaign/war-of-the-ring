@@ -1,0 +1,72 @@
+// Cloudflare Pages Function: the /api/* lobby for online async play. Routes map
+// onto the framework GameServer (see _lib/server.ts). Token auth via ?as=TOKEN.
+// Mirrors the integration-guide route table.
+import { makeServer, type Env } from '../_lib/server';
+import { ConflictError } from 'digital-boardgame-framework/server';
+import { createGame } from '../../src/engine/setup';
+import { startGame } from '../../src/adapter/wotrAdapter';
+
+const json = (data: unknown, status = 200): Response =>
+  new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+
+interface Ctx { request: Request; env: Env; params: { path?: string[] }; }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const onRequest = async (context: Ctx): Promise<Response> => {
+  const { request, env } = context;
+  const url = new URL(request.url);
+  const seg = (context.params.path ?? []); // segments after /api/
+  const token = url.searchParams.get('as') ?? '';
+  const method = request.method;
+
+  try {
+    const server = makeServer(env);
+
+    // POST /api/games — create a game, return { gameId, invites:{fp,shadow} }
+    if (seg.length === 1 && seg[0] === 'games' && method === 'POST') {
+      const body = await safeJson(request);
+      const seed = randomSeed();
+      const initialState = startGame(createGame({ seed }));
+      const result = await server.createGame({
+        initialState,
+        players: ['fp', 'shadow'],
+        emails: body?.emails,
+      });
+      return json(result, 201);
+    }
+
+    // /api/games/:id[...]
+    if (seg.length >= 2 && seg[0] === 'games') {
+      const gameId = seg[1]!;
+      const sub = seg[2];
+
+      if (sub === undefined && method === 'GET') return json(await server.fetch(gameId, token));
+      if (sub === 'legal' && method === 'GET') return json({ legalActions: await server.legalActions(gameId, token) });
+      if (sub === 'submit' && method === 'POST') {
+        const body = await safeJson(request);
+        return json(await server.submit(gameId, token, body?.action));
+      }
+      if (sub === 'report' && method === 'POST') {
+        const body = await safeJson(request);
+        return json(await server.report(gameId, token, body));
+      }
+    }
+
+    return json({ error: 'not found' }, 404);
+  } catch (e) {
+    if (e instanceof ConflictError) return json({ error: 'conflict', reason: (e as Error).message }, 409);
+    const msg = (e as Error).message ?? 'error';
+    const status = /not configured|token|seat|unauthor/i.test(msg) ? 400 : 500;
+    return json({ error: msg }, status);
+  }
+};
+
+async function safeJson(request: Request): Promise<any> {
+  try { return await request.json(); } catch { return undefined; }
+}
+
+function randomSeed(): number {
+  const a = new Uint32Array(1);
+  (globalThis.crypto ?? require('node:crypto').webcrypto).getRandomValues(a);
+  return a[0]!;
+}

@@ -1,21 +1,31 @@
 // Per-seat redaction (viewFor). Hides what a viewer must not know: the opponent's
-// Event-card hand, and the RNG state (which determines future Hunt draws / rolls).
-// The Fellowship's Progress and last-known position are PUBLIC in WotR (both are
-// on the board), so they are not redacted. Log is default-deny: public entries +
-// the viewer's own side-tagged entries only.
+// Event-card hand + draw piles, the RNG state, and the *contents* of a pending
+// choice that belongs to the opponent. The Fellowship's Progress and last-known
+// position are PUBLIC in WotR (both on the board), so they aren't redacted. Log
+// is default-deny: public entries + the viewer's own side-tagged entries only.
+// At game over, everything is revealed (no hidden-info-dependent client scoring,
+// but faithful + future-proof).
 import type { GameState, Side } from '../engine/types';
 
 export function redactStateForViewer(state: GameState, viewer: Side | null): GameState {
   const v: GameState = JSON.parse(JSON.stringify(state));
-  v.rngState = 0; // never expose the RNG
+  v.rngState = 0; // never expose the RNG (it determines future Hunt draws / rolls)
+
+  if (state.winner) return v; // game over — reveal all (rng stays hidden, irrelevant)
+
   for (const side of ['fp', 'shadow'] as Side[]) {
     if (side === viewer) continue;
-    // Opponent hand: preserve count, hide identities.
     v.cards[side].hand = v.cards[side].hand.map(() => 'hidden');
-    // Opponent draw piles: order/identity hidden (counts kept).
     v.cards[side].draw.character = v.cards[side].draw.character.map(() => 'hidden');
     v.cards[side].draw.strategy = v.cards[side].draw.strategy.map(() => 'hidden');
   }
+
+  // A pending choice belonging to the opponent: keep a non-leaky "opponent is
+  // choosing" indicator (owner + kind), strip its payload.
+  if (v.pendingChoice && viewer != null && v.pendingChoice.owner !== viewer) {
+    v.pendingChoice = { owner: v.pendingChoice.owner, kind: v.pendingChoice.kind };
+  }
+
   // Log: public entries (side null) + the viewer's own side-tagged entries.
   v.log = v.log.filter((e) => e.side == null || e.side === viewer);
   return v;

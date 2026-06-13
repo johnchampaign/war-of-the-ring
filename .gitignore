@@ -29,3 +29,6 @@ tmp_*
 .DS_Store
 Thumbs.db
 *.local
+
+# Local dev game store (FsStore)
+.dev-store/
