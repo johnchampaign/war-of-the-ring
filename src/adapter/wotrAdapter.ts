@@ -280,14 +280,14 @@ function recruitTargets(state: GameState, side: Side): WotrAction[] {
   return out;
 }
 
-/** Representative army-move options: stacks moving to an adjacent free region. */
-function moveTargets(state: GameState, side: Side, cap = 8): Array<[string, string]> {
+/** Army-move options: every legal adjacent move for each of the side's stacks (so
+ *  the AI can steer direction), capped. */
+function moveTargets(state: GameState, side: Side, cap = 28): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   for (const from of Object.keys(state.regions)) {
-    if (out.length >= cap) break;
     if (armySide(state, from) !== side) continue;
     for (const to of REGIONS[from]!.adjacency) {
-      if (canMoveArmy(state, from, to, side)) { out.push([from, to]); break; }
+      if (canMoveArmy(state, from, to, side)) { out.push([from, to]); if (out.length >= cap) return out; }
     }
   }
   return out;

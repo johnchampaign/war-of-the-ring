@@ -42,15 +42,61 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
   }
 
   // --- action resolution: score and pick the best ---
+  const target = campaignTarget(state, actor); // an enemy Settlement to march on
   let best = legal[0]!, bestScore = -Infinity;
   for (const a of legal) {
-    const s = score(state, actor, a) + rng.next() * 0.5; // tiny noise for tie-breaks
+    const s = score(state, actor, a, target) + rng.next() * 0.5; // tiny noise for tie-breaks
     if (s > bestScore) { bestScore = s; best = a; }
   }
   return best;
 }
 
-function score(state: GameState, actor: Side, a: WotrAction): number {
+const FP = new Set(['dwarves', 'elves', 'gondor', 'north', 'rohan']);
+const settlementCtrl = (state: GameState, id: RegionId): Side | null => {
+  const def = REGIONS[id]!;
+  if (!def.settlement) return null;
+  return state.regions[id]!.control ?? (def.nation ? (FP.has(def.nation) ? 'fp' : 'shadow') : null);
+};
+const armyHere = (state: GameState, id: RegionId, side: Side): boolean => {
+  const r = state.regions[id]!;
+  return (Object.keys(r.units) as Nation[]).some((n) => FP.has(n) === (side === 'fp') && (r.units[n]!.regular + r.units[n]!.elite) > 0);
+};
+
+/** BFS distance between two regions over adjacency (Infinity if unreachable). */
+function dist(from: RegionId, to: RegionId): number {
+  if (from === to) return 0;
+  const seen = new Set([from]); let frontier = [from], d = 0;
+  while (frontier.length) {
+    d++; const next: RegionId[] = [];
+    for (const r of frontier) for (const a of REGIONS[r]?.adjacency ?? []) {
+      if (seen.has(a)) continue; if (a === to) return d; seen.add(a); next.push(a);
+    }
+    frontier = next;
+  }
+  return Infinity;
+}
+
+/** The enemy Settlement (vp>0) worth marching on: nearest to one of our armies,
+ *  weighted by VP. Cached per state object (one campaign target per decision). */
+const targetCache = new WeakMap<object, RegionId | null>();
+function campaignTarget(state: GameState, actor: Side): RegionId | null {
+  if (targetCache.has(state)) return targetCache.get(state)!;
+  const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
+  const myArmies = Object.keys(state.regions).filter((id) => armyHere(state, id, actor));
+  let best: RegionId | null = null, bestScore = -Infinity;
+  for (const id of Object.keys(state.regions)) {
+    const def = REGIONS[id]!;
+    if (def.vp <= 0 || settlementCtrl(state, id) !== enemy) continue;
+    const d = myArmies.reduce((m, a) => Math.min(m, dist(a, id)), Infinity);
+    if (d === Infinity) continue;
+    const s = def.vp * 4 - d;
+    if (s > bestScore) { bestScore = s; best = id; }
+  }
+  targetCache.set(state, best);
+  return best;
+}
+
+function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | null): number {
   const fs = state.fellowship;
   switch (a.kind) {
     case 'moveFellowship': return fs.corruption >= 11 ? 8 : 65;       // push hard, ease off at the brink
@@ -62,15 +108,13 @@ function score(state: GameState, actor: Side, a: WotrAction): number {
     case 'attack': {
       const fromU = unitCount(state, a.from), toU = unitCount(state, a.to);
       if (fromU < toU) return -50;                                     // don't attack uphill
-      const def = REGIONS[a.to]!;
-      const vp = def.vp;
-      return (fromU - toU) * 8 + (actor === 'shadow' ? vp * 25 : vp * 6) + 20;
+      return (fromU - toU) * 8 + REGIONS[a.to]!.vp * 25 + 25;
     }
     case 'bringUpgrade': return 70; // Aragorn / Gandalf the White: +1 FP die
     case 'bringMinion': return 55; // +1 die and a strong leader — high tempo
-    case 'recruitUnit': return actor === 'shadow' ? 30 : 20;
-    case 'moveArmy': return armyAdvanceScore(state, actor, a.from, a.to);
-    case 'diplomaticAction': return 28;                                // mobilize toward At War
+    case 'recruitUnit': return actor === 'shadow' ? 38 : 20; // build the war stacks
+    case 'moveArmy': return armyMoveScore(state, actor, a.from, a.to, target);
+    case 'diplomaticAction': return 32;                                // mobilize toward At War
     case 'playEvent':
       if (actor === 'fp' && HEAL_EVENTS.has(a.cardId)) return fs.corruption >= 6 ? 95 : 25;
       if (actor === 'shadow' && CORRUPT_EVENTS.has(a.cardId)) return 70;
@@ -82,22 +126,16 @@ function score(state: GameState, actor: Side, a: WotrAction): number {
   }
 }
 
-/** Prefer moving armies toward the nearest enemy Settlement (Shadow attacks FP
- *  cities/strongholds; FP repositions defensively, weaker preference). */
-function armyAdvanceScore(state: GameState, actor: Side, from: RegionId, to: RegionId): number {
+/** March toward the campaign target, capture undefended enemy Settlements
+ *  outright, and concentrate stacks. */
+function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: RegionId, target: RegionId | null): number {
   const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
-  const base = actor === 'shadow' ? 14 : 8;
-  // Bonus if the destination is adjacent to an enemy Settlement (closing in).
-  for (const adj of REGIONS[to]!.adjacency) {
-    const def = REGIONS[adj]!;
-    if (def.settlement && (def.vp > 0)) {
-      const ctrl = state.regions[adj]!.control ?? (def.nation ? (FP.has(def.nation) ? 'fp' : 'shadow') : null);
-      if (ctrl === enemy) return base + def.vp * 6;
-    }
-  }
-  return base;
+  let s = actor === 'shadow' ? 16 : 8;
+  if (settlementCtrl(state, to) === enemy && !armyHere(state, to, enemy)) s += REGIONS[to]!.vp * 30 + 25; // capture
+  if (armyHere(state, to, actor)) s += 10;                                                                // concentrate
+  if (target) { s += -(dist(to, target) - dist(from, target)) * 12; if (to === target) s += 30; }         // march
+  return s;
 }
-const FP = new Set(['dwarves', 'elves', 'gondor', 'north', 'rohan']);
 
 function combatCardValue(m: CombatMods | null): number {
   if (!m) return 0;
