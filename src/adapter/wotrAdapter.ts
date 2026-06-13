@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, MORDOR_ENTRANCES } from '../engine/fellowship';
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
@@ -79,20 +79,22 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
     case 'actionResolution': {
       const faces = new Set(state.dice[actor]);
       const acts: WotrAction[] = [];
-      if (actor === 'fp' && faces.has('character')) {
+      const hasWill = actor === 'fp' && faces.has('will'); // Will of the West = wildcard
+      if (actor === 'fp' && (faces.has('character') || hasWill)) {
         if (fs.hidden) acts.push({ kind: 'moveFellowship' });
         else acts.push({ kind: 'hideFellowship' });
         if (fs.mordor === null) for (const c of fs.companions) acts.push({ kind: 'separateCompanion', companion: c });
       }
-      if (faces.has('event')) {
+      if (hasWill) for (const u of upgradeOptions(state)) acts.push(u);
+      if (faces.has('event') || hasWill) {
         if (state.cards[actor].draw.character.length) acts.push({ kind: 'drawEvent', deck: 'character' });
         if (state.cards[actor].draw.strategy.length) acts.push({ kind: 'drawEvent', deck: 'strategy' });
         for (const cardId of state.cards[actor].hand) {
           if (canPlayCard(state, cardId, actor)) acts.push({ kind: 'playEvent', cardId });
         }
       }
-      const hasMuster = faces.has('muster') || faces.has('armyMuster');
-      const hasArmy = faces.has('army') || faces.has('armyMuster');
+      const hasMuster = faces.has('muster') || faces.has('armyMuster') || hasWill;
+      const hasArmy = faces.has('army') || faces.has('armyMuster') || hasWill;
       if (hasMuster) {
         for (const n of advanceableNations(state, actor)) acts.push({ kind: 'diplomaticAction', nation: n });
         acts.push(...recruitTargets(state, actor));
@@ -139,22 +141,28 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP moves the Fellowship');
       if (!state.fellowship.hidden) throw new Error('Fellowship is revealed');
-      if (!consumeDie(state, 'fp', 'character')) throw new Error('No Character die');
+      if (!consumeOneOf(state, 'fp', ['character', 'will'])) throw new Error('No Character die');
       moveFellowship(state); passResolutionTurn(state, actor); break;
     case 'hideFellowship':
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP hides the Fellowship');
-      if (!consumeDie(state, 'fp', 'character')) throw new Error('No Character die');
+      if (!consumeOneOf(state, 'fp', ['character', 'will'])) throw new Error('No Character die');
       hideFellowship(state); passResolutionTurn(state, actor); break;
     case 'separateCompanion':
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP separates Companions');
-      if (!consumeDie(state, 'fp', 'character')) throw new Error('No Character die');
+      if (!consumeOneOf(state, 'fp', ['character', 'will'])) throw new Error('No Character die');
       if (!separateCompanion(state, action.companion)) throw new Error('Cannot separate that Companion');
+      passResolutionTurn(state, actor); break;
+    case 'bringUpgrade':
+      requirePhase(state, 'actionResolution');
+      if (actor !== 'fp') throw new Error('Only FP upgrades');
+      if (!consumeDie(state, 'fp', 'will')) throw new Error('No Will of the West die');
+      if (!bringUpgrade(state, action.which)) throw new Error('Cannot bring that upgrade');
       passResolutionTurn(state, actor); break;
     case 'drawEvent':
       requirePhase(state, 'actionResolution');
-      if (!consumeDie(state, actor, 'event')) throw new Error('No Event die');
+      if (!consumeOneOf(state, actor, ['event', 'will'])) throw new Error('No Event die');
       drawOne(state, actor, action.deck); passResolutionTurn(state, actor); break;
     case 'playEvent': {
       requirePhase(state, 'actionResolution');
@@ -163,7 +171,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (idx < 0) throw new Error('Card not in hand');
       const h = getHandler(action.cardId);
       if (!h || !canPlayCard(state, action.cardId, actor)) throw new Error('Card not playable');
-      if (!consumeDie(state, actor, 'event')) throw new Error('No Event die');
+      if (!consumeOneOf(state, actor, ['event', 'will'])) throw new Error('No Event die');
       hand.splice(idx, 1);
       h.apply(state, actor);
       const deck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
@@ -174,30 +182,30 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'diplomaticAction': {
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
-      if (!consumeOneOf(state, actor, ['muster', 'armyMuster'])) throw new Error('No Muster die');
+      if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
       advancePolitical(state, action.nation, 1); passResolutionTurn(state, actor); break;
     }
     case 'recruitUnit':
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
-      if (!consumeOneOf(state, actor, ['muster', 'armyMuster'])) throw new Error('No Muster die');
+      if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
       if (!recruit(state, action.nation, action.region, action.regular, action.elite)) throw new Error('Illegal recruit');
       passResolutionTurn(state, actor); break;
     case 'bringMinion':
       requirePhase(state, 'actionResolution');
       if (actor !== 'shadow') throw new Error('Only Shadow brings Minions');
-      if (!consumeOneOf(state, actor, ['muster', 'armyMuster'])) throw new Error('No Muster die');
+      if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
       if (!bringMinion(state, action.minion, action.region)) throw new Error('Cannot bring that Minion');
       passResolutionTurn(state, actor); break;
     case 'moveArmy':
       requirePhase(state, 'actionResolution');
-      if (!consumeOneOf(state, actor, ['army', 'armyMuster'])) throw new Error('No Army die');
+      if (!consumeOneOf(state, actor, ['army', 'armyMuster', 'will'])) throw new Error('No Army die');
       if (!moveArmy(state, action.from, action.to, actor)) throw new Error('Illegal move');
       passResolutionTurn(state, actor); break;
     case 'attack':
       requirePhase(state, 'actionResolution');
       if (armySide(state, action.from) !== actor) throw new Error('No attacking army');
-      if (!consumeOneOf(state, actor, ['army', 'armyMuster'])) throw new Error('No Army die');
+      if (!consumeOneOf(state, actor, ['army', 'armyMuster', 'will'])) throw new Error('No Army die');
       startBattle(state, actor, action.from, action.to); break; // finishCombat resumes the turn
     // --- interactive combat choices (resolving state.pendingChoice) ---
     case 'chooseCasualties':
@@ -233,6 +241,14 @@ function requireChoice(state: GameState, kind: string, actor: Side): void {
 function consumeOneOf(state: GameState, side: Side, faces: DieFace[]): boolean {
   for (const f of faces) if (consumeDie(state, side, f)) return true;
   return false;
+}
+
+/** Will-of-the-West upgrade options currently available (FP). */
+function upgradeOptions(state: GameState): WotrAction[] {
+  const out: WotrAction[] = [];
+  if (canBringAragorn(state)) out.push({ kind: 'bringUpgrade', which: 'aragorn' });
+  if (canBringGandalfWhite(state)) out.push({ kind: 'bringUpgrade', which: 'gandalf-white' });
+  return out;
 }
 
 /** Representative recruit options: one Regular into a friendly free At-War

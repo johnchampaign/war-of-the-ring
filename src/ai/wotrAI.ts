@@ -65,6 +65,7 @@ function score(state: GameState, actor: Side, a: WotrAction): number {
       const vp = def.vp;
       return (fromU - toU) * 8 + (actor === 'shadow' ? vp * 25 : vp * 6) + 20;
     }
+    case 'bringUpgrade': return 70; // Aragorn / Gandalf the White: +1 FP die
     case 'bringMinion': return 55; // +1 die and a strong leader — high tempo
     case 'recruitUnit': return actor === 'shadow' ? 30 : 20;
     case 'moveArmy': return armyAdvanceScore(state, actor, a.from, a.to);

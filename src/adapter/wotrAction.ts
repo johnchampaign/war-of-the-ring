@@ -14,6 +14,7 @@ export type WotrAction =
   | { kind: 'moveFellowship' }   // FP, Character die
   | { kind: 'hideFellowship' }   // FP, Character die
   | { kind: 'separateCompanion'; companion: string } // FP, Character die
+  | { kind: 'bringUpgrade'; which: 'aragorn' | 'gandalf-white' } // FP, Will of the West
   | { kind: 'drawEvent'; deck: Deck } // Event die
   | { kind: 'playEvent'; cardId: string } // Event die: play a card from hand
   | { kind: 'diplomaticAction'; nation: Nation } // Muster die: advance political track

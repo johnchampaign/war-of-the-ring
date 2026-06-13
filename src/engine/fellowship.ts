@@ -6,7 +6,8 @@ import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
 import { activateNation, advancePolitical } from './politics';
-import { settlementController } from './armies';
+import { settlementController, armySide } from './armies';
+import { MINION_IDS } from './minions';
 import { log } from './log';
 
 /** Highest-Level Companion in the Fellowship becomes Guide; Gollum if none. */
@@ -171,5 +172,57 @@ export function enterMordor(state: GameState): boolean {
   fs.mordor = 0;
   fs.progress = 0;
   log(state, null, 'fellowship', 'Fellowship entered Mordor');
+  return true;
+}
+
+// --- Will-of-the-West upgrades (Aragorn, Gandalf the White) ----------------
+const ARAGORN_CITIES: RegionId[] = ['minas-tirith', 'dol-amroth', 'pelargir'];
+const GANDALF_WHITE_REGIONS: RegionId[] = ['fangorn', 'grey-havens', 'rivendell', 'lorien', 'woodland-realm'];
+
+function findCharacterRegion(state: GameState, id: CharacterId): RegionId | null {
+  for (const r of Object.keys(state.regions)) if (state.regions[r]!.characters.includes(id)) return r;
+  return null;
+}
+
+export function canBringAragorn(state: GameState): boolean {
+  if (state.characters.entered.includes('aragorn')) return false;
+  const r = findCharacterRegion(state, 'strider');
+  return !!r && ARAGORN_CITIES.includes(r) && settlementController(state, r) !== 'shadow';
+}
+
+function gandalfWhiteRegion(state: GameState): RegionId | null {
+  const grey = findCharacterRegion(state, 'gandalf-grey');
+  if (grey) return grey; // replace him in place
+  for (const r of GANDALF_WHITE_REGIONS) {
+    if (REGIONS[r] && settlementController(state, r) !== 'shadow' && armySide(state, r) !== 'shadow') return r;
+  }
+  return null;
+}
+
+export function canBringGandalfWhite(state: GameState): boolean {
+  if (state.characters.entered.includes('gandalf-white')) return false;
+  if (state.fellowship.companions.includes('gandalf-grey')) return false; // must have left/been lost
+  if (!MINION_IDS.some((m) => state.characters.entered.includes(m))) return false;
+  return gandalfWhiteRegion(state) !== null;
+}
+
+/** Bring an upgrade into play via a Will-of-the-West die. */
+export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white'): boolean {
+  if (which === 'aragorn') {
+    if (!canBringAragorn(state)) return false;
+    const r = findCharacterRegion(state, 'strider')!;
+    const arr = state.regions[r]!.characters;
+    arr.splice(arr.indexOf('strider'), 1); arr.push('aragorn');
+    state.characters.entered.push('aragorn');
+    log(state, null, 'muster', `Strider becomes Aragorn at ${r} (+1 FP die next turn)`);
+  } else {
+    if (!canBringGandalfWhite(state)) return false;
+    const grey = findCharacterRegion(state, 'gandalf-grey');
+    const dest = gandalfWhiteRegion(state)!;
+    if (grey) { const a = state.regions[grey]!.characters; a.splice(a.indexOf('gandalf-grey'), 1); }
+    state.regions[dest]!.characters.push('gandalf-white');
+    state.characters.entered.push('gandalf-white');
+    log(state, null, 'muster', `Gandalf the White enters at ${dest} (+1 FP die next turn)`);
+  }
   return true;
 }
