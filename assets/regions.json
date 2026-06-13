@@ -11,7 +11,7 @@
       "adjacency is empty: to be transcribed from the rulebook map (authority on borders) in a focused, tool-verified pass.",
       "Region SET still needs confirming as exactly the base-game board (expansions add cards/figures, not regions, but confirm)."
     ],
-    "regionCount": 107,
+    "regionCount": 105,
     "rawEntriesScanned": 185
   },
   "regions": {
@@ -183,8 +183,8 @@
       },
       "adjacency": []
     },
-    "buchland": {
-      "name": "Buchland",
+    "buckland": {
+      "name": "Buckland",
       "nation": "The North",
       "settlement": null,
       "vp": 0,
@@ -771,8 +771,8 @@
       },
       "adjacency": []
     },
-    "minbiriath": {
-      "name": "Minbiriath",
+    "minhiriath": {
+      "name": "Minhiriath",
       "nation": null,
       "settlement": null,
       "vp": 0,
@@ -1149,8 +1149,8 @@
       },
       "adjacency": []
     },
-    "south-andium-vale": {
-      "name": "South Andium Vale",
+    "south-anduin-vale": {
+      "name": "South Anduin Vale",
       "nation": null,
       "settlement": null,
       "vp": 0,
@@ -1247,8 +1247,8 @@
       },
       "adjacency": []
     },
-    "southern-murkwood": {
-      "name": "Southern Murkwood",
+    "southern-mirkwood": {
+      "name": "Southern Mirkwood",
       "nation": null,
       "settlement": null,
       "vp": 0,
@@ -1482,34 +1482,6 @@
         "regular": 1,
         "elite": 2,
         "leader": 1
-      },
-      "adjacency": []
-    },
-    "shadow-stronghold-1": {
-      "name": "Shadow Stronghold 1",
-      "nation": null,
-      "settlement": null,
-      "vp": 0,
-      "side": "Shadow",
-      "control": "Shadow",
-      "starting": {
-        "regular": 0,
-        "elite": 0,
-        "leader": 0
-      },
-      "adjacency": []
-    },
-    "shadow-stronghold-2": {
-      "name": "Shadow Stronghold 2",
-      "nation": null,
-      "settlement": null,
-      "vp": 0,
-      "side": "Shadow",
-      "control": "Shadow",
-      "starting": {
-        "regular": 0,
-        "elite": 0,
-        "leader": 0
       },
       "adjacency": []
     }

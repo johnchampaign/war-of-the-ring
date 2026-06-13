@@ -106,12 +106,39 @@ const NON_SETTLEMENT_SETUP = {
   'gorgoroth':   { nation: 'sauron', setup: { regular: 3 } },        // p.17
 };
 
+// WILDERNESS nation membership (no settlement, but inside a nation's border on
+// the map). Cross-checked: SirMartin/WarOfRingMap nation data agreed with the
+// rulebook on ALL settlement regions (0 mismatches), so it's a trustworthy
+// secondary source for the bordered-but-empty regions. Final confirmation vs the
+// rulebook colored map (p.9) belongs to the calibration dev-tab. All other
+// regions are FREE (no nation).
+const WILDERNESS_NATION = {
+  'anfalas': 'gondor', 'erech': 'gondor',
+  'buckland': 'north', 'old-forest-road': 'north', 'rhosgobel': 'north',
+  'eastemnet': 'rohan',
+  'gap-of-rohan': 'isengard',
+  'north-ered-luin': 'dwarves',
+  'mount-gram': 'sauron', 'southern-mirkwood': 'sauron',
+  'khand': 'southrons', 'east-rhun': 'southrons',
+};
+
 const VP = { City: 1, Stronghold: 2, Town: 0, Fortification: 0 };
+
+// ---- Adjacency (from scripts/extract-adjacency.mjs) ----
+let adjacency = {};
+try {
+  adjacency = JSON.parse(readFileSync(join(repoRoot, 'assets', 'adjacency.json'), 'utf8')).byRegion;
+} catch {
+  console.warn('WARN: assets/adjacency.json not found — run extract-adjacency.mjs. Adjacency will be empty.');
+}
 
 // ---- Validate keys ----
 const errors = [];
-for (const k of [...Object.keys(SETTLEMENTS), ...Object.keys(NON_SETTLEMENT_SETUP)]) {
+for (const k of [...Object.keys(SETTLEMENTS), ...Object.keys(NON_SETTLEMENT_SETUP), ...Object.keys(WILDERNESS_NATION)]) {
   if (!nodes[k]) errors.push(`Unknown region id in authored data: ${k}`);
+}
+for (const k of Object.keys(WILDERNESS_NATION)) {
+  if (SETTLEMENTS[k] || NON_SETTLEMENT_SETUP[k]) errors.push(`WILDERNESS_NATION conflicts with settlement nation: ${k}`);
 }
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
 
@@ -122,21 +149,25 @@ for (const [id, node] of Object.entries(nodes)) {
   const ns = NON_SETTLEMENT_SETUP[id];
   regions[id] = {
     name: node.name,
-    nation: s ? s.nation : ns ? ns.nation : null,   // wilderness nation: PENDING map pass
+    nation: s ? s.nation : ns ? ns.nation : (WILDERNESS_NATION[id] || null),
     settlement: s ? s.settlement : null,
     vp: s ? VP[s.settlement] : 0,
     setup: s ? s.setup : ns ? ns.setup : null,
-    adjacency: [],                                   // PENDING map pass
+    adjacency: adjacency[id] || [],
   };
 }
 
 const out = {
   _meta: {
     generatedBy: 'scripts/build-map.mjs',
-    authority: 'Rulebook (Ares WOTR 2E). Settlement/nation/VP/setup are rulebook-authoritative. The TTS mod gameplay fields are NOT used.',
+    authority: 'Rulebook (Ares WOTR 2E) is authoritative for settlement/nation/VP/setup; the TTS mod gameplay fields are NOT used. Adjacency is bootstrapped from a community source (see provenance) and reconciled to this 105-region set; wilderness nation membership is cross-checked (0 mismatches on settlement regions).',
+    provenance: {
+      settlementsAndSetup: 'rulebook p.9-11, p.16-17 (hand-authored here)',
+      adjacency: 'assets/adjacency.json — Golehm/war-of-the-ring AI map (factual edges), FIRST PASS pending rulebook spot-verify via calibration tab',
+      wildernessNation: 'SirMartin/WarOfRingMap nation data, cross-checked vs rulebook settlement nations (0 conflicts)',
+    },
     pending: [
-      'WILDERNESS nation membership (regions with no settlement inside a nation border) — null until transcribed from the colored map (p.9).',
-      'ADJACENCY — empty; transcribe from the rulebook map (authority on borders) with verification.',
+      'Final verification of ADJACENCY and WILDERNESS nation membership vs the rulebook map (impassable borders, p.9 colored borders) — via a hover/click calibration dev-tab once the UI exists.',
       'Exact political-track step counts (only active/passive + start box captured).',
     ],
     counts: {

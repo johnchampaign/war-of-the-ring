@@ -19,6 +19,11 @@ tts_extracted/
 # Runtime asset catalog + any downloaded/extracted art (regenerated locally)
 public/dev-assets/
 public/art-cache/
+# Third-party reference sources (no license — used to derive factual data only,
+# never redistributed): TTS mod, community map/AI sources, etc.
+tmp_*
+*.ref.java
+*.ref.json
 
 # OS / editor cruft
 .DS_Store

@@ -47,9 +47,19 @@ const EXCLUDE = [
   /^Army [123] (Free Peoples|Shadow)$/,
   /^Fellowship Box$/,
   / Stronghold$/,            // "Rivendell Stronghold" etc. are siege BOXES
+  /^Shadow Stronghold \d$/,  // generic Shadow siege BOXES (end in a digit)
   /^Mount Doom [1-5]$/,      // Mordor track steps
   /^Crack of Doom$/,
 ];
+
+// Mod region-name typos -> correct names (confirmed vs the rulebook / Golehm AI
+// map cross-check). Applied before slugging so ids and names are canonical.
+const NAME_FIX = {
+  'Buchland': 'Buckland',
+  'Minbiriath': 'Minhiriath',
+  'South Andium Vale': 'South Anduin Vale',
+  'Southern Murkwood': 'Southern Mirkwood',
+};
 
 // slugify a region name into a stable id.
 const slug = (name) => name
@@ -66,10 +76,11 @@ const regions = {};
 let m;
 let total = 0;
 for (; (m = rx.exec(lua)); ) {
-  const name = m[1];
+  const rawName = m[1];
   const body = m[2];
   total++;
-  if (EXCLUDE.some((re) => re.test(name))) continue;
+  if (EXCLUDE.some((re) => re.test(rawName))) continue;
+  const name = NAME_FIX[rawName] || rawName;
 
   const str = (k) => (body.match(new RegExp(`${k}="([^"]*)"`)) || [, ''])[1];
   const num = (k) => Number((body.match(new RegExp(`${k}=(\\d+)`)) || [, 0])[1]);
