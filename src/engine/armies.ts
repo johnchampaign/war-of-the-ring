@@ -55,10 +55,11 @@ export function freeForMovement(state: GameState, id: RegionId, side: Side): boo
 
 /** Recruit reinforcements into a free, friendly, At-War Settlement (Muster die,
  *  simplified). Places `regular`/`elite` of `nation`; returns false if illegal. */
-export function recruit(state: GameState, nation: Nation, id: RegionId, regular: number, elite: number): boolean {
+export function recruit(state: GameState, nation: Nation, id: RegionId, regular: number, elite: number,
+  opts: { ignoreAtWar?: boolean } = {}): boolean {
   const def = REGIONS[id]!;
   if (!def.settlement || def.nation !== nation) return false;
-  if (!isAtWar(state, nation)) return false;
+  if (!opts.ignoreAtWar && !isAtWar(state, nation)) return false; // Event cards may recruit before At War (rules-spec §6)
   const side = sideOfNation(nation);
   if (settlementController(state, id) !== side) return false; // not friendly/free
   if (armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) return false;

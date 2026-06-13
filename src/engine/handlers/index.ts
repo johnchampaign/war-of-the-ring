@@ -1,0 +1,119 @@
+// Registered Event-card handlers — a representative subset of mechanically simple
+// cards (heal/Corruption, political, recruit, dice). Each cites its card id from
+// assets/event-cards.json. Cards not registered here stay unimplemented (not
+// offered) until added. Effects modify the standard rules per the card text.
+import type { GameState, Side, Nation } from '../types';
+import { FP_NATIONS } from '../types';
+import { withRng } from '../rng';
+import { register } from './registry';
+import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT } from '../armies';
+import { activateNation, advancePolitical } from '../politics';
+import { REGIONS } from '../data';
+import { log } from '../log';
+
+const heal = (state: GameState, n: number): void => {
+  state.fellowship.corruption = Math.max(0, state.fellowship.corruption - n);
+};
+const corrupt = (state: GameState, n: number): void => {
+  state.fellowship.corruption = Math.min(12, state.fellowship.corruption + n);
+};
+const isGollumGuide = (state: GameState): boolean => state.fellowship.guide === 'gollum';
+
+/** Recruit via an Event card (may ignore At War): place into the first friendly,
+ *  free, unfull Settlement of `nation`. Returns whether anything was placed. */
+function eventRecruit(state: GameState, side: Side, nation: Nation, regular: number, elite: number): boolean {
+  for (const id of Object.keys(state.regions)) {
+    const def = REGIONS[id]!;
+    if (def.nation !== nation || !def.settlement) continue;
+    if (settlementController(state, id) !== side) continue;
+    if (armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) continue;
+    if (unitCount(state, id) + regular + elite > STACKING_LIMIT) continue;
+    if (recruit(state, nation, id, regular, elite, { ignoreAtWar: true })) return true;
+  }
+  return false;
+}
+const canEventRecruit = (state: GameState, nation: Nation, n = 1): boolean =>
+  state.reinforcements[nation].regular + state.reinforcements[nation].elite >= n
+  && Object.keys(state.regions).some((id) => {
+    const def = REGIONS[id]!;
+    return def.nation === nation && def.settlement
+      && settlementController(state, id) === (FP_NATIONS.includes(nation) ? 'fp' : 'shadow')
+      && unitCount(state, id) < STACKING_LIMIT;
+  });
+
+// --- Free Peoples: heal / Corruption -------------------------------------
+register('fp-char-09', { // Athelas
+  apply(state) {
+    const guideIsStrider = state.fellowship.guide === 'strider';
+    const healed = withRng(state, (rng) => {
+      let h = 0; for (let i = 0; i < 3; i++) { const d = rng.rollDie(6); if (d >= (guideIsStrider ? 3 : 5)) h++; } return h;
+    });
+    heal(state, healed); log(state, null, 'event', `Athelas heals ${healed}`);
+  },
+});
+register('fp-char-10', { apply(state) { heal(state, 1); } }); // There Is Another Way
+register('fp-char-12', { apply(state) { heal(state, isGollumGuide(state) ? 2 : 1); } }); // Bilbo's Song
+
+// --- Free Peoples: political ---------------------------------------------
+register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP nation
+  canPlay: (state) => FP_NATIONS.some((n) => state.nations[n].step > 0),
+  apply(state) {
+    const n = FP_NATIONS.find((x) => state.nations[x].step > 0) ?? 'gondor';
+    activateNation(state, n); advancePolitical(state, n, 1);
+  },
+});
+
+// --- Free Peoples: recruit (Event recruit, may ignore At War) -------------
+const fpRecruits: Array<[string, Nation]> = [
+  ['fp-str-14', 'gondor'],  // Guards of the Citadel
+  ['fp-str-18', 'gondor'],  // Imrahil of Dol Amroth
+  ['fp-str-22', 'dwarves'], // Dáin Ironfoot's Guard
+  ['fp-str-23', 'rohan'],   // Éomer, Son of Éomund
+  ['fp-str-24', 'elves'],   // Thranduil's Archers
+  ['fp-str-19', 'north'],   // King Brand's Men
+];
+for (const [id, nation] of fpRecruits) {
+  register(id, {
+    canPlay: (state) => canEventRecruit(state, nation),
+    apply(state, side) { eventRecruit(state, side, nation, 1, 0); },
+  });
+}
+
+// --- Shadow: Corruption --------------------------------------------------
+register('sh-char-08', { // Candles of Corpses: +1 corruption per die 4+ (6 if Gollum guides)
+  apply(state) {
+    const t = isGollumGuide(state) ? 6 : 4;
+    const c = withRng(state, (rng) => { let n = 0; for (let i = 0; i < 3; i++) if (rng.rollDie(6) >= t) n++; return n; });
+    corrupt(state, c); log(state, null, 'event', `Candles of Corpses +${c} corruption`);
+  },
+});
+register('sh-char-12', { // Morgul Wound: +2 if corruption ≤3 else +1; requires revealed
+  canPlay: (state) => !state.fellowship.hidden,
+  apply(state) { corrupt(state, state.fellowship.corruption <= 3 ? 2 : 1); },
+});
+
+// --- Shadow: dice --------------------------------------------------------
+register('sh-char-18', { // The Lidless Eye: up to 3 unused Shadow dice → Eyes in the Hunt Box
+  canPlay: (state) => state.dice.shadow.some((f) => f !== 'eye'),
+  apply(state) {
+    let moved = 0;
+    for (let i = state.dice.shadow.length - 1; i >= 0 && moved < 3; i--) {
+      if (state.dice.shadow[i] !== 'eye') { state.dice.shadow.splice(i, 1); state.hunt.box += 1; moved++; }
+    }
+    log(state, null, 'event', `The Lidless Eye: +${moved} Eyes to the Hunt Box`);
+  },
+});
+
+// --- Shadow: recruit -----------------------------------------------------
+const shRecruits: Array<[string, Nation]> = [
+  ['sh-str-13', 'isengard'],   // Half-orcs and Goblin-men (simplified: 1 unit)
+  ['sh-str-14', 'sauron'],     // Olog-hai
+  ['sh-str-20', 'sauron'],     // Orcs Multiplying Again (simplified)
+  ['sh-str-17', 'southrons'],  // Many Kings to the Service of Mordor (simplified)
+];
+for (const [id, nation] of shRecruits) {
+  register(id, {
+    canPlay: (state) => canEventRecruit(state, nation),
+    apply(state, side) { eventRecruit(state, side, nation, 1, 0); },
+  });
+}

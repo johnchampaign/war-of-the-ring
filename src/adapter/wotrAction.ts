@@ -14,6 +14,7 @@ export type WotrAction =
   | { kind: 'moveFellowship' }   // FP, Character die
   | { kind: 'hideFellowship' }   // FP, Character die
   | { kind: 'drawEvent'; deck: Deck } // Event die
+  | { kind: 'playEvent'; cardId: string } // Event die: play a card from hand
   | { kind: 'diplomaticAction'; nation: Nation } // Muster die: advance political track
   | { kind: 'recruitUnit'; nation: Nation; region: RegionId; regular: number; elite: number } // Muster die
   | { kind: 'moveArmy'; from: RegionId; to: RegionId }   // Army die

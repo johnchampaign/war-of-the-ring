@@ -13,8 +13,10 @@ import {
 } from '../engine/armies';
 import { resolveBattle, attackTargets } from '../engine/combat';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
-import { REGIONS, sideOfNation } from '../engine/data';
+import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import type { DieFace, Nation } from '../engine/types';
+import { getHandler, canPlayCard } from '../engine/handlers/registry';
+import '../engine/handlers/index'; // registers the handlers (side-effect import)
 import { redactStateForViewer } from './redact';
 
 const clone = (s: GameState): GameState => JSON.parse(JSON.stringify(s));
@@ -60,6 +62,9 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       if (faces.has('event')) {
         if (state.cards[actor].draw.character.length) acts.push({ kind: 'drawEvent', deck: 'character' });
         if (state.cards[actor].draw.strategy.length) acts.push({ kind: 'drawEvent', deck: 'strategy' });
+        for (const cardId of state.cards[actor].hand) {
+          if (canPlayCard(state, cardId, actor)) acts.push({ kind: 'playEvent', cardId });
+        }
       }
       const hasMuster = faces.has('muster') || faces.has('armyMuster');
       const hasArmy = faces.has('army') || faces.has('armyMuster');
@@ -115,6 +120,21 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'actionResolution');
       if (!consumeDie(state, actor, 'event')) throw new Error('No Event die');
       drawOne(state, actor, action.deck); passResolutionTurn(state, actor); break;
+    case 'playEvent': {
+      requirePhase(state, 'actionResolution');
+      const hand = state.cards[actor].hand;
+      const idx = hand.indexOf(action.cardId);
+      if (idx < 0) throw new Error('Card not in hand');
+      const h = getHandler(action.cardId);
+      if (!h || !canPlayCard(state, action.cardId, actor)) throw new Error('Card not playable');
+      if (!consumeDie(state, actor, 'event')) throw new Error('No Event die');
+      hand.splice(idx, 1);
+      h.apply(state, actor);
+      const deck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
+      if (h.onTable) state.cards[actor].table.push(action.cardId);
+      else state.cards[actor].discard[deck].push(action.cardId);
+      passResolutionTurn(state, actor); break;
+    }
     case 'diplomaticAction': {
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
