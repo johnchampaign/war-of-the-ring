@@ -4,11 +4,12 @@
 import { useMemo, useState } from 'react';
 import { useGame } from 'digital-boardgame-framework/client';
 import type { GameClientApi } from '../online/gameClient';
-import type { GameState, RegionId } from '../engine/types';
+import type { GameState, RegionId, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import { Board } from './Board';
 import { ActionPanel } from './ActionPanel';
 import { StatusBar } from './StatusBar';
+import { HandStrip } from './HandStrip';
 
 type SpatialAction = Extract<WotrAction, { kind: 'moveArmy' | 'attack' }>;
 const isSpatial = (a: WotrAction): a is SpatialAction => a.kind === 'moveArmy' || a.kind === 'attack';
@@ -57,7 +58,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         </div>
         <ActionPanel actions={panelActions} onAction={g.submit} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
       </div>
-      {onExit && <button onClick={onExit} style={{ position: 'fixed', top: 6, right: 8, padding: '3px 8px', fontSize: 12 }}>← Lobby</button>}
+      <HandStrip view={g.view} you={g.you as Side} />
+      {onExit &&<button onClick={onExit} style={{ position: 'fixed', top: 6, right: 8, padding: '3px 8px', fontSize: 12 }}>← Lobby</button>}
     </div>
   );
 }

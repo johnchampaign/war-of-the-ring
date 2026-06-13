@@ -5,6 +5,7 @@ import { PlayPage } from './play/PlayPage';
 import { PolygonAudit } from './devtabs/PolygonAudit';
 import { makeLocalClient } from './online/localClient';
 import { makeGameClient, createOnlineGame, readOnlineInvite } from './online/gameClient';
+import { LoadArtPanel } from './play/LoadArtPanel';
 
 type Mode =
   | { kind: 'lobby' }
@@ -50,6 +51,7 @@ function Lobby({ onHotseat }: { onHotseat: () => void }) {
             <p><b>Shadow:</b><br /><a style={{ color: '#e6857f', wordBreak: 'break-all' }} href={invites.shadow}>{invites.shadow}</a></p>
           </div>
         )}
+        <LoadArtPanel />
         <p style={{ marginTop: 24, fontSize: 12, color: '#776' }}>Placeholder board (no publisher art). <a href="#audit" style={{ color: '#998' }}>polygon audit</a></p>
       </div>
     </div>
