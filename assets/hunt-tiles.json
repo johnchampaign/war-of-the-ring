@@ -10,9 +10,9 @@
     },
     "engineUse": "The 16 standard tiles are the Hunt Pool (rules-spec §10). Specials are set aside and enter only via Event cards, then join the pool when the Fellowship enters Mordor. Draw via Rng; when the pool empties, return STANDARD tiles only.",
     "verify": [
-      "Exact STANDARD multiset (esp. Eye x4, '3' x3) — reconciles to 16 but confirm against an official tile list; the mod is a fan creation.",
-      "Blue Fellowship special ICONS/effects: tile with a gold RING (x2) and a tile with a horn/mallet icon (x1) — exact effect text unconfirmed; resolve when cataloguing the Event cards that introduce each special tile."
-    ]
+      "Exact STANDARD multiset (esp. Eye x4, '3' x3) — reconciles to 16 but confirm against an official tile list; the mod is a fan creation."
+    ],
+    "specialsResolved": "Each special tile's value and its introducing Event card were confirmed from the card scans (see assets/event-cards.json): blue Fellowship tiles enter via FP Character cards fp-char-01..04; red Shadow tiles via Shadow Character cards sh-char-01..04. All red Shadow tiles carry the Stop icon (rulebook p.40)."
   },
 
   "standard": [
@@ -26,16 +26,17 @@
   ],
 
   "specialFellowship": [
-    { "value": 0,  "icon": "ring",        "reveal": false, "count": 2, "note": "blue; gold One Ring icon; effect unconfirmed" },
-    { "value": 0,  "icon": "horn",        "reveal": false, "count": 1, "note": "blue; horn/mallet icon; effect unconfirmed" },
-    { "value": -2, "icon": null,          "reveal": false, "count": 1, "note": "blue; subtract 2 Corruption (min 0)" }
+    { "value": 0,  "reveal": false, "count": 1, "introducedBy": "fp-char-01", "card": "Elven Cloaks" },
+    { "value": 0,  "reveal": false, "count": 1, "introducedBy": "fp-char-02", "card": "Elven Rope" },
+    { "value": -2, "reveal": false, "count": 1, "introducedBy": "fp-char-03", "card": "Phial of Galadriel", "note": "subtract 2 Corruption (min 0)" },
+    { "value": -1, "reveal": false, "count": 1, "introducedBy": "fp-char-04", "card": "Sméagol Helps Nice Master", "note": "subtract 1 Corruption (min 0)" }
   ],
 
   "specialShadow": [
-    { "value": 1,     "reveal": true,  "stop": true, "count": 1 },
-    { "value": 3,     "reveal": false, "stop": true, "count": 1 },
-    { "value": "die", "reveal": false, "stop": true, "count": 1 },
-    { "value": "eye", "reveal": true,  "stop": true, "count": 1 }
+    { "value": "die", "reveal": false, "stop": true, "count": 1, "introducedBy": "sh-char-01", "card": "Shelob's Lair" },
+    { "value": "eye", "reveal": true,  "stop": true, "count": 1, "introducedBy": "sh-char-02", "card": "The Ring is Mine!" },
+    { "value": 3,     "reveal": false, "stop": true, "count": 1, "introducedBy": "sh-char-03", "card": "On, On They Went" },
+    { "value": 1,     "reveal": true,  "stop": true, "count": 1, "introducedBy": "sh-char-04", "card": "Give it to Uss!" }
   ],
 
   "counts": { "standard": 16, "specialFellowship": 4, "specialShadow": 4, "total": 24 }
