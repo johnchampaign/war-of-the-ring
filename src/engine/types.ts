@@ -144,6 +144,7 @@ export interface PendingChoice {
 // pauses with a PendingChoice for casualty selection, the cease decision, and the
 // retreat decision; `step` is where to resume.
 export type CombatStep =
+  | 'attackerCard' | 'defenderCard'
   | 'beginRound' | 'attackerCasualties' | 'defenderCasualties'
   | 'continueDecision' | 'retreatDecision';
 
@@ -155,6 +156,9 @@ export interface PendingCombat {
   round: number;
   fortified: boolean;
   step: CombatStep;
+  /** Combat cards chosen at battle start (applied in round 0), or null. */
+  attackerCard: string | null;
+  defenderCard: string | null;
   /** Hits scored this round (attacker's hits land on the defender, vice versa). */
   atkHits: number;
   defHits: number;

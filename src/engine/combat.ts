@@ -5,25 +5,38 @@
 // deferred — auto "no card" — and noted; everything else is now a real prompt,
 // honoring the prompt-for-every-choice fidelity decision.)
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
-import { REGIONS, sideOfNation } from './data';
+import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { withRng } from './rng';
 import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement } from './armies';
 import { onArmyAttacked } from './politics';
+import { combatModsFor, hasCombatEffect, EMPTY_MODS, type CombatMods } from './combatCards';
 import { log } from './log';
 
 const MAX_ROUNDS = 5;
+const clamp = (lo: number, hi: number, v: number): number => Math.max(lo, Math.min(hi, v));
 const other = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
   (Object.keys(state.regions[id]!.units) as Nation[]).filter((n) => (state.regions[id]!.units[n]!.regular + state.regions[id]!.units[n]!.elite) > 0);
 
-function rollHits(state: GameState, count: number, leadershipN: number, target: number): number {
-  return withRng(state, (rng) => {
-    let hits = 0; const fails = [];
-    for (let i = 0; i < count; i++) { const d = rng.rollDie(6); if (d >= target && d !== 1) hits++; else fails.push(d); }
-    const rerolls = Math.min(leadershipN, fails.length, 5);
-    for (let i = 0; i < rerolls; i++) if (rng.rollDie(6) >= target) hits++;
-    return hits;
+/** Hits for one side's roll, applying that side's combat-card mods and the
+ *  enemy's penalty mods. */
+function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
+  baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods): number {
+  let count = Math.min(5, unitCount(state, ownRegion));
+  if (enemyMods.maxDiceEnemy != null) count = Math.min(count, enemyMods.maxDiceEnemy);
+  const target = clamp(2, 6, baseTarget - (ownMods.rollBonus ?? 0) + (enemyMods.enemyRollPenalty ?? 0));
+  const lead = Math.min(5, leadership(state, ownRegion, side));
+  const allowReroll = !enemyMods.negateEnemyReroll;
+  let hits = withRng(state, (rng) => {
+    let h = 0, failed = 0;
+    for (let i = 0; i < count; i++) { const d = rng.rollDie(6); if (d === 6 || (d !== 1 && d >= target)) h++; else failed++; }
+    if (allowReroll) for (let i = 0; i < Math.min(lead, failed); i++) { const d = rng.rollDie(6); if (d === 6 || (d !== 1 && d >= target)) h++; }
+    for (let i = 0; i < (ownMods.extraAttackDice ?? 0); i++) { const d = rng.rollDie(6); if (d >= 5) h++; } // extra attack hits on 5+
+    return h;
   });
+  if ((ownMods.bonusHitsIfAny ?? 0) > 0 && hits > 0) hits += ownMods.bonusHitsIfAny!;
+  if ((ownMods.bonusHitsIfOutnumber ?? 0) > 0 && unitCount(state, ownRegion) >= 2 * Math.max(1, unitCount(state, enemyRegion))) hits += ownMods.bonusHitsIfOutnumber!;
+  return hits;
 }
 
 /** A casualty plan changes the outcome only when both Regulars and Elites are
@@ -65,7 +78,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   state.pendingCombat = {
     attacker, defender: other(attacker), from, to, round: 0,
     fortified: dReg.settlement === 'City' || dReg.settlement === 'Fortification' || dReg.settlement === 'Stronghold',
-    step: 'beginRound', atkHits: 0, defHits: 0,
+    step: 'attackerCard', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0,
   };
   log(state, null, 'combat', `${attacker} attacks ${to} from ${from}`);
   void def;
@@ -106,11 +119,27 @@ export function combatStep(state: GameState): void {
   for (;;) {
     if (unitCount(state, pc.from) === 0 || unitCount(state, pc.to) === 0) { finishCombat(state, true); return; }
     switch (pc.step) {
+      case 'attackerCard': {
+        if (hasPlayableCombatCard(state, pc.attacker)) { state.pendingChoice = { owner: pc.attacker, kind: 'combatCard' }; return; }
+        pc.step = 'defenderCard'; continue;
+      }
+      case 'defenderCard': {
+        if (hasPlayableCombatCard(state, pc.defender)) { state.pendingChoice = { owner: pc.defender, kind: 'combatCard' }; return; }
+        pc.step = 'beginRound'; continue;
+      }
       case 'beginRound': {
         if (pc.round >= MAX_ROUNDS) { finishCombat(state, false); return; }
+        // Combat cards apply in round 0 only, then are spent.
+        let aMods = pc.round === 0 && pc.attackerCard ? (combatModsFor(pc.attackerCard) ?? EMPTY_MODS) : EMPTY_MODS;
+        let dMods = pc.round === 0 && pc.defenderCard ? (combatModsFor(pc.defenderCard) ?? EMPTY_MODS) : EMPTY_MODS;
+        if (aMods.cancelEnemyCard) dMods = EMPTY_MODS;
+        if (dMods.cancelEnemyCard) aMods = EMPTY_MODS;
         const atkTarget = pc.round === 0 && pc.fortified ? 6 : 5;
-        pc.atkHits = rollHits(state, Math.min(5, unitCount(state, pc.from)), leadership(state, pc.from, pc.attacker), atkTarget);
-        pc.defHits = rollHits(state, Math.min(5, unitCount(state, pc.to)), leadership(state, pc.to, pc.defender), 5);
+        const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods);
+        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, aMods);
+        pc.atkHits = Math.max(0, atkHits - (dMods.cancelHits ?? 0)); // defender's Shield-wall
+        pc.defHits = Math.max(0, defHits - (aMods.cancelHits ?? 0));
+        if (pc.round === 0) { pc.attackerCard = null; pc.defenderCard = null; }
         pc.step = 'attackerCasualties'; continue;
       }
       case 'attackerCasualties': {
@@ -179,6 +208,33 @@ function moveStack(state: GameState, from: RegionId, to: RegionId): void {
 }
 
 export const canRetreat = (state: GameState): boolean => retreatRegion(state, state.pendingCombat!) !== null;
+
+/** Hand cards a side could play as a combat card now (those with a modelled
+ *  combat effect). Combat preconditions are not enforced yet (D5). */
+export function playableCombatCards(state: GameState, side: Side): string[] {
+  return state.cards[side].hand.filter((id) => hasCombatEffect(id));
+}
+const hasPlayableCombatCard = (state: GameState, side: Side): boolean => playableCombatCards(state, side).length > 0;
+
+/** Resolve the 'combatCard' PendingChoice: record the chosen card (or none) for
+ *  the side whose step it is, discard it, and advance to the next card/round. */
+export function resolvePlayCombatCard(state: GameState, cardId: string | null): void {
+  const pc = state.pendingCombat!;
+  const owner = pc.step === 'attackerCard' ? pc.attacker : pc.defender;
+  if (cardId) {
+    const hand = state.cards[owner].hand;
+    const i = hand.indexOf(cardId);
+    if (i >= 0) {
+      hand.splice(i, 1);
+      const deck = EVENT_BY_ID[cardId]!.deck === 'Character' ? 'character' : 'strategy';
+      state.cards[owner].discard[deck].push(cardId);
+    }
+    if (pc.step === 'attackerCard') pc.attackerCard = cardId; else pc.defenderCard = cardId;
+    log(state, owner, 'combat', `${owner} plays combat card ${EVENT_BY_ID[cardId]?.combat?.title ?? cardId}`);
+  }
+  pc.step = pc.step === 'attackerCard' ? 'defenderCard' : 'beginRound';
+  state.pendingChoice = null;
+}
 
 /** Regions where `side` has an At-War Army adjacent to an enemy Army. */
 export function attackTargets(state: GameState, side: Side, cap = 8): Array<[RegionId, RegionId]> {

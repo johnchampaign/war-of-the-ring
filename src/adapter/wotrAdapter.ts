@@ -11,7 +11,7 @@ import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separat
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
-import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, canRetreat } from '../engine/combat';
+import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
@@ -42,6 +42,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
   // Combat / other pending choices take precedence over the phase.
   if (state.pendingChoice) {
     switch (state.pendingChoice.kind) {
+      case 'combatCard': {
+        const acts: WotrAction[] = [{ kind: 'playCombatCard', cardId: null }];
+        for (const id of playableCombatCards(state, actor)) acts.push({ kind: 'playCombatCard', cardId: id });
+        return acts;
+      }
       case 'combatCasualties':
         return [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
       case 'combatContinue':
@@ -208,6 +213,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!consumeOneOf(state, actor, ['army', 'armyMuster', 'will'])) throw new Error('No Army die');
       startBattle(state, actor, action.from, action.to); break; // finishCombat resumes the turn
     // --- interactive combat choices (resolving state.pendingChoice) ---
+    case 'playCombatCard':
+      requireChoice(state, 'combatCard', actor); resolvePlayCombatCard(state, action.cardId); break;
     case 'chooseCasualties':
       requireChoice(state, 'combatCasualties', actor); resolveCasualties(state, action.plan); break;
     case 'combatContinue':

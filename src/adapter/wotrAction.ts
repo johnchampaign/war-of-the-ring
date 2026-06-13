@@ -25,6 +25,7 @@ export type WotrAction =
   | { kind: 'skipDie'; face: DieFace } // discard a die, no effect
   | { kind: 'pass' }             // yield to opponent, no die spent
   // Interactive combat sub-machine (resolving a PendingChoice).
+  | { kind: 'playCombatCard'; cardId: string | null } // play a combat card (or none)
   | { kind: 'chooseCasualties'; plan: 'regularsFirst' | 'elitesFirst' }
   | { kind: 'combatContinue'; cont: boolean }  // attacker: continue or cease
   | { kind: 'combatRetreat'; retreat: boolean } // defender: retreat or stand

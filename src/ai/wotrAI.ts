@@ -15,6 +15,7 @@ import type { WotrAction } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS } from '../engine/data';
 import { unitCount } from '../engine/armies';
+import { combatModsFor, type CombatMods } from '../engine/combatCards';
 
 const HEAL_EVENTS = new Set(['fp-char-09', 'fp-char-10', 'fp-char-12', 'fp-char-13']);
 const CORRUPT_EVENTS = new Set(['sh-char-08', 'sh-char-12']);
@@ -98,9 +99,26 @@ function armyAdvanceScore(state: GameState, actor: Side, from: RegionId, to: Reg
 }
 const FP = new Set(['dwarves', 'elves', 'gondor', 'north', 'rohan']);
 
+function combatCardValue(m: CombatMods | null): number {
+  if (!m) return 0;
+  return (m.rollBonus ?? 0) * 2 + (m.extraAttackDice ?? 0) + (m.bonusHitsIfAny ?? 0) * 2
+    + (m.bonusHitsIfOutnumber ?? 0) + (m.enemyRollPenalty ?? 0) * 2 + (m.maxDiceEnemy != null ? 2 : 0)
+    + (m.cancelEnemyCard ? 3 : 0) + (m.negateEnemyReroll ? 2 : 0) + (m.cancelHits ?? 0) * 2;
+}
+
 function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
   const pc = state.pendingCombat;
   switch (state.pendingChoice!.kind) {
+    case 'combatCard': {
+      // Play the most valuable combat card, or none if nothing helps enough.
+      let best: WotrAction = { kind: 'playCombatCard', cardId: null }, bestVal = 1.5;
+      for (const a of legal) {
+        if (a.kind !== 'playCombatCard' || a.cardId == null) continue;
+        const v = combatCardValue(combatModsFor(a.cardId));
+        if (v > bestVal) { bestVal = v; best = a; }
+      }
+      return best;
+    }
     case 'huntDamage': {
       const damage = (state.pendingChoice!.data as { damage: number }).damage;
       const wouldCorrupt = state.fellowship.corruption + damage;
