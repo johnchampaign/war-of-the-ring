@@ -7,7 +7,7 @@ import { FP_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT } from '../armies';
-import { activateNation, advancePolitical } from '../politics';
+import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS } from '../data';
 import { log } from '../log';
 
@@ -65,13 +65,28 @@ register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP nation
 
 // --- Free Peoples: recruit (Event recruit, may ignore At War) -------------
 const fpRecruits: Array<[string, Nation]> = [
+  ['fp-str-13', 'elves'],   // Círdan's Ships
   ['fp-str-14', 'gondor'],  // Guards of the Citadel
+  ['fp-str-15', 'elves'],   // Celeborn's Galadhrim
+  ['fp-str-16', 'rohan'],   // Riders of Théoden
+  ['fp-str-17', 'north'],   // Grimbeorn the Old
   ['fp-str-18', 'gondor'],  // Imrahil of Dol Amroth
   ['fp-str-22', 'dwarves'], // Dáin Ironfoot's Guard
   ['fp-str-23', 'rohan'],   // Éomer, Son of Éomund
   ['fp-str-24', 'elves'],   // Thranduil's Archers
   ['fp-str-19', 'north'],   // King Brand's Men
 ];
+
+// "Book of Mazarbul" — rouse the Dwarves directly to At War.
+register('fp-str-04', {
+  canPlay: (state) => !isAtWar(state, 'dwarves'),
+  apply(state) { activateNation(state, 'dwarves'); advancePolitical(state, 'dwarves', 99); },
+});
+// "Fear! Fire! Foes!" — rouse the North directly to At War.
+register('fp-str-07', {
+  canPlay: (state) => !isAtWar(state, 'north'),
+  apply(state) { activateNation(state, 'north'); advancePolitical(state, 'north', 99); },
+});
 for (const [id, nation] of fpRecruits) {
   register(id, {
     canPlay: (state) => canEventRecruit(state, nation),
@@ -106,10 +121,14 @@ register('sh-char-18', { // The Lidless Eye: up to 3 unused Shadow dice → Eyes
 
 // --- Shadow: recruit -----------------------------------------------------
 const shRecruits: Array<[string, Nation]> = [
-  ['sh-str-13', 'isengard'],   // Half-orcs and Goblin-men (simplified: 1 unit)
+  ['sh-str-11', 'isengard'],   // Rage of the Dunlendings
+  ['sh-str-13', 'isengard'],   // Half-orcs and Goblin-men
   ['sh-str-14', 'sauron'],     // Olog-hai
-  ['sh-str-20', 'sauron'],     // Orcs Multiplying Again (simplified)
-  ['sh-str-17', 'southrons'],  // Many Kings to the Service of Mordor (simplified)
+  ['sh-str-16', 'isengard'],   // A New Power is Rising
+  ['sh-str-19', 'sauron'],     // Shadows on the Misty Mountains
+  ['sh-str-20', 'sauron'],     // Orcs Multiplying Again
+  ['sh-str-22', 'sauron'],     // Monsters Roused
+  ['sh-str-17', 'southrons'],  // Many Kings to the Service of Mordor
 ];
 for (const [id, nation] of shRecruits) {
   register(id, {
