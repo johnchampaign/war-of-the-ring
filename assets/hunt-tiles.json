@@ -1,0 +1,42 @@
+{
+  "_meta": {
+    "authority": "Read directly from the Hunt-tile face scans in the TTS mod (each tile is a scan of the real component). Tile MULTIPLICITIES come from counting how many physical tile objects share each face texture; they reconcile EXACTLY to 16 standard + 8 special = 24 base tiles. Cross-checked vs rulebook p.40-42: red Shadow specials all carry the Stop icon (confirmed), blue Fellowship specials are 0/negative (confirmed).",
+    "source": "TTS mod 1831369203 Hunt Tile objects (DiffuseURL textures); not committed.",
+    "model": {
+      "value": "number 0..3 = Hunt damage. 'eye' = damage equals the number of Hunt successes rolled (0 if drawn for a reveal/Stronghold, not a roll). 'die' = roll a die for damage. negative = SUBTRACT from Corruption (min 0).",
+      "reveal": "true if the tile has the Reveal icon (Fellowship is revealed after other effects).",
+      "stop": "Shadow special only: the Mordor 'Stop' icon — on the Mordor Track the Fellowship does not advance a step.",
+      "background": "beige=standard, blue=Fellowship special, red=Shadow special."
+    },
+    "engineUse": "The 16 standard tiles are the Hunt Pool (rules-spec §10). Specials are set aside and enter only via Event cards, then join the pool when the Fellowship enters Mordor. Draw via Rng; when the pool empties, return STANDARD tiles only.",
+    "verify": [
+      "Exact STANDARD multiset (esp. Eye x4, '3' x3) — reconciles to 16 but confirm against an official tile list; the mod is a fan creation.",
+      "Blue Fellowship special ICONS/effects: tile with a gold RING (x2) and a tile with a horn/mallet icon (x1) — exact effect text unconfirmed; resolve when cataloguing the Event cards that introduce each special tile."
+    ]
+  },
+
+  "standard": [
+    { "value": "eye", "reveal": true,  "count": 4 },
+    { "value": 3,     "reveal": false, "count": 3 },
+    { "value": 2,     "reveal": false, "count": 2 },
+    { "value": 2,     "reveal": true,  "count": 1 },
+    { "value": 1,     "reveal": false, "count": 2 },
+    { "value": 1,     "reveal": true,  "count": 2 },
+    { "value": 0,     "reveal": true,  "count": 2 }
+  ],
+
+  "specialFellowship": [
+    { "value": 0,  "icon": "ring",        "reveal": false, "count": 2, "note": "blue; gold One Ring icon; effect unconfirmed" },
+    { "value": 0,  "icon": "horn",        "reveal": false, "count": 1, "note": "blue; horn/mallet icon; effect unconfirmed" },
+    { "value": -2, "icon": null,          "reveal": false, "count": 1, "note": "blue; subtract 2 Corruption (min 0)" }
+  ],
+
+  "specialShadow": [
+    { "value": 1,     "reveal": true,  "stop": true, "count": 1 },
+    { "value": 3,     "reveal": false, "stop": true, "count": 1 },
+    { "value": "die", "reveal": false, "stop": true, "count": 1 },
+    { "value": "eye", "reveal": true,  "stop": true, "count": 1 }
+  ],
+
+  "counts": { "standard": 16, "specialFellowship": 4, "specialShadow": 4, "total": 24 }
+}
