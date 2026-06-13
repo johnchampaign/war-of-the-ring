@@ -10,16 +10,26 @@ import { Rng } from 'digital-boardgame-framework';
 import { createGame } from '../src/engine/setup.ts';
 import { wotrAdapter, startGame } from '../src/adapter/wotrAdapter.ts';
 import { redactStateForViewer } from '../src/adapter/redact.ts';
+import { chooseAction } from '../src/ai/wotrAI.ts';
 
 const arg = (name, def) => {
   const i = process.argv.indexOf(name);
   return i >= 0 ? Number(process.argv[i + 1]) : def;
 };
+const strArg = (name, def) => {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : def;
+};
 const GAMES = arg('--games', 300);
 const MAX_ACTIONS = 20000;
+// Controller per side: 'heuristic' (default) or 'random'.
+const CTRL = { fp: strArg('--fp', 'heuristic'), shadow: strArg('--shadow', 'heuristic') };
+const pick = (ctrl, state, actor, legal, rng) =>
+  ctrl === 'random' ? rng.pick(legal) : chooseAction(state, actor, legal, rng);
 
 let stalls = 0, illegals = 0, timeouts = 0, leaks = 0;
 const wins = { fp: 0, shadow: 0 };
+const reasons = {};
 const turnCounts = [];
 
 for (let game = 0; game < GAMES; game++) {
@@ -33,7 +43,7 @@ for (let game = 0; game < GAMES; game++) {
     if (actor === null) { stalls++; break; }
     const legal = wotrAdapter.legalActions(state, actor);
     if (legal.length === 0) { stalls++; break; }
-    const action = ai.pick(legal);
+    const action = pick(CTRL[actor], state, actor, legal, ai);
     const res = wotrAdapter.tryApplyAction(state, action, actor);
     if (!res.ok) { illegals++; console.error(`  illegal: ${JSON.stringify(action)} -> ${res.reason}`); break; }
     state = res.state;
@@ -49,15 +59,16 @@ for (let game = 0; game < GAMES; game++) {
   }
 
   const result = wotrAdapter.result(state);
-  if (result) { wins[result.winners[0]]++; turnCounts.push(state.turn); }
+  if (result) { wins[result.winners[0]]++; turnCounts.push(state.turn); reasons[result.reason] = (reasons[result.reason] || 0) + 1; }
   else if (actions >= MAX_ACTIONS) timeouts++;
 }
 
 turnCounts.sort((a, b) => a - b);
 const avg = turnCounts.length ? (turnCounts.reduce((a, b) => a + b, 0) / turnCounts.length) : 0;
 const med = turnCounts.length ? turnCounts[Math.floor(turnCounts.length / 2)] : 0;
-console.log(`Games: ${GAMES}`);
+console.log(`Games: ${GAMES} (FP=${CTRL.fp}, Shadow=${CTRL.shadow})`);
 console.log(`  winners: FP ${wins.fp}, Shadow ${wins.shadow}`);
+console.log(`  win reasons: ${JSON.stringify(reasons)}`);
 console.log(`  turns: min ${turnCounts[0] ?? '-'}, median ${med}, avg ${avg.toFixed(1)}, max ${turnCounts.at(-1) ?? '-'}`);
 console.log(`  stalls: ${stalls}, illegal-accepted: ${illegals}, timeouts: ${timeouts}, view-leaks: ${leaks}`);
 
