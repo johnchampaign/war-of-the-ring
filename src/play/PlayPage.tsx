@@ -2,7 +2,7 @@
 // a GameClientApi (local hotseat or online HTTP). Renders the redacted view; it
 // never owns rules and never drives the opponent.
 import { useMemo, useState } from 'react';
-import { useGame } from 'digital-boardgame-framework/client';
+import { useGame, ChatPanel } from 'digital-boardgame-framework/client';
 import type { GameClientApi } from '../online/gameClient';
 import type { GameState, RegionId, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
@@ -12,14 +12,27 @@ import { StatusBar } from './StatusBar';
 import { HandStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal } from './DecisionModal';
+import { ReportButton } from './ReportButton';
 import { isDecisionAction } from './actionText';
+
+const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ? 'Shadow' : s);
 
 type SpatialAction = Extract<WotrAction, { kind: 'moveArmy' | 'attack' }>;
 const isSpatial = (a: WotrAction): a is SpatialAction => a.kind === 'moveArmy' || a.kind === 'attack';
 
 export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: () => void }) {
-  const g = useGame<GameState, WotrAction>(client as any);
+  // Realtime move push when available (online); polling fallback otherwise.
+  const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
   const [selected, setSelected] = useState<RegionId | null>(null);
+
+  // Chat is online-only (a remote opponent to talk to); the hotseat client omits
+  // the messaging methods, so it's hidden in that mode.
+  const chatClient = useMemo(
+    () => (client.listMessages && client.postMessage
+      ? { listMessages: client.listMessages.bind(client), postMessage: client.postMessage.bind(client) }
+      : null),
+    [client],
+  );
 
   const armyActs = useMemo(() => g.legalActions.filter(isSpatial), [g.legalActions]);
   const sources = useMemo(() => new Set(armyActs.map((a) => a.from)), [armyActs]);
@@ -65,10 +78,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             <ActionPanel actions={panelActions} onAction={g.submit} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
           </div>
+          {chatClient && g.you && (
+            <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
+              subscribe={client.subscribeMessages} style={{ borderTop: '1px solid #2a2418', maxHeight: '34vh' }} />
+          )}
         </div>
       </div>
       <HandStrip view={g.view} you={g.you as Side} />
       <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={g.submit} yourTurn={g.yourTurn} />
+      <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
       {onExit &&<button onClick={onExit} style={{ position: 'fixed', top: 6, right: 8, padding: '3px 8px', fontSize: 12 }}>← Lobby</button>}
     </div>
   );

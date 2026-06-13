@@ -1,7 +1,10 @@
 // Online transport: a GameClientApi over the /api/* routes, for the framework's
 // useGame hook (Phase 3 UI). Pure fetch — no React, no engine. The UI renders the
 // redacted `view` and submits actions; it never owns rules and never drives the
-// opponent.
+// opponent. Also exposes the standard-kit messaging (chat) + realtime subscribe
+// factories; the local hotseat client omits them (no remote opponent to push to).
+import { subscribeSupabaseRealtime } from 'digital-boardgame-framework/client/realtime';
+import type { ChatMessage } from 'digital-boardgame-framework/client';
 import type { GameState } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 
@@ -17,8 +20,20 @@ export interface GameClientApi {
   fetch(): Promise<ViewResult>;
   submit(action: WotrAction): Promise<ViewResult>;
   legalActions(): Promise<WotrAction[]>;
-  report(body: { message: string; category?: string; severity?: string }): Promise<{ reportId: string }>;
+  report(body: { message: string; category?: string; severity?: string; clientBuild?: string }): Promise<{ reportId: string }>;
+  // Online-only (absent on the hotseat client):
+  listMessages?(): Promise<ChatMessage[]>;
+  postMessage?(body: string): Promise<ChatMessage[]>;
+  /** Realtime "a move happened" subscription (for useGame). */
+  subscribeMoves?: (onChange: () => void) => () => void;
+  /** Realtime "a chat message was posted" subscription (for useMessages). */
+  subscribeMessages?: (onChange: () => void) => () => void;
 }
+
+// Public Supabase url + anon key, baked in at build time when present. Enables
+// realtime push; absent -> the hooks fall back to polling (still correct).
+const SB_URL = import.meta.env.VITE_SUPABASE_URL;
+const SB_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export function makeGameClient(gameId: string, token: string): GameClientApi {
   const base = `/api/games/${encodeURIComponent(gameId)}`;
@@ -27,11 +42,20 @@ export function makeGameClient(gameId: string, token: string): GameClientApi {
     fetch(`${base}${path}${q}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }).then((r) => r.json());
+
+  const realtime = SB_URL && SB_ANON
+    ? (event: 'moved' | 'message') => subscribeSupabaseRealtime({ supabaseUrl: SB_URL, anonKey: SB_ANON, gameId, event })
+    : null;
+
   return {
     fetch: () => fetch(`${base}${q}`).then((r) => r.json()),
     submit: (action) => post('/submit', { action }),
     legalActions: () => fetch(`${base}/legal${q}`).then((r) => r.json()).then((r) => r.legalActions ?? r),
     report: (body) => post('/report', body),
+    listMessages: () => fetch(`${base}/chat${q}`).then((r) => r.json()),
+    postMessage: (body: string) => post('/chat', { message: body }),
+    subscribeMoves: realtime ? realtime('moved') : undefined,
+    subscribeMessages: realtime ? realtime('message') : undefined,
   };
 }
 

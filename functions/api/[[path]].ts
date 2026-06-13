@@ -50,6 +50,12 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         const body = await safeJson(request);
         return json(await server.report(gameId, token, body));
       }
+      // In-game chat — auth-gated to the two seats (chat is private to the game).
+      if (sub === 'chat' && method === 'GET') return json(await server.listMessages(gameId, token));
+      if (sub === 'chat' && method === 'POST') {
+        const body = await safeJson(request);
+        return json(await server.postMessage(gameId, token, body?.message ?? body?.body ?? ''));
+      }
     }
 
     return json({ error: 'not found' }, 404);
