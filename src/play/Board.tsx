@@ -1,12 +1,15 @@
-// The Middle-earth board, PLACEHOLDER mode: region polygons (filled by Nation
-// colour) + tokens laid out inside each region via the framework's
-// layoutTokensInPolygon (the polygon token-placement work). No publisher art —
-// fully playable. The real board image is a first-run download, layered on later.
+// The Middle-earth board: the real map image (first-run download) behind the
+// region polygons, with army badges laid out inside each region via the
+// framework's layoutTokensInPolygon. WotR has no 2D unit art (the pieces are
+// miniatures), so armies render as informative tokens — side colour, regular vs
+// elite split, leader/Nazgûl pip. Without the downloaded map it falls back to
+// nation-coloured polygons; fully playable either way.
 import { useMemo } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
 import { useBoardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage } from '../data/geometry';
 import mapData from '../../assets/map.json';
+import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
 
 const NATION_COLOR: Record<string, string> = {
@@ -15,17 +18,26 @@ const NATION_COLOR: Record<string, string> = {
 };
 const regions = (mapData as { regions: Record<string, { name?: string; nation: Nation | null; settlement: string | null; vp: number }> }).regions;
 const rName = (id: RegionId): string => regions[id]?.name ?? id;
+const FP_SET = new Set<string>(FP_NATIONS);
 
 const polyPath = (poly: { x: number; y: number }[]) =>
   poly.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + ' Z';
 
-function unitTotal(r: GameState['regions'][string]): { fp: number; shadow: number } {
-  let fp = 0, shadow = 0;
+// One army badge per side present in a region, with the regular/elite split and
+// the side's leader figures (FP grey Leaders / Shadow Nazgûl). WotR has no 2D
+// unit art (the pieces are miniatures), so these are informative tokens: side
+// colour, regulars vs elites (gold), and a leader/Nazgûl pip.
+interface ArmyInfo { side: Side; reg: number; elite: number; leaders: number; nazgul: number }
+function presentArmies(r: GameState['regions'][string]): ArmyInfo[] {
+  let fpReg = 0, fpElite = 0, shReg = 0, shElite = 0;
   for (const [nation, u] of Object.entries(r.units)) {
-    const n = u!.regular + u!.elite;
-    if (['dwarves', 'elves', 'gondor', 'north', 'rohan'].includes(nation)) fp += n; else shadow += n;
+    if (FP_SET.has(nation)) { fpReg += u!.regular; fpElite += u!.elite; }
+    else { shReg += u!.regular; shElite += u!.elite; }
   }
-  return { fp, shadow };
+  const out: ArmyInfo[] = [];
+  if (fpReg + fpElite + r.leaders > 0) out.push({ side: 'fp', reg: fpReg, elite: fpElite, leaders: r.leaders, nazgul: 0 });
+  if (shReg + shElite + r.nazgul > 0) out.push({ side: 'shadow', reg: shReg, elite: shElite, leaders: 0, nazgul: r.nazgul });
+  return out;
 }
 
 export interface BoardHighlights {
@@ -47,12 +59,10 @@ export function Board({ view, onPickRegion, highlights }: {
     const def = regions[id];
     const fill = def?.nation ? NATION_COLOR[def.nation] ?? '#888' : '#cfcab8';
     const r = view.regions[id];
-    const { fp, shadow } = r ? unitTotal(r) : { fp: 0, shadow: 0 };
-    const total = fp + shadow;
-    const side: Side | null = total ? (fp >= shadow ? 'fp' : 'shadow') : null;
-    const layout = total ? layoutTokensInPolygon(poly, Math.min(total, 10), { tokenRadius: 11 }) : null;
+    const armies = r ? presentArmies(r) : [];
+    const layout = armies.length ? layoutTokensInPolygon(poly, armies.length, { tokenRadius: 22 }) : null;
     const control = r?.control;
-    return { id, poly, fill, def, total, side, layout, control, r };
+    return { id, poly, fill, def, armies, layout, control, r };
   }), [view]);
 
   return (
@@ -75,27 +85,51 @@ export function Board({ view, onPickRegion, highlights }: {
               fill={e.control === 'shadow' ? '#a83232' : e.control === 'fp' ? '#2f4f9e' : '#fff'}
               stroke="#222" strokeWidth={1} transform={`rotate(45 ${e.poly[0]!.x} ${e.poly[0]!.y})`} />
           )}
-          {/* tokens */}
-          {e.layout && !e.layout.stacked && e.layout.points.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r={11 * e.layout!.scale}
-              fill={e.side === 'shadow' ? '#c0392b' : '#2c5fb3'} stroke="#fff" strokeWidth={1} />
-          ))}
-          {e.layout?.stacked && (
-            <>
-              <circle cx={e.layout.anchor.x} cy={e.layout.anchor.y} r={14}
-                fill={e.side === 'shadow' ? '#c0392b' : '#2c5fb3'} stroke="#fff" strokeWidth={1.5} />
-              <text x={e.layout.anchor.x} y={e.layout.anchor.y + 5} fontSize={15} textAnchor="middle" fill="#fff" fontWeight="bold">{e.total}</text>
-            </>
-          )}
-          {/* nazgûl / characters dots */}
-          {e.r && (e.r.nazgul > 0 || e.r.characters.length > 0) && (
-            <circle cx={(e.layout?.anchor.x ?? e.poly[0]!.x) + 16} cy={(e.layout?.anchor.y ?? e.poly[0]!.y) - 16} r={6} fill="#111" stroke="#fff" strokeWidth={1} />
+          {/* army badges (one per side present) */}
+          {e.armies.map((a, i) => {
+            const pt = e.layout && !e.layout.stacked && e.layout.points[i]
+              ? e.layout.points[i]
+              : { x: (e.layout?.anchor.x ?? e.poly[0]!.x), y: (e.layout?.anchor.y ?? e.poly[0]!.y) + i * 22 };
+            return <ArmyBadge key={a.side} x={pt.x} y={pt.y} scale={e.layout?.scale ?? 1} army={a} />;
+          })}
+          {/* separated companions / minions / Witch-king present in the region */}
+          {e.r && e.r.characters.length > 0 && (
+            <circle cx={(e.layout?.anchor.x ?? e.poly[0]!.x) - 16} cy={(e.layout?.anchor.y ?? e.poly[0]!.y) - 16} r={6} fill="#2a1d3a" stroke="#fff" strokeWidth={1} />
           )}
         </g>
       ))}
       {/* Fellowship marker (last-known position) */}
       <FellowshipMarker view={view} />
     </svg>
+  );
+}
+
+// An army marker: a two-tone pill — side colour for Regulars, gold for Elites —
+// plus a corner pip counting Leaders (FP) / Nazgûl (Shadow). Sized to stay legible
+// at fit-to-width zoom without overwhelming the small regions.
+function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number; army: ArmyInfo }) {
+  const { side, reg, elite, leaders, nazgul } = army;
+  const col = side === 'shadow' ? '#b8332b' : '#2c5fb3';
+  const s = Math.min(1, Math.max(0.6, scale));
+  const W = 34, H = 20;
+  const both = reg > 0 && elite > 0;
+  const special = leaders + nazgul;
+  const label = `${side === 'shadow' ? 'Shadow' : 'Free Peoples'}: ${reg} Regular${reg === 1 ? '' : 's'}, ${elite} Elite${elite === 1 ? '' : 's'}` +
+    (leaders ? `, ${leaders} Leader${leaders === 1 ? '' : 's'}` : '') + (nazgul ? `, ${nazgul} Nazgûl` : '');
+  return (
+    <g transform={`translate(${x},${y}) scale(${s})`}>
+      <title>{label}</title>
+      <rect x={-W / 2} y={-H / 2} width={W} height={H} rx={5} fill={elite > 0 && reg === 0 ? '#e8c14a' : col} stroke="#fff" strokeWidth={1.2} />
+      {both && <rect x={0} y={-H / 2} width={W / 2} height={H} rx={5} fill="#e8c14a" stroke="#fff" strokeWidth={1.2} />}
+      {reg > 0 && <text x={both ? -W / 4 : 0} y={4.5} fontSize={13} fontWeight="bold" fill="#fff" textAnchor="middle">{reg}</text>}
+      {elite > 0 && <text x={both ? W / 4 : 0} y={4.5} fontSize={13} fontWeight="bold" fill="#3a2a00" textAnchor="middle">{elite}</text>}
+      {special > 0 && (
+        <g>
+          <circle cx={W / 2 - 1} cy={-H / 2 + 1} r={6.5} fill={nazgul > 0 ? '#141414' : '#f4e7c0'} stroke="#fff" strokeWidth={1} />
+          <text x={W / 2 - 1} y={-H / 2 + 4} fontSize={9} fontWeight="bold" fill={nazgul > 0 ? '#fff' : '#222'} textAnchor="middle">{special}</text>
+        </g>
+      )}
+    </g>
   );
 }
 
