@@ -408,6 +408,8 @@ the seeded `Rng`. Each deviation is listed here, next to its rule.
 | D2 | Event deck shuffle (p.14 step 8) | Physically shuffle | `Rng.shuffle` at setup / on (rare) reshuffle | Mechanical; deterministic under seed. |
 | D3 | Random Companion casualty (p.42) | SH draws a face-down Companion counter | `Rng.pick` over the eligible Companion set | Mechanical when FP *chooses* "random" — FP still chooses guide-vs-random (a real prompt). |
 | D4 | Combat/Hunt dice (p.30, p.41) | Roll physical d6 | `Rng.rollDie` | Mechanical. |
+| D5 | Battle resolution (p.29-32) | Interactive: combat-card play, casualty selection, cease/retreat each round | **TEMPORARY** auto-resolution in `combat.ts`: no combat cards; casualties Regular-first (Elite downgrades); attacker presses while not outnumbered; ≤5 rounds; winner advances+captures | First-playable slice only — to be replaced by an interactive combat sub-machine (real prompts) in a later increment. |
+| D6 | Hunt damage (p.41-42) | FP chooses casualty vs Corruption; re-roll conditions | **TEMPORARY** auto-apply to Corruption (`hunt.ts`) | As above; becomes a real prompt + full modelling later. |
 
 *(Add rows here as implementation surfaces more. Genuine choices — casualty
 removal selection, retreat decisions, combat-card play, declaring/revealing,
