@@ -10,6 +10,9 @@ import { Board } from './Board';
 import { ActionPanel } from './ActionPanel';
 import { StatusBar } from './StatusBar';
 import { HandStrip } from './HandStrip';
+import { PoliticsPanel } from './PoliticsPanel';
+import { DecisionModal } from './DecisionModal';
+import { isDecisionAction } from './actionText';
 
 type SpatialAction = Extract<WotrAction, { kind: 'moveArmy' | 'attack' }>;
 const isSpatial = (a: WotrAction): a is SpatialAction => a.kind === 'moveArmy' || a.kind === 'attack';
@@ -38,8 +41,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
-  // Army moves/attacks are done on the board; keep them out of the button list.
-  const panelActions = g.legalActions.filter((a) => !isSpatial(a));
+  // Army moves/attacks are done on the board; combat/hunt decisions go to the
+  // modal. Keep both out of the plain action-button list.
+  const panelActions = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a));
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
@@ -56,9 +60,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             </div>
           )}
         </div>
-        <ActionPanel actions={panelActions} onAction={g.submit} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
+        <div style={{ width: 320, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <PoliticsPanel view={g.view} />
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <ActionPanel actions={panelActions} onAction={g.submit} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
+          </div>
+        </div>
       </div>
       <HandStrip view={g.view} you={g.you as Side} />
+      <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={g.submit} yourTurn={g.yourTurn} />
       {onExit &&<button onClick={onExit} style={{ position: 'fixed', top: 6, right: 8, padding: '3px 8px', fontSize: 12 }}>← Lobby</button>}
     </div>
   );
