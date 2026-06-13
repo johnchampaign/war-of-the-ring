@@ -4,7 +4,7 @@
     "source": "TTS Workshop mod \"War of the Ring 2E (Scripted by DevKev)\" (1831369203), LuaScript Regions table",
     "trust": "NODE LIST ONLY is reliable. The region NAMES/ids are trustworthy; the gameplay fields (nation/settlement/vp/side/control/starting) are an UNRELIABLE mod author table (or snapshot) and MUST be re-derived from the rulebook before any engine use.",
     "knownIssues": [
-      "Gameplay fields are NOT canonical. Clear example: Erebor is tagged Nation=Sauron / Shadow-controlled, but it is a DWARVEN Stronghold (rulebook p.16). nation/side/control are not to be trusted.",
+      "Gameplay fields are NOT canonical. The Lua has MULTIPLE inconsistent Regions tables (likely per-scenario); no single table matches the rulebook (e.g. one has Erebor=Dwarves/Dale=City correct but Rivendell=3 Elite wrong; another has Rivendell=2 Elite correct but Erebor=Sauron/Dale=Fortification wrong). This extractor takes last-match-wins, so nation/side/control/starting here are arbitrary among those tables — re-derive ALL of them from the rulebook.",
       "Mod `Settlement` has errors: e.g. \"Dale\" tagged Fortification, but rulebook p.10 says the ONLY fortifications are Osgiliath and Fords of Isen.",
       "Mod `starting` units disagree with rulebook p.16-17 (e.g. Rivendell mod=3 Elite vs rulebook=2 Elite). Rulebook is authority for setup.",
       "AUTHORITATIVE re-derivation plan: nation membership from the colored map (p.9); settlement type from p.10-11; VP from p.11/44; starting units from the Army Setup diagram (p.16-17).",
