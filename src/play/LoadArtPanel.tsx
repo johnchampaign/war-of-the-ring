@@ -5,12 +5,12 @@
 // load-art flow in the Rebellion / Tyrants / A&A ports.
 import { useState } from 'react';
 import {
-  downloadAllArt, clearArt, useArtLoaded, ART_SOURCE_NOTE,
+  downloadAllArt, downloadBoardArt, clearArt, useArtLoaded, ART_SOURCE_NOTE,
   TOTAL_CARD_COUNT, SHEET_COUNT, type DownloadProgress,
 } from './artCache';
 
 export function LoadArtPanel() {
-  const { loaded, meta } = useArtLoaded();
+  const { loaded, meta, hasBoard } = useArtLoaded();
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState<DownloadProgress | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -20,6 +20,12 @@ export function LoadArtPanel() {
     try { await downloadAllArt(setProg); }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); setProg(null); }
+  };
+  const addBoard = async () => {
+    setBusy(true); setErr(null);
+    try { await downloadBoardArt(); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
   };
   const drop = async () => { setBusy(true); try { await clearArt(); } finally { setBusy(false); } };
 
@@ -31,7 +37,14 @@ export function LoadArtPanel() {
       <div style={{ fontWeight: 600, marginBottom: 4 }}>Card art</div>
       {loaded ? (
         <>
-          <div style={{ fontSize: 13, color: '#9c9' }}>✓ {meta!.cardCount} cards cached ({mb} MB) — shown in hands & plays.</div>
+          <div style={{ fontSize: 13, color: '#9c9' }}>
+            ✓ {hasBoard ? 'Board map + ' : ''}{meta!.cardCount} cards cached ({mb} MB) — shown {hasBoard ? 'on the board & ' : ''}in hands.
+          </div>
+          {!hasBoard && (
+            <button onClick={addBoard} disabled={busy} style={primary}>
+              {busy ? 'Adding board map…' : 'Add board map (new)'}
+            </button>
+          )}
           <button onClick={drop} disabled={busy} style={ghost}>Remove cached art</button>
         </>
       ) : busy ? (
@@ -45,10 +58,11 @@ export function LoadArtPanel() {
       ) : (
         <>
           <div style={{ fontSize: 13, color: '#bba' }}>
-            Optional: load the real {TOTAL_CARD_COUNT} event cards from the public Steam CDN ({SHEET_COUNT} sheets, one-time).
-            Otherwise the game uses text placeholders.
+            Optional: load the real Middle-earth board map plus the {TOTAL_CARD_COUNT} event cards
+            ({SHEET_COUNT} card sheets + 1 map, public hosts, one-time). Otherwise the game uses
+            the placeholder board and text cards.
           </div>
-          <button onClick={run} style={primary}>Download card art</button>
+          <button onClick={run} style={primary}>Download board &amp; card art</button>
         </>
       )}
       {err && <div style={{ color: '#e98', fontSize: 12, marginTop: 4 }}>⚠ {err}</div>}

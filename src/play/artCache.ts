@@ -31,9 +31,18 @@ const SHEETS = (assetUrlsJson as { sheets: Record<string, { url: string; w: numb
 export const TOTAL_CARD_COUNT = CARDS.length;
 /** Distinct Steam-CDN sheets we'd fetch (deduped). */
 export const SHEET_COUNT = new Set(CARDS.map((c) => c.sheetId)).size;
+
+// The Middle-earth board image is NOT in the TTS card dump. We fetch it from the
+// public SirMartin/WarOfRingMap repo, whose map_en.jpg (1920x1324) is the exact
+// reference image our region polygons were calibrated against — so it overlays
+// the polygon board with no further calibration. Cached under this id like a card.
+export const BOARD_ID = 'board:map_en';
+const BOARD_URL = 'https://raw.githubusercontent.com/SirMartin/WarOfRingMap/master/images/map_en.jpg';
+
 export const ART_SOURCE_NOTE =
-  'Art is fetched from the publicly-hosted Steam Workshop CDN (the "War of the Ring 2E" Tabletop Simulator mod). ' +
-  'Nothing is bundled with or served by this site. Art © Ares Games — loaded into your browser only.';
+  'Card art is fetched from the public Steam Workshop CDN (the "War of the Ring 2E" Tabletop Simulator mod); ' +
+  'the board map is fetched from the public SirMartin/WarOfRingMap repo. Nothing is bundled with or served by ' +
+  'this site — art is loaded into your browser only. Card/board art © Ares Games; map by SirMartin.';
 
 const DB_NAME = 'wotr-card-art';
 const STORE = 'images';
@@ -138,11 +147,40 @@ export async function downloadAllArt(onProgress?: (p: DownloadProgress) => void)
     report('slicing');
   }
 
+  // Board map (single image, no slicing) — fetched from SirMartin/WarOfRingMap.
+  report('fetching');
+  try {
+    const bResp = await fetch(BOARD_URL, { headers: { Accept: 'image/*' } });
+    if (bResp.ok) {
+      const bBlob = await bResp.blob();
+      totalBytes += bBlob.size;
+      await dbPut(BOARD_ID, bBlob);
+    }
+  } catch { /* board is optional; cards still usable without it */ }
+
   const meta: ArtMeta = { loadedAt: new Date().toISOString(), cardCount: cardsDone, totalBytes };
   await dbPut(META_KEY, meta);
   report('done');
   notifyArtChanged();
   return meta;
+}
+
+/** True if the board map image is already cached (separate from cards, since it
+ *  was added after the initial card-only release — lets us offer an "add board"
+ *  path to players who downloaded before this feature shipped). */
+export async function hasBoardArt(): Promise<boolean> {
+  try { return !!(await dbGet<Blob>(BOARD_ID)); } catch { return false; }
+}
+
+/** Fetch + cache just the board map (no card re-slicing). */
+export async function downloadBoardArt(): Promise<void> {
+  const resp = await fetch(BOARD_URL, { headers: { Accept: 'image/*' } });
+  if (!resp.ok) throw new Error(`Board map fetch failed: HTTP ${resp.status}`);
+  const blob = await resp.blob();
+  await dbPut(BOARD_ID, blob);
+  const meta = await dbGet<ArtMeta>(META_KEY);
+  if (meta) await dbPut(META_KEY, { ...meta, totalBytes: meta.totalBytes + blob.size });
+  notifyArtChanged();
 }
 
 export async function getArtMeta(): Promise<ArtMeta | null> {
@@ -213,18 +251,22 @@ export function useCardArt(cardId: string | null): string | null {
   return url;
 }
 
+/** blob: URL for the cached board map image, or null if not downloaded. */
+export function useBoardArt(): string | null { return useCardArt(BOARD_ID); }
+
 const ART_EVENT = 'wotr-art-changed';
 export function notifyArtChanged(): void { window.dispatchEvent(new CustomEvent(ART_EVENT)); }
 
-export function useArtLoaded(): { loaded: boolean; meta: ArtMeta | null } {
-  const [s, setS] = useState<{ loaded: boolean; meta: ArtMeta | null }>({ loaded: false, meta: null });
+export function useArtLoaded(): { loaded: boolean; meta: ArtMeta | null; hasBoard: boolean } {
+  const [s, setS] = useState<{ loaded: boolean; meta: ArtMeta | null; hasBoard: boolean }>({ loaded: false, meta: null, hasBoard: false });
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
       const meta = await getArtMeta();
       if (cancelled) return;
       if (meta) await preloadAllArt();
-      if (!cancelled) setS({ loaded: !!meta, meta });
+      const hasBoard = await hasBoardArt();
+      if (!cancelled) setS({ loaded: !!meta, meta, hasBoard });
     };
     refresh();
     const h = () => refresh();

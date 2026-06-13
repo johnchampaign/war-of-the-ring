@@ -4,6 +4,7 @@
 // fully playable. The real board image is a first-run download, layered on later.
 import { useMemo } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
+import { useBoardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage } from '../data/geometry';
 import mapData from '../../assets/map.json';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
@@ -37,6 +38,7 @@ export function Board({ view, onPickRegion, highlights }: {
 }) {
   const W = mapImage.width, H = mapImage.height;
   const hl = highlights ?? {};
+  const boardArt = useBoardArt(); // map_en.jpg (1920x1324), aligns 1:1 with the polygons
 
   const regionEls = useMemo(() => regionIds.map((id) => {
     const poly = regionPolygon(id);
@@ -55,10 +57,14 @@ export function Board({ view, onPickRegion, highlights }: {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
       <rect x={0} y={0} width={W} height={H} fill="#9fb8cf" />
+      {/* Real board image (first-run download) sits behind the polygons, aligned
+          1:1 to their pixel space. When present, region fills go near-transparent
+          so the map shows through; strokes/highlights stay for click targeting. */}
+      {boardArt && <image href={boardArt} x={0} y={0} width={W} height={H} preserveAspectRatio="none" />}
       {regionEls.map((e) => e && (
         <g key={e.id} onClick={() => onPickRegion?.(e.id)} style={{ cursor: onPickRegion ? 'pointer' : 'default' }}>
           <path d={polyPath(e.poly)} fill={e.fill}
-            fillOpacity={hl.selected === e.id ? 0.75 : 0.5}
+            fillOpacity={boardArt ? (hl.selected === e.id ? 0.3 : hl.destinations?.has(e.id) || hl.sources?.has(e.id) ? 0.18 : 0) : (hl.selected === e.id ? 0.75 : 0.5)}
             stroke={hl.selected === e.id ? '#fff200' : hl.destinations?.has(e.id) ? '#ffd23f' : hl.sources?.has(e.id) ? '#5dff7a' : '#3a3a3a'}
             strokeWidth={hl.selected === e.id || hl.destinations?.has(e.id) ? 4 : hl.sources?.has(e.id) ? 3 : 1.2} />
           {/* settlement marker */}
