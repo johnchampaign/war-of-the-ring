@@ -25,7 +25,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { poleOfInaccessibility, signedDistanceToPolygon } from 'digital-boardgame-framework';
+import { poleOfInaccessibilityWithClearance, toPolygon } from 'digital-boardgame-framework';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..');
@@ -67,7 +67,6 @@ function parsePolygonPx(path) {
   return pts.length >= 3 ? pts : null;
 }
 const round = (n) => Math.round(n * 100) / 100;
-const toPoints = (poly) => poly.map(([x, y]) => ({ x, y }));   // framework Polygon adapter
 
 const nodes = JSON.parse(readFileSync(join(repoRoot, 'assets', 'regions.json'), 'utf8')).regions;
 const nodeSet = new Set(Object.keys(nodes));
@@ -86,9 +85,8 @@ for (const nat of sm) for (const r of nat.regions) {
 let minClearance = Infinity, worst = null;
 let anchorsOutside = 0;
 for (const [id, t] of Object.entries(territories)) {
-  const ring = toPoints(t.polygon);
-  const anchor = poleOfInaccessibility(ring);              // framework
-  const clearance = signedDistanceToPolygon(anchor, ring); // framework
+  // One call: anchor + its inscribed-circle clearance (v0.9.1).
+  const { clearance } = poleOfInaccessibilityWithClearance(toPolygon(t.polygon));
   if (clearance <= 0) anchorsOutside++;
   if (clearance < minClearance) { minClearance = clearance; worst = id; }
 }

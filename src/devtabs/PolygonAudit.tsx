@@ -9,7 +9,7 @@
 import { useMemo, useState } from 'react';
 import {
   layoutTokensInPolygon,
-  poleOfInaccessibility,
+  poleOfInaccessibilityWithClearance,
   signedDistanceToPolygon,
   area,
   type Polygon,
@@ -46,11 +46,11 @@ export function PolygonAudit() {
   const computed = useMemo(() => {
     return regionIds.map((id) => {
       const poly = regionPolygon(id)!;
-      const anchor = poleOfInaccessibility(poly);
-      const clearance = signedDistanceToPolygon(anchor, poly);
+      // One call for anchor + clearance (v0.9.1); reuse the anchor in layout.
+      const { point: anchor, clearance } = poleOfInaccessibilityWithClearance(poly);
       const count = forceCount > 0 ? forceCount : setupCount(id);
       const layout = count > 0
-        ? layoutTokensInPolygon(poly, count, { tokenRadius })
+        ? layoutTokensInPolygon(poly, count, { tokenRadius, anchor })
         : null;
       return { id, poly, anchor, clearance, count, layout, a: area(poly) };
     });

@@ -13,10 +13,11 @@
     "preview": "vite preview",
     "deploy": "npm run build && npx wrangler pages deploy dist --project-name war-of-the-ring --branch main --commit-dirty=true",
     "copy-assets": "node scripts/copy-dev-assets.mjs",
-    "test": "vitest run"
+    "audit:layout": "node scripts/audit-layout.mjs",
+    "test": "node scripts/audit-layout.mjs"
   },
   "dependencies": {
-    "digital-boardgame-framework": "^0.9.0",
+    "digital-boardgame-framework": "^0.9.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

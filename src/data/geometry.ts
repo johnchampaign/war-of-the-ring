@@ -2,7 +2,7 @@
 // pairs, the framework's documented JSON format) and the framework geo API
 // (Polygon = Point[] of {x,y}). The framework owns the math; this just reshapes
 // the data. Board geometry is STATIC — never put it in game state / snapshots.
-import type { Polygon } from 'digital-boardgame-framework';
+import { toPolygon, type Polygon } from 'digital-boardgame-framework';
 import raw from '../../assets/region-geometry.json';
 
 export interface MapImage {
@@ -27,7 +27,7 @@ export const regionIds: string[] = Object.keys(data.territories);
 /** Convert a region's on-disk [x,y][] ring into a framework Polygon ({x,y}[]). */
 export function regionPolygon(id: string): Polygon | null {
   const t = data.territories[id];
-  return t ? t.polygon.map(([x, y]) => ({ x, y })) : null;
+  return t ? toPolygon(t.polygon) : null;
 }
 
 /** All region polygons, keyed by id, as framework Polygons. */
