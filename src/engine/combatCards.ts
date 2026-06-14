@@ -42,6 +42,13 @@ export interface CombatMods {
   /** Sacrifice one of the owner's Leaders to cancel one incoming hit
    *  (Heroic Death) — modelled as cancelHits with a Leader cost. */
   sacrificeLeaderToCancelHit?: number;
+  // --- pre-combat timing effects (resolved BEFORE the normal roll, in
+  //     initiative order; lower first, defender wins ties) ---
+  /** Retreat the owner's Army to a free adjacent region before combat (Scouts). */
+  retreatBeforeCombat?: boolean;
+  /** Roll N extra dice as a pre-combat attack on the enemy (hits on 4+),
+   *  applied immediately before the normal round (Durin's Bane). */
+  preCombatAttackDice?: number;
 }
 
 // Effects by combat title.
@@ -89,6 +96,9 @@ const BY_TITLE: Record<string, CombatMods> = {
   'Blade of Westernesse': { eliminateMinion: 1 },
   'Fateful Strike': { eliminateNazgulIfHit: 1 },
   'Heroic Death': { sacrificeLeaderToCancelHit: 1 },
+  // pre-combat timing (resolved before the normal roll, in initiative order)
+  'Scouts': { retreatBeforeCombat: true },          // init 1
+  "Durin's Bane": { preCombatAttackDice: 3 },       // init 2
 };
 
 /** The combat mods for a card id, or null if its combat half isn't modelled. */

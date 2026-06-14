@@ -27,6 +27,24 @@ function cardInitiative(cardId: string): number {
   if (typeof ini === 'string') { const m = ini.match(/\d+/); return m ? Number(m[0]) : 99; }
   return 99;
 }
+
+/** Is `target` within `n` region-steps of `from` (inclusive)? Bounded BFS. */
+function withinRegions(from: RegionId, target: RegionId, n: number): boolean {
+  const seen = new Set([from]);
+  let layer = [from];
+  for (let d = 0; d < n; d++) {
+    const next: RegionId[] = [];
+    for (const r of layer) for (const adj of REGIONS[r]?.adjacency ?? []) if (!seen.has(adj)) { seen.add(adj); next.push(adj); }
+    layer = next;
+  }
+  return seen.has(target);
+}
+
+/** A free adjacent region a `side` army could retreat into, or null. */
+function freeAdjacentFor(state: GameState, regionId: RegionId, side: Side): RegionId | null {
+  for (const adj of REGIONS[regionId]!.adjacency) if (freeForMovement(state, adj, side)) return adj;
+  return null;
+}
 const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
   (Object.keys(state.regions[id]!.units) as Nation[]).filter((n) => (state.regions[id]!.units[n]!.regular + state.regions[id]!.units[n]!.elite) > 0);
 
@@ -125,8 +143,34 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
 }
 
 function retreatRegion(state: GameState, pc: PendingCombat): RegionId | null {
-  for (const adj of REGIONS[pc.to]!.adjacency) if (freeForMovement(state, adj, pc.defender)) return adj;
-  return null;
+  return freeAdjacentFor(state, pc.to, pc.defender);
+}
+
+/** Resolve pre-combat-timing card effects (Scouts retreat, Durin's Bane special
+ *  attack) in initiative order — lower first, defender wins ties (rules p.29).
+ *  A retreat empties the owner's region; a pre-attack damages the enemy. Fully
+ *  automatic (auto-picked retreat + auto casualties), like the sub-machine's
+ *  other non-choice steps. */
+function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods, dMods: CombatMods): void {
+  const effects: Array<{ side: Side; ini: number; mods: CombatMods }> = [];
+  if (pc.attackerCard && (aMods.retreatBeforeCombat || aMods.preCombatAttackDice)) effects.push({ side: pc.attacker, ini: cardInitiative(pc.attackerCard), mods: aMods });
+  if (pc.defenderCard && (dMods.retreatBeforeCombat || dMods.preCombatAttackDice)) effects.push({ side: pc.defender, ini: cardInitiative(pc.defenderCard), mods: dMods });
+  if (!effects.length) return;
+  effects.sort((x, y) => x.ini - y.ini || (x.side === pc.defender ? -1 : 1)); // lower first; tie -> defender
+  for (const ef of effects) {
+    const own = ef.side === pc.attacker ? pc.from : pc.to;
+    const enemy = ef.side === pc.attacker ? pc.to : pc.from;
+    if (unitCount(state, own) === 0) continue; // owner already left/wiped by an earlier pre-effect
+    if (ef.mods.retreatBeforeCombat) {
+      const dest = freeAdjacentFor(state, own, ef.side);
+      if (dest) { moveStack(state, own, dest); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
+    } else if (ef.mods.preCombatAttackDice) {
+      if (unitCount(state, enemy) === 0) continue;
+      const dice = ef.mods.preCombatAttackDice;
+      const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) if (rng.rollDie(6) >= 4) h++; return h; });
+      if (hits > 0) { applyCasualties(state, enemy, armySide(state, enemy)!, hits, 'regularsFirst'); log(state, null, 'combat', `pre-combat attack scores ${hits} at ${enemy}`); }
+    }
+  }
 }
 
 /** Move the whole army at `from` into `to` (defender gone), capturing. */
@@ -181,6 +225,11 @@ export function combatStep(state: GameState): void {
         const dIni = pc.defenderCard ? cardInitiative(pc.defenderCard) : 99;
         if (aMods.cancelEnemyCard && pc.defenderCard && aIni < dIni) dMods = EMPTY_MODS;
         if (dMods.cancelEnemyCard && pc.attackerCard && dIni <= aIni) aMods = EMPTY_MODS;
+        // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
+        // resolve in initiative order before the normal roll; either can end the
+        // battle (a retreat empties a region, a pre-attack can wipe one).
+        resolvePreCombat(state, pc, aMods, dMods);
+        if (unitCount(state, pc.from) === 0 || unitCount(state, pc.to) === 0) { finishCombat(state, true); return; }
         const atkTarget = pc.round === 0 && pc.fortified ? 6 : 5; // siege bonus first round only
         const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods);
         const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, aMods);
@@ -308,6 +357,7 @@ function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): 
   if (has('Leadership is 1')) return nazgulLeadership >= 1;
   if (has('Rohan region, Fangorn or Orthanc')) return defNation === 'rohan' || pc.to === 'fangorn' || pc.to === 'orthanc';
   if (has('inside the borders of a Free Peoples Nation')) return !!defNation && sideOfNation(defNation) === 'fp';
+  if (has('within two regions of Moria')) return withinRegions(pc.to, 'moria', 2);
   if (has('Strider/Aragorn')) return fpChars.includes('strider') || fpChars.includes('aragorn');
   if (has('Gandalf is in the battle')) return fpChars.includes('gandalf-grey') || fpChars.includes('gandalf-white');
   if (has('Hobbit')) return fpChars.some((c) => HOBBIT_IDS.has(c));
