@@ -3,7 +3,7 @@
 // assets/event-cards.json. Cards not registered here stay unimplemented (not
 // offered) until added. Effects modify the standard rules per the card text.
 import type { GameState, Side, Nation } from '../types';
-import { FP_NATIONS } from '../types';
+import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT } from '../armies';
@@ -30,6 +30,20 @@ function fpArmyNearNazgul(state: GameState): Array<[string, string]> {
 function eliminateNazgul(state: GameState, region: string, n: number): void {
   const r = state.regions[region]!; const k = Math.min(n, r.nazgul);
   r.nazgul -= k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + k;
+}
+const allAtWar = (state: GameState, nations: Nation[]): boolean => nations.every((n) => state.nations[n].step === 0);
+/** Force-place units into a region (a card that recruits in a NAMED region,
+ *  bypassing the settlement/control checks recruit() applies). Capped by
+ *  reinforcements + the stacking limit. */
+function placeUnits(state: GameState, nation: Nation, region: string, regular: number, elite: number): void {
+  const pool = state.reinforcements[nation], r = state.regions[region]!;
+  const room = STACKING_LIMIT - unitCount(state, region);
+  const reg = Math.max(0, Math.min(regular, pool.regular, room));
+  const el = Math.max(0, Math.min(elite, pool.elite, room - reg));
+  if (reg + el === 0) return;
+  pool.regular -= reg; pool.elite -= el;
+  const u = r.units[nation] ?? { regular: 0, elite: 0 };
+  u.regular += reg; u.elite += el; r.units[nation] = u;
 }
 
 const heal = (state: GameState, n: number): void => {
@@ -157,6 +171,63 @@ for (const [id, nation] of shRecruits) {
     apply(state, side) { eventRecruit(state, side, nation, 1, 0); },
   });
 }
+
+// --- Recruit / muster cards in named or chosen regions -----------------------
+// Pits of Mordor: recruit 2 Sauron Regulars in each of three Sauron Strongholds.
+register('sh-str-24', {
+  canPlay: (state) => isAtWar(state, 'sauron'),
+  apply(state) {
+    let done = 0;
+    for (const id of Object.keys(state.regions)) {
+      if (done >= 3) break;
+      const def = REGIONS[id]!;
+      if (def.nation === 'sauron' && def.settlement === 'Stronghold' && settlementController(state, id) === 'shadow'
+        && unitCount(state, id) < STACKING_LIMIT && recruit(state, 'sauron', id, 2, 0, { ignoreAtWar: true })) done++;
+    }
+  },
+});
+// Musterings of Long-planned War: 5 Southrons in Gorgoroth + 5 Sauron in Nurn.
+register('sh-str-23', {
+  canPlay: (state) => allAtWar(state, SHADOW_NATIONS),
+  apply(state) {
+    placeUnits(state, 'southrons', 'gorgoroth', 5, 0);
+    placeUnits(state, 'sauron', 'nurn', 5, 0);
+  },
+});
+// Return of the Witch-king: move the Witch-king to Angmar + recruit there.
+register('sh-str-12', {
+  canPlay: (state) => state.characters.entered.includes('witch-king'),
+  apply(state) {
+    for (const id of Object.keys(state.regions)) {
+      const i = state.regions[id]!.characters.indexOf('witch-king');
+      if (i >= 0) { state.regions[id]!.characters.splice(i, 1); break; }
+    }
+    state.regions['angmar']!.characters.push('witch-king');
+    placeUnits(state, 'sauron', 'angmar', 2, 1);
+    log(state, null, 'event', 'Return of the Witch-king: to Angmar + muster');
+  },
+});
+
+// --- Action-die manipulation --------------------------------------------------
+// Mirror of Galadriel: turn an unused FP Character die into a Will of the West.
+register('fp-char-13', {
+  canPlay: (state) => state.dice.fp.includes('character'),
+  apply(state) {
+    const i = state.dice.fp.indexOf('character');
+    if (i >= 0) state.dice.fp[i] = 'will';
+    if (state.fellowship.location === 'lorien' && settlementController(state, 'lorien') !== 'shadow') heal(state, 1);
+  },
+});
+// The Day Without Dawn: discard all unused FP Will-of-the-West dice.
+register('sh-str-04', {
+  canPlay: (state) => allAtWar(state, SHADOW_NATIONS) && state.dice.fp.includes('will'),
+  apply(state) {
+    const kept = state.dice.fp.filter((f) => f !== 'will');
+    const removed = state.dice.fp.length - kept.length;
+    state.dice.fp = kept;
+    log(state, null, 'event', `The Day Without Dawn: discarded ${removed} FP Will die/dice`);
+  },
+});
 
 // --- Direct-damage event cards (roll dice -> hits on an Army) ----------------
 // The Ents Awake (Treebeard/Huorns/Entmoot): hit the Shadow Army in Orthanc.
