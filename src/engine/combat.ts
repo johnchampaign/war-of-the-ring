@@ -17,6 +17,16 @@ import { log } from './log';
 const MAX_ROUNDS = 5;
 const clamp = (lo: number, hi: number, v: number): number => Math.max(lo, Math.min(hi, v));
 const other = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
+
+/** A combat card's initiative for resolution order (lower resolves first). For a
+ *  ranged/multi-effect card ("3-5") use its earliest effect (the min). Unknown
+ *  initiative resolves last. */
+function cardInitiative(cardId: string): number {
+  const ini = EVENT_BY_ID[cardId]?.initiative;
+  if (typeof ini === 'number') return ini;
+  if (typeof ini === 'string') { const m = ini.match(/\d+/); return m ? Number(m[0]) : 99; }
+  return 99;
+}
 const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
   (Object.keys(state.regions[id]!.units) as Nation[]).filter((n) => (state.regions[id]!.units[n]!.regular + state.regions[id]!.units[n]!.elite) > 0);
 
@@ -135,13 +145,25 @@ export function combatStep(state: GameState): void {
         // a fresh card may be played next round (rules-spec §7, p.29).
         let aMods = pc.attackerCard ? (combatModsFor(pc.attackerCard) ?? EMPTY_MODS) : EMPTY_MODS;
         let dMods = pc.defenderCard ? (combatModsFor(pc.defenderCard) ?? EMPTY_MODS) : EMPTY_MODS;
-        if (aMods.cancelEnemyCard) dMods = EMPTY_MODS;
-        if (dMods.cancelEnemyCard) aMods = EMPTY_MODS;
+        // Cancels resolve in initiative order (lower first; tie -> defender). A
+        // cancel removes the opponent's card only if it resolves first — the
+        // attacker (never the tie-winner) needs strictly lower initiative; the
+        // defender wins ties.
+        const aIni = pc.attackerCard ? cardInitiative(pc.attackerCard) : 99;
+        const dIni = pc.defenderCard ? cardInitiative(pc.defenderCard) : 99;
+        if (aMods.cancelEnemyCard && pc.defenderCard && aIni < dIni) dMods = EMPTY_MODS;
+        if (dMods.cancelEnemyCard && pc.attackerCard && dIni <= aIni) aMods = EMPTY_MODS;
         const atkTarget = pc.round === 0 && pc.fortified ? 6 : 5; // siege bonus first round only
         const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods);
         const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, aMods);
-        pc.atkHits = Math.max(0, atkHits - (dMods.cancelHits ?? 0)); // defender's Shield-wall
-        pc.defHits = Math.max(0, defHits - (aMods.cancelHits ?? 0));
+        let atk = Math.max(0, atkHits - (dMods.cancelHits ?? 0)); // defender's Shield-wall
+        let def = Math.max(0, defHits - (aMods.cancelHits ?? 0));
+        // Mûmakil's later effect: +hits if you outscored the enemy (snapshot the
+        // pre-bonus totals so simultaneous bonuses compare fairly).
+        const a0 = atk, d0 = def;
+        if (aMods.bonusHitIfOutscore && a0 > d0) atk += aMods.bonusHitIfOutscore;
+        if (dMods.bonusHitIfOutscore && d0 > a0) def += dMods.bonusHitIfOutscore;
+        pc.atkHits = atk; pc.defHits = def;
         pc.attackerCard = null; pc.defenderCard = null;
         pc.step = 'attackerCasualties'; continue;
       }

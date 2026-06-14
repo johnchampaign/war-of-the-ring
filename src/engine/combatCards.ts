@@ -25,6 +25,9 @@ export interface CombatMods {
   negateEnemyReroll?: boolean;
   /** Cancel N hits the owner would take this round. */
   cancelHits?: number;
+  /** +N hits if, after the re-roll, the owner scored MORE total hits than the
+   *  enemy (Mûmakil's second, later-initiative effect). Evaluated post-roll. */
+  bonusHitIfOutscore?: number;
 }
 
 // Effects by combat title.
@@ -64,6 +67,9 @@ const BY_TITLE: Record<string, CombatMods> = {
   'Daring Defiance': { cancelEnemyCard: true },
   'Swarm of Bats': { cancelEnemyCard: true },
   'Shield-wall': { cancelHits: 1 },
+  // multi-effect (per-effect initiative 3-5): +1 dice (init 3) AND +1 hit if you
+  // outscore the enemy after the re-roll (init 5). See data.ts initiative note.
+  'Mûmakil': { rollBonus: 1, bonusHitIfOutscore: 1 },
 };
 
 /** The combat mods for a card id, or null if its combat half isn't modelled. */
