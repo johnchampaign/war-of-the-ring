@@ -11,6 +11,7 @@ import { applyCasualties, startBattle } from '../combat';
 import { extraHunt } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS } from '../data';
+import { separateCompanion } from '../fellowship';
 import { log } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
@@ -604,6 +605,59 @@ register('sh-str-03', { // Denethor's Folly — eliminate an FP Leader in Minas 
   apply(state) {
     const mt = state.regions['minas-tirith']!;
     if (mt.leaders > 0) { mt.leaders -= 1; log(state, null, 'event', "Denethor's Folly: an FP Leader in Minas Tirith is eliminated"); }
+  },
+});
+
+// --- Companion-separation event cards: separate one Companion (with bonus
+//     movement) plus a secondary effect. Interactive — the player picks which.
+//     (The cards' alternative "or move an already-separated Companion" is folded
+//     into the existing Character-die moveCharacter action.) ---------------------
+const fellowCompanions = (state: GameState): EventTarget[] =>
+  state.fellowship.companions.filter((c) => COMPANION_SET.has(c)).map((companion) => ({ companion }));
+const canSeparate = (state: GameState): boolean =>
+  state.fellowship.mordor === null && state.fellowship.companions.some((c) => COMPANION_SET.has(c));
+register('fp-char-11', { // I Will Go Alone — separate (+1 region), then heal 1 Corruption
+  canPlay: canSeparate, targets: fellowCompanions,
+  applyTarget(state, _side, t) { separateCompanion(state, t.companion!, { extraMove: 1 }); heal(state, 1); log(state, null, 'event', `I Will Go Alone: ${t.companion} separates, heal 1`); },
+});
+register('fp-char-15', { // Gwaihir the Windlord — separate as if Level 4
+  canPlay: canSeparate, targets: fellowCompanions,
+  applyTarget(state, _side, t) { separateCompanion(state, t.companion!, { levelOverride: 4 }); log(state, null, 'event', `Gwaihir bears ${t.companion} away (Level 4)`); },
+});
+register('fp-char-16', { // We Prove the Swifter — separate, +2 regions
+  canPlay: canSeparate, targets: fellowCompanions,
+  applyTarget(state, _side, t) { separateCompanion(state, t.companion!, { extraMove: 2 }); log(state, null, 'event', `We Prove the Swifter: ${t.companion} separates (+2)`); },
+});
+register('fp-char-17', { // There and Back Again — separate (+1); if Gimli/Legolas reach Dale/Erebor/Woodland Realm, rouse Dwarves & North
+  canPlay: canSeparate, targets: fellowCompanions,
+  applyTarget(state, _side, t) {
+    separateCompanion(state, t.companion!, { extraMove: 1 });
+    const trig = ['dale', 'erebor', 'woodland-realm'];
+    if (['gimli', 'legolas'].some((c) => trig.includes(charRegion(state, c) ?? ''))) {
+      activateNation(state, 'dwarves', { viaCompanion: true }); activateNation(state, 'north', { viaCompanion: true });
+      advancePolitical(state, 'dwarves', 1); advancePolitical(state, 'elves', 1); advancePolitical(state, 'north', 1);
+      log(state, null, 'event', 'There and Back Again rouses the Dwarves/Elves/North');
+    }
+  },
+});
+
+// The Spirit of Mordor: choose a Shadow Army of ≥2 Nations, roll 5 dice, hit on 5+.
+function multiNationShadowArmies(state: GameState): EventTarget[] {
+  const out: EventTarget[] = [];
+  for (const id of Object.keys(state.regions)) {
+    if (armySide(state, id) !== 'shadow') continue;
+    const nations = (Object.keys(state.regions[id]!.units) as Nation[]).filter((n) => { const u = state.regions[id]!.units[n]!; return u.regular > 0 || u.elite > 0; });
+    if (nations.length >= 2) out.push({ region: id });
+  }
+  return out;
+}
+register('fp-str-05', {
+  canPlay: (state) => multiNationShadowArmies(state).length > 0,
+  targets: multiNationShadowArmies,
+  applyTarget(state, _side, t) {
+    const hits = rollDice(state, 5, 5);
+    if (hits > 0) applyCasualties(state, t.region!, 'shadow', hits, 'regularsFirst');
+    log(state, null, 'event', `The Spirit of Mordor scores ${hits} at ${t.region}`);
   },
 });
 

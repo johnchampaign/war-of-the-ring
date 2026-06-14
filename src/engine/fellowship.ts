@@ -136,10 +136,11 @@ function nearestMatch(from: RegionId, maxMove: number, pred: (id: RegionId) => b
  *  Mordor Track). The Companion moves up to (Progress + Level) regions toward the
  *  nearest City/Stronghold of a Nation it can activate that isn't yet At War, and
  *  activates + advances that Nation on arrival. Separation is permanent. */
-export function separateCompanion(state: GameState, id: CharacterId): boolean {
+export function separateCompanion(state: GameState, id: CharacterId,
+  opts: { extraMove?: number; levelOverride?: number } = {}): boolean {
   const fs = state.fellowship;
   if (fs.mordor !== null || !fs.companions.includes(id)) return false;
-  const maxMove = fs.progress + levelOf(id);
+  const maxMove = fs.progress + (opts.levelOverride ?? levelOf(id)) + (opts.extraMove ?? 0);
   const nations = activatableNations(id);
   const isTarget = (r: RegionId): boolean => {
     const def = REGIONS[r]!;
