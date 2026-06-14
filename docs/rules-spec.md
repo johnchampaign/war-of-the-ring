@@ -234,7 +234,10 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
 
 - Modifiers from cards/abilities add to the die result (clamped by the 1-miss/
   6-hit rule). Card **initiative** (bottom number) breaks timing ties; lower
-  applied first; equal → defender's first (p.29).
+  applied first; equal → defender's first (p.29). A Combat card with **multiple
+  different-timing effects has one initiative per effect** — e.g. *Mûmakil* is
+  printed "Initiative 3-5" (effect at 3, effect at 5), not a single value
+  (p.29). Initiative 0 = resolves first (the *Daring Defiance* cancel cards).
 
 ### Fortifications & Cities (p.31)
 First combat round only: attacker hits on **6+** (instead of 5+). Then normal.
