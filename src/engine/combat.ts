@@ -135,7 +135,7 @@ export function applyCasualties(state: GameState, id: RegionId, side: Side, hits
  *  (combatStep, run from advance) takes it from here. */
 export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId): void {
   const def = state.regions[to]!;
-  for (const n of nationsWithUnits(state, to)) onArmyAttacked(state, n);
+  for (const n of nationsWithUnits(state, to)) onArmyAttacked(state, n, to);
   const dReg = REGIONS[to]!;
   state.pendingCombat = {
     attacker, defender: other(attacker), from, to, round: 0,

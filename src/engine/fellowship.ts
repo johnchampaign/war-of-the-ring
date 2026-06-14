@@ -158,7 +158,7 @@ export function separateCompanion(state: GameState, id: CharacterId): boolean {
   // activate + advance the destination Nation if it's one this Companion rouses
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
-    activateNation(state, dn); advancePolitical(state, dn, 1);
+    activateNation(state, dn, { viaCompanion: true }); advancePolitical(state, dn, 1);
   }
   log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);
   return true;

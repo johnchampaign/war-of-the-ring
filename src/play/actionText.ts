@@ -50,6 +50,7 @@ export function describeAction(a: WotrAction): string {
         case 'reduceCard': return 'Discard a table card (−1 damage)';
       }
       return 'Resolve Hunt';
+    case 'bonusDraw': return `Palantír: draw a ${cap(a.deck)} card`;
     case 'huntPreventDraw': return a.prevent ? 'Discard Wizard’s Staff — no Hunt tile' : 'Let the Shadow draw';
     case 'huntRedraw': return a.redraw ? 'Discard Mithril Coat — redraw the tile' : 'Keep the drawn tile';
     default: return JSON.stringify(a);
@@ -58,5 +59,5 @@ export function describeAction(a: WotrAction): string {
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'huntDamage', 'huntPreventDraw', 'huntRedraw']);
+const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);

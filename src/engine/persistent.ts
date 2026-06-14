@@ -31,3 +31,21 @@ export const threatsAndPromisesActive = (s: GameState): boolean => onTable(s, 's
  *  for battles fought in Minas Tirith. */
 export const fpCombatCardsBarredAt = (s: GameState, region: RegionId): boolean =>
   onTable(s, 'shadow', 'sh-str-03') && region === 'minas-tirith';
+
+/** sh-char-21 "The Palantír of Orthanc": after the Shadow plays an Event card,
+ *  immediately draw another card from either Shadow deck. */
+export const palantirActive = (s: GameState): boolean => onTable(s, 'shadow', 'sh-char-21');
+
+/** sh-char-15 "Worn with Sorrow and Toil": when a Companion in the Fellowship is
+ *  taken as a casualty, the Shadow also discards an FP Character Event card. */
+export const wornWithSorrowActive = (s: GameState): boolean => onTable(s, 'shadow', 'sh-char-15');
+
+/** sh-char-22 "Wormtongue": Rohan cannot be activated except by an appropriate
+ *  Companion, the Fellowship being declared in Edoras/Helm's Deep, or an attack on
+ *  Edoras/Helm's Deep. Given an activation trigger, may it activate Rohan? */
+export function wormtongueAllowsActivation(
+  s: GameState, n: string, opts: { region?: RegionId; viaCompanion?: boolean },
+): boolean {
+  if (n !== 'rohan' || !onTable(s, 'shadow', 'sh-char-22')) return true;
+  return !!opts.viaCompanion || opts.region === 'edoras' || opts.region === 'helms-deep';
+}

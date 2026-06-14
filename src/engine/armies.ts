@@ -123,5 +123,5 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
     state.victoryPoints[side] += vp;
     log(state, null, 'army', `${side} captured ${id} (+${vp} VP, total ${state.victoryPoints[side]})`);
   }
-  if (def.nation) onSettlementCaptured(state, def.nation);
+  if (def.nation) onSettlementCaptured(state, def.nation, id);
 }

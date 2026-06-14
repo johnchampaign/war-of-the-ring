@@ -165,9 +165,18 @@ die already showing an Eye.
   Muster die, politics.ts `advanceableNations`), *Denethor's Folly* (FP can't use
   Combat cards in a Minas Tirith battle, combat.ts `playableCombatCards`). The handler
   applies only the immediate part (e.g. advancing the Nation, eliminating the Leader)
-  and lets the card persist. (Deferred persistent cards needing extra machinery:
-  Palantír of Orthanc, Worn with Sorrow and Toil, Wormtongue.)
-- **Handlers** (`handlers/index.ts`, ~70/96 implemented): each registered card
+  and lets the card persist. Three more persistent cards carry their own machinery:
+  *The Palantír of Orthanc* (after the Shadow plays an Event card, a `bonusDraw`
+  PendingChoice lets it draw from either Shadow deck — captured before the play so the
+  card can't trigger off itself; adapter `playEvent`/`eventTarget`), *Worn with Sorrow
+  and Toil* (on a Fellowship-Companion casualty the Shadow discards an FP Character card,
+  random from hand else from the table; hunt.ts `discardFpCharacterCard`), and *Wormtongue*
+  (`activateNation` gains a `trigger` arg so Rohan stays passive unless roused by an
+  appropriate Companion or an attack on/capture of Edoras/Helm's Deep; politics.ts).
+  **Deviation:** declaring the Fellowship in a region does not activate that Nation in this
+  engine, so Wormtongue's "declared in Edoras/Helm's Deep" exception is moot. Worn with
+  Sorrow's "you may" is auto-applied (always to the Shadow's benefit).
+- **Handlers** (`handlers/index.ts`, ~73/96 implemented): each registered card
   applies its effect; unimplemented cards aren't offered. **Interactive cards**
   (those whose effect needs a player-chosen target) use an `EventHandler.targets`/
   `applyTarget` pair: playing pauses with an `eventTarget` PendingChoice, the

@@ -35,6 +35,8 @@ export type WotrAction =
   | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId }
   // Follow-up target choice for an interactive event card (fields per card).
   | { kind: 'eventTarget'; card: string; from?: RegionId; to?: RegionId; region?: RegionId; companion?: string; done?: boolean }
+  // Palantír of Orthanc bonus draw (Shadow): choose which deck to draw from.
+  | { kind: 'bonusDraw'; deck: 'character' | 'strategy' }
   // Hunt damage resolution (FP): absorb as Corruption, lose a Companion, or use a
   // damage-reduction ability (separate the Hobbit Guide / Gollum reveal).
   | { kind: 'huntDamage'; mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard' }

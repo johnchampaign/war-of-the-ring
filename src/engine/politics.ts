@@ -2,12 +2,16 @@
 // reach step 0 until activated.
 import type { GameState, Nation } from './types';
 import { sideOfNation } from './data';
-import { threatsAndPromisesActive } from './persistent';
+import type { RegionId } from './types';
+import { threatsAndPromisesActive, wormtongueAllowsActivation } from './persistent';
 import { log } from './log';
 
 export const isAtWar = (state: GameState, n: Nation): boolean => state.nations[n].step === 0;
 
-export function activateNation(state: GameState, n: Nation): void {
+/** Activate a Nation. `trigger` carries the activation source so persistent cards
+ *  (Wormtongue) can veto it; default (no trigger) is a generic activation. */
+export function activateNation(state: GameState, n: Nation, trigger: { region?: RegionId; viaCompanion?: boolean } = {}): void {
+  if (!wormtongueAllowsActivation(state, n, trigger)) return; // Wormtongue: Rohan stays passive
   if (!state.nations[n].active) {
     state.nations[n].active = true;
     log(state, null, 'politics', `${n} activated`);
@@ -25,15 +29,15 @@ export function advancePolitical(state: GameState, n: Nation, steps = 1): void {
   }
 }
 
-/** Automatic political reaction when a nation's army is attacked. */
-export function onArmyAttacked(state: GameState, n: Nation): void {
-  activateNation(state, n);
+/** Automatic political reaction when a nation's army is attacked (in `region`). */
+export function onArmyAttacked(state: GameState, n: Nation, region?: RegionId): void {
+  activateNation(state, n, { region });
   advancePolitical(state, n, 1);
 }
 
-/** Automatic reaction when one of a nation's Settlements is captured. */
-export function onSettlementCaptured(state: GameState, n: Nation): void {
-  activateNation(state, n);
+/** Automatic reaction when one of a nation's Settlements (in `region`) is captured. */
+export function onSettlementCaptured(state: GameState, n: Nation, region?: RegionId): void {
+  activateNation(state, n, { region });
   advancePolitical(state, n, 1);
 }
 

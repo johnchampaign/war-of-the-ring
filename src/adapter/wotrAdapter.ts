@@ -14,7 +14,7 @@ import {
 import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
-import { shadowBarredFromRegion, threatsAndPromisesActive } from '../engine/persistent';
+import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, characterMoveOptions } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
@@ -67,6 +67,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         if ((h?.repeat ?? 1) > 1 && data.applied.length > 0) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         return opts;
       }
+      case 'bonusDraw':
+        return [{ kind: 'bonusDraw', deck: 'character' }, { kind: 'bonusDraw', deck: 'strategy' }];
       case 'huntDamage': {
         const fs = state.fellowship;
         const acts: WotrAction[] = [{ kind: 'huntDamage', mode: 'corruption' }];
@@ -205,23 +207,27 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const h = getHandler(action.cardId);
       if (!h || !canPlayCard(state, action.cardId, actor)) throw new Error('Card not playable');
       if (!consumeOneOf(state, actor, ['event', 'will'])) throw new Error('No Event die');
+      // Palantír of Orthanc grants a bonus draw — captured BEFORE this play so the
+      // card doesn't trigger off its own play.
+      const palantirWasActive = actor === 'shadow' && palantirActive(state);
       hand.splice(idx, 1);
       // Interactive card: pause for the player's target choice; the card is held
       // (out of hand) until the eventTarget resolves.
       const opts = h.targets ? h.targets(state, actor) : null;
       if (opts && opts.length > 0) {
-        state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId, repeat: h.repeat ?? 1, left: h.repeat ?? 1, applied: [] } };
+        state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId, repeat: h.repeat ?? 1, left: h.repeat ?? 1, applied: [], palantir: palantirWasActive } };
         break;
       }
       h.apply?.(state, actor);
       const deck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
       if (h.onTable) state.cards[actor].table.push(action.cardId);
       else state.cards[actor].discard[deck].push(action.cardId);
+      if (palantirWasActive) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
       passResolutionTurn(state, actor); break;
     }
     case 'eventTarget': {
       requireChoice(state, 'eventTarget', actor);
-      const data = state.pendingChoice!.data as { card: string; left: number; applied: EventTarget[] };
+      const data = state.pendingChoice!.data as { card: string; left: number; applied: EventTarget[]; palantir?: boolean };
       const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
@@ -235,7 +241,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       state.pendingChoice = null;
       const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
       state.cards[actor].discard[deck].push(data.card);
+      if (data.palantir) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
       passResolutionTurn(state, actor); break;
+    }
+    case 'bonusDraw': {
+      requireChoice(state, 'bonusDraw', actor); // Palantír of Orthanc bonus draw
+      drawOne(state, actor, action.deck);
+      state.pendingChoice = null; break; // the turn already passed when the Event resolved
     }
     case 'diplomaticAction': {
       requirePhase(state, 'actionResolution');

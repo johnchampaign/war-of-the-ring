@@ -567,6 +567,9 @@ register('fp-str-03', { // The Power of Tom Bombadil — advance North; bar Shad
   apply(state) { advancePolitical(state, 'north', 1); log(state, null, 'event', 'The Power of Tom Bombadil: North advances; Shadow barred from the Old Forest/Shire/Buckland'); },
 });
 register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see politics.ts (advanceableNations) */ } });
+register('sh-char-21', { onTable: true, apply() { /* The Palantír of Orthanc — bonus draw, see wotrAdapter playEvent */ } });
+register('sh-char-15', { onTable: true, apply() { /* Worn with Sorrow and Toil — see hunt.ts (companion casualty) */ } });
+register('sh-char-22', { onTable: true, apply() { /* Wormtongue — see politics.ts (activateNation) */ } });
 register('sh-str-03', { // Denethor's Folly — eliminate an FP Leader in Minas Tirith; bar FP Combat cards there
   onTable: true,
   apply(state) {

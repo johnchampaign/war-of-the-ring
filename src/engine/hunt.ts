@@ -9,8 +9,8 @@
 // Still deferred: "play on the table" damage-cancel cards (Axe & Bow, Mithril
 // Coat — they land with the on-table event-handler increment).
 import type { GameState } from './types';
-import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, type HuntTileDef } from './data';
-import { fellowshipDieSkipsHuntBox } from './persistent';
+import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, EVENT_BY_ID, type HuntTileDef } from './data';
+import { fellowshipDieSkipsHuntBox, wornWithSorrowActive } from './persistent';
 import { withRng } from './rng';
 import { settlementController, armySide } from './armies';
 import { log } from './log';
@@ -270,6 +270,7 @@ function eliminateCompanionInline(state: GameState, id: string): number {
   if (i < 0) return 0;
   fs.companions.splice(i, 1);
   if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
+  if (wornWithSorrowActive(state)) discardFpCharacterCard(state); // Worn with Sorrow and Toil
   // Reassign Guide: highest-Level remaining Companion, else Gollum.
   if (!fs.companions.includes(fs.guide)) {
     fs.guide = fs.companions.length
@@ -277,4 +278,25 @@ function eliminateCompanionInline(state: GameState, id: string): number {
       : 'gollum';
   }
   return levelOf(id);
+}
+
+/** Worn with Sorrow and Toil: discard one FP Character Event card — randomly from
+ *  the hand (it's hidden), else from the table if the hand has none. */
+function discardFpCharacterCard(state: GameState): void {
+  const cards = state.cards.fp;
+  const isChar = (id: string) => EVENT_BY_ID[id]?.deck === 'Character';
+  const handChars = cards.hand.filter(isChar);
+  if (handChars.length) {
+    const pick = withRng(state, (rng) => rng.pick(handChars));
+    cards.hand.splice(cards.hand.indexOf(pick), 1);
+    cards.discard.character.push(pick);
+    log(state, null, 'event', `Worn with Sorrow and Toil: FP discards a Character card (${pick})`);
+    return;
+  }
+  const ti = cards.table.findIndex(isChar);
+  if (ti >= 0) {
+    const id = cards.table.splice(ti, 1)[0]!;
+    cards.discard.character.push(id);
+    log(state, null, 'event', `Worn with Sorrow and Toil: FP discards a tabled Character card (${id})`);
+  }
 }
