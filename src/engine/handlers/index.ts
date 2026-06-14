@@ -6,7 +6,7 @@ import type { GameState, Side, Nation } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register } from './registry';
-import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement } from '../armies';
+import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement } from '../armies';
 import { applyCasualties } from '../combat';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS } from '../data';
@@ -41,8 +41,9 @@ function regionDist(from: string, to: string): number {
     layer = next; }
   return Infinity;
 }
-/** Move a whole Army (units + Leaders + Nazgûl + characters) from→to, capturing. */
-function moveAllUnits(state: GameState, from: string, to: string): void {
+/** Move a whole Army (units + Leaders + Nazgûl + characters) from→to, capturing
+ *  for `side` (default Shadow). */
+function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow'): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
   for (const n of Object.keys(src.units) as Nation[]) {
     const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
@@ -50,7 +51,7 @@ function moveAllUnits(state: GameState, from: string, to: string): void {
   }
   dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...src.characters);
   src.units = {}; src.leaders = 0; src.nazgul = 0; src.characters = [];
-  captureIfEnemySettlement(state, to, 'shadow');
+  captureIfEnemySettlement(state, to, side);
 }
 /** Force-place units into a region (a card that recruits in a NAMED region,
  *  bypassing the settlement/control checks recruit() applies). Capped by
@@ -227,6 +228,50 @@ register('sh-str-07', {
   canPlay: (state) => shadowsGatherMoves(state).length > 0,
   targets: shadowsGatherMoves,
   applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}`); },
+});
+
+// Dead Men of Dunharrow: move Strider/Aragorn (+ Companions in the same region)
+// from a Rohan region to Erech, Lamedon or Pelargir.
+const ROHAN = ['eastemnet', 'edoras', 'folde', 'fords-of-isen', 'helms-deep', 'westemnet'];
+function aragornRohanRegion(state: GameState): string | null {
+  for (const id of ROHAN) if (state.regions[id]!.characters.some((c) => c === 'aragorn' || c === 'strider')) return id;
+  return null;
+}
+register('fp-char-22', {
+  canPlay: (state) => aragornRohanRegion(state) !== null,
+  targets: () => ['erech', 'lamedon', 'pelargir'].map((region) => ({ region })),
+  applyTarget(state, _side, t) {
+    const from = aragornRohanRegion(state); if (!from) return;
+    const moving = state.regions[from]!.characters.filter((c) => COMPANION_SET.has(c));
+    state.regions[from]!.characters = state.regions[from]!.characters.filter((c) => !COMPANION_SET.has(c));
+    state.regions[t.region!]!.characters.push(...moving);
+    for (const c of moving) if (state.characters.inPlay[c]) state.characters.inPlay[c] = t.region!;
+    log(state, null, 'event', `Dead Men of Dunharrow: ${from} → ${t.region}`);
+  },
+});
+// Paths of the Woses: move an FP Army from a Rohan region directly to Minas Tirith.
+register('fp-str-11', {
+  canPlay: (state) => isAtWar(state, 'rohan') && ROHAN.some((r) => armySide(state, r) === 'fp'),
+  targets: (state) => ROHAN.filter((r) => armySide(state, r) === 'fp').map((from) => ({ from, to: 'minas-tirith' })),
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, 'minas-tirith', 'fp'); log(state, null, 'event', `Paths of the Woses: ${t.from} → Minas Tirith`); },
+});
+// Through a Day and a Night: move an FP Army containing a Companion up to 2 regions.
+function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {
+  const out: Array<{ from: string; to: string }> = [];
+  for (const from of Object.keys(state.regions)) {
+    if (armySide(state, from) !== 'fp' || !state.regions[from]!.characters.some((c) => COMPANION_SET.has(c))) continue;
+    for (const to of Object.keys(state.regions)) {
+      if (out.length >= 12) return out;
+      const d = regionDist(from, to);
+      if (d >= 1 && d <= 2 && freeForMovement(state, to, 'fp') && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+    }
+  }
+  return out;
+}
+register('fp-str-12', {
+  canPlay: (state) => dayNightMoves(state).length > 0,
+  targets: dayNightMoves,
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp'); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}`); },
 });
 
 // --- Recruit / muster cards in named or chosen regions -----------------------
