@@ -177,6 +177,23 @@ export function extraHunt(state: GameState): void {
   applyHuntTile(state, tile, Math.min(5, state.hunt.box));
 }
 
+/** Challenge of the King: draw 3 Hunt tiles. If all 3 are Eyes, return them to the
+ *  pool and report true (the caller eliminates Strider/Aragorn). Otherwise the drawn
+ *  Eye tiles are removed from the game and the rest return to the pool. */
+export function challengeOfTheKing(state: GameState): boolean {
+  const refs = [drawTile(state), drawTile(state), drawTile(state)];
+  const allEyes = refs.every((r) => r.tile.value === 'eye');
+  for (const r of refs) {
+    if (!allEyes && r.tile.value === 'eye' && 'std' in r.ref) {
+      const i = state.hunt.drawn.lastIndexOf(r.ref.std); // permanently remove (don't return to pool)
+      if (i >= 0) state.hunt.drawn.splice(i, 1);
+    } else {
+      returnTileToPool(state, r.ref);
+    }
+  }
+  return allEyes;
+}
+
 /** Draw a Hunt tile for a card effect (The Breaking of the Fellowship): returns the
  *  tile's number (a 'die' tile is rolled), or null if it's an Eye / FP-special tile. */
 export function drawHuntTileNumber(state: GameState): number | null {

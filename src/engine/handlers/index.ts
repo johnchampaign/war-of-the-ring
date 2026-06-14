@@ -8,7 +8,7 @@ import { withRng } from '../rng';
 import { register, type EventTarget } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement } from '../armies';
 import { applyCasualties, startBattle } from '../combat';
-import { extraHunt, drawHuntTileNumber } from '../hunt';
+import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf } from '../data';
 import { separateCompanion, reassignGuide } from '../fellowship';
@@ -720,6 +720,41 @@ register('sh-char-13', {
     state.pendingChoice = { owner: 'fp', kind: 'lureChoice', data: { companion, level: levelOf(companion) } };
     log(state, null, 'event', `Lure of the Ring tempts ${companion}`);
   },
+});
+
+// Challenge of the King: with Strider/Aragorn in a Gondor/Rohan Army, draw 3 Hunt
+// tiles — all 3 Eyes eliminates him; otherwise the drawn Eye tiles leave the game.
+function striderAragornArmy(state: GameState): { id: string; char: string } | null {
+  for (const char of ['aragorn', 'strider']) {
+    const id = charRegion(state, char);
+    if (id && (REGIONS[id]!.nation === 'gondor' || REGIONS[id]!.nation === 'rohan') && armySide(state, id) === 'fp') return { id, char };
+  }
+  return null;
+}
+register('fp-char-14', {
+  canPlay: (state) => striderAragornArmy(state) !== null,
+  apply(state) {
+    const who = striderAragornArmy(state);
+    if (challengeOfTheKing(state)) {
+      if (who) {
+        const r = state.regions[who.id]!;
+        r.characters = r.characters.filter((c) => c !== who.char);
+        delete state.characters.inPlay[who.char];
+        if (!state.characters.eliminated.includes(who.char)) state.characters.eliminated.push(who.char);
+        log(state, null, 'event', `Challenge of the King: all Eyes — ${who.char} is lost`);
+      }
+    } else log(state, null, 'event', 'Challenge of the King: Eye tiles removed from the Hunt Pool');
+  },
+});
+
+// Hordes From the East: recruit five S&E Regulars in a free S&E region adjacent to
+// the eastern map edge (derived from region geometry: Far Harad / Khand / South Rhûn).
+const EAST_EDGE_SE = ['far-harad', 'khand', 'south-rhun'];
+register('sh-str-21', {
+  canPlay: (state) => isAtWar(state, 'southrons') && state.reinforcements.southrons.regular > 0
+    && EAST_EDGE_SE.some((id) => armySide(state, id) !== 'fp'),
+  targets: (state) => EAST_EDGE_SE.filter((id) => armySide(state, id) !== 'fp').map((region) => ({ region })),
+  applyTarget(state, _side, t) { placeUnits(state, 'southrons', t.region!, 5, 0); log(state, null, 'event', `Hordes From the East muster in ${t.region}`); },
 });
 
 // The Spirit of Mordor: choose a Shadow Army of ≥2 Nations, roll 5 dice, hit on 5+.
