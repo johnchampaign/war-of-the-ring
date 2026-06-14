@@ -554,6 +554,27 @@ register('fp-char-08', { // Wizard's Staff — Gandalf the Grey in the Fellowshi
   apply() { /* persists on the table */ },
 });
 
+// --- Persistent "while in play" cards: played to the table; their ongoing rule
+//     change is enforced at the relevant seam via src/engine/persistent.ts. The
+//     handler applies only the immediate part and lets the card persist. ---------
+register('fp-str-01', { onTable: true, apply() { /* The Last Battle — see hunt.ts (fpDiceInBox) */ } });
+register('fp-str-02', { // A Power too Great — advance Elves; bar Shadow from Lórien/Rivendell/Grey Havens
+  onTable: true,
+  apply(state) { advancePolitical(state, 'elves', 1); log(state, null, 'event', 'A Power too Great: Elves advance; Shadow barred from Lórien/Rivendell/Grey Havens'); },
+});
+register('fp-str-03', { // The Power of Tom Bombadil — advance North; bar Shadow from Old Forest/Shire/Buckland
+  onTable: true,
+  apply(state) { advancePolitical(state, 'north', 1); log(state, null, 'event', 'The Power of Tom Bombadil: North advances; Shadow barred from the Old Forest/Shire/Buckland'); },
+});
+register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see politics.ts (advanceableNations) */ } });
+register('sh-str-03', { // Denethor's Folly — eliminate an FP Leader in Minas Tirith; bar FP Combat cards there
+  onTable: true,
+  apply(state) {
+    const mt = state.regions['minas-tirith']!;
+    if (mt.leaders > 0) { mt.leaders -= 1; log(state, null, 'event', "Denethor's Folly: an FP Leader in Minas Tirith is eliminated"); }
+  },
+});
+
 // --- The Red Arrow: advance Rohan + recruit a Rohan unit & Leader in Edoras ----
 register('fp-str-09', {
   canPlay: (state) => state.nations.gondor.active,

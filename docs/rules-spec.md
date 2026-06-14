@@ -156,7 +156,18 @@ die already showing an Eye.
   costs a die, that counts as the action (p.22).
 - **Combat cards**: every Event card has a bottom-half combat use. Played during
   a battle (does **not** cost an action) — see §7 (p.23, p.29).
-- **Handlers** (`handlers/index.ts`, ~65/96 implemented): each registered card
+- **Persistent "while in play" cards** (`src/engine/persistent.ts`): cards played to
+  `cards[side].table` (`onTable`) whose effect keeps modifying the rules. Each query
+  reads the table at the seam it governs — *The Last Battle* (FP move die skips the
+  Hunt Box, hunt.ts), *A Power too Great* / *The Power of Tom Bombadil* (Shadow barred
+  from moving into / attacking listed regions, armies.ts `canMoveArmy` + combat.ts
+  `attackTargets`), *Threats and Promises* (FP can't advance a passive Nation via a
+  Muster die, politics.ts `advanceableNations`), *Denethor's Folly* (FP can't use
+  Combat cards in a Minas Tirith battle, combat.ts `playableCombatCards`). The handler
+  applies only the immediate part (e.g. advancing the Nation, eliminating the Leader)
+  and lets the card persist. (Deferred persistent cards needing extra machinery:
+  Palantír of Orthanc, Worn with Sorrow and Toil, Wormtongue.)
+- **Handlers** (`handlers/index.ts`, ~70/96 implemented): each registered card
   applies its effect; unimplemented cards aren't offered. **Interactive cards**
   (those whose effect needs a player-chosen target) use an `EventHandler.targets`/
   `applyTarget` pair: playing pauses with an `eventTarget` PendingChoice, the

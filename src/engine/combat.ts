@@ -11,6 +11,7 @@ import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { withRng } from './rng';
 import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement } from './armies';
 import { onArmyAttacked } from './politics';
+import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, hasCombatEffect, EMPTY_MODS, type CombatMods } from './combatCards';
 import { log } from './log';
 
@@ -389,6 +390,8 @@ function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): 
  *  AND a satisfied precondition (rules-spec §7). */
 export function playableCombatCards(state: GameState, side: Side): string[] {
   const pc = state.pendingCombat;
+  // Denethor's Folly: the FP may not use Combat cards for a battle in Minas Tirith.
+  if (side === 'fp' && pc && fpCombatCardsBarredAt(state, pc.to)) return [];
   return state.cards[side].hand.filter((id) => hasCombatEffect(id) && (!pc || combatPrecondMet(state, pc, id)));
 }
 const hasPlayableCombatCard = (state: GameState, side: Side): boolean => playableCombatCards(state, side).length > 0;
@@ -420,7 +423,7 @@ export function attackTargets(state: GameState, side: Side, cap = 8): Array<[Reg
   for (const from of Object.keys(state.regions)) {
     if (out.length >= cap) break;
     if (armySide(state, from) !== side || !hasAtWarUnit(state, from, side)) continue;
-    for (const to of REGIONS[from]!.adjacency) if (armySide(state, to) === enemy) { out.push([from, to]); break; }
+    for (const to of REGIONS[from]!.adjacency) if (armySide(state, to) === enemy && !(side === 'shadow' && shadowBarredFromRegion(state, to))) { out.push([from, to]); break; }
   }
   return out;
 }

@@ -14,6 +14,7 @@ import {
 import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
+import { shadowBarredFromRegion, threatsAndPromisesActive } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, characterMoveOptions } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
@@ -239,6 +240,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'diplomaticAction': {
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
+      if (actor === 'fp' && threatsAndPromisesActive(state) && !state.nations[action.nation].active) throw new Error('Threats and Promises bars advancing a passive Nation');
       if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
       advancePolitical(state, action.nation, 1); passResolutionTurn(state, actor); break;
     }
@@ -262,6 +264,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'attack':
       requirePhase(state, 'actionResolution');
       if (armySide(state, action.from) !== actor) throw new Error('No attacking army');
+      if (actor === 'shadow' && shadowBarredFromRegion(state, action.to)) throw new Error('Region protected from Shadow');
       if (!consumeOneOf(state, actor, ['army', 'armyMuster', 'will'])) throw new Error('No Army die');
       startBattle(state, actor, action.from, action.to); break; // finishCombat resumes the turn
     // --- interactive combat choices (resolving state.pendingChoice) ---

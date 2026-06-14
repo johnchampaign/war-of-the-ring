@@ -2,6 +2,7 @@
 // reach step 0 until activated.
 import type { GameState, Nation } from './types';
 import { sideOfNation } from './data';
+import { threatsAndPromisesActive } from './persistent';
 import { log } from './log';
 
 export const isAtWar = (state: GameState, n: Nation): boolean => state.nations[n].step === 0;
@@ -38,9 +39,12 @@ export function onSettlementCaptured(state: GameState, n: Nation): void {
 
 /** Nations of a side that can still be advanced on the track (diplomatic action). */
 export function advanceableNations(state: GameState, side: 'fp' | 'shadow'): Nation[] {
+  // Threats and Promises: the FP cannot advance a passive Nation via a Muster die.
+  const barPassiveFp = side === 'fp' && threatsAndPromisesActive(state);
   return (Object.keys(state.nations) as Nation[]).filter((n) => {
     if (sideOfNation(n) !== side) return false;
     const ns = state.nations[n];
+    if (barPassiveFp && !ns.active) return false;
     const floor = ns.active ? 0 : 1;
     return ns.step > floor; // can move at least one step (FP passive must activate first via events/companions)
   });

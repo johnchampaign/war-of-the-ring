@@ -3,6 +3,7 @@
 import type { GameState, Nation, RegionId, Side, ArmyUnits } from './types';
 import { REGIONS, sideOfNation, characterDef } from './data';
 import { isAtWar, onSettlementCaptured } from './politics';
+import { shadowBarredFromRegion } from './persistent';
 import { log } from './log';
 
 export const STACKING_LIMIT = 10;
@@ -80,6 +81,7 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
 export function canMoveArmy(state: GameState, from: RegionId, to: RegionId, side: Side): boolean {
   if (!REGIONS[from]!.adjacency.includes(to)) return false;
   if (armySide(state, from) !== side) return false;
+  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return false; // A Power too Great / Tom Bombadil
   if (!freeForMovement(state, to, side)) return false;
   if (unitCount(state, from) + unitCount(state, to) > STACKING_LIMIT) return false;
   // Non-belligerent nations cannot cross another nation's border (rules-spec §8).

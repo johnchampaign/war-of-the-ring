@@ -10,6 +10,7 @@
 // Coat — they land with the on-table event-handler increment).
 import type { GameState } from './types';
 import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, type HuntTileDef } from './data';
+import { fellowshipDieSkipsHuntBox } from './persistent';
 import { withRng } from './rng';
 import { settlementController, armySide } from './armies';
 import { log } from './log';
@@ -181,7 +182,7 @@ export function resolveHunt(state: GameState): void {
   const h = state.hunt;
   const level = Math.min(5, h.box);
   const bonus = h.fpDiceInBox;     // dice already in the box (before this move's die)
-  h.fpDiceInBox += 1;              // this move's FP die enters the Hunt Box
+  if (!fellowshipDieSkipsHuntBox(state)) h.fpDiceInBox += 1; // FP die enters the Hunt Box (unless "The Last Battle")
   if (level <= 0) return;
   const rerolls = huntRerolls(state);
   const successes = withRng(state, (rng) => {
@@ -198,7 +199,7 @@ export function resolveHunt(state: GameState): void {
 export function resolveMordorStep(state: GameState): void {
   const fs = state.fellowship;
   if (fs.mordor === null) return;
-  state.hunt.fpDiceInBox += 1; // the FP die still enters the Hunt Box
+  if (!fellowshipDieSkipsHuntBox(state)) state.hunt.fpDiceInBox += 1; // FP die enters the Hunt Box (unless "The Last Battle")
   beginHuntDraw(state, Math.min(5, state.hunt.box), true);
 }
 
