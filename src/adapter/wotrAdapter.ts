@@ -11,7 +11,7 @@ import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separat
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
-import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
+import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
@@ -53,6 +53,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
       case 'combatContinue':
         return [{ kind: 'combatContinue', cont: true }, { kind: 'combatContinue', cont: false }];
+      case 'siegeWithdraw':
+        return [{ kind: 'siegeWithdraw', withdraw: true }, { kind: 'siegeWithdraw', withdraw: false }];
       case 'combatRetreat':
         return canRetreat(state)
           ? [{ kind: 'combatRetreat', retreat: true }, { kind: 'combatRetreat', retreat: false }]
@@ -242,7 +244,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
       state.cards[actor].discard[deck].push(data.card);
       if (data.palantir) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
-      passResolutionTurn(state, actor); break;
+      // A card that started a battle (Grond / Uruk-hai) hands off to the combat
+      // driver, which resumes the turn itself — don't pass it here.
+      if (!state.pendingCombat) passResolutionTurn(state, actor);
+      break;
     }
     case 'bonusDraw': {
       requireChoice(state, 'bonusDraw', actor); // Palantír of Orthanc bonus draw
@@ -288,6 +293,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'combatContinue', actor); resolveContinue(state, action.cont); break;
     case 'combatRetreat':
       requireChoice(state, 'combatRetreat', actor); resolveRetreat(state, action.retreat); break;
+    case 'siegeWithdraw':
+      requireChoice(state, 'siegeWithdraw', actor); resolveSiegeWithdraw(state, action.withdraw); break;
     case 'retreatTo':
       requireChoice(state, 'retreatTo', actor); resolveRetreatTo(state, action.region); break;
     case 'moveCharacter': {

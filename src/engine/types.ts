@@ -148,7 +148,8 @@ export interface PendingChoice {
 export type CombatStep =
   | 'attackerCard' | 'defenderCard'
   | 'beginRound' | 'attackerCasualties' | 'defenderCasualties'
-  | 'continueDecision' | 'retreatDecision';
+  | 'continueDecision' | 'retreatDecision'
+  | 'siegeWithdraw' | 'siegeAdvance';
 
 export interface PendingCombat {
   attacker: Side;
@@ -164,6 +165,14 @@ export interface PendingCombat {
   /** Hits scored this round (attacker's hits land on the defender, vice versa). */
   atkHits: number;
   defHits: number;
+  /** True for a siege assault (attacking a besieged Stronghold): round-capped, the
+   *  attacker hits on 6 every round, and the defender cannot retreat. */
+  siege?: boolean;
+  /** Rounds remaining in this siege assault (1 normally; 3 via Grond / Uruk-hai). */
+  siegeRoundsLeft?: number;
+  /** Grond / The Fighting Uruk-hai: the FP may not play a Combat card in the first
+   *  siege round unless a Companion is in the besieged Stronghold. */
+  fpCardLock?: boolean;
 }
 
 // --- The whole game state ------------------------------------------------

@@ -7,9 +7,9 @@
 // (a card's initiative only matters when both sides' effects collide — see D5)
 // and a few intricate per-effect cards (e.g. Mûmakil's two timings).
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
-import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
+import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES } from './data';
 import { withRng } from './rng';
-import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement } from './armies';
+import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement, settlementController } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, hasCombatEffect, EMPTY_MODS, type CombatMods } from './combatCards';
@@ -133,17 +133,28 @@ export function applyCasualties(state: GameState, id: RegionId, side: Side, hits
 
 /** Begin a battle: political reactions, then set up the sub-machine. The driver
  *  (combatStep, run from advance) takes it from here. */
-export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId): void {
-  const def = state.regions[to]!;
+export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId,
+  opts: { siegeRounds?: number; fpCardLock?: boolean } = {}): void {
   for (const n of nationsWithUnits(state, to)) onArmyAttacked(state, n, to);
   const dReg = REGIONS[to]!;
-  state.pendingCombat = {
-    attacker, defender: other(attacker), from, to, round: 0,
+  const defender = other(attacker);
+  const isStronghold = dReg.settlement === 'Stronghold';
+  const alreadyBesieged = isStronghold && state.regions[to]!.besieged;
+  const pc: PendingCombat = {
+    attacker, defender, from, to, round: 0,
     fortified: dReg.settlement === 'City' || dReg.settlement === 'Fortification' || dReg.settlement === 'Stronghold',
     step: 'attackerCard', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0,
   };
-  log(state, null, 'combat', `${attacker} attacks ${to} from ${from}`);
-  void def;
+  if (opts.siegeRounds) {
+    // Grond / The Fighting Uruk-hai force a multi-round assault on a besieged Stronghold.
+    pc.siege = true; pc.siegeRoundsLeft = opts.siegeRounds; pc.fpCardLock = !!opts.fpCardLock;
+  } else if (alreadyBesieged) {
+    pc.siege = true; pc.siegeRoundsLeft = 1; // a normal siege assault is one round
+  } else if (isStronghold && settlementController(state, to) === defender) {
+    pc.step = 'siegeWithdraw'; // the defender may withdraw into the siege instead of a field battle
+  }
+  state.pendingCombat = pc;
+  log(state, null, 'combat', `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}`);
 }
 
 function retreatRegion(state: GameState, pc: PendingCombat): RegionId | null {
@@ -191,7 +202,8 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
 
 function finishCombat(state: GameState, advance: boolean): void {
   const pc = state.pendingCombat!;
-  if (advance && unitCount(state, pc.from) > 0) advanceInto(state, pc.attacker, pc.from, pc.to);
+  if (advance && unitCount(state, pc.from) > 0) { advanceInto(state, pc.attacker, pc.from, pc.to); state.regions[pc.to]!.besieged = false; }
+  if (pc.siege && unitCount(state, pc.from) === 0) state.regions[pc.to]!.besieged = false; // siege lifted: attacker gone
   log(state, null, 'combat', `battle at ${pc.to} ended (atk ${unitCount(state, pc.from)} / def ${unitCount(state, pc.to)})`);
   // Resume Action Resolution: opponent of attacker acts if able (else attacker).
   const opp = other(pc.attacker);
@@ -234,7 +246,9 @@ export function combatStep(state: GameState): void {
         // battle (a retreat empties a region, a pre-attack can wipe one).
         resolvePreCombat(state, pc, aMods, dMods);
         if (unitCount(state, pc.from) === 0 || unitCount(state, pc.to) === 0) { finishCombat(state, true); return; }
-        const atkTarget = pc.round === 0 && pc.fortified ? 6 : 5; // siege bonus first round only
+        // Stronghold gives the attacker a 6-to-hit: the first round of a field
+        // battle, and EVERY round of a siege assault.
+        const atkTarget = pc.fortified && (pc.siege || pc.round === 0) ? 6 : 5;
         const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods);
         const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, aMods);
         // Hit cancellation: Shield-wall, plus Heroic Death's sacrifice-a-Leader.
@@ -270,12 +284,25 @@ export function combatStep(state: GameState): void {
       case 'defenderCasualties': {
         if (pc.atkHits > 0) {
           if (meaningfulCasualty(state, pc.to, pc.atkHits)) {
-            state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: pc.atkHits, next: 'continueDecision' } };
+            state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: pc.atkHits, next: pc.siege ? 'siegeAdvance' : 'continueDecision' } };
             return;
           }
           applyCasualties(state, pc.to, pc.defender, pc.atkHits, 'regularsFirst');
         }
-        pc.step = 'continueDecision'; continue;
+        pc.step = pc.siege ? 'siegeAdvance' : 'continueDecision'; continue;
+      }
+      case 'siegeWithdraw': {
+        // The defender chooses: withdraw into the Stronghold (siege box) or fight in the open.
+        state.pendingChoice = { owner: pc.defender, kind: 'siegeWithdraw' };
+        return;
+      }
+      case 'siegeAdvance': {
+        // A siege round resolved: capture if the garrison is gone, else count down
+        // the assault's rounds (the attacker can't be made to continue past them).
+        if (unitCount(state, pc.to) === 0) { finishCombat(state, true); return; }
+        pc.siegeRoundsLeft = (pc.siegeRoundsLeft ?? 1) - 1;
+        if (pc.siegeRoundsLeft > 0 && unitCount(state, pc.from) > 0) { pc.round += 1; pc.step = 'attackerCard'; continue; }
+        finishCombat(state, false); return; // the siege holds; attacker remains besieging
       }
       case 'continueDecision': {
         if (unitCount(state, pc.to) === 0 || unitCount(state, pc.from) === 0) { finishCombat(state, true); return; }
@@ -296,6 +323,19 @@ export function resolveCasualties(state: GameState, plan: 'regularsFirst' | 'eli
   applyCasualties(state, d.region, d.side, d.hits, plan);
   state.pendingCombat!.step = d.next;
   state.pendingChoice = null;
+}
+/** Resolve the defender's siege-withdraw choice: retreat into the Stronghold (the
+ *  region becomes besieged, no battle this action) or stand and fight a field battle. */
+export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void {
+  const pc = state.pendingCombat!;
+  state.pendingChoice = null;
+  if (withdraw) {
+    state.regions[pc.to]!.besieged = true;
+    log(state, null, 'combat', `${pc.defender} withdraws into the siege at ${pc.to}`);
+    finishCombat(state, false); // siege established; the assault itself is a later action
+    return;
+  }
+  pc.step = 'attackerCard'; // fight in the open
 }
 export function resolveContinue(state: GameState, cont: boolean): void {
   state.pendingChoice = null;
@@ -388,10 +428,15 @@ function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): 
 
 /** Hand cards a side could play as a combat card now: a modelled combat effect
  *  AND a satisfied precondition (rules-spec §7). */
+const isCompanion = (id: string): boolean => !!(COMPANIONS[id] || UPGRADES[id]);
 export function playableCombatCards(state: GameState, side: Side): string[] {
   const pc = state.pendingCombat;
   // Denethor's Folly: the FP may not use Combat cards for a battle in Minas Tirith.
   if (side === 'fp' && pc && fpCombatCardsBarredAt(state, pc.to)) return [];
+  // Grond / The Fighting Uruk-hai: no FP Combat card in the first siege round unless
+  // a Companion is in the besieged Stronghold.
+  if (side === 'fp' && pc?.fpCardLock && pc.round === 0
+    && !state.regions[pc.to]!.characters.some(isCompanion)) return [];
   return state.cards[side].hand.filter((id) => hasCombatEffect(id) && (!pc || combatPrecondMet(state, pc, id)));
 }
 const hasPlayableCombatCard = (state: GameState, side: Side): boolean => playableCombatCards(state, side).length > 0;

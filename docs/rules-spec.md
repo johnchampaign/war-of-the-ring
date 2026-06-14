@@ -176,7 +176,7 @@ die already showing an Eye.
   **Deviation:** declaring the Fellowship in a region does not activate that Nation in this
   engine, so Wormtongue's "declared in Edoras/Helm's Deep" exception is moot. Worn with
   Sorrow's "you may" is auto-applied (always to the Shadow's benefit).
-- **Handlers** (`handlers/index.ts`, ~73/96 implemented): each registered card
+- **Handlers** (`handlers/index.ts`, ~75/96 implemented): each registered card
   applies its effect; unimplemented cards aren't offered. **Interactive cards**
   (those whose effect needs a player-chosen target) use an `EventHandler.targets`/
   `applyTarget` pair: playing pauses with an `eventTarget` PendingChoice, the
@@ -294,6 +294,23 @@ siege) (p.31). Siege ends if attacker leaves or either side is wiped (p.31).
 Stronghold defense (p.32). **Relieving**: an outside army attacks the besiegers
 normally; the besieged don't participate (p.32). The besieging player may move
 new troops into the (free) region — movement, not attack (p.32).
+
+**Implementation (combat.ts `siege` sub-machine).** When a Stronghold's controller
+is attacked and isn't yet besieged, `startBattle` pauses with a `siegeWithdraw`
+PendingChoice: **withdraw** sets `region.besieged` and ends the action with no
+combat (the assault is a later action); **fight** runs a normal field battle.
+Attacking an already-besieged Stronghold is a **siege assault** (`pc.siege`):
+attacker hits on 6 every round, the defender cannot retreat, and the assault is
+**round-capped** (`siegeRoundsLeft`, default 1) — after the cap the battle ends with
+the siege still standing. Capturing (garrison destroyed) clears `besieged` and flips
+control; the siege also lifts if the attacker is wiped. **Deviations:** (1) no
+dual-occupancy — the besieger stays in its own region rather than occupying the open
+ground (`besieged` flags "an adjacent enemy is besieging"); the withdraw choice is
+offered once, pre-battle, not before every round. (2) Extending a siege by reducing
+an Elite→Regular is not modelled (only the 1-round default and the card-driven
+3-round assault exist). *Grond* (sh-char-20) / *The Fighting Uruk-hai* (sh-str-02)
+set `siegeRounds:3` + `fpCardLock` (FP gets no Combat card in siege round 0 unless a
+Companion is in the Stronghold). Sortie / relieve-by-outside-army are not yet modelled.
 
 ### Capturing a settlement (p.32)
 Captured when an enemy army enters a region with a City / Town / unoccupied

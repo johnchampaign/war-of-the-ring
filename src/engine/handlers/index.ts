@@ -7,7 +7,7 @@ import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement } from '../armies';
-import { applyCasualties } from '../combat';
+import { applyCasualties, startBattle } from '../combat';
 import { extraHunt } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS } from '../data';
@@ -570,6 +570,35 @@ register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see
 register('sh-char-21', { onTable: true, apply() { /* The Palantír of Orthanc — bonus draw, see wotrAdapter playEvent */ } });
 register('sh-char-15', { onTable: true, apply() { /* Worn with Sorrow and Toil — see hunt.ts (companion casualty) */ } });
 register('sh-char-22', { onTable: true, apply() { /* Wormtongue — see politics.ts (activateNation) */ } });
+
+// --- Grond / The Fighting Uruk-hai: a 3-round siege assault on a besieged FP
+//     Stronghold (siege mechanic in combat.ts). The besieging army must be adjacent
+//     to the besieged Stronghold and contain the required figure/unit. -----------
+function siegeAssaultTargets(state: GameState, qualifies: (from: string) => boolean): EventTarget[] {
+  const out: EventTarget[] = [];
+  for (const to of Object.keys(state.regions)) {
+    const def = REGIONS[to]!;
+    if (def.settlement !== 'Stronghold' || !state.regions[to]!.besieged) continue;
+    if (settlementController(state, to) !== 'fp') continue;
+    for (const from of def.adjacency) if (armySide(state, from) === 'shadow' && qualifies(from)) out.push({ from, to });
+  }
+  return out;
+}
+const inPlay = (state: GameState, id: string) => state.characters.entered.includes(id) && !state.characters.eliminated.includes(id);
+register('sh-char-20', { // Grond, Hammer of the Underworld — Witch-king with the besieging Army
+  canPlay: (state) => siegeAssaultTargets(state, (from) => state.regions[from]!.characters.includes('witch-king')).length > 0,
+  targets: (state) => siegeAssaultTargets(state, (from) => state.regions[from]!.characters.includes('witch-king')),
+  applyTarget(state, _side, t) { startBattle(state, 'shadow', t.from!, t.to!, { siegeRounds: 3, fpCardLock: true }); log(state, null, 'event', `Grond assaults ${t.to} (3-round siege)`); },
+});
+const hasIsengardUnit = (state: GameState, from: string): boolean => {
+  const u = state.regions[from]!.units.isengard;
+  return !!u && (u.regular > 0 || u.elite > 0);
+};
+register('sh-str-02', { // The Fighting Uruk-hai — Saruman in play + an Isengard unit besieging
+  canPlay: (state) => inPlay(state, 'saruman') && siegeAssaultTargets(state, (from) => hasIsengardUnit(state, from)).length > 0,
+  targets: (state) => siegeAssaultTargets(state, (from) => hasIsengardUnit(state, from)),
+  applyTarget(state, _side, t) { startBattle(state, 'shadow', t.from!, t.to!, { siegeRounds: 3, fpCardLock: true }); log(state, null, 'event', `The Fighting Uruk-hai assault ${t.to} (3-round siege)`); },
+});
 register('sh-str-03', { // Denethor's Folly — eliminate an FP Leader in Minas Tirith; bar FP Combat cards there
   onTable: true,
   apply(state) {
