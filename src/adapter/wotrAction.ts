@@ -29,5 +29,6 @@ export type WotrAction =
   | { kind: 'chooseCasualties'; plan: 'regularsFirst' | 'elitesFirst' }
   | { kind: 'combatContinue'; cont: boolean }  // attacker: continue or cease
   | { kind: 'combatRetreat'; retreat: boolean } // defender: retreat or stand
-  // Hunt damage resolution (FP): absorb as Corruption, or lose a Companion.
-  | { kind: 'huntDamage'; mode: 'corruption' | 'guide' | 'random' };
+  // Hunt damage resolution (FP): absorb as Corruption, lose a Companion, or use a
+  // damage-reduction ability (separate the Hobbit Guide / Gollum reveal).
+  | { kind: 'huntDamage'; mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' };

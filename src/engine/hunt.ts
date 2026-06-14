@@ -3,8 +3,11 @@
 // take a Companion casualty (the Guide, or a random Companion) — a real
 // PendingChoice (replaces the D6 auto-resolution). Re-roll conditions (a
 // Shadow-controlled Stronghold / Shadow Army / Nazgûl in the Ring-bearers'
-// region) are modelled. Still simplified: the Guide's special abilities and
-// "play on the table" damage-cancel cards aren't applied before this choice yet.
+// region) are modelled. The Guide's Hunt abilities are applied: Meriadoc/Peregrin
+// may separate to reduce damage by 1; Gollum suppresses a numbered tile's Reveal
+// and may reveal to reduce damage by 1 — all as `huntDamage` choice options.
+// Still deferred: "play on the table" damage-cancel cards (Axe & Bow, Mithril
+// Coat — they land with the on-table event-handler increment).
 import type { GameState } from './types';
 import { STANDARD_TILE_LIST, REGIONS, levelOf, type HuntTileDef } from './data';
 import { withRng } from './rng';
@@ -41,18 +44,31 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): 
   else if (tile.value === 'eye') damage = successes;
   else if (tile.value === 'die') damage = withRng(state, (rng) => rng.rollDie(6));
 
-  if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (tile.reveal) fs.hidden = false; return; }
-  if (damage === 0) { if (tile.reveal) fs.hidden = false; return; }
+  // Gollum's Guide ability (passive): a standard NUMBERED tile's Reveal icon does
+  // not reveal the Fellowship.
+  const reveal = !!tile.reveal && !(fs.guide === 'gollum' && typeof tile.value === 'number');
 
-  if (fs.companions.length > 0) {
-    // Interactive: FP chooses casualty vs Corruption.
-    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal: !!tile.reveal } };
-    log(state, null, 'hunt', `Hunt damage ${damage} pending (FP: casualty or Corruption)`);
+  if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) fs.hidden = false; return; }
+  if (damage === 0) { if (reveal) fs.hidden = false; return; }
+
+  // Interactive resolution when FP has any choice — a Companion to spend, a Hobbit
+  // Guide to separate, or Gollum's reveal-to-reduce — otherwise apply directly.
+  if (fs.companions.length > 0 || huntReductionAvailable(state)) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal } };
+    log(state, null, 'hunt', `Hunt damage ${damage} pending (FP decision)`);
   } else {
     fs.corruption = Math.min(12, fs.corruption + damage);
-    if (tile.reveal) fs.hidden = false;
+    if (reveal) fs.hidden = false;
     log(state, null, 'hunt', `Hunt damage ${damage} -> Corruption ${fs.corruption}`);
   }
+}
+
+/** A Guide-based damage reduction the FP could use right now (Hobbit Guide
+ *  separate, or Gollum reveal-to-reduce). On-table cards (Axe & Bow) land with
+ *  the event-handler/on-table-card increment. */
+export function huntReductionAvailable(state: GameState): boolean {
+  const fs = state.fellowship;
+  return fs.guide === 'meriadoc' || fs.guide === 'peregrin' || (fs.guide === 'gollum' && fs.hidden);
 }
 
 /** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. */
@@ -83,10 +99,41 @@ export function resolveMordorStep(state: GameState): void {
   applyHuntTile(state, tile, Math.min(5, state.hunt.box));
 }
 
+/** After a −1 damage reduction (Hobbit-Guide separate, applied by the adapter; or
+ *  Gollum reveal here): re-prompt with the lower damage, or finish if it hit 0. */
+function repromptOrFinish(state: GameState, damage: number, reveal: boolean): void {
+  const fs = state.fellowship;
+  if (damage > 0) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal } };
+    return;
+  }
+  if (reveal) fs.hidden = false;
+  state.pendingChoice = null;
+  log(state, null, 'hunt', `Hunt reduced to 0; hidden ${fs.hidden}`);
+}
+
+/** Drop Hunt damage by 1 and re-prompt/finish — called by the adapter after it
+ *  separates the Hobbit Guide (separateCompanion lives in fellowship.ts; importing
+ *  it here would cycle). The Guide reassigns as part of the separation. */
+export function reduceHuntDamageBySeparate(state: GameState): void {
+  const d = state.pendingChoice!.data as { damage: number; reveal: boolean };
+  repromptOrFinish(state, d.damage - 1, d.reveal);
+}
+
 /** Resolve the FP's Hunt-damage choice (PendingChoice 'huntDamage'). */
-export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide' | 'random'): void {
+export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal'): void {
   const fs = state.fellowship;
   const d = state.pendingChoice!.data as { damage: number; reveal: boolean };
+
+  // Gollum's active ability: reveal the Fellowship to reduce the damage by 1.
+  if (mode === 'reduceReveal') {
+    fs.hidden = false;
+    repromptOrFinish(state, d.damage - 1, false); // already revealed
+    return;
+  }
+  // reduceSeparate is handled in the adapter (needs separateCompanion); it calls
+  // reduceHuntDamageBySeparate. It should not reach here.
+
   state.pendingChoice = null;
   let remaining = d.damage;
   if (mode !== 'corruption' && fs.companions.length > 0) {

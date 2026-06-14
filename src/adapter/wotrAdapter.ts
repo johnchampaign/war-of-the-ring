@@ -12,7 +12,7 @@ import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
 import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
-import { resolveHuntDamage } from '../engine/hunt';
+import { resolveHuntDamage, reduceHuntDamageBySeparate } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
@@ -55,12 +55,18 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return canRetreat(state)
           ? [{ kind: 'combatRetreat', retreat: true }, { kind: 'combatRetreat', retreat: false }]
           : [{ kind: 'combatRetreat', retreat: false }];
-      case 'huntDamage':
-        return [
-          { kind: 'huntDamage', mode: 'corruption' },
-          { kind: 'huntDamage', mode: 'guide' },
-          { kind: 'huntDamage', mode: 'random' },
-        ];
+      case 'huntDamage': {
+        const fs = state.fellowship;
+        const acts: WotrAction[] = [{ kind: 'huntDamage', mode: 'corruption' }];
+        if (fs.companions.length > 0) {
+          acts.push({ kind: 'huntDamage', mode: 'guide' }, { kind: 'huntDamage', mode: 'random' });
+        }
+        // Guide damage-reduction abilities (−1 each): separate a Hobbit Guide, or
+        // Gollum reveals the Fellowship.
+        if (fs.guide === 'meriadoc' || fs.guide === 'peregrin') acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
+        if (fs.guide === 'gollum' && fs.hidden) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
+        return acts;
+      }
       default: return [];
     }
   }
@@ -222,7 +228,16 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'combatRetreat':
       requireChoice(state, 'combatRetreat', actor); resolveRetreat(state, action.retreat); break;
     case 'huntDamage':
-      requireChoice(state, 'huntDamage', actor); resolveHuntDamage(state, action.mode); break;
+      requireChoice(state, 'huntDamage', actor);
+      if (action.mode === 'reduceSeparate') {
+        // The Hobbit Guide leaves the Fellowship (separateCompanion reassigns the
+        // Guide); hunt damage drops by 1, then re-prompt / finish.
+        separateCompanion(state, state.fellowship.guide);
+        reduceHuntDamageBySeparate(state);
+      } else {
+        resolveHuntDamage(state, action.mode);
+      }
+      break;
     case 'skipDie':
       requirePhase(state, 'actionResolution');
       if (!consumeDie(state, actor, action.face)) throw new Error(`No ${action.face} die`);

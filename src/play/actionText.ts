@@ -33,7 +33,15 @@ export function describeAction(a: WotrAction): string {
     case 'chooseCasualties': return a.plan === 'regularsFirst' ? 'Lose Regulars first' : 'Reduce Elites first';
     case 'combatContinue': return a.cont ? 'Continue the attack' : 'Cease the attack';
     case 'combatRetreat': return a.retreat ? 'Retreat' : 'Stand and fight';
-    case 'huntDamage': return a.mode === 'corruption' ? 'Take Corruption' : a.mode === 'guide' ? 'Sacrifice the Guide' : 'Sacrifice a random Companion';
+    case 'huntDamage':
+      switch (a.mode) {
+        case 'corruption': return 'Take Corruption';
+        case 'guide': return 'Sacrifice the Guide';
+        case 'random': return 'Sacrifice a random Companion';
+        case 'reduceSeparate': return 'Separate the Hobbit Guide (−1 damage)';
+        case 'reduceReveal': return 'Reveal the Fellowship (−1 damage)';
+      }
+      return 'Resolve Hunt';
     default: return JSON.stringify(a);
   }
 }
