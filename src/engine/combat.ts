@@ -1,9 +1,11 @@
 // Interactive battle resolution (rules-spec §7). Combat is a resumable
-// sub-machine: it pauses with a PendingChoice for casualty selection (when the
-// choice is meaningful), the attacker's cease/continue decision, and the
-// defender's retreat decision. (Combat-card play within a battle is still
-// deferred — auto "no card" — and noted; everything else is now a real prompt,
-// honoring the prompt-for-every-choice fidelity decision.)
+// sub-machine: it pauses with a PendingChoice for each side's combat-card play
+// EVERY round (gated by the card's "Play if…" precondition), casualty selection
+// (when the choice is meaningful), the attacker's cease/continue decision, and
+// the defender's retreat decision — honoring the prompt-for-every-choice fidelity
+// decision. Still deferred: initiative-ordered resolution of competing effects
+// (a card's initiative only matters when both sides' effects collide — see D5)
+// and a few intricate per-effect cards (e.g. Mûmakil's two timings).
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { withRng } from './rng';
@@ -129,17 +131,18 @@ export function combatStep(state: GameState): void {
       }
       case 'beginRound': {
         if (pc.round >= MAX_ROUNDS) { finishCombat(state, false); return; }
-        // Combat cards apply in round 0 only, then are spent.
-        let aMods = pc.round === 0 && pc.attackerCard ? (combatModsFor(pc.attackerCard) ?? EMPTY_MODS) : EMPTY_MODS;
-        let dMods = pc.round === 0 && pc.defenderCard ? (combatModsFor(pc.defenderCard) ?? EMPTY_MODS) : EMPTY_MODS;
+        // Each side's combat card (if any) applies THIS round, then is spent —
+        // a fresh card may be played next round (rules-spec §7, p.29).
+        let aMods = pc.attackerCard ? (combatModsFor(pc.attackerCard) ?? EMPTY_MODS) : EMPTY_MODS;
+        let dMods = pc.defenderCard ? (combatModsFor(pc.defenderCard) ?? EMPTY_MODS) : EMPTY_MODS;
         if (aMods.cancelEnemyCard) dMods = EMPTY_MODS;
         if (dMods.cancelEnemyCard) aMods = EMPTY_MODS;
-        const atkTarget = pc.round === 0 && pc.fortified ? 6 : 5;
+        const atkTarget = pc.round === 0 && pc.fortified ? 6 : 5; // siege bonus first round only
         const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods);
         const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, aMods);
         pc.atkHits = Math.max(0, atkHits - (dMods.cancelHits ?? 0)); // defender's Shield-wall
         pc.defHits = Math.max(0, defHits - (aMods.cancelHits ?? 0));
-        if (pc.round === 0) { pc.attackerCard = null; pc.defenderCard = null; }
+        pc.attackerCard = null; pc.defenderCard = null;
         pc.step = 'attackerCasualties'; continue;
       }
       case 'attackerCasualties': {
@@ -195,7 +198,8 @@ export function resolveRetreat(state: GameState, retreat: boolean): void {
     if (dest) { moveStack(state, pc.to, dest); finishCombat(state, true); return; }
     // no retreat available -> stand
   }
-  pc.round += 1; pc.step = 'beginRound';
+  // Next round re-opens combat-card play (cards are per-round now).
+  pc.round += 1; pc.step = 'attackerCard';
 }
 function moveStack(state: GameState, from: RegionId, to: RegionId): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
@@ -209,10 +213,54 @@ function moveStack(state: GameState, from: RegionId, to: RegionId): void {
 
 export const canRetreat = (state: GameState): boolean => retreatRegion(state, state.pendingCombat!) !== null;
 
-/** Hand cards a side could play as a combat card now (those with a modelled
- *  combat effect). Combat preconditions are not enforced yet (D5). */
+// Companion ids (separated Companions can be "in the battle"); Hobbits among them.
+const COMPANION_IDS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
+const HOBBIT_IDS = new Set(['meriadoc', 'peregrin']);
+
+/** Which of the battle's two regions holds the FP vs the Shadow army. */
+function battleRegions(pc: PendingCombat): { fp: RegionId; sh: RegionId } {
+  return pc.attacker === 'fp' ? { fp: pc.from, sh: pc.to } : { fp: pc.to, sh: pc.from };
+}
+
+/** Is a Combat card's precondition (the boldface "Play if…" line) met by the
+ *  current battle? Covers the patterns the modelled cards use; an unrecognized
+ *  precondition returns true (we can't prove it unmet — conservative). */
+function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): boolean {
+  const pre = EVENT_BY_ID[cardId]?.combat?.precondition;
+  if (!pre) return true;
+  const { fp: fpR, sh: shR } = battleRegions(pc);
+  const fp = state.regions[fpR]!, sh = state.regions[shR]!;
+  const fpChars = fp.characters;
+  const companionInBattle = fpChars.some((c) => COMPANION_IDS.has(c));
+  const fpElite = Object.entries(fp.units).some(([n, u]) => sideOfNation(n as Nation) === 'fp' && u!.elite > 0);
+  const shElite = Object.entries(sh.units).some(([n, u]) => sideOfNation(n as Nation) === 'shadow' && u!.elite > 0);
+  const nazgulLeadership = sh.nazgul + (sh.characters.includes('witch-king') ? 2 : 0);
+  const defNation = REGIONS[pc.to]!.nation;
+  const has = (s: string) => pre.includes(s);
+
+  if (has('same region as the Fellowship')) return pc.to === state.fellowship.location;
+  if (has('Leader or a Companion')) return fp.leaders > 0 || companionInBattle;
+  if (has('a Companion is in the battle')) return companionInBattle;
+  if (has('Free Peoples Elite')) return fpElite;
+  if (has('Shadow Elite')) return shElite;
+  if (has('Southrons & Easterlings Elite')) return (sh.units.southrons?.elite ?? 0) > 0;
+  if (has('Isengard Army unit')) return !!sh.units.isengard && REGIONS[pc.to]!.settlement === 'Stronghold';
+  if (has('Leadership is 2')) return nazgulLeadership >= 2;
+  if (has('Leadership is 1')) return nazgulLeadership >= 1;
+  if (has('Rohan region, Fangorn or Orthanc')) return defNation === 'rohan' || pc.to === 'fangorn' || pc.to === 'orthanc';
+  if (has('inside the borders of a Free Peoples Nation')) return !!defNation && sideOfNation(defNation) === 'fp';
+  if (has('Strider/Aragorn')) return fpChars.includes('strider') || fpChars.includes('aragorn');
+  if (has('Gandalf is in the battle')) return fpChars.includes('gandalf-grey') || fpChars.includes('gandalf-white');
+  if (has('Hobbit')) return fpChars.some((c) => HOBBIT_IDS.has(c));
+  if (has('defending in a field battle')) return pc.defender === 'fp' && !pc.fortified;
+  return true;
+}
+
+/** Hand cards a side could play as a combat card now: a modelled combat effect
+ *  AND a satisfied precondition (rules-spec §7). */
 export function playableCombatCards(state: GameState, side: Side): string[] {
-  return state.cards[side].hand.filter((id) => hasCombatEffect(id));
+  const pc = state.pendingCombat;
+  return state.cards[side].hand.filter((id) => hasCombatEffect(id) && (!pc || combatPrecondMet(state, pc, id)));
 }
 const hasPlayableCombatCard = (state: GameState, side: Side): boolean => playableCombatCards(state, side).length > 0;
 

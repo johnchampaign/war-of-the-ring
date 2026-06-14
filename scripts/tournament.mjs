@@ -53,8 +53,10 @@ for (let game = 0; game < GAMES; game++) {
     if (actions % 50 === 0) {
       const enc = JSON.stringify(state);
       if (JSON.stringify(JSON.parse(enc)) !== enc) { console.error('  codec mismatch'); illegals++; break; }
+      // The hidden-info invariant is mid-game only — at game over redact reveals
+      // everything by design (see redact.ts), so skip terminal states.
       const sv = redactStateForViewer(state, 'shadow');
-      if (sv.rngState !== 0 || sv.cards.fp.hand.some((c) => c !== 'hidden')) leaks++;
+      if (!state.winner && (sv.rngState !== 0 || sv.cards.fp.hand.some((c) => c !== 'hidden'))) leaks++;
     }
   }
 
