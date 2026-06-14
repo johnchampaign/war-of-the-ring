@@ -25,6 +25,7 @@ export function describeAction(a: WotrAction): string {
     case 'diplomaticAction': return `Diplomacy: advance ${cap(a.nation)}`;
     case 'recruitUnit': return `Recruit ${cap(a.nation)} in ${rName(a.region)}`;
     case 'bringMinion': return `Bring ${a.minion} into play`;
+    case 'moveCharacter': return `Move ${a.char === 'nazgul' ? 'Nazgûl' : cap(a.char.replace(/-/g, ' '))} ${rName(a.from)} → ${rName(a.to)}`;
     case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;
     case 'attack': return `Attack ${rName(a.to)} (from ${rName(a.from)})`;
     case 'skipDie': return `Discard a ${a.face} die`;

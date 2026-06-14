@@ -173,6 +173,13 @@ die already showing an Eye.
   enter a friendly Stronghold besieged by enemy; no impassable (p.24).
 - Nazgûl fly anywhere (except into FP-controlled Stronghold unless besieged by
   SH). Saruman can never leave Orthanc; Mouth of Sauron moves ≤3 (p.24).
+- **Implemented** (`charMove.ts`, `moveCharacter` action): a Character die moves
+  independent characters — SH moves a Nazgûl group / Witch-king (fly) / Mouth
+  (≤3); FP moves a separated Companion (≤ Level). Landing rule (no enemy
+  Stronghold unless besieged) enforced. **Deviation:** one die moves ONE
+  piece/Nazgûl-group to one destination (the rulebook lets one die move ALL
+  eligible characters, each to its own region) — keeps the action space tractable
+  and avoids stripping army leadership wholesale.
 - **Character card** fields (p.25): Level, activatable Nation, Guide ability,
   out-of-Fellowship ability, Leadership, action-die bonus symbol. Gandalf,
   Aragorn, Merry, Pippin can activate **any** FP nation (p.34).

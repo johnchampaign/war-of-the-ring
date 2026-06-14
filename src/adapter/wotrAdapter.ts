@@ -15,6 +15,7 @@ import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolve
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
+import { moveCharacter, characterMoveOptions } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import type { DieFace, Nation } from '../engine/types';
 import { getHandler, canPlayCard } from '../engine/handlers/registry';
@@ -102,6 +103,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         if (fs.hidden) acts.push({ kind: 'moveFellowship' });
         else acts.push({ kind: 'hideFellowship' });
         if (fs.mordor === null) for (const c of fs.companions) acts.push({ kind: 'separateCompanion', companion: c });
+      }
+      // Move independent characters (Nazgûl/Minions for SH, separated Companions
+      // for FP) — a Character die, both sides.
+      if (faces.has('character') || hasWill) {
+        for (const m of characterMoveOptions(state, actor)) acts.push({ kind: 'moveCharacter', ...m });
       }
       if (hasWill) for (const u of upgradeOptions(state)) acts.push(u);
       if (faces.has('event') || hasWill) {
@@ -236,6 +242,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'combatRetreat', actor); resolveRetreat(state, action.retreat); break;
     case 'retreatTo':
       requireChoice(state, 'retreatTo', actor); resolveRetreatTo(state, action.region); break;
+    case 'moveCharacter': {
+      requirePhase(state, 'actionResolution');
+      if (!consumeOneOf(state, actor, ['character', 'will'])) throw new Error('No Character die');
+      if (!moveCharacter(state, actor, action.char, action.from, action.to)) throw new Error('Illegal character move');
+      passResolutionTurn(state, actor); break;
+    }
     case 'huntDamage':
       requireChoice(state, 'huntDamage', actor);
       if (action.mode === 'reduceSeparate') {

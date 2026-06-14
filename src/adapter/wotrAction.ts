@@ -30,6 +30,9 @@ export type WotrAction =
   | { kind: 'combatContinue'; cont: boolean }  // attacker: continue or cease
   | { kind: 'combatRetreat'; retreat: boolean } // defender: retreat or stand
   | { kind: 'retreatTo'; region: RegionId }     // defender: chosen retreat destination
+  // Move an independent character via a Character die: 'nazgul' (a region's
+  // Nazgûl group), a Minion id, or a separated Companion id.
+  | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId }
   // Hunt damage resolution (FP): absorb as Corruption, lose a Companion, or use a
   // damage-reduction ability (separate the Hobbit Guide / Gollum reveal).
   | { kind: 'huntDamage'; mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard' }
