@@ -98,7 +98,10 @@ export interface EventCardDef {
   name: string;
   side: 'FreePeoples' | 'Shadow';
   deck: 'Character' | 'Strategy';
-  initiative: number | null;
+  // Card initiative (bottom-left number; lower resolves first on a timing tie).
+  // Usually a single number; a few cards (e.g. sh-str-07/08) print a RANGE like
+  // "3-5", kept verbatim as a string. null only if genuinely unread.
+  initiative: number | string | null;
   precondition: string | null;
   eventText: string;
   discardCondition?: string;

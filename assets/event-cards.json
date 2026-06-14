@@ -11,7 +11,7 @@
     "total": 96,
     "notes": [
       "Duplicate collector number for sh-char-08: \"Candles of Corpses\" and \"The Nazgul Strike!\" — both kept with a/b suffix; verify the true numbering on the cards.",
-      "initiative 0 (the lowest — card resolves first, e.g. the 'Daring Defiance' cancel cards) was dropped to null by the TTS source extraction (falsy). The 7 affected cards (fp-char-11/15/16, sh-str-07/08/09/12) were restored to 0 from the physical cards; fp-char-11/15/16 photo-confirmed, the 4 Shadow cards inferred from the same systematic 0->null pattern (no other card carries a 0)."
+      "7 cards had a null initiative — the TTS source extraction couldn't read these corner values. Restored from the physical cards / card art: fp-char-11/15/16 = 0 (photo-confirmed) and sh-str-09/12 = 0 (the 'resolve-first' value, e.g. the 'Daring Defiance' cancel card); sh-str-07 (Shadows Gather) and sh-str-08 (The Shadow Lengthens) print a RANGE '3-5' in the corner (kept verbatim as a string). The mechanic of a ranged initiative is unverified against the rulebook — flagged for the combat-card (D5) fidelity pass."
     ],
     "textSource": "Read verbatim from the base-game card scans (crop_event_cards.py crops); merged by merge-event-text.mjs. eventText/precondition/discardCondition/combat are card-accurate.",
     "playableViaNote": "playableVia (the upper-right play-via icon, i.e. which non-Event Action die can play the card) is NOT yet captured per-card — pending a focused corner-icon read. Any card is always playable with an Event/Palantir die regardless.",
@@ -1841,7 +1841,7 @@
       "side": "Shadow",
       "deck": "Strategy",
       "collector": 7,
-      "initiative": 0,
+      "initiative": "3-5",
       "sheetId": "48",
       "region": [
         0.333333,
@@ -1865,7 +1865,7 @@
       "side": "Shadow",
       "deck": "Strategy",
       "collector": 8,
-      "initiative": 0,
+      "initiative": "3-5",
       "sheetId": "48",
       "region": [
         0.111111,
