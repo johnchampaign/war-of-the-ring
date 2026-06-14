@@ -32,6 +32,18 @@ function eliminateNazgul(state: GameState, region: string, n: number): void {
   r.nazgul -= k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + k;
 }
 const allAtWar = (state: GameState, nations: Nation[]): boolean => nations.every((n) => state.nations[n].step === 0);
+const isFpNation = (n: string): boolean => (FP_NATIONS as string[]).includes(n);
+/** The region holding character `id` (separated/in play), or null. */
+function charRegion(state: GameState, id: string): string | null {
+  for (const r of Object.keys(state.regions)) if (state.regions[r]!.characters.includes(id)) return r;
+  return null;
+}
+/** Draw one card from a deck into `side`'s hand (hand max 6). */
+function drawCard(state: GameState, side: Side, deck: 'character' | 'strategy'): void {
+  const p = state.cards[side]; const top = p.draw[deck].shift();
+  if (top) p.hand.push(top);
+  while (p.hand.length > 6) p.discard.strategy.push(p.hand.shift()!);
+}
 /** Region-step distance (BFS), or Infinity. */
 function regionDist(from: string, to: string): number {
   if (from === to) return 0;
@@ -307,6 +319,50 @@ register('sh-str-12', {
     state.regions['angmar']!.characters.push('witch-king');
     placeUnits(state, 'sauron', 'angmar', 2, 1);
     log(state, null, 'event', 'Return of the Witch-king: to Angmar + muster');
+  },
+});
+
+// --- Recruit + draw / upgrade cards ------------------------------------------
+// House of the Stewards: recruit a Gondor unit with Boromir + draw 2 Strategy.
+register('fp-char-23', {
+  canPlay: (state) => charRegion(state, 'boromir') !== null,
+  apply(state) {
+    const r = charRegion(state, 'boromir'); if (!r) return;
+    placeUnits(state, 'gondor', r, 1, 0);
+    drawCard(state, 'fp', 'strategy'); drawCard(state, 'fp', 'strategy');
+  },
+});
+// Kindred of Glorfindel: recruit an Elven unit in Rivendell + draw 1 Strategy.
+register('fp-str-21', {
+  canPlay: (state) => settlementController(state, 'rivendell') === 'fp'
+    && state.reinforcements.elves.regular + state.reinforcements.elves.elite > 0,
+  apply(state) {
+    if (!recruit(state, 'elves', 'rivendell', 1, 0, { ignoreAtWar: true })) placeUnits(state, 'elves', 'rivendell', 1, 0);
+    drawCard(state, 'fp', 'strategy');
+  },
+});
+// Swords in Eriador: recruit a North unit in the Shire + a Dwarven unit in Ered Luin.
+register('fp-str-20', {
+  canPlay: (state) => state.reinforcements.north.regular + state.reinforcements.north.elite > 0
+    || state.reinforcements.dwarves.regular + state.reinforcements.dwarves.elite > 0,
+  apply(state) {
+    recruit(state, 'north', 'the-shire', 1, 0, { ignoreAtWar: true });
+    recruit(state, 'dwarves', 'ered-luin', 1, 0, { ignoreAtWar: true });
+  },
+});
+// The Grey Company: in Strider's Army, upgrade one Regular to an Elite.
+register('fp-char-24', {
+  canPlay: (state) => {
+    const r = charRegion(state, 'strider'); if (!r) return false;
+    return Object.entries(state.regions[r]!.units).some(([n, u]) => isFpNation(n) && u!.regular > 0 && state.reinforcements[n as Nation].elite > 0);
+  },
+  apply(state) {
+    const r = charRegion(state, 'strider'); if (!r) return;
+    for (const [n, u] of Object.entries(state.regions[r]!.units)) {
+      if (isFpNation(n) && u!.regular > 0 && state.reinforcements[n as Nation].elite > 0) {
+        u!.regular--; u!.elite++; state.reinforcements[n as Nation].regular++; state.reinforcements[n as Nation].elite--; break;
+      }
+    }
   },
 });
 
