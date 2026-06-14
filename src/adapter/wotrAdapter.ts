@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, MORDOR_ENTRANCES } from '../engine/fellowship';
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
@@ -71,6 +71,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       }
       case 'bonusDraw':
         return [{ kind: 'bonusDraw', deck: 'character' }, { kind: 'bonusDraw', deck: 'strategy' }];
+      case 'lureChoice':
+        return [{ kind: 'lureChoice', mode: 'corruption' }, { kind: 'lureChoice', mode: 'eliminate' }];
       case 'huntDamage': {
         const fs = state.fellowship;
         const acts: WotrAction[] = [{ kind: 'huntDamage', mode: 'corruption' }];
@@ -249,6 +251,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!state.pendingCombat) passResolutionTurn(state, actor);
       break;
     }
+    case 'lureChoice':
+      requireChoice(state, 'lureChoice', actor); resolveLureChoice(state, action.mode); break; // turn already passed
     case 'bonusDraw': {
       requireChoice(state, 'bonusDraw', actor); // Palantír of Orthanc bonus draw
       drawOne(state, actor, action.deck);

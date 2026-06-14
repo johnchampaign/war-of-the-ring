@@ -33,6 +33,14 @@ export function eliminateCompanion(state: GameState, id: CharacterId): number {
   return levelOf(id);
 }
 
+/** Resolve Lure of the Ring (FP's choice on the randomly-selected Companion). */
+export function resolveLureChoice(state: GameState, mode: 'corruption' | 'eliminate'): void {
+  const d = state.pendingChoice!.data as { companion: CharacterId; level: number };
+  if (mode === 'corruption') state.fellowship.corruption = Math.min(12, state.fellowship.corruption + d.level);
+  else eliminateCompanion(state, d.companion);
+  state.pendingChoice = null;
+}
+
 export const MORDOR_ENTRANCES: RegionId[] = ['morannon', 'minas-morgul'];
 
 /** BFS shortest-path next-hops from `from` to `to` over region adjacency

@@ -38,6 +38,8 @@ export type WotrAction =
   | { kind: 'eventTarget'; card: string; from?: RegionId; to?: RegionId; region?: RegionId; companion?: string; done?: boolean }
   // Palantír of Orthanc bonus draw (Shadow): choose which deck to draw from.
   | { kind: 'bonusDraw'; deck: 'character' | 'strategy' }
+  // Lure of the Ring (FP responds): take Corruption equal to the Companion's Level, or eliminate him.
+  | { kind: 'lureChoice'; mode: 'corruption' | 'eliminate' }
   // Hunt damage resolution (FP): absorb as Corruption, lose a Companion, or use a
   // damage-reduction ability (separate the Hobbit Guide / Gollum reveal).
   | { kind: 'huntDamage'; mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard' }

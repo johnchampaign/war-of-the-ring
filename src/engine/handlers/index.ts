@@ -10,7 +10,7 @@ import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, cap
 import { applyCasualties, startBattle } from '../combat';
 import { extraHunt } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
-import { REGIONS } from '../data';
+import { REGIONS, levelOf } from '../data';
 import { separateCompanion } from '../fellowship';
 import { log } from '../log';
 
@@ -638,6 +638,69 @@ register('fp-char-17', { // There and Back Again — separate (+1); if Gimli/Leg
       advancePolitical(state, 'dwarves', 1); advancePolitical(state, 'elves', 1); advancePolitical(state, 'north', 1);
       log(state, null, 'event', 'There and Back Again rouses the Dwarves/Elves/North');
     }
+  },
+});
+
+// --- Nazgûl converge on the Fellowship. "Move any or all of the Nazgûl" is
+//     auto-resolved to the decisive move — one Nazgûl flown to the Fellowship's
+//     region — since that is the play that arms the card's secondary effect. ------
+const anyNazgul = (state: GameState): string | null => {
+  for (const id of Object.keys(state.regions)) if (state.regions[id]!.nazgul > 0) return id;
+  return null;
+};
+function nazgulCanReachFellowship(state: GameState): boolean {
+  const dest = state.fellowship.location;
+  const def = REGIONS[dest]!;
+  // Nazgûl can't enter an FP-controlled Stronghold unless it's besieged.
+  if (def.settlement === 'Stronghold' && settlementController(state, dest) === 'fp' && !state.regions[dest]!.besieged) return false;
+  return state.fellowship.mordor === null && anyNazgul(state) !== null;
+}
+function flyNazgulToFellowship(state: GameState): boolean {
+  const dest = state.fellowship.location;
+  if (state.regions[dest]!.nazgul > 0) return true; // already there
+  const src = anyNazgul(state); if (!src || src === dest) return src === dest;
+  state.regions[src]!.nazgul -= 1; state.regions[dest]!.nazgul += 1;
+  return true;
+}
+register('sh-char-09', { // Nazgul Search — move a Nazgûl to the Fellowship, then reveal it
+  canPlay: (state) => state.fellowship.progress >= 1 && state.fellowship.hidden && nazgulCanReachFellowship(state),
+  apply(state) { if (flyNazgulToFellowship(state)) { state.fellowship.hidden = false; log(state, null, 'event', 'Nazgûl Search reveals the Fellowship'); } },
+});
+register('sh-char-08b', { // The Nazgul Strike! — move a Nazgûl to the Fellowship, then roll for the Hunt
+  canPlay: (state) => state.fellowship.progress >= 1 && nazgulCanReachFellowship(state),
+  apply(state) { if (flyNazgulToFellowship(state)) { log(state, null, 'event', 'The Nazgûl Strike! — Hunt roll'); extraHunt(state); } },
+});
+
+// Return to Valinor: each non-besieged Elven Stronghold with Elven units takes a
+// Hunt-style roll (1 die per unit, max 5; hit on 6). (The data precond reads "you
+// control an Elven Stronghold"; the effect targets the Elves' own Strongholds, so
+// playability follows the effect — at least one such Stronghold has Elven units.)
+function elvenStrongholds(state: GameState): string[] {
+  return Object.keys(state.regions).filter((id) => REGIONS[id]!.nation === 'elves' && REGIONS[id]!.settlement === 'Stronghold'
+    && !state.regions[id]!.besieged && (state.regions[id]!.units.elves?.regular ?? 0) + (state.regions[id]!.units.elves?.elite ?? 0) > 0);
+}
+register('sh-str-01', {
+  canPlay: (state) => elvenStrongholds(state).length > 0,
+  apply(state) {
+    for (const id of elvenStrongholds(state)) {
+      const u = state.regions[id]!.units.elves!;
+      const hits = rollDice(state, u.regular + u.elite, 6);
+      if (hits > 0) applyCasualties(state, id, 'fp', hits, 'regularsFirst');
+      log(state, null, 'event', `Return to Valinor: ${hits} Elven units sail from ${id}`);
+    }
+  },
+});
+
+// Lure of the Ring: a random Companion; the FP chooses Corruption=Level or to
+// eliminate him (Gollum-as-Guide → +1 Corruption instead, no choice).
+register('sh-char-13', {
+  canPlay: (state) => !state.fellowship.hidden && state.fellowship.companions.some((c) => COMPANION_SET.has(c)),
+  apply(state) {
+    if (isGollumGuide(state)) { corrupt(state, 1); log(state, null, 'event', 'Lure of the Ring: Gollum guides — +1 Corruption'); return; }
+    const pool = state.fellowship.companions.filter((c) => COMPANION_SET.has(c));
+    const companion = withRng(state, (rng) => rng.pick(pool));
+    state.pendingChoice = { owner: 'fp', kind: 'lureChoice', data: { companion, level: levelOf(companion) } };
+    log(state, null, 'event', `Lure of the Ring tempts ${companion}`);
   },
 });
 
