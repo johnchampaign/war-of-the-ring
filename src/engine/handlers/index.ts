@@ -7,9 +7,30 @@ import { FP_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT } from '../armies';
+import { applyCasualties } from '../combat';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS } from '../data';
 import { log } from '../log';
+
+const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
+/** Roll min(5, count) dice; count hits on `target`+. */
+const rollDice = (state: GameState, count: number, target: number): number =>
+  withRng(state, (rng) => { let h = 0; for (let i = 0; i < Math.min(5, count); i++) if (rng.rollDie(6) >= target) h++; return h; });
+/** [FP-army region, Shadow-Nazgûl region] pairs that are the same or adjacent. */
+function fpArmyNearNazgul(state: GameState): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  for (const fp of Object.keys(state.regions)) {
+    if (armySide(state, fp) !== 'fp') continue;
+    for (const sh of [fp, ...REGIONS[fp]!.adjacency]) {
+      if (state.regions[sh] && state.regions[sh]!.nazgul > 0 && armySide(state, sh) === 'shadow') out.push([fp, sh]);
+    }
+  }
+  return out;
+}
+function eliminateNazgul(state: GameState, region: string, n: number): void {
+  const r = state.regions[region]!; const k = Math.min(n, r.nazgul);
+  r.nazgul -= k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + k;
+}
 
 const heal = (state: GameState, n: number): void => {
   state.fellowship.corruption = Math.max(0, state.fellowship.corruption - n);
@@ -136,6 +157,53 @@ for (const [id, nation] of shRecruits) {
     apply(state, side) { eventRecruit(state, side, nation, 1, 0); },
   });
 }
+
+// --- Direct-damage event cards (roll dice -> hits on an Army) ----------------
+// The Ents Awake (Treebeard/Huorns/Entmoot): hit the Shadow Army in Orthanc.
+for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
+  register(id, {
+    canPlay: (state) => state.characters.entered.includes('gandalf-white')
+      && state.regions['fangorn']!.characters.some((c) => COMPANION_SET.has(c))
+      && armySide(state, 'orthanc') === 'shadow',
+    apply(state) {
+      const hits = rollDice(state, 3, 4);
+      if (hits > 0) applyCasualties(state, 'orthanc', 'shadow', hits, 'regularsFirst');
+      log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on Orthanc`);
+    },
+  });
+}
+// Faramir's Rangers: hit a Shadow Army in Osgiliath / N. or S. Ithilien.
+register('fp-str-06', {
+  canPlay: (state) => ['osgiliath', 'south-ithilien', 'north-ithilien'].some((r) => armySide(state, r) === 'shadow'),
+  apply(state) {
+    const r = ['osgiliath', 'south-ithilien', 'north-ithilien'].find((x) => armySide(state, x) === 'shadow')!;
+    const hits = rollDice(state, 3, 5);
+    if (hits > 0) applyCasualties(state, r, 'shadow', hits, 'regularsFirst');
+    log(state, null, 'event', `Faramir's Rangers: ${hits} hit(s) on ${r}`);
+  },
+});
+// The Eagles are Coming!: eliminate Nazgûl near an FP Army containing a Companion.
+register('fp-char-18', {
+  canPlay: (state) => fpArmyNearNazgul(state).some(([fp]) => state.regions[fp]!.characters.some((c) => COMPANION_SET.has(c))),
+  apply(state) {
+    const pair = fpArmyNearNazgul(state).find(([fp]) => state.regions[fp]!.characters.some((c) => COMPANION_SET.has(c)));
+    if (!pair) return;
+    const sh = pair[1];
+    const kills = rollDice(state, state.regions[sh]!.nazgul, 5);
+    eliminateNazgul(state, sh, kills);
+    log(state, null, 'event', `The Eagles are Coming!: eliminated ${kills} Nazgûl at ${sh}`);
+  },
+});
+// Dreadful Spells (Shadow): hit an FP Army adjacent to/with a Nazgûl force.
+register('sh-char-19', {
+  canPlay: (state) => fpArmyNearNazgul(state).length > 0,
+  apply(state) {
+    const [fp, sh] = fpArmyNearNazgul(state)[0]!;
+    const hits = rollDice(state, state.regions[sh]!.nazgul, 5);
+    if (hits > 0) applyCasualties(state, fp, 'fp', hits, 'regularsFirst');
+    log(state, null, 'event', `Dreadful Spells: ${hits} hit(s) on ${fp}`);
+  },
+});
 
 // --- Special Hunt tiles: the card brings a tile "into play"; it joins the Hunt
 //     Pool only once the Fellowship is on the Mordor Track (rules-spec §11). ---
