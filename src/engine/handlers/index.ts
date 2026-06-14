@@ -5,7 +5,7 @@
 import type { GameState, Side, Nation } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
-import { register } from './registry';
+import { register, type EventTarget } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement } from '../armies';
 import { applyCasualties } from '../combat';
 import { extraHunt } from '../hunt';
@@ -241,6 +241,49 @@ register('sh-str-07', {
   canPlay: (state) => shadowsGatherMoves(state).length > 0,
   targets: shadowsGatherMoves,
   applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}`); },
+});
+// The Shadow Lengthens: move TWO (different) Shadow Armies up to two regions each,
+// every move ending where another Shadow Army stands (not besieged). `applied`
+// excludes a just-moved army (now sitting at a prior move's destination).
+function shadowLengthensMoves(state: GameState, applied: EventTarget[] = []): EventTarget[] {
+  const movedTo = new Set(applied.map((a) => a.to));
+  const out: EventTarget[] = [];
+  const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
+  for (const from of shadowRegions) {
+    if (movedTo.has(from)) continue;
+    for (const to of shadowRegions) {
+      if (out.length >= 12) return out;
+      if (from === to || state.regions[to]!.besieged) continue;
+      if (regionDist(from, to) <= 2 && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+    }
+  }
+  return out;
+}
+register('sh-str-08', {
+  repeat: 2,
+  canPlay: (state) => shadowLengthensMoves(state).length > 0,
+  targets: (state, _side, applied) => shadowLengthensMoves(state, applied),
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `The Shadow Lengthens: ${t.from} → ${t.to}`); },
+});
+// The Shadow is Moving (all Shadow Nations At War): move up to four DIFFERENT Shadow
+// Armies one region each (to an adjacent region free for movement, merges allowed).
+function shadowMovingMoves(state: GameState, applied: EventTarget[] = []): EventTarget[] {
+  const movedTo = new Set(applied.map((a) => a.to));
+  const out: EventTarget[] = [];
+  for (const from of Object.keys(state.regions)) {
+    if (armySide(state, from) !== 'shadow' || movedTo.has(from)) continue;
+    for (const to of REGIONS[from]!.adjacency) {
+      if (out.length >= 16) return out;
+      if (freeForMovement(state, to, 'shadow') && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+    }
+  }
+  return out;
+}
+register('sh-str-09', {
+  repeat: 4,
+  canPlay: (state) => allAtWar(state, SHADOW_NATIONS) && shadowMovingMoves(state).length > 0,
+  targets: (state, _side, applied) => shadowMovingMoves(state, applied),
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `The Shadow is Moving: ${t.from} → ${t.to}`); },
 });
 
 // Dead Men of Dunharrow: move Strider/Aragorn (+ Companions in the same region)

@@ -18,7 +18,7 @@ import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/
 import { moveCharacter, characterMoveOptions } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import type { DieFace, Nation } from '../engine/types';
-import { getHandler, canPlayCard } from '../engine/handlers/registry';
+import { getHandler, canPlayCard, type EventTarget } from '../engine/handlers/registry';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
 import { redactStateForViewer } from './redact';
 
@@ -59,9 +59,12 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'retreatTo':
         return retreatDestinations(state).map((region) => ({ kind: 'retreatTo', region }));
       case 'eventTarget': {
-        const card = (state.pendingChoice!.data as { card: string }).card;
-        const h = getHandler(card);
-        return (h?.targets?.(state, actor) ?? []).map((t) => ({ kind: 'eventTarget' as const, card, ...t }));
+        const data = state.pendingChoice!.data as { card: string; applied: EventTarget[]; repeat: number };
+        const h = getHandler(data.card);
+        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, ...t }));
+        // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
+        if ((h?.repeat ?? 1) > 1 && data.applied.length > 0) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
+        return opts;
       }
       case 'huntDamage': {
         const fs = state.fellowship;
@@ -206,7 +209,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // (out of hand) until the eventTarget resolves.
       const opts = h.targets ? h.targets(state, actor) : null;
       if (opts && opts.length > 0) {
-        state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId } };
+        state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId, repeat: h.repeat ?? 1, left: h.repeat ?? 1, applied: [] } };
         break;
       }
       h.apply?.(state, actor);
@@ -217,13 +220,20 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'eventTarget': {
       requireChoice(state, 'eventTarget', actor);
-      const card = (state.pendingChoice!.data as { card: string }).card;
-      const h = getHandler(card);
+      const data = state.pendingChoice!.data as { card: string; left: number; applied: EventTarget[] };
+      const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
-      h.applyTarget(state, actor, { from: action.from, to: action.to, region: action.region, companion: action.companion });
+      if (!action.done) {
+        const target: EventTarget = { from: action.from, to: action.to, region: action.region, companion: action.companion };
+        h.applyTarget(state, actor, target);
+        data.applied.push(target);
+        data.left -= 1;
+        // Multi-target card with moves left and still-legal targets? Re-prompt (hold the card).
+        if (data.left > 0 && (h.targets?.(state, actor, data.applied)?.length ?? 0) > 0) break;
+      }
       state.pendingChoice = null;
-      const deck = EVENT_BY_ID[card]!.deck === 'Character' ? 'character' : 'strategy';
-      state.cards[actor].discard[deck].push(card);
+      const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
+      state.cards[actor].discard[deck].push(data.card);
       passResolutionTurn(state, actor); break;
     }
     case 'diplomaticAction': {

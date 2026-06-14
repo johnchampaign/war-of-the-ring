@@ -156,7 +156,7 @@ die already showing an Eye.
   costs a die, that counts as the action (p.22).
 - **Combat cards**: every Event card has a bottom-half combat use. Played during
   a battle (does **not** cost an action) — see §7 (p.23, p.29).
-- **Handlers** (`handlers/index.ts`, ~52/96 implemented): each registered card
+- **Handlers** (`handlers/index.ts`, ~65/96 implemented): each registered card
   applies its effect; unimplemented cards aren't offered. **Interactive cards**
   (those whose effect needs a player-chosen target) use an `EventHandler.targets`/
   `applyTarget` pair: playing pauses with an `eventTarget` PendingChoice, the
@@ -164,6 +164,12 @@ die already showing an Eye.
   *Cruel Weather* = move the Fellowship to an adjacent region; *Corsairs of Umbar*;
   *Shadows Gather*). Minor approximations are noted per card (Corsairs' "coastal"
   set; Shadows Gather's path-traversal reduced to distance).
+  **Multi-target cards** (`EventHandler.repeat = N`, e.g. *The Shadow Lengthens* = 2,
+  *The Shadow is Moving* = 4) re-prompt the same `eventTarget` choice up to N times:
+  the choice persists (`data.left`/`data.applied`), `targets(state, side, applied)`
+  recomputes the legal set each step (excluding a just-moved Army via `applied`), and
+  a synthetic `{done:true}` option lets the player stop early once ≥1 target is applied
+  (cards read "up to"). The card is held out of hand until the loop ends, then discarded.
 
 ---
 

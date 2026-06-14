@@ -26,6 +26,7 @@ export function describeAction(a: WotrAction): string {
     case 'recruitUnit': return `Recruit ${cap(a.nation)} in ${rName(a.region)}`;
     case 'bringMinion': return `Bring ${a.minion} into play`;
     case 'eventTarget': {
+      if (a.done) return `${cardName(a.card)}: done`;
       const dest = a.companion ? cap(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
       return `${cardName(a.card)}: ${a.from ? `${rName(a.from)} → ` : ''}${dest}`;
     }
