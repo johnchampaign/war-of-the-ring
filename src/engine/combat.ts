@@ -37,17 +37,45 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   let count = Math.min(5, unitCount(state, ownRegion));
   if (enemyMods.maxDiceEnemy != null) count = Math.min(count, enemyMods.maxDiceEnemy);
   const target = clamp(2, 6, baseTarget - (ownMods.rollBonus ?? 0) + (enemyMods.enemyRollPenalty ?? 0));
-  const lead = Math.min(5, leadership(state, ownRegion, side));
+  // Forfeiting a Companion's Leadership (Mighty Attack) costs re-roll dice.
+  const lead = Math.max(0, Math.min(5, leadership(state, ownRegion, side)) - (ownMods.ownLeadershipPenalty ?? 0));
   const allowReroll = !enemyMods.negateEnemyReroll;
   let hits = withRng(state, (rng) => {
     let h = 0, failed = 0;
     for (let i = 0; i < count; i++) { const d = rng.rollDie(6); if (d === 6 || (d !== 1 && d >= target)) h++; else failed++; }
-    if (allowReroll) for (let i = 0; i < Math.min(lead, failed); i++) { const d = rng.rollDie(6); if (d === 6 || (d !== 1 && d >= target)) h++; }
+    if (allowReroll) for (let i = 0; i < Math.min(lead, failed); i++) { const d = rng.rollDie(6); if (d === 6 || (d !== 1 && d >= target)) { h++; failed--; } }
     for (let i = 0; i < (ownMods.extraAttackDice ?? 0); i++) { const d = rng.rollDie(6); if (d >= 5) h++; } // extra attack hits on 5+
+    // Mighty Attack: turn up to N still-missed dice into hits.
+    h += Math.min(ownMods.guaranteedHits ?? 0, failed);
     return h;
   });
   if ((ownMods.bonusHitsIfAny ?? 0) > 0 && hits > 0) hits += ownMods.bonusHitsIfAny!;
   if ((ownMods.bonusHitsIfOutnumber ?? 0) > 0 && unitCount(state, ownRegion) >= 2 * Math.max(1, unitCount(state, enemyRegion))) hits += ownMods.bonusHitsIfOutnumber!;
+  return hits;
+}
+
+const MINION_SET = new Set(['witch-king', 'saruman', 'mouth-of-sauron']);
+
+/** Apply a combat card's enemy-figure eliminations after the rolls. Returns the
+ *  owner's remaining hits (Blade of Westernesse spends a hit per Minion killed).
+ *  Eliminated Nazgûl return to the Sauron reinforcements; Minions are removed for
+ *  good. `enemy` is the region holding the card owner's opponent. */
+function applyCombatEliminations(state: GameState, enemy: RegionId, mods: CombatMods, ownHits: number): number {
+  const e = state.regions[enemy]!;
+  let hits = ownHits;
+  for (let n = mods.eliminateNazgulIfHit ?? 0; n > 0 && hits > 0 && e.nazgul > 0; n--) {
+    e.nazgul -= 1;
+    state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + 1;
+    log(state, null, 'combat', `a Nazgûl is eliminated at ${enemy}`);
+  }
+  for (let n = mods.eliminateMinion ?? 0; n > 0 && hits > 0; n--) {
+    const i = e.characters.findIndex((c) => MINION_SET.has(c));
+    if (i < 0) break;
+    const id = e.characters.splice(i, 1)[0]!;
+    state.characters.eliminated.push(id);
+    hits -= 1; // the hit is spent to make the kill
+    log(state, null, 'combat', `${id} is eliminated at ${enemy}`);
+  }
   return hits;
 }
 
@@ -156,13 +184,22 @@ export function combatStep(state: GameState): void {
         const atkTarget = pc.round === 0 && pc.fortified ? 6 : 5; // siege bonus first round only
         const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods);
         const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, aMods);
-        let atk = Math.max(0, atkHits - (dMods.cancelHits ?? 0)); // defender's Shield-wall
-        let def = Math.max(0, defHits - (aMods.cancelHits ?? 0));
+        // Hit cancellation: Shield-wall, plus Heroic Death's sacrifice-a-Leader.
+        const dCancel = (dMods.cancelHits ?? 0) + (dMods.sacrificeLeaderToCancelHit ?? 0);
+        const aCancel = (aMods.cancelHits ?? 0) + (aMods.sacrificeLeaderToCancelHit ?? 0);
+        if ((aMods.sacrificeLeaderToCancelHit ?? 0) > 0 && defHits > 0) state.regions[pc.from]!.leaders = Math.max(0, state.regions[pc.from]!.leaders - 1);
+        if ((dMods.sacrificeLeaderToCancelHit ?? 0) > 0 && atkHits > 0) state.regions[pc.to]!.leaders = Math.max(0, state.regions[pc.to]!.leaders - 1);
+        let atk = Math.max(0, atkHits - dCancel);
+        let def = Math.max(0, defHits - aCancel);
         // Mûmakil's later effect: +hits if you outscored the enemy (snapshot the
         // pre-bonus totals so simultaneous bonuses compare fairly).
         const a0 = atk, d0 = def;
         if (aMods.bonusHitIfOutscore && a0 > d0) atk += aMods.bonusHitIfOutscore;
         if (dMods.bonusHitIfOutscore && d0 > a0) def += dMods.bonusHitIfOutscore;
+        // Enemy-figure eliminations (Blade of Westernesse / Fateful Strike): the
+        // attacker's card targets the defender's army (pc.to), and vice versa.
+        atk = applyCombatEliminations(state, pc.to, aMods, atk);
+        def = applyCombatEliminations(state, pc.from, dMods, def);
         pc.atkHits = atk; pc.defHits = def;
         pc.attackerCard = null; pc.defenderCard = null;
         pc.step = 'attackerCasualties'; continue;

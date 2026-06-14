@@ -28,6 +28,20 @@ export interface CombatMods {
   /** +N hits if, after the re-roll, the owner scored MORE total hits than the
    *  enemy (Mûmakil's second, later-initiative effect). Evaluated post-roll. */
   bonusHitIfOutscore?: number;
+  /** Forfeit a Companion's Leadership to turn N missed dice into hits: +N hits,
+   *  −N from the owner's re-roll Leadership (Mighty Attack). */
+  guaranteedHits?: number;
+  /** Reduce the owner's own Leader re-roll dice by N (the forfeit cost). */
+  ownLeadershipPenalty?: number;
+  /** Spend N of the owner's hits to eliminate up to N enemy Minions in the
+   *  battle (Blade of Westernesse). */
+  eliminateMinion?: number;
+  /** If the owner scored ≥1 hit, eliminate up to N enemy Nazgûl in the battle —
+   *  they return to reinforcements (Fateful Strike). */
+  eliminateNazgulIfHit?: number;
+  /** Sacrifice one of the owner's Leaders to cancel one incoming hit
+   *  (Heroic Death) — modelled as cancelHits with a Leader cost. */
+  sacrificeLeaderToCancelHit?: number;
 }
 
 // Effects by combat title.
@@ -41,7 +55,8 @@ const BY_TITLE: Record<string, CombatMods> = {
   'One for the Dark Lord': { rollBonus: 1 },
   'Cruel as Death': { rollBonus: 1 },
   'They Are Terrible': { rollBonus: 1 },
-  'Mighty Attack': { rollBonus: 1 },
+  // forfeit a Companion's Leadership to turn one miss into a hit
+  'Mighty Attack': { guaranteedHits: 1, ownLeadershipPenalty: 1 },
   'Andúril': { rollBonus: 1 },
   'Deadly Strife': { rollBonus: 2 },
   'Desperate Battle': { rollBonus: 1 },
@@ -70,6 +85,10 @@ const BY_TITLE: Record<string, CombatMods> = {
   // multi-effect (per-effect initiative 3-5): +1 dice (init 3) AND +1 hit if you
   // outscore the enemy after the re-roll (init 5). See data.ts initiative note.
   'Mûmakil': { rollBonus: 1, bonusHitIfOutscore: 1 },
+  // elimination / sacrifice
+  'Blade of Westernesse': { eliminateMinion: 1 },
+  'Fateful Strike': { eliminateNazgulIfHit: 1 },
+  'Heroic Death': { sacrificeLeaderToCancelHit: 1 },
 };
 
 /** The combat mods for a card id, or null if its combat half isn't modelled. */
