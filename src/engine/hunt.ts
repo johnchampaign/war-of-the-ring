@@ -165,6 +165,17 @@ export function resolveHuntRedraw(state: GameState, redraw: boolean): void {
 }
 export const huntPreventAvailable = hasWizardStaff;
 
+/** An "extra" Hunt from an Event card (Orc Patrol / Isildur's Bane / Foul Thing):
+ *  draw a tile; if it's an Eye or a Free-Peoples special tile, discard it without
+ *  effect; otherwise apply it as a successful Hunt (which may prompt FP). */
+export function extraHunt(state: GameState): void {
+  const { tile, ref } = drawTile(state);
+  const isEye = tile.value === 'eye';
+  const isFpSpecial = 'spec' in ref && ref.spec.startsWith('fp-');
+  if (isEye || isFpSpecial) { log(state, null, 'hunt', 'extra Hunt tile discarded (Eye / FP special)'); return; }
+  applyHuntTile(state, tile, Math.min(5, state.hunt.box));
+}
+
 /** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. */
 export function resolveHunt(state: GameState): void {
   const h = state.hunt;

@@ -8,6 +8,7 @@ import { withRng } from '../rng';
 import { register } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement } from '../armies';
 import { applyCasualties } from '../combat';
+import { extraHunt } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS } from '../data';
 import { log } from '../log';
@@ -433,6 +434,47 @@ register('sh-char-19', {
     log(state, null, 'event', `Dreadful Spells: ${hits} hit(s) on ${fp}`);
   },
 });
+
+// --- Shadow: extra Hunt cards (draw a tile; skip Eye / FP-special) -----------
+const fellowshipInFpSettlement = (state: GameState): boolean => {
+  const loc = state.fellowship.location;
+  return !!REGIONS[loc]!.settlement && settlementController(state, loc) === 'fp';
+};
+for (const id of ['sh-char-05', 'sh-char-06', 'sh-char-07']) { // Orc Patrol / Isildur's Bane / Foul Thing
+  register(id, {
+    canPlay: (state) => !fellowshipInFpSettlement(state),
+    apply(state) { extraHunt(state); },
+  });
+}
+
+// --- Stormcrow: set back an FP Nation (with the Fellowship/a Companion) + a loss
+register('sh-str-06', {
+  canPlay: (state) => stormcrowNation(state) !== null,
+  apply(state) {
+    const n = stormcrowNation(state); if (!n) return;
+    state.nations[n].step = Math.min(3, state.nations[n].step + 1); // move back one step
+    // FP loses one Army unit of that Nation (Regular preferred).
+    for (const id of Object.keys(state.regions)) {
+      const u = state.regions[id]!.units[n];
+      if (u && u.regular > 0) { u.regular--; break; }
+      if (u && u.elite > 0) { u.elite--; break; }
+    }
+    log(state, null, 'event', `Stormcrow: ${n} set back + a unit lost`);
+  },
+});
+/** An FP Nation, not yet At War, whose region holds the Fellowship or a Companion. */
+function stormcrowNation(state: GameState): Nation | null {
+  const inRegion = (id: string): Nation | null => {
+    const def = REGIONS[id]!; const n = def.nation as Nation | null;
+    return n && isFpNation(n) && state.nations[n].step > 0 ? n : null;
+  };
+  const fellow = inRegion(state.fellowship.location);
+  if (fellow) return fellow;
+  for (const id of Object.keys(state.regions)) {
+    if (state.regions[id]!.characters.some((c) => COMPANION_SET.has(c))) { const n = inRegion(id); if (n) return n; }
+  }
+  return null;
+}
 
 // --- Special Hunt tiles: the card brings a tile "into play"; it joins the Hunt
 //     Pool only once the Fellowship is on the Mordor Track (rules-spec §11). ---
