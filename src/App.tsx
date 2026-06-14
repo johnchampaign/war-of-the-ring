@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { PlayPage } from './play/PlayPage';
 import { PolygonAudit } from './devtabs/PolygonAudit';
+import { ContentAudit } from './devtabs/ContentAudit';
 import { makeLocalClient } from './online/localClient';
 import { makeGameClient, createOnlineGame, readOnlineInvite } from './online/gameClient';
 import { LoadArtPanel } from './play/LoadArtPanel';
@@ -14,6 +15,7 @@ type Mode =
 
 export function App() {
   if (typeof window !== 'undefined' && window.location.hash === '#audit') return <PolygonAudit />;
+  if (typeof window !== 'undefined' && window.location.hash === '#content') return <ContentAudit />;
 
   const invite = readOnlineInvite();
   const [mode, setMode] = useState<Mode>(invite ? { kind: 'online', gameId: invite.gameId, token: invite.token } : { kind: 'lobby' });
@@ -52,7 +54,7 @@ function Lobby({ onHotseat }: { onHotseat: () => void }) {
           </div>
         )}
         <LoadArtPanel />
-        <p style={{ marginTop: 24, fontSize: 12, color: '#776' }}>Placeholder board (no publisher art). <a href="#audit" style={{ color: '#998' }}>polygon audit</a></p>
+        <p style={{ marginTop: 24, fontSize: 12, color: '#776' }}>Placeholder board (no publisher art). <a href="#audit" style={{ color: '#998' }}>polygon audit</a> · <a href="#content" style={{ color: '#998' }}>content audit</a></p>
       </div>
     </div>
   );
