@@ -572,6 +572,7 @@ register('sh-char-21', { onTable: true, apply() { /* The Palantír of Orthanc �
 register('sh-char-15', { onTable: true, apply() { /* Worn with Sorrow and Toil — see hunt.ts (companion casualty) */ } });
 register('sh-char-22', { onTable: true, apply() { /* Wormtongue — see politics.ts (activateNation) */ } });
 register('sh-char-16', { onTable: true, apply() { /* Flocks of Crebain — +1 Hunt dice, see hunt.ts resolveHunt */ } });
+register('sh-char-17', { onTable: true, apply() { /* Balrog of Moria — extra Hunt tile on a Moria declaration, see wotrAdapter declareFellowship */ } });
 register('sh-char-14', { // The Breaking of the Fellowship — separate N Companions to the Fellowship's region
   canPlay: (state) => !state.fellowship.hidden && state.fellowship.companions.some((c) => COMPANION_SET.has(c)),
   apply(state) {

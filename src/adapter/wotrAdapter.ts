@@ -7,7 +7,8 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { extraHunt } from '../engine/hunt';
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
@@ -162,8 +163,22 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
   switch (action.kind) {
     case 'skipFellowshipPhase':
       requirePhase(state, 'fellowship'); state.phase = 'huntAllocation'; break;
-    case 'declareFellowship':
-      requirePhase(state, 'fellowship'); declareFellowship(state, action.target); state.phase = 'huntAllocation'; break;
+    case 'declareFellowship': {
+      requirePhase(state, 'fellowship');
+      const fromLoc = state.fellowship.location;
+      const stepsBefore = Math.min(state.fellowship.progress, pathTo(fromLoc, action.target).length);
+      const traversed = [fromLoc, ...pathTo(fromLoc, action.target).slice(0, stepsBefore)];
+      declareFellowship(state, action.target);
+      // Balrog of Moria: a declaration that moves the Fellowship through Moria lets
+      // the Shadow draw an extra Hunt tile (discarding the on-table card).
+      const balrog = state.cards.shadow.table.indexOf('sh-char-17');
+      if (balrog >= 0 && traversed.includes('moria')) {
+        state.cards.shadow.table.splice(balrog, 1);
+        state.cards.shadow.discard.character.push('sh-char-17');
+        extraHunt(state);
+      }
+      state.phase = 'huntAllocation'; break;
+    }
     case 'enterMordor':
       requirePhase(state, 'fellowship');
       if (!enterMordor(state)) throw new Error('Cannot enter Mordor from here');
