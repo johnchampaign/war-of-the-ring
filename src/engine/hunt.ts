@@ -63,13 +63,20 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): 
   }
 }
 
-/** A Guide-based damage reduction the FP could use right now (Hobbit Guide
- *  separate, or Gollum reveal-to-reduce). On-table cards (Axe & Bow) land with
- *  the event-handler/on-table-card increment. */
+// On-table cards the FP may discard to reduce Hunt damage by 1 (Axe and Bow,
+// Horn of Gondor). They reach cards.fp.table via their onTable event handlers.
+const ON_TABLE_HUNT_REDUCERS = new Set(['fp-char-06', 'fp-char-07']);
+const hasOnTableReducer = (state: GameState): boolean =>
+  state.cards.fp.table.some((id) => ON_TABLE_HUNT_REDUCERS.has(id));
+
+/** A damage reduction the FP could use right now: a Hobbit Guide separate,
+ *  Gollum reveal-to-reduce, or an on-table reduction card. */
 export function huntReductionAvailable(state: GameState): boolean {
   const fs = state.fellowship;
-  return fs.guide === 'meriadoc' || fs.guide === 'peregrin' || (fs.guide === 'gollum' && fs.hidden);
+  return fs.guide === 'meriadoc' || fs.guide === 'peregrin'
+    || (fs.guide === 'gollum' && fs.hidden) || hasOnTableReducer(state);
 }
+export const huntReduceCardAvailable = hasOnTableReducer;
 
 /** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. */
 export function resolveHunt(state: GameState): void {
@@ -121,7 +128,7 @@ export function reduceHuntDamageBySeparate(state: GameState): void {
 }
 
 /** Resolve the FP's Hunt-damage choice (PendingChoice 'huntDamage'). */
-export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal'): void {
+export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard'): void {
   const fs = state.fellowship;
   const d = state.pendingChoice!.data as { damage: number; reveal: boolean };
 
@@ -129,6 +136,17 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
   if (mode === 'reduceReveal') {
     fs.hidden = false;
     repromptOrFinish(state, d.damage - 1, false); // already revealed
+    return;
+  }
+  // Discard an on-table reduction card (Axe and Bow / Horn of Gondor) for −1.
+  if (mode === 'reduceCard') {
+    const i = state.cards.fp.table.findIndex((id) => ON_TABLE_HUNT_REDUCERS.has(id));
+    if (i >= 0) {
+      const id = state.cards.fp.table.splice(i, 1)[0]!;
+      state.cards.fp.discard.character.push(id);
+      log(state, null, 'hunt', `discard ${id} to reduce Hunt damage by 1`);
+    }
+    repromptOrFinish(state, d.damage - 1, d.reveal);
     return;
   }
   // reduceSeparate is handled in the adapter (needs separateCompanion); it calls

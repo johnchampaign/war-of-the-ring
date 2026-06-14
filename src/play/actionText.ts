@@ -40,6 +40,7 @@ export function describeAction(a: WotrAction): string {
         case 'random': return 'Sacrifice a random Companion';
         case 'reduceSeparate': return 'Separate the Hobbit Guide (−1 damage)';
         case 'reduceReveal': return 'Reveal the Fellowship (−1 damage)';
+        case 'reduceCard': return 'Discard a table card (−1 damage)';
       }
       return 'Resolve Hunt';
     default: return JSON.stringify(a);

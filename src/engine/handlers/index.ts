@@ -136,3 +136,59 @@ for (const [id, nation] of shRecruits) {
     apply(state, side) { eventRecruit(state, side, nation, 1, 0); },
   });
 }
+
+// --- On-table hunt-defense cards: discard during the Hunt to reduce damage by 1
+//     (the discard-for-reduction itself is the reduceCard huntDamage option). ---
+register('fp-char-06', { // Axe and Bow — Gimli or Legolas in the Fellowship
+  onTable: true,
+  canPlay: (state) => state.fellowship.companions.includes('gimli') || state.fellowship.companions.includes('legolas'),
+  apply() { /* persists on the table */ },
+});
+register('fp-char-07', { // Horn of Gondor — Boromir in the Fellowship
+  onTable: true,
+  canPlay: (state) => state.fellowship.companions.includes('boromir'),
+  apply() { /* persists on the table */ },
+});
+
+// --- The Red Arrow: advance Rohan + recruit a Rohan unit & Leader in Edoras ----
+register('fp-str-09', {
+  canPlay: (state) => state.nations.gondor.active,
+  apply(state) {
+    advancePolitical(state, 'rohan', 1);
+    recruit(state, 'rohan', 'edoras', 1, 0, { ignoreAtWar: true });
+    if (state.reinforcements.rohan.leader > 0 && settlementController(state, 'edoras') === 'fp') {
+      state.reinforcements.rohan.leader--; state.regions['edoras']!.leaders++;
+    }
+  },
+});
+
+// --- Hill-Trolls: replace up to two Sauron Regulars on the board with Elites ---
+register('sh-str-15', {
+  canPlay: (state) => isAtWar(state, 'sauron') && state.reinforcements.sauron.elite > 0
+    && Object.values(state.regions).some((r) => (r.units.sauron?.regular ?? 0) > 0),
+  apply(state) {
+    let done = 0;
+    for (const id of Object.keys(state.regions)) {
+      const u = state.regions[id]!.units.sauron;
+      while (done < 2 && u && u.regular > 0 && state.reinforcements.sauron.elite > 0) {
+        u.regular--; u.elite++; state.reinforcements.sauron.regular++; state.reinforcements.sauron.elite--; done++;
+      }
+      if (done >= 2) break;
+    }
+    log(state, null, 'event', `Hill-Trolls: upgraded ${done} Sauron Regular(s) to Elite`);
+  },
+});
+
+// --- The King is Revealed: recruit 5 Sauron Regulars + a Nazgûl in Minas Morgul -
+register('sh-str-18', {
+  canPlay: (state) => state.characters.entered.includes('aragorn'),
+  apply(state) {
+    const room = STACKING_LIMIT - unitCount(state, 'minas-morgul');
+    const n = Math.max(0, Math.min(5, state.reinforcements.sauron.regular, room));
+    if (n > 0) recruit(state, 'sauron', 'minas-morgul', n, 0, { ignoreAtWar: true });
+    // Nazgûl don't count toward the Army stacking limit.
+    if ((state.reinforcements.sauron.nazgul ?? 0) > 0) {
+      state.reinforcements.sauron.nazgul!--; state.regions['minas-morgul']!.nazgul++;
+    }
+  },
+});
