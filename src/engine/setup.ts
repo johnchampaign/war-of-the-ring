@@ -80,7 +80,7 @@ export function createGame({ seed }: SetupOptions): GameState {
     currentPlayer: 'fp',
     dice: { fp: [], shadow: [] },
     usedDice: { fp: [], shadow: [] },
-    hunt: { box: 0, fpDiceInBox: 0, pool, drawn: [], specialsInPlay: [], specialsInPool: [] },
+    hunt: { box: 0, fpDiceInBox: 0, pool, drawn: [], specialsInPlay: [], specialsInPool: [], specialsDrawn: [] },
     elvenRings: ['fp', 'fp', 'fp'],
     fellowship: {
       location: 'rivendell',

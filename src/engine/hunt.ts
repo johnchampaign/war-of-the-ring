@@ -9,17 +9,32 @@
 // Still deferred: "play on the table" damage-cancel cards (Axe & Bow, Mithril
 // Coat — they land with the on-table event-handler increment).
 import type { GameState } from './types';
-import { STANDARD_TILE_LIST, REGIONS, levelOf, type HuntTileDef } from './data';
+import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, type HuntTileDef } from './data';
 import { withRng } from './rng';
 import { settlementController, armySide } from './armies';
 import { log } from './log';
 
+/** Draw one tile from the active Hunt Pool — standard tiles (indices) PLUS any
+ *  special tiles in the pool (card ids; present only once the Fellowship is on
+ *  the Mordor Track). When the combined pool empties, all drawn tiles reshuffle. */
 function drawTile(state: GameState): HuntTileDef {
   const h = state.hunt;
-  if (h.pool.length === 0) { h.pool = h.drawn.slice(); h.drawn = []; }
-  const idx = withRng(state, (rng) => h.pool.splice(rng.int(h.pool.length), 1)[0]!);
-  h.drawn.push(idx);
-  return STANDARD_TILE_LIST[idx]!;
+  if (!h.specialsDrawn) h.specialsDrawn = []; // tolerate pre-field snapshots
+  if (h.pool.length + h.specialsInPool.length === 0) {
+    h.pool = h.drawn.slice(); h.drawn = [];
+    h.specialsInPool = h.specialsDrawn.slice(); h.specialsDrawn = [];
+  }
+  const n = h.pool.length + h.specialsInPool.length;
+  if (n === 0) return STANDARD_TILE_LIST[0]!; // fully exhausted safety net
+  const pick = withRng(state, (rng) => rng.int(n));
+  if (pick < h.pool.length) {
+    const idx = h.pool.splice(pick, 1)[0]!;
+    h.drawn.push(idx);
+    return STANDARD_TILE_LIST[idx]!;
+  }
+  const cardId = h.specialsInPool.splice(pick - h.pool.length, 1)[0]!;
+  h.specialsDrawn.push(cardId);
+  return SPECIAL_TILE_BY_CARD[cardId]!;
 }
 
 /** Extra failed-die re-rolls available to the Shadow this Hunt (rules-spec §10):

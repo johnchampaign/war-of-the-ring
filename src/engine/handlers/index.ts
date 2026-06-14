@@ -137,6 +137,19 @@ for (const [id, nation] of shRecruits) {
   });
 }
 
+// --- Special Hunt tiles: the card brings a tile "into play"; it joins the Hunt
+//     Pool only once the Fellowship is on the Mordor Track (rules-spec §11). ---
+for (const id of ['fp-char-01', 'fp-char-02', 'fp-char-03', 'fp-char-04', 'sh-char-01', 'sh-char-02', 'sh-char-03', 'sh-char-04']) {
+  register(id, {
+    apply(state) {
+      const h = state.hunt;
+      if (h.specialsInPlay.includes(id) || h.specialsInPool.includes(id) || (h.specialsDrawn ?? []).includes(id)) return;
+      (state.fellowship.mordor !== null ? h.specialsInPool : h.specialsInPlay).push(id);
+      log(state, null, 'event', `special Hunt tile ${id} now in play`);
+    },
+  });
+}
+
 // --- On-table hunt-defense cards: discard during the Hunt to reduce damage by 1
 //     (the discard-for-reduction itself is the reduceCard huntDamage option). ---
 register('fp-char-06', { // Axe and Bow — Gimli or Legolas in the Fellowship

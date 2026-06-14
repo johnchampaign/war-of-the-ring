@@ -92,6 +92,14 @@ export const HUNT_SPECIAL_SHADOW = huntData.specialShadow;
 export const STANDARD_TILE_LIST: HuntTileDef[] = HUNT_STANDARD.flatMap((t) =>
   Array.from({ length: t.count }, () => t));
 
+/** Special Hunt tiles keyed by the Event card that brings them into play. They
+ *  join the Hunt Pool only once the Fellowship is on the Mordor Track. */
+export const SPECIAL_TILE_BY_CARD: Record<string, HuntTileDef> = Object.fromEntries(
+  [...HUNT_SPECIAL_FELLOWSHIP, ...HUNT_SPECIAL_SHADOW]
+    .filter((t) => t.introducedBy)
+    .map((t) => [t.introducedBy!, t]),
+);
+
 // --- Event cards ---------------------------------------------------------
 export interface EventCardDef {
   id: string;

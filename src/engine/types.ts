@@ -94,6 +94,8 @@ export interface HuntState {
   specialsInPlay: string[];
   /** Special tile ids added to the active pool (after entering Mordor). */
   specialsInPool: string[];
+  /** Special tiles drawn this cycle (reshuffled with the pool when it empties). */
+  specialsDrawn: string[];
 }
 
 // --- Event / Combat cards ------------------------------------------------

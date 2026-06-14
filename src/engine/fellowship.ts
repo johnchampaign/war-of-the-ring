@@ -171,6 +171,11 @@ export function enterMordor(state: GameState): boolean {
   if (fs.mordor !== null || !MORDOR_ENTRANCES.includes(fs.location)) return false;
   fs.mordor = 0;
   fs.progress = 0;
+  // Special tiles in play now join the active Hunt Pool (rules-spec §11).
+  if (state.hunt.specialsInPlay.length) {
+    state.hunt.specialsInPool.push(...state.hunt.specialsInPlay);
+    state.hunt.specialsInPlay = [];
+  }
   log(state, null, 'fellowship', 'Fellowship entered Mordor');
   return true;
 }
