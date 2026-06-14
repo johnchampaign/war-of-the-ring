@@ -8,10 +8,10 @@ import { withRng } from '../rng';
 import { register, type EventTarget } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement } from '../armies';
 import { applyCasualties, startBattle } from '../combat';
-import { extraHunt } from '../hunt';
+import { extraHunt, drawHuntTileNumber } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf } from '../data';
-import { separateCompanion } from '../fellowship';
+import { separateCompanion, reassignGuide } from '../fellowship';
 import { log } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
@@ -571,6 +571,24 @@ register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see
 register('sh-char-21', { onTable: true, apply() { /* The Palantír of Orthanc — bonus draw, see wotrAdapter playEvent */ } });
 register('sh-char-15', { onTable: true, apply() { /* Worn with Sorrow and Toil — see hunt.ts (companion casualty) */ } });
 register('sh-char-22', { onTable: true, apply() { /* Wormtongue — see politics.ts (activateNation) */ } });
+register('sh-char-16', { onTable: true, apply() { /* Flocks of Crebain — +1 Hunt dice, see hunt.ts resolveHunt */ } });
+register('sh-char-14', { // The Breaking of the Fellowship — separate N Companions to the Fellowship's region
+  canPlay: (state) => !state.fellowship.hidden && state.fellowship.companions.some((c) => COMPANION_SET.has(c)),
+  apply(state) {
+    const n = drawHuntTileNumber(state);
+    if (n === null) { log(state, null, 'event', 'The Breaking of the Fellowship: tile had no effect'); return; }
+    if (isGollumGuide(state)) { corrupt(state, 1); log(state, null, 'event', 'The Breaking of the Fellowship: Gollum guides — +1 Corruption'); return; }
+    const fs = state.fellowship;
+    const pick = fs.companions.filter((c) => COMPANION_SET.has(c)).slice(0, n);
+    for (const c of pick) {
+      fs.companions.splice(fs.companions.indexOf(c), 1);
+      state.characters.inPlay[c] = fs.location;
+      state.regions[fs.location]!.characters.push(c);
+    }
+    reassignGuide(state);
+    log(state, null, 'event', `The Breaking of the Fellowship separates ${pick.length} Companion(s) at ${fs.location}`);
+  },
+});
 
 // --- Grond / The Fighting Uruk-hai: a 3-round siege assault on a besieged FP
 //     Stronghold (siege mechanic in combat.ts). The besieging army must be adjacent

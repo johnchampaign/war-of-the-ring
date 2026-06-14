@@ -177,13 +177,32 @@ export function extraHunt(state: GameState): void {
   applyHuntTile(state, tile, Math.min(5, state.hunt.box));
 }
 
+/** Draw a Hunt tile for a card effect (The Breaking of the Fellowship): returns the
+ *  tile's number (a 'die' tile is rolled), or null if it's an Eye / FP-special tile. */
+export function drawHuntTileNumber(state: GameState): number | null {
+  const { tile, ref } = drawTile(state);
+  const isEye = tile.value === 'eye';
+  const isFpSpecial = 'spec' in ref && ref.spec.startsWith('fp-');
+  if (isEye || isFpSpecial) return null;
+  if (typeof tile.value === 'number') return tile.value;
+  return withRng(state, (rng) => rng.rollDie(6)); // 'die' tile: roll for the number
+}
+
 /** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. */
 export function resolveHunt(state: GameState): void {
   const h = state.hunt;
   const level = Math.min(5, h.box);
-  const bonus = h.fpDiceInBox;     // dice already in the box (before this move's die)
+  let bonus = h.fpDiceInBox;     // dice already in the box (before this move's die)
   if (!fellowshipDieSkipsHuntBox(state)) h.fpDiceInBox += 1; // FP die enters the Hunt Box (unless "The Last Battle")
   if (level <= 0) return;
+  // Flocks of Crebain (on the Shadow table): +1 to all Hunt dice, then discarded.
+  const crebain = state.cards.shadow.table.indexOf('sh-char-16');
+  if (crebain >= 0) {
+    bonus += 1;
+    state.cards.shadow.table.splice(crebain, 1);
+    state.cards.shadow.discard.character.push('sh-char-16');
+    log(state, null, 'hunt', 'Flocks of Crebain: +1 to all Hunt dice');
+  }
   const rerolls = huntRerolls(state);
   const successes = withRng(state, (rng) => {
     let hits = 0, failed = 0;
