@@ -4,7 +4,10 @@
 // in hand (handlers are added incrementally). Handlers mutate state in place;
 // randomness goes through withRng. Cite the card id; effects modify the standard
 // rules per the card text.
-import type { GameState, Side } from '../types';
+import type { GameState, RegionId, Side } from '../types';
+
+/** A chosen target for an interactive event card (fields used per card). */
+export interface EventTarget { from?: RegionId; to?: RegionId; region?: RegionId; companion?: string }
 
 export interface EventHandler {
   /** "Play on the table" — the card persists (its id goes to cards[side].table)
@@ -12,8 +15,13 @@ export interface EventHandler {
   onTable?: boolean;
   /** Whether the card's precondition is currently met for `side`. Default: true. */
   canPlay?(state: GameState, side: Side): boolean;
-  /** Apply the immediate effect. */
-  apply(state: GameState, side: Side): void;
+  /** Apply the immediate effect (omitted for interactive cards — see targets). */
+  apply?(state: GameState, side: Side): void;
+  /** Interactive cards: the legal follow-up targets after the card is played. A
+   *  non-empty result makes playEvent pause with an 'eventTarget' choice; the
+   *  player's pick is applied via applyTarget. */
+  targets?(state: GameState, side: Side): EventTarget[];
+  applyTarget?(state: GameState, side: Side, target: EventTarget): void;
 }
 
 const handlers = new Map<string, EventHandler>();

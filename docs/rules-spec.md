@@ -156,6 +156,14 @@ die already showing an Eye.
   costs a die, that counts as the action (p.22).
 - **Combat cards**: every Event card has a bottom-half combat use. Played during
   a battle (does **not** cost an action) — see §7 (p.23, p.29).
+- **Handlers** (`handlers/index.ts`, ~52/96 implemented): each registered card
+  applies its effect; unimplemented cards aren't offered. **Interactive cards**
+  (those whose effect needs a player-chosen target) use an `EventHandler.targets`/
+  `applyTarget` pair: playing pauses with an `eventTarget` PendingChoice, the
+  player picks from the enumerated targets, then the effect applies (e.g.
+  *Cruel Weather* = move the Fellowship to an adjacent region; *Corsairs of Umbar*;
+  *Shadows Gather*). Minor approximations are noted per card (Corsairs' "coastal"
+  set; Shadows Gather's path-traversal reduced to distance).
 
 ---
 

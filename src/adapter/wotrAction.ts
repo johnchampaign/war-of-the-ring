@@ -33,6 +33,8 @@ export type WotrAction =
   // Move an independent character via a Character die: 'nazgul' (a region's
   // Nazgûl group), a Minion id, or a separated Companion id.
   | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId }
+  // Follow-up target choice for an interactive event card (fields per card).
+  | { kind: 'eventTarget'; card: string; from?: RegionId; to?: RegionId; region?: RegionId; companion?: string }
   // Hunt damage resolution (FP): absorb as Corruption, lose a Companion, or use a
   // damage-reduction ability (separate the Hobbit Guide / Gollum reveal).
   | { kind: 'huntDamage'; mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard' }

@@ -58,6 +58,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
           : [{ kind: 'combatRetreat', retreat: false }];
       case 'retreatTo':
         return retreatDestinations(state).map((region) => ({ kind: 'retreatTo', region }));
+      case 'eventTarget': {
+        const card = (state.pendingChoice!.data as { card: string }).card;
+        const h = getHandler(card);
+        return (h?.targets?.(state, actor) ?? []).map((t) => ({ kind: 'eventTarget' as const, card, ...t }));
+      }
       case 'huntDamage': {
         const fs = state.fellowship;
         const acts: WotrAction[] = [{ kind: 'huntDamage', mode: 'corruption' }];
@@ -197,10 +202,28 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!h || !canPlayCard(state, action.cardId, actor)) throw new Error('Card not playable');
       if (!consumeOneOf(state, actor, ['event', 'will'])) throw new Error('No Event die');
       hand.splice(idx, 1);
-      h.apply(state, actor);
+      // Interactive card: pause for the player's target choice; the card is held
+      // (out of hand) until the eventTarget resolves.
+      const opts = h.targets ? h.targets(state, actor) : null;
+      if (opts && opts.length > 0) {
+        state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId } };
+        break;
+      }
+      h.apply?.(state, actor);
       const deck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
       if (h.onTable) state.cards[actor].table.push(action.cardId);
       else state.cards[actor].discard[deck].push(action.cardId);
+      passResolutionTurn(state, actor); break;
+    }
+    case 'eventTarget': {
+      requireChoice(state, 'eventTarget', actor);
+      const card = (state.pendingChoice!.data as { card: string }).card;
+      const h = getHandler(card);
+      if (!h?.applyTarget) throw new Error('Not an interactive card');
+      h.applyTarget(state, actor, { from: action.from, to: action.to, region: action.region, companion: action.companion });
+      state.pendingChoice = null;
+      const deck = EVENT_BY_ID[card]!.deck === 'Character' ? 'character' : 'strategy';
+      state.cards[actor].discard[deck].push(card);
       passResolutionTurn(state, actor); break;
     }
     case 'diplomaticAction': {

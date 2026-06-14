@@ -6,7 +6,7 @@ import type { GameState, Side, Nation } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register } from './registry';
-import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT } from '../armies';
+import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement } from '../armies';
 import { applyCasualties } from '../combat';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS } from '../data';
@@ -32,6 +32,26 @@ function eliminateNazgul(state: GameState, region: string, n: number): void {
   r.nazgul -= k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + k;
 }
 const allAtWar = (state: GameState, nations: Nation[]): boolean => nations.every((n) => state.nations[n].step === 0);
+/** Region-step distance (BFS), or Infinity. */
+function regionDist(from: string, to: string): number {
+  if (from === to) return 0;
+  const seen = new Set([from]); let layer = [from], d = 0;
+  while (layer.length) { d++; const next: string[] = [];
+    for (const r of layer) for (const a of REGIONS[r]?.adjacency ?? []) { if (a === to) return d; if (!seen.has(a)) { seen.add(a); next.push(a); } }
+    layer = next; }
+  return Infinity;
+}
+/** Move a whole Army (units + Leaders + Nazgûl + characters) from→to, capturing. */
+function moveAllUnits(state: GameState, from: string, to: string): void {
+  const src = state.regions[from]!, dst = state.regions[to]!;
+  for (const n of Object.keys(src.units) as Nation[]) {
+    const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
+    d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
+  }
+  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...src.characters);
+  src.units = {}; src.leaders = 0; src.nazgul = 0; src.characters = [];
+  captureIfEnemySettlement(state, to, 'shadow');
+}
 /** Force-place units into a region (a card that recruits in a NAMED region,
  *  bypassing the settlement/control checks recruit() applies). Capped by
  *  reinforcements + the stacking limit. */
@@ -171,6 +191,43 @@ for (const [id, nation] of shRecruits) {
     apply(state, side) { eventRecruit(state, side, nation, 1, 0); },
   });
 }
+
+// --- Interactive movement cards (the player picks a target after playing) -----
+// Cruel Weather: the Shadow moves the Fellowship to an adjacent region.
+register('sh-char-10', {
+  canPlay: (state) => state.fellowship.progress >= 1 && (REGIONS[state.fellowship.location]?.adjacency.length ?? 0) > 0,
+  targets: (state) => (REGIONS[state.fellowship.location]?.adjacency ?? []).map((region) => ({ region })),
+  applyTarget(state, _side, t) { state.fellowship.location = t.region!; log(state, null, 'event', `Cruel Weather moves the Fellowship to ${t.region}`); },
+});
+// Corsairs of Umbar: move the Umbar Army to a Gondor coastal region (coastal set
+// approximated; merges, checking the stacking limit).
+const GONDOR_COASTAL = ['anfalas', 'dol-amroth', 'pelargir', 'lossarnach', 'osgiliath'];
+register('sh-str-10', {
+  canPlay: (state) => isAtWar(state, 'southrons') && armySide(state, 'umbar') === 'shadow',
+  targets: (state) => GONDOR_COASTAL
+    .filter((to) => unitCount(state, 'umbar') + unitCount(state, to) <= STACKING_LIMIT)
+    .map((to) => ({ from: 'umbar', to })),
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}`); },
+});
+// Shadows Gather: move one Shadow Army ≤3 regions, ending where another Shadow
+// Army stands (not besieged). (Path-free-traversal nuance simplified to distance.)
+function shadowsGatherMoves(state: GameState): Array<{ from: string; to: string }> {
+  const out: Array<{ from: string; to: string }> = [];
+  const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
+  for (const from of shadowRegions) {
+    for (const to of shadowRegions) {
+      if (out.length >= 12) return out;
+      if (from === to || state.regions[to]!.besieged) continue;
+      if (regionDist(from, to) <= 3 && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+    }
+  }
+  return out;
+}
+register('sh-str-07', {
+  canPlay: (state) => shadowsGatherMoves(state).length > 0,
+  targets: shadowsGatherMoves,
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}`); },
+});
 
 // --- Recruit / muster cards in named or chosen regions -----------------------
 // Pits of Mordor: recruit 2 Sauron Regulars in each of three Sauron Strongholds.
