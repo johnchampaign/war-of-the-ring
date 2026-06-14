@@ -162,6 +162,15 @@ register('fp-char-07', { // Horn of Gondor — Boromir in the Fellowship
   canPlay: (state) => state.fellowship.companions.includes('boromir'),
   apply() { /* persists on the table */ },
 });
+register('fp-char-05', { // Mithril Coat and Sting — discard to redraw a Hunt tile
+  onTable: true,
+  apply() { /* persists on the table */ },
+});
+register('fp-char-08', { // Wizard's Staff — Gandalf the Grey in the Fellowship
+  onTable: true,
+  canPlay: (state) => state.fellowship.companions.includes('gandalf-grey'),
+  apply() { /* persists on the table */ },
+});
 
 // --- The Red Arrow: advance Rohan + recruit a Rohan unit & Leader in Edoras ----
 register('fp-str-09', {

@@ -14,10 +14,13 @@ import { withRng } from './rng';
 import { settlementController, armySide } from './armies';
 import { log } from './log';
 
+type TileRef = { std: number } | { spec: string };
+
 /** Draw one tile from the active Hunt Pool — standard tiles (indices) PLUS any
  *  special tiles in the pool (card ids; present only once the Fellowship is on
- *  the Mordor Track). When the combined pool empties, all drawn tiles reshuffle. */
-function drawTile(state: GameState): HuntTileDef {
+ *  the Mordor Track). When the combined pool empties, all drawn tiles reshuffle.
+ *  Returns the tile and a `ref` so a redraw (Mithril Coat) can return it. */
+function drawTile(state: GameState): { tile: HuntTileDef; ref: TileRef } {
   const h = state.hunt;
   if (!h.specialsDrawn) h.specialsDrawn = []; // tolerate pre-field snapshots
   if (h.pool.length + h.specialsInPool.length === 0) {
@@ -25,16 +28,24 @@ function drawTile(state: GameState): HuntTileDef {
     h.specialsInPool = h.specialsDrawn.slice(); h.specialsDrawn = [];
   }
   const n = h.pool.length + h.specialsInPool.length;
-  if (n === 0) return STANDARD_TILE_LIST[0]!; // fully exhausted safety net
+  if (n === 0) return { tile: STANDARD_TILE_LIST[0]!, ref: { std: 0 } }; // exhausted safety net
   const pick = withRng(state, (rng) => rng.int(n));
   if (pick < h.pool.length) {
     const idx = h.pool.splice(pick, 1)[0]!;
     h.drawn.push(idx);
-    return STANDARD_TILE_LIST[idx]!;
+    return { tile: STANDARD_TILE_LIST[idx]!, ref: { std: idx } };
   }
   const cardId = h.specialsInPool.splice(pick - h.pool.length, 1)[0]!;
   h.specialsDrawn.push(cardId);
-  return SPECIAL_TILE_BY_CARD[cardId]!;
+  return { tile: SPECIAL_TILE_BY_CARD[cardId]!, ref: { spec: cardId } };
+}
+
+/** Return a just-drawn tile to the active pool (Mithril Coat's "return the first
+ *  tile to the Hunt Pool"). */
+function returnTileToPool(state: GameState, ref: TileRef): void {
+  const h = state.hunt;
+  if ('std' in ref) { const i = h.drawn.lastIndexOf(ref.std); if (i >= 0) h.drawn.splice(i, 1); h.pool.push(ref.std); }
+  else { const i = h.specialsDrawn.lastIndexOf(ref.spec); if (i >= 0) h.specialsDrawn.splice(i, 1); h.specialsInPool.push(ref.spec); }
 }
 
 /** Extra failed-die re-rolls available to the Shadow this Hunt (rules-spec §10):
@@ -93,6 +104,67 @@ export function huntReductionAvailable(state: GameState): boolean {
 }
 export const huntReduceCardAvailable = hasOnTableReducer;
 
+// On-table cards that intercept the draw itself: Wizard's Staff (prevent the
+// draw, decided BLIND, before the tile) and Mithril Coat (redraw, decided after
+// seeing the tile). Both reach cards.fp.table via their onTable handlers.
+const WIZARD_STAFF = 'fp-char-08', MITHRIL_COAT = 'fp-char-05';
+const hasWizardStaff = (s: GameState) => s.cards.fp.table.includes(WIZARD_STAFF);
+const hasMithrilCoat = (s: GameState) => s.cards.fp.table.includes(MITHRIL_COAT);
+function discardTableCard(state: GameState, id: string): void {
+  const t = state.cards.fp.table; const i = t.indexOf(id);
+  if (i >= 0) { t.splice(i, 1); state.cards.fp.discard.character.push(id); }
+}
+
+/** Begin the tile draw. Wizard's Staff (if on the table) prompts a BLIND
+ *  prevent-the-draw choice first; otherwise draw immediately. */
+function beginHuntDraw(state: GameState, successes: number, onMordor: boolean): void {
+  if (hasWizardStaff(state)) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntPreventDraw', data: { successes, onMordor } };
+    return;
+  }
+  doHuntDraw(state, successes, onMordor);
+}
+/** Draw a tile; Mithril Coat (if on the table) prompts a redraw choice after the
+ *  tile is seen; otherwise apply it. */
+function doHuntDraw(state: GameState, successes: number, onMordor: boolean): void {
+  const { tile, ref } = drawTile(state);
+  if (hasMithrilCoat(state)) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntRedraw', data: { tile, ref, successes, onMordor } };
+    return;
+  }
+  applyDrawnTile(state, tile, successes, onMordor);
+}
+/** Advance the Mordor Track (unless the tile is a Stop) then apply the tile. */
+function applyDrawnTile(state: GameState, tile: HuntTileDef, successes: number, onMordor: boolean): void {
+  const fs = state.fellowship;
+  if (onMordor && fs.mordor !== null && !tile.stop) fs.mordor = Math.min(5, fs.mordor + 1);
+  applyHuntTile(state, tile, successes);
+}
+
+/** Resolve the BLIND prevent-the-draw choice (Wizard's Staff). */
+export function resolveHuntPreventDraw(state: GameState, prevent: boolean): void {
+  const d = state.pendingChoice!.data as { successes: number; onMordor: boolean };
+  state.pendingChoice = null;
+  if (prevent) { discardTableCard(state, WIZARD_STAFF); log(state, null, 'hunt', 'Wizard’s Staff prevents the Hunt tile draw'); return; }
+  doHuntDraw(state, d.successes, d.onMordor);
+}
+/** Resolve the redraw choice (Mithril Coat): redraw (return the first tile, draw
+ *  a second, apply it) or keep the first. */
+export function resolveHuntRedraw(state: GameState, redraw: boolean): void {
+  const d = state.pendingChoice!.data as { tile: HuntTileDef; ref: TileRef; successes: number; onMordor: boolean };
+  state.pendingChoice = null;
+  if (redraw) {
+    discardTableCard(state, MITHRIL_COAT);
+    returnTileToPool(state, d.ref);
+    const { tile } = drawTile(state);
+    log(state, null, 'hunt', 'Mithril Coat and Sting: redrew the Hunt tile');
+    applyDrawnTile(state, tile, d.successes, d.onMordor);
+  } else {
+    applyDrawnTile(state, d.tile, d.successes, d.onMordor);
+  }
+}
+export const huntPreventAvailable = hasWizardStaff;
+
 /** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. */
 export function resolveHunt(state: GameState): void {
   const h = state.hunt;
@@ -107,18 +179,16 @@ export function resolveHunt(state: GameState): void {
     for (let i = 0; i < Math.min(rerolls, failed); i++) { const d = rng.rollDie(6); if (d !== 1 && d + bonus >= 6) hits++; }
     return hits;
   });
-  if (successes >= 1) applyHuntTile(state, drawTile(state), successes);
+  if (successes >= 1) beginHuntDraw(state, successes, false);
 }
 
-/** Resolve a step on the Mordor Track: advance (unless Stop) then draw + apply a
- *  tile directly (no Hunt roll). */
+/** Resolve a step on the Mordor Track: draw a tile (advancing unless it's a Stop)
+ *  and apply it — no Hunt roll. Wizard's Staff / Mithril Coat may intercept. */
 export function resolveMordorStep(state: GameState): void {
   const fs = state.fellowship;
   if (fs.mordor === null) return;
   state.hunt.fpDiceInBox += 1; // the FP die still enters the Hunt Box
-  const tile = drawTile(state);
-  if (!tile.stop) fs.mordor = Math.min(5, fs.mordor + 1);
-  applyHuntTile(state, tile, Math.min(5, state.hunt.box));
+  beginHuntDraw(state, Math.min(5, state.hunt.box), true);
 }
 
 /** After a −1 damage reduction (Hobbit-Guide separate, applied by the adapter; or

@@ -12,7 +12,7 @@ import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
 import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
-import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable } from '../engine/hunt';
+import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
@@ -68,6 +68,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         if (huntReduceCardAvailable(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard' });
         return acts;
       }
+      case 'huntPreventDraw':
+        return [{ kind: 'huntPreventDraw', prevent: true }, { kind: 'huntPreventDraw', prevent: false }];
+      case 'huntRedraw':
+        return [{ kind: 'huntRedraw', redraw: true }, { kind: 'huntRedraw', redraw: false }];
       default: return [];
     }
   }
@@ -239,6 +243,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         resolveHuntDamage(state, action.mode);
       }
       break;
+    case 'huntPreventDraw':
+      requireChoice(state, 'huntPreventDraw', actor); resolveHuntPreventDraw(state, action.prevent); break;
+    case 'huntRedraw':
+      requireChoice(state, 'huntRedraw', actor); resolveHuntRedraw(state, action.redraw); break;
     case 'skipDie':
       requirePhase(state, 'actionResolution');
       if (!consumeDie(state, actor, action.face)) throw new Error(`No ${action.face} die`);
