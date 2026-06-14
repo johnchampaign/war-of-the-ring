@@ -40,10 +40,13 @@ function withinRegions(from: RegionId, target: RegionId, n: number): boolean {
   return seen.has(target);
 }
 
-/** A free adjacent region a `side` army could retreat into, or null. */
+/** All free adjacent regions a `side` army could retreat into. */
+function freeAdjacentRegions(state: GameState, regionId: RegionId, side: Side): RegionId[] {
+  return REGIONS[regionId]!.adjacency.filter((adj) => freeForMovement(state, adj, side));
+}
+/** The first such region, or null (used for "can retreat?" / pre-combat retreats). */
 function freeAdjacentFor(state: GameState, regionId: RegionId, side: Side): RegionId | null {
-  for (const adj of REGIONS[regionId]!.adjacency) if (freeForMovement(state, adj, side)) return adj;
-  return null;
+  return freeAdjacentRegions(state, regionId, side)[0] ?? null;
 }
 const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
   (Object.keys(state.regions[id]!.units) as Nation[]).filter((n) => (state.regions[id]!.units[n]!.regular + state.regions[id]!.units[n]!.elite) > 0);
@@ -302,13 +305,30 @@ export function resolveRetreat(state: GameState, retreat: boolean): void {
   const pc = state.pendingCombat!;
   state.pendingChoice = null;
   if (retreat) {
-    const dest = retreatRegion(state, pc);
-    if (dest) { moveStack(state, pc.to, dest); finishCombat(state, true); return; }
-    // no retreat available -> stand
+    const dests = freeAdjacentRegions(state, pc.to, pc.defender);
+    if (dests.length === 1) { moveStack(state, pc.to, dests[0]!); finishCombat(state, true); return; }
+    if (dests.length > 1) { state.pendingChoice = { owner: pc.defender, kind: 'retreatTo' }; return; } // defender picks where
+    // none available -> stand
   }
   // Next round re-opens combat-card play (cards are per-round now).
   pc.round += 1; pc.step = 'attackerCard';
 }
+
+/** Resolve the defender's chosen retreat destination ('retreatTo' choice). */
+export function resolveRetreatTo(state: GameState, region: RegionId): void {
+  const pc = state.pendingCombat!;
+  state.pendingChoice = null;
+  const dests = freeAdjacentRegions(state, pc.to, pc.defender);
+  const dest = dests.includes(region) ? region : dests[0];
+  if (dest) { moveStack(state, pc.to, dest); finishCombat(state, true); return; }
+  pc.round += 1; pc.step = 'attackerCard'; // shouldn't happen; stand as a fallback
+}
+
+/** Free regions the defender may retreat into (for the 'retreatTo' choice). */
+export const retreatDestinations = (state: GameState): RegionId[] => {
+  const pc = state.pendingCombat;
+  return pc ? freeAdjacentRegions(state, pc.to, pc.defender) : [];
+};
 function moveStack(state: GameState, from: RegionId, to: RegionId): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
   for (const n of Object.keys(src.units) as Nation[]) {

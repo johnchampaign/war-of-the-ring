@@ -33,6 +33,7 @@ export function describeAction(a: WotrAction): string {
     case 'chooseCasualties': return a.plan === 'regularsFirst' ? 'Lose Regulars first' : 'Reduce Elites first';
     case 'combatContinue': return a.cont ? 'Continue the attack' : 'Cease the attack';
     case 'combatRetreat': return a.retreat ? 'Retreat' : 'Stand and fight';
+    case 'retreatTo': return `Retreat to ${rName(a.region)}`;
     case 'huntDamage':
       switch (a.mode) {
         case 'corruption': return 'Take Corruption';
@@ -51,5 +52,5 @@ export function describeAction(a: WotrAction): string {
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'huntDamage', 'huntPreventDraw', 'huntRedraw']);
+const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'huntDamage', 'huntPreventDraw', 'huntRedraw']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);

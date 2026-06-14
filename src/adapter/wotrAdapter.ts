@@ -11,7 +11,7 @@ import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separat
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
-import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
+import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
@@ -55,6 +55,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return canRetreat(state)
           ? [{ kind: 'combatRetreat', retreat: true }, { kind: 'combatRetreat', retreat: false }]
           : [{ kind: 'combatRetreat', retreat: false }];
+      case 'retreatTo':
+        return retreatDestinations(state).map((region) => ({ kind: 'retreatTo', region }));
       case 'huntDamage': {
         const fs = state.fellowship;
         const acts: WotrAction[] = [{ kind: 'huntDamage', mode: 'corruption' }];
@@ -232,6 +234,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'combatContinue', actor); resolveContinue(state, action.cont); break;
     case 'combatRetreat':
       requireChoice(state, 'combatRetreat', actor); resolveRetreat(state, action.retreat); break;
+    case 'retreatTo':
+      requireChoice(state, 'retreatTo', actor); resolveRetreatTo(state, action.region); break;
     case 'huntDamage':
       requireChoice(state, 'huntDamage', actor);
       if (action.mode === 'reduceSeparate') {
