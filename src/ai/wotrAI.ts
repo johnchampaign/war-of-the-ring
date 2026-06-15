@@ -226,6 +226,8 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'crebain' && a.use === (level >= 2)) ?? legal[0]!;
     }
     case 'eventTarget': return chooseEventTarget(state, legal);
+    case 'musterSecond': // place the second figure of a two-figure muster (fuller build)
+      return legal.find((a) => a.kind === 'recruitSecond' && !a.done) ?? legal[0]!;
     default: return legal[0]!;
   }
 }

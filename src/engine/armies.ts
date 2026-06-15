@@ -72,9 +72,6 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
   const leader = opts.leader ?? 0;
   if (regular > pool.regular || elite > pool.elite || leader > (pool.leader ?? 0)) return false;
   if (unitCount(state, id) + regular + elite > STACKING_LIMIT) return false;
-  // A Leader can't be recruited into a region without an Army unit of its Faction
-  // (existing units, or the units this same recruit places).
-  if (leader > 0 && unitCount(state, id) + regular + elite === 0) return false;
   pool.regular -= regular; pool.elite -= elite;
   const r = state.regions[id]!;
   const u: ArmyUnits = r.units[nation] ?? { regular: 0, elite: 0 };
@@ -82,6 +79,27 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
   r.units[nation] = u;
   if (leader > 0) { pool.leader = (pool.leader ?? 0) - leader; r.leaders += leader; }
   log(state, null, 'muster', `Recruited ${regular}R/${elite}E${leader ? `/${leader}L` : ''} ${nation} in ${id}`);
+  return true;
+}
+
+/** A region where the Shadow may muster a Nazgûl: a free (no FP Army) Sauron
+ *  Stronghold the Shadow controls (rules-spec §6, "Nazgûl are always recruited in
+ *  the Strongholds of the Sauron Nation"). */
+export function canRecruitNazgul(state: GameState, id: RegionId): boolean {
+  const def = REGIONS[id]!;
+  if (def.nation !== 'sauron' || def.settlement !== 'Stronghold') return false;
+  if (settlementController(state, id) !== 'shadow') return false;
+  if (armySide(state, id) === 'fp') return false;
+  return (state.reinforcements.sauron as { nazgul?: number }).nazgul! > 0;
+}
+
+/** Muster a single Nazgûl into a Sauron Stronghold (the Shadow's "Leader/Nazgûl"
+ *  muster figure). Returns false if illegal. */
+export function recruitNazgul(state: GameState, id: RegionId): boolean {
+  if (!canRecruitNazgul(state, id)) return false;
+  const pool = state.reinforcements.sauron as { nazgul: number };
+  pool.nazgul -= 1; state.regions[id]!.nazgul += 1;
+  log(state, null, 'muster', `Mustered a Nazgûl in ${id}`);
   return true;
 }
 

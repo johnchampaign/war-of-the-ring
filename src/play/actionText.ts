@@ -31,9 +31,12 @@ export function describeAction(a: WotrAction): string {
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
     case 'diplomaticAction': return `Diplomacy: advance ${cap(a.nation)}`;
     case 'recruitUnit': {
-      const parts = [a.regular ? `${a.regular} Regular${a.regular > 1 ? 's' : ''}` : '', a.elite ? `${a.elite} Elite${a.elite > 1 ? 's' : ''}` : '', a.leader ? `${a.leader} Leader${a.leader > 1 ? 's' : ''}` : ''].filter(Boolean);
-      return `Recruit ${parts.join(' + ')} ${cap(a.nation)} in ${rName(a.region)}`;
+      const fig = a.nazgul ? 'Nazgûl' : a.leader ? 'Leader' : a.elite ? 'Elite' : 'Regular';
+      const more = a.then ? ` (+ a 2nd ${a.then === 'leader' ? 'Leader/Nazgûl' : 'Regular'} elsewhere)` : '';
+      return `Recruit ${fig} ${cap(a.nation)} in ${rName(a.region)}${more}`;
     }
+    case 'recruitSecond':
+      return a.done ? 'Muster: no second figure' : `Muster 2nd: ${a.figure === 'leader' ? 'Leader/Nazgûl' : 'Regular'}${a.nation ? ` ${cap(a.nation)}` : ''} in ${rName(a.region!)}`;
     case 'bringMinion': return `Bring ${charName(a.minion)} into play`;
     case 'eventTarget': {
       if (a.done) return `${cardName(a.card)}: done`;

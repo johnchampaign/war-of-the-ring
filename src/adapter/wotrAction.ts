@@ -21,7 +21,12 @@ export type WotrAction =
   | { kind: 'drawEvent'; deck: Deck } // Event die
   | { kind: 'playEvent'; cardId: string } // Event die: play a card from hand
   | { kind: 'diplomaticAction'; nation: Nation } // Muster die: advance political track
-  | { kind: 'recruitUnit'; nation: Nation; region: RegionId; regular: number; elite: number; leader?: number } // Muster die: one bundle (2R / 2L / 1R+1L / 1E)
+  // Muster die: place the FIRST figure of a recruit. `then` (when present) means a
+  // second figure of that type follows — placed in a SEPARATE Settlement via the
+  // 'recruitSecond' choice (rules-spec §6). Exactly one of regular/elite/leader/nazgul is 1.
+  | { kind: 'recruitUnit'; nation: Nation; region: RegionId; regular: number; elite: number; leader?: number; nazgul?: number; then?: 'regular' | 'leader' }
+  // The second figure of a two-figure muster (separate Settlement), or decline it.
+  | { kind: 'recruitSecond'; nation?: Nation; region?: RegionId; figure?: 'regular' | 'leader'; done?: boolean }
   | { kind: 'bringMinion'; minion: 'witch-king' | 'saruman' | 'mouth-of-sauron'; region: RegionId } // Muster die (Shadow)
   | { kind: 'moveArmy'; from: RegionId; to: RegionId }   // Army die
   | { kind: 'attack'; from: RegionId; to: RegionId }      // Army die

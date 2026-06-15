@@ -11,6 +11,7 @@ import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separat
 import { extraHunt } from '../engine/hunt';
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
+  recruitNazgul, canRecruitNazgul,
 } from '../engine/armies';
 import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
@@ -170,6 +171,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         if (fs.guide === 'gollum' && fs.hidden) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
         if (huntReduceCardAvailable(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard' });
         return acts;
+      }
+      case 'musterSecond': {
+        const data = state.pendingChoice!.data as { figure: 'regular' | 'leader'; first: string };
+        return recruitSecondTargets(state, actor, data.figure, data.first);
       }
       case 'huntPreventDraw':
         return [{ kind: 'huntPreventDraw', prevent: true }, { kind: 'huntPreventDraw', prevent: false }];
@@ -450,12 +455,28 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       }
       passResolutionTurn(state, actor); break;
     }
-    case 'recruitUnit':
+    case 'recruitUnit': {
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
       if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
-      if (!recruit(state, action.nation, action.region, action.regular, action.elite, { leader: action.leader ?? 0 })) throw new Error('Illegal recruit');
-      passResolutionTurn(state, actor); break;
+      if (!placeFigure(state, actor, action.nation, action.region, firstFigure(action))) throw new Error('Illegal recruit');
+      // A two-figure muster: the second figure goes to a SEPARATE Settlement (RAW p.26).
+      if (action.then) state.pendingChoice = { owner: actor, kind: 'musterSecond', data: { figure: action.then, first: action.region } };
+      else passResolutionTurn(state, actor);
+      break;
+    }
+    case 'recruitSecond': {
+      requireChoice(state, 'musterSecond', actor);
+      const data = state.pendingChoice!.data as { figure: 'regular' | 'leader'; first: RegionId };
+      state.pendingChoice = null;
+      if (!action.done) {
+        if (action.region === data.first) throw new Error('Second figure must go to a different Settlement');
+        if (action.nation && sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
+        if (!placeFigure(state, actor, action.nation ?? 'sauron', action.region!, data.figure)) throw new Error('Illegal second recruit');
+      }
+      passResolutionTurn(state, actor);
+      break;
+    }
     case 'bringMinion':
       requirePhase(state, 'actionResolution');
       if (actor !== 'shadow') throw new Error('Only Shadow brings Minions');
@@ -575,32 +596,83 @@ function upgradeOptions(state: GameState): WotrAction[] {
   return out;
 }
 
-/** Recruit options for a Muster die: per eligible nation, the legal single-
- *  settlement bundles a Muster die buys — 1 Regular, 1 Elite, 1 Regular + 1 Leader,
- *  2 Leaders (rules-spec §6). The two-settlement "2 Regulars" split is not modelled
- *  (a 1-Regular partial stands in for it; deviation E1). Capped to keep the action
- *  space tractable. */
+type Figure = 'regular' | 'elite' | 'leader' | 'nazgul';
+/** Which single figure a first-figure recruit action places. */
+function firstFigure(a: Extract<WotrAction, { kind: 'recruitUnit' }>): Figure {
+  if (a.nazgul) return 'nazgul';
+  if (a.leader) return 'leader';
+  if (a.elite) return 'elite';
+  return 'regular';
+}
+/** Place one muster figure. For the Shadow a 'leader' figure is a Nazgûl, which
+ *  goes into a Sauron Stronghold (rules-spec §6). */
+function placeFigure(state: GameState, side: Side, nation: Nation, region: string, figure: Figure): boolean {
+  switch (figure) {
+    case 'regular': return recruit(state, nation, region, 1, 0);
+    case 'elite': return recruit(state, nation, region, 0, 1);
+    case 'nazgul': return recruitNazgul(state, region);
+    case 'leader': return side === 'shadow' ? recruitNazgul(state, region) : recruit(state, nation, region, 0, 0, { leader: 1 });
+  }
+}
+
+/** Free, friendly, At-War Settlement regions of `nation` (recruit targets). */
+function recruitRegions(state: GameState, side: Side, nation: Nation, cap = 4): string[] {
+  const out: string[] = [];
+  for (const id of Object.keys(state.regions)) {
+    const def = REGIONS[id]!;
+    if (def.nation !== nation || !def.settlement) continue;
+    if (settlementController(state, id) !== side || armySide(state, id) === opp(side)) continue;
+    if (unitCount(state, id) >= STACKING_LIMIT) continue;
+    out.push(id);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+/** Recruit options for a Muster die — the first figure of each legal bundle
+ *  (rules-spec §6): up to 2 Regulars, up to 2 Leaders/Nazgûl, 1 Regular + 1 Leader,
+ *  1 Elite. A `then` marks a two-figure bundle whose second figure is placed in a
+ *  SEPARATE Settlement (the 'recruitSecond' choice). Declining the second yields
+ *  the lesser single-figure muster. Capped to keep the action list tractable. */
 function recruitTargets(state: GameState, side: Side): WotrAction[] {
   const out: WotrAction[] = [];
+  const naz = (state.reinforcements.sauron as { nazgul?: number }).nazgul ?? 0;
   for (const nation of Object.keys(state.nations) as Nation[]) {
-    if (out.length >= 16) break;
+    if (out.length >= 24) break;
     if (sideOfNation(nation) !== side || !isAtWar(state, nation)) continue;
     const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
-    const lead = pool.leader ?? 0;
-    for (const id of Object.keys(state.regions)) {
-      const def = REGIONS[id]!;
-      if (def.nation !== nation || !def.settlement) continue;
-      if (settlementController(state, id) !== side) continue;
-      if (armySide(state, id) === opp(side)) continue;
-      const room = STACKING_LIMIT - unitCount(state, id);
-      if (room <= 0) continue;
-      const hasUnit = unitCount(state, id) > 0;
-      if (pool.regular >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0 });
-      if (pool.elite >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 1 });
-      if (pool.regular >= 1 && lead >= 1 && room >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, leader: 1 });
-      if (lead >= 2 && hasUnit) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 0, leader: 2 });
-      break; // one settlement per nation in the representative set
-    }
+    const fpLead = side === 'fp' ? (pool.leader ?? 0) : 0;
+    const id = recruitRegions(state, side, nation, 1)[0];
+    if (!id) continue;
+    if (pool.regular >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'regular' });
+    if (pool.elite >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 1 });
+    // 1 Regular + 1 Leader/Nazgûl, and 2 Leaders/Nazgûl. Shadow's "Leader" is a Nazgûl.
+    const canLead = side === 'shadow' ? naz > 0 : fpLead >= 1;
+    if (pool.regular >= 1 && canLead) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'leader' });
+    if (side === 'fp' && fpLead >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 0, leader: 1, then: 'leader' });
+  }
+  // Shadow Nazgûl muster (Sauron Strongholds): up to 2 Nazgûl.
+  if (side === 'shadow' && naz > 0) {
+    const sr = Object.keys(state.regions).find((r) => canRecruitNazgul(state, r));
+    if (sr) out.push({ kind: 'recruitUnit', nation: 'sauron', region: sr, regular: 0, elite: 0, nazgul: 1, then: 'leader' });
+  }
+  return out;
+}
+
+/** Second-figure placements for a two-figure muster: the same figure type, in a
+ *  Settlement other than the first (RAW: separate Settlements). */
+function recruitSecondTargets(state: GameState, side: Side, figure: 'regular' | 'leader', first: string): WotrAction[] {
+  const out: WotrAction[] = [{ kind: 'recruitSecond', done: true }];
+  if (figure === 'leader' && side === 'shadow') {
+    for (const r of Object.keys(state.regions)) if (r !== first && canRecruitNazgul(state, r)) { out.push({ kind: 'recruitSecond', nation: 'sauron', region: r, figure }); break; }
+    return out;
+  }
+  for (const nation of Object.keys(state.nations) as Nation[]) {
+    if (sideOfNation(nation) !== side || !isAtWar(state, nation)) continue;
+    const pool = state.reinforcements[nation] as { regular: number; leader?: number };
+    if (figure === 'regular' ? pool.regular < 1 : (pool.leader ?? 0) < 1) continue;
+    for (const r of recruitRegions(state, side, nation, 3)) if (r !== first) { out.push({ kind: 'recruitSecond', nation, region: r, figure }); break; }
+    if (out.length >= 8) break;
   }
   return out;
 }
