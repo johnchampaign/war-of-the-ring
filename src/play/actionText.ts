@@ -5,6 +5,7 @@
 import type { WotrAction } from '../adapter/wotrAction';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
+import { charName } from './charInfo';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 const cardName = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.name ?? id;
@@ -18,20 +19,20 @@ export function describeAction(a: WotrAction): string {
     case 'allocateHunt': return `Allocate ${a.dice} Hunt ${a.dice === 1 ? 'die' : 'dice'}`;
     case 'moveFellowship': return 'Move the Fellowship';
     case 'hideFellowship': return 'Hide the Fellowship';
-    case 'separateCompanion': return `Separate ${cap(a.companion)}`;
+    case 'separateCompanion': return `Separate ${charName(a.companion)}`;
     case 'bringUpgrade': return a.which === 'aragorn' ? 'Crown Aragorn (Will of the West)' : 'Summon Gandalf the White';
     case 'drawEvent': return `Draw a ${a.deck} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
     case 'diplomaticAction': return `Diplomacy: advance ${cap(a.nation)}`;
     case 'recruitUnit': return `Recruit ${cap(a.nation)} in ${rName(a.region)}`;
-    case 'bringMinion': return `Bring ${a.minion} into play`;
+    case 'bringMinion': return `Bring ${charName(a.minion)} into play`;
     case 'eventTarget': {
       if (a.done) return `${cardName(a.card)}: done`;
-      const dest = a.companion ? cap(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
+      const dest = a.companion ? charName(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
       const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';
       return `${cardName(a.card)}: ${verb}${a.from ? `${rName(a.from)} → ` : ''}${dest}`;
     }
-    case 'moveCharacter': return `Move ${a.char === 'nazgul' ? 'Nazgûl' : cap(a.char.replace(/-/g, ' '))} ${rName(a.from)} → ${rName(a.to)}`;
+    case 'moveCharacter': return `Move ${a.char === 'nazgul' ? 'Nazgûl' : charName(a.char)} ${rName(a.from)} → ${rName(a.to)}`;
     case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;
     case 'attack': return `Attack ${rName(a.to)} (from ${rName(a.from)})`;
     case 'skipDie': return `Discard a ${a.face} die`;

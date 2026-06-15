@@ -1,7 +1,8 @@
 // Top status bar: turn / phase / seat, victory points, the Ring track, dice.
 import type { GameState } from '../engine/types';
+import { charName } from './charInfo';
 
-export function StatusBar({ view, you }: { view: GameState; you: string | null }) {
+export function StatusBar({ view, you, onHoverChar }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void }) {
   const fs = view.fellowship;
   const diceStr = (s: 'fp' | 'shadow') => view.dice[s].join(' ') || '—';
   return (
@@ -13,7 +14,9 @@ export function StatusBar({ view, you }: { view: GameState; you: string | null }
       <span style={{ ...pill, background: '#a83232' }}>Shadow VP {view.victoryPoints.shadow}</span>
       <span style={{ ...pill, background: '#6b2d2d' }}>Corruption {fs.corruption}/12</span>
       <span style={pill}>Fellowship: {fs.mordor !== null ? `Mordor ${fs.mordor}/5` : `progress ${fs.progress}`} · {fs.hidden ? 'hidden' : 'REVEALED'}</span>
-      <span style={pill}>Guide: {fs.guide} · {fs.companions.length} companions</span>
+      <span style={pill}>Guide: <span
+        onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
+        style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span> · {fs.companions.length} companions</span>
       <span style={pill}>Hunt box {view.hunt.box}</span>
       <span style={{ ...pill, background: '#1e3a6e' }}>FP dice: {diceStr('fp')}</span>
       <span style={{ ...pill, background: '#6e1e1e' }}>Shadow dice: {diceStr('shadow')}</span>

@@ -8,8 +8,9 @@ import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, Nation } from '../engine/types';
+import { charName, charDef } from './charInfo';
 
-export type Hover = { kind: 'region'; id: string } | { kind: 'card'; id: string } | null;
+export type Hover = { kind: 'region'; id: string } | { kind: 'card'; id: string } | { kind: 'character'; id: string } | null;
 
 const regions = (mapData as { regions: Record<string, { name?: string; nation: Nation | null; settlement: string | null; vp: number }> }).regions;
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
@@ -26,7 +27,8 @@ export function HoverPreview({ hover, view }: { hover: Hover; view: GameState })
     <div style={panel}>
       {hover?.kind === 'region' ? <RegionPreview id={hover.id} view={view} />
         : hover?.kind === 'card' ? <CardPreview id={hover.id} />
-          : <div style={hint}>Hover the board or a card to inspect it here.</div>}
+          : hover?.kind === 'character' ? <CharacterPreview id={hover.id} />
+            : <div style={hint}>Hover the board, a card, or the Guide to inspect it here.</div>}
     </div>
   );
 }
@@ -65,7 +67,7 @@ function RegionPreview({ id, view }: { id: string; view: GameState }) {
         </div>
         {(fpReg + fpElite + (r?.leaders ?? 0)) > 0 && <div style={{ color: '#7fb6e6', fontSize: 12 }}>FP: {fpReg}R / {fpElite}E{r?.leaders ? ` · ${r.leaders} Leader${r.leaders > 1 ? 's' : ''}` : ''}</div>}
         {(shReg + shElite + (r?.nazgul ?? 0)) > 0 && <div style={{ color: '#e6857f', fontSize: 12 }}>Shadow: {shReg}R / {shElite}E{r?.nazgul ? ` · ${r.nazgul} Nazgûl` : ''}</div>}
-        {(r?.characters?.length ?? 0) > 0 && <div style={{ color: '#d9c98a', fontSize: 12 }}>Characters: {r!.characters.join(', ')}</div>}
+        {(r?.characters?.length ?? 0) > 0 && <div style={{ color: '#d9c98a', fontSize: 12 }}>Characters: {r!.characters.map(charName).join(', ')}</div>}
       </div>
     </div>
   );
@@ -82,6 +84,21 @@ function CardPreview({ id }: { id: string }) {
       <h3 style={{ margin: '4px 0' }}>{def?.name ?? id}</h3>
       {def?.eventText && <p style={{ fontSize: 13, margin: '4px 0' }}><b>Event:</b> {def.eventText}</p>}
       {def?.combat?.title && <p style={{ fontSize: 13, margin: '4px 0' }}><b>Combat — {def.combat.title}:</b> {def.combat.text}</p>}
+    </div>
+  );
+}
+
+function CharacterPreview({ id }: { id: string }) {
+  const d = charDef(id);
+  if (!d) return <div style={hint}>{charName(id)}</div>;
+  return (
+    <div style={info}>
+      <div style={{ fontWeight: 700, fontSize: 15 }}>{d.name}</div>
+      {d.title && <div style={{ color: '#b9b29c', fontSize: 12, fontStyle: 'italic' }}>{d.title}</div>}
+      <div style={{ color: '#d9c98a', fontSize: 12 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</div>
+      {d.guide && <p style={{ fontSize: 12, margin: '4px 0' }}><b>Guide:</b> {d.guide}</p>}
+      {d.becomesGuide && <p style={{ fontSize: 12, margin: '4px 0' }}><b>Becomes Guide:</b> {d.becomesGuide}</p>}
+      {d.abilities?.map((a, i) => <p key={i} style={{ fontSize: 12, margin: '4px 0' }}><b>{a.name}:</b> {a.text}</p>)}
     </div>
   );
 }

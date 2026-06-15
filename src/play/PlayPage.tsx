@@ -28,6 +28,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [hover, setHover] = useState<Hover>(null);
   const onHoverRegion = useCallback((id: RegionId | null) => setHover(id ? { kind: 'region', id } : null), []);
   const onHoverCard = useCallback((id: string | null) => setHover(id ? { kind: 'card', id } : null), []);
+  const onHoverChar = useCallback((id: string | null) => setHover(id ? { kind: 'character', id } : null), []);
 
   // Guard against a rapid double-click submitting a now-stale action (e.g. clicking
   // a combat decision twice before the re-render): drop submits while one is in flight.
@@ -76,7 +77,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
-      <StatusBar view={g.view} you={g.you} />
+      <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} />
       {g.error && <div style={{ background: '#7a1f1f', color: '#fff', padding: 6, fontFamily: 'system-ui', fontSize: 13 }}>⚠ {g.error.message}</div>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
