@@ -249,10 +249,16 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const traversed = [fromLoc, ...pathTo(fromLoc, action.target).slice(0, stepsBefore)];
       declareFellowship(state, action.target);
       state.phase = 'huntAllocation';
+      // Declaring through a Shadow-controlled Stronghold draws a Hunt tile per such
+      // Stronghold on the path (rules p.38). (If a tile's damage opens an FP choice,
+      // any further Strongholds' tiles are deferred — see deviation log; very rare.)
+      for (const r of traversed) {
+        if (state.pendingChoice) break;
+        if (REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow') extraHunt(state);
+      }
       // Balrog of Moria: a declaration that moves the Fellowship through Moria lets the
-      // Shadow CHOOSE to discard the on-table card to draw an extra Hunt tile. Pausing
-      // for the Shadow's choice before Hunt Allocation proceeds.
-      if (state.cards.shadow.table.includes('sh-char-17') && traversed.includes('moria')) {
+      // Shadow CHOOSE to discard the on-table card to draw an extra Hunt tile.
+      if (!state.pendingChoice && state.cards.shadow.table.includes('sh-char-17') && traversed.includes('moria')) {
         state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: {} };
       }
       break;

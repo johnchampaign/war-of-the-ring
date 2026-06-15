@@ -11,7 +11,7 @@ import { applyCasualties, startBattle } from '../combat';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf } from '../data';
-import { separateCompanion, reassignGuide } from '../fellowship';
+import { separateCompanion, reassignGuide, pruneFellowshipOnTableCards } from '../fellowship';
 import { log } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
@@ -635,6 +635,7 @@ register('sh-char-14', { // The Breaking of the Fellowship — separate N Compan
       state.regions[fs.location]!.characters.push(c);
     }
     reassignGuide(state);
+    pruneFellowshipOnTableCards(state);
     log(state, null, 'event', `The Breaking of the Fellowship separates ${pick.length} Companion(s) at ${fs.location}`);
   },
 });

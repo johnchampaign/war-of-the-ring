@@ -87,7 +87,14 @@ export function advance(state: GameState): void {
         if (noDiceLeft(state)) { state.phase = 'victoryCheck'; continue; }
         return; // await current player
       case 'victoryCheck':
-        checkMilitaryVictory(state);
+        // Mordor Track: if the Fellowship is on the Track and the FP didn't move or hide
+        // it this turn, the Ring-bearers take 1 Corruption (rules p.43).
+        if (state.fellowship.mordor !== null && !state.flags.fellowshipDeclaredOrMovedThisTurn) {
+          state.fellowship.corruption = Math.min(12, state.fellowship.corruption + 1);
+          log(state, null, 'hunt', 'Mordor Track: +1 Corruption (no Fellowship move/hide this turn)');
+          checkRingVictory(state);
+        }
+        if (!state.winner) checkMilitaryVictory(state);
         if (state.winner) { state.phase = 'gameOver'; return; }
         state.turn += 1;
         state.phase = 'recover';

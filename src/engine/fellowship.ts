@@ -22,6 +22,26 @@ export function reassignGuide(state: GameState): void {
 
 /** Eliminate a Companion from the Fellowship (permanent), reassigning the Guide.
  *  Returns the eliminated Companion's Level. */
+// On-table cards that require a specific Companion to remain in the Fellowship; when
+// that Companion leaves (separated/eliminated), the card is discarded (rules: the card
+// stays only while its Companion is in the Fellowship).
+const ONTABLE_REQUIRES: Record<string, (c: string[]) => boolean> = {
+  'fp-char-06': (c) => c.includes('gimli') || c.includes('legolas'), // Axe and Bow
+  'fp-char-07': (c) => c.includes('boromir'),                        // Horn of Gondor
+  'fp-char-08': (c) => c.includes('gandalf-grey'),                   // Wizard's Staff
+};
+export function pruneFellowshipOnTableCards(state: GameState): void {
+  const t = state.cards.fp.table;
+  for (const id of Object.keys(ONTABLE_REQUIRES)) {
+    const i = t.indexOf(id);
+    if (i >= 0 && !ONTABLE_REQUIRES[id]!(state.fellowship.companions)) {
+      t.splice(i, 1);
+      state.cards.fp.discard.character.push(id);
+      log(state, null, 'event', `${id} discarded — its Companion left the Fellowship`);
+    }
+  }
+}
+
 export function eliminateCompanion(state: GameState, id: CharacterId): number {
   const fs = state.fellowship;
   const i = fs.companions.indexOf(id);
@@ -38,6 +58,7 @@ export function eliminateCompanion(state: GameState, id: CharacterId): number {
     state.characters.eliminated.push(id);
   }
   reassignGuide(state);
+  pruneFellowshipOnTableCards(state);
   return lvl;
 }
 
@@ -117,6 +138,7 @@ export function moveFellowship(state: GameState): void {
  *  the Hunt Box. */
 export function hideFellowship(state: GameState): void {
   state.fellowship.hidden = true;
+  state.flags.fellowshipDeclaredOrMovedThisTurn = true; // counts as attempting a move/hide (Mordor penalty)
   log(state, null, 'fellowship', 'Fellowship hidden');
 }
 
@@ -194,6 +216,7 @@ export function separateCompanion(state: GameState, id: CharacterId,
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
     activateNation(state, dn, { viaCompanion: true }); advancePolitical(state, dn, 1);
   }
+  pruneFellowshipOnTableCards(state);
   log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);
   return true;
 }
