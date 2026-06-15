@@ -68,6 +68,26 @@ function sarumanMusterOptions(state: GameState): WotrAction[] {
   if (canSarumanUpgrade(state)) out.push({ kind: 'sarumanMuster', mode: 'upgrade' });
   return out;
 }
+// Elven Rings (rules p.21): once per turn a player may change one of their unused
+// Action dice to another face. FP can't change a die TO Will; SH can't change a die
+// that's already an Eye (changing TO an Eye sends that die straight to the Hunt Box).
+// FP-use flips a Ring to the Shadow side; SH-use discards it.
+const ringAvailable = (state: GameState, side: Side): boolean =>
+  !state.flags[side === 'fp' ? 'fpUsedElvenRingThisTurn' : 'shadowUsedElvenRingThisTurn']
+  && state.elvenRings.includes(side === 'fp' ? 'fp' : 'shadow');
+function elvenRingOptions(state: GameState, side: Side): WotrAction[] {
+  if (state.phase !== 'actionResolution' || !ringAvailable(state, side)) return [];
+  const present = [...new Set(state.dice[side])] as DieFace[];
+  const targets: DieFace[] = side === 'fp'
+    ? ['character', 'army', 'muster', 'armyMuster', 'event']           // FP: not Will, not Eye
+    : ['character', 'army', 'muster', 'armyMuster', 'event', 'eye'];   // SH: Eye → Hunt Box
+  const out: WotrAction[] = [];
+  for (const from of present) {
+    if (side === 'shadow' && from === 'eye') continue; // can't change a die already showing an Eye
+    for (const to of targets) if (to !== from) out.push({ kind: 'useElvenRing', from, to });
+  }
+  return out;
+}
 function companionMusterOptions(state: GameState): WotrAction[] {
   const out: WotrAction[] = [];
   for (const pa of COMPANION_POLITICS) {
@@ -223,6 +243,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       }
       // Companion political abilities: any Action die advances their Nation.
       if (actor === 'fp' && state.dice.fp.length > 0) acts.push(...companionMusterOptions(state));
+      acts.push(...elvenRingOptions(state, actor)); // Elven Rings: change a die's face
+
       for (const f of faces) acts.push({ kind: 'skipDie', face: f });
       if (state.dice[actor].length < state.dice[opp(actor)].length) acts.push({ kind: 'pass' });
       return acts;
@@ -389,6 +411,22 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!pa || !r || !pa.at(r) || settlementController(state, r) !== 'fp') throw new Error('Companion ability condition not met');
       if (!consumeOneOf(state, 'fp', [...new Set(state.dice.fp)])) throw new Error('No Action die');
       advancePolitical(state, pa.nation, 1); passResolutionTurn(state, actor); break;
+    }
+    case 'useElvenRing': {
+      requirePhase(state, 'actionResolution');
+      if (!ringAvailable(state, actor)) throw new Error('No Elven Ring available');
+      if (actor === 'fp' && action.to === 'will') throw new Error('Cannot change a die to Will of the West');
+      if (actor === 'shadow' && action.from === 'eye') throw new Error('Cannot change a die already showing an Eye');
+      const di = state.dice[actor].indexOf(action.from);
+      if (di < 0) throw new Error(`No ${action.from} die to change`);
+      state.dice[actor].splice(di, 1);
+      if (actor === 'shadow' && action.to === 'eye') state.hunt.box += 1; // straight to the Hunt Box (not an action)
+      else state.dice[actor].push(action.to);
+      // Flip (FP → Shadow) or discard (SH → used) one Ring, and mark the per-turn use.
+      const ri = state.elvenRings.indexOf(actor === 'fp' ? 'fp' : 'shadow');
+      if (ri >= 0) state.elvenRings[ri] = actor === 'fp' ? 'shadow' : 'used';
+      state.flags[actor === 'fp' ? 'fpUsedElvenRingThisTurn' : 'shadowUsedElvenRingThisTurn'] = true;
+      break; // free action — the player still acts this turn (no turn pass)
     }
     case 'sarumanMuster': {
       requirePhase(state, 'actionResolution');

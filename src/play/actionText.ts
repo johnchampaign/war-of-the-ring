@@ -22,6 +22,7 @@ export function describeAction(a: WotrAction): string {
     case 'separateCompanion': return `Separate ${charName(a.companion)}`;
     case 'changeGuide': return `Make ${charName(a.companion)} the Guide`;
     case 'companionMuster': return `${charName(a.companion)}: advance ${cap(a.nation)} (any die)`;
+    case 'useElvenRing': return `Elven Ring: change a ${cap(a.from)} die to ${a.to === 'eye' ? 'an Eye (→ Hunt Box)' : cap(a.to)}`;
     case 'sarumanMuster': return a.mode === 'upgrade'
       ? 'Voice of Saruman: upgrade 2 Orthanc Regulars to Elites'
       : 'Voice of Saruman: recruit Isengard in every Settlement';
