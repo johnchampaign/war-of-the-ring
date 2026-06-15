@@ -30,7 +30,10 @@ export function describeAction(a: WotrAction): string {
     case 'drawEvent': return `Draw a ${a.deck} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
     case 'diplomaticAction': return `Diplomacy: advance ${cap(a.nation)}`;
-    case 'recruitUnit': return `Recruit ${cap(a.nation)} in ${rName(a.region)}`;
+    case 'recruitUnit': {
+      const parts = [a.regular ? `${a.regular} Regular${a.regular > 1 ? 's' : ''}` : '', a.elite ? `${a.elite} Elite${a.elite > 1 ? 's' : ''}` : '', a.leader ? `${a.leader} Leader${a.leader > 1 ? 's' : ''}` : ''].filter(Boolean);
+      return `Recruit ${parts.join(' + ')} ${cap(a.nation)} in ${rName(a.region)}`;
+    }
     case 'bringMinion': return `Bring ${charName(a.minion)} into play`;
     case 'eventTarget': {
       if (a.done) return `${cardName(a.card)}: done`;
