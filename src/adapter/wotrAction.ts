@@ -15,7 +15,8 @@ export type WotrAction =
   | { kind: 'hideFellowship' }   // FP, Character die
   | { kind: 'separateCompanion'; companion: string }
   | { kind: 'changeGuide'; companion: string } // Fellowship phase: pick the Guide (FP breaks Level ties)
-  | { kind: 'companionMuster'; companion: string; nation: Nation } // companion ability: any die advances their Nation // FP, Character die
+  | { kind: 'companionMuster'; companion: string; nation: Nation } // companion ability: any die advances their Nation
+  | { kind: 'sarumanMuster' } // Voice of Saruman: Muster die recruits an Isengard Regular in every Isengard Settlement // FP, Character die
   | { kind: 'bringUpgrade'; which: 'aragorn' | 'gandalf-white' } // FP, Will of the West
   | { kind: 'drawEvent'; deck: Deck } // Event die
   | { kind: 'playEvent'; cardId: string } // Event die: play a card from hand

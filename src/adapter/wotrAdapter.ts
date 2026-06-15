@@ -35,6 +35,15 @@ const COMPANION_POLITICS: { companion: string; nation: Nation; at: (r: RegionId)
   { companion: 'legolas', nation: 'elves', at: (r) => REGIONS[r]!.nation === 'elves' && REGIONS[r]!.settlement === 'Stronghold' },
   { companion: 'gimli', nation: 'dwarves', at: (r) => r === 'erebor' },
 ];
+// Voice of Saruman: while Orthanc is Shadow-held and not besieged and Saruman is in
+// play, a Muster die recruits one Isengard Regular in every Isengard Settlement.
+const isengardSettlements = (): RegionId[] => Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'isengard' && !!REGIONS[id]!.settlement);
+function voiceOfSarumanAvailable(state: GameState): boolean {
+  if (!state.characters.entered.includes('saruman') || state.characters.eliminated.includes('saruman')) return false;
+  if (settlementController(state, 'orthanc') !== 'shadow' || state.regions['orthanc']!.besieged) return false;
+  if (state.reinforcements.isengard.regular <= 0) return false;
+  return isengardSettlements().some((id) => settlementController(state, id) === 'shadow' && unitCount(state, id) < STACKING_LIMIT);
+}
 function companionMusterOptions(state: GameState): WotrAction[] {
   const out: WotrAction[] = [];
   for (const pa of COMPANION_POLITICS) {
@@ -170,6 +179,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
           for (const m of MINION_IDS) {
             if (canBringMinion(state, m)) { const r = entryRegion(state, m); if (r) acts.push({ kind: 'bringMinion', minion: m, region: r }); }
           }
+          if (voiceOfSarumanAvailable(state)) acts.push({ kind: 'sarumanMuster' });
         }
       }
       if (hasArmy) {
@@ -330,6 +340,15 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!consumeOneOf(state, 'fp', [...new Set(state.dice.fp)])) throw new Error('No Action die');
       advancePolitical(state, pa.nation, 1); passResolutionTurn(state, actor); break;
     }
+    case 'sarumanMuster': {
+      requirePhase(state, 'actionResolution');
+      if (actor !== 'shadow' || !voiceOfSarumanAvailable(state)) throw new Error('Voice of Saruman not available');
+      if (!consumeOneOf(state, 'shadow', ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
+      for (const id of isengardSettlements()) {
+        if (settlementController(state, id) === 'shadow') recruit(state, 'isengard', id, 1, 0, { ignoreAtWar: true });
+      }
+      passResolutionTurn(state, actor); break;
+    }
     case 'recruitUnit':
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
@@ -354,8 +373,20 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!consumeOneOf(state, actor, ['army', 'armyMuster', 'will'])) throw new Error('No Army die');
       startBattle(state, actor, action.from, action.to); break; // finishCombat resumes the turn
     // --- interactive combat choices (resolving state.pendingChoice) ---
-    case 'playCombatCard':
-      requireChoice(state, 'combatCard', actor); resolvePlayCombatCard(state, action.cardId); break;
+    case 'playCombatCard': {
+      requireChoice(state, 'combatCard', actor);
+      resolvePlayCombatCard(state, action.cardId);
+      // Witch-king "Sorcerer": Shadow plays a Combat card in the first round with the
+      // Witch-king in the battle → draw an Event card from the matching deck.
+      const pc = state.pendingCombat;
+      if (actor === 'shadow' && action.cardId && pc && pc.round === 0) {
+        const shR = pc.attacker === 'shadow' ? pc.from : pc.to;
+        if (state.regions[shR]!.characters.includes('witch-king')) {
+          drawOne(state, 'shadow', EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy');
+        }
+      }
+      break;
+    }
     case 'chooseCasualties':
       requireChoice(state, 'combatCasualties', actor); resolveCasualties(state, action.plan); break;
     case 'combatContinue':

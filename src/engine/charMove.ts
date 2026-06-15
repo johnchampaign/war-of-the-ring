@@ -40,10 +40,17 @@ function canLand(state: GameState, to: RegionId, side: Side): boolean {
   return true;
 }
 
-/** The movement range of a piece: Nazgûl/Witch-king fly; Saruman 0; others by Level. */
-function rangeOf(char: string): number {
+const HOBBITS = new Set(['meriadoc', 'peregrin']);
+/** The movement range of a piece: Nazgûl/Witch-king fly; Saruman 0; others by Level.
+ *  Gandalf the White's Shadowfax: Level 4 when alone or with a single Hobbit. */
+function rangeOf(state: GameState, char: string, from: RegionId): number {
   if (char === 'nazgul' || char === 'witch-king') return FLY;
   if (char === 'saruman') return 0;
+  if (char === 'gandalf-white') {
+    const others = state.regions[from]!.characters.filter((c) => c !== 'gandalf-white' && COMPANION_SET.has(c));
+    const aloneOrOneHobbit = others.length === 0 || (others.length === 1 && HOBBITS.has(others[0]!));
+    return aloneOrOneHobbit ? 4 : levelOf('gandalf-white');
+  }
   return levelOf(char); // mouth-of-sauron = 3, companions = their Level
 }
 
@@ -51,7 +58,7 @@ function rangeOf(char: string): number {
  *  Minion id, or a separated Companion id. Returns false if illegal. */
 export function moveCharacter(state: GameState, side: Side, char: string, from: RegionId, to: RegionId): boolean {
   if (from === to || !REGIONS[to]) return false;
-  const range = rangeOf(char);
+  const range = rangeOf(state, char, from);
   if (range <= 0) return false;
   if (regionDistance(from, to) > range) return false;
   if (!canLand(state, to, side)) return false;
@@ -81,7 +88,7 @@ function movablePieces(state: GameState, side: Side): Array<{ char: string; from
     const r = state.regions[id]!;
     if (side === 'shadow' && r.nazgul > 0) out.push({ char: 'nazgul', from: id });
     for (const c of r.characters) {
-      if (rangeOf(c) <= 0) continue; // Saruman / level-0
+      if (rangeOf(state, c, id) <= 0) continue; // Saruman / level-0
       const isShadowChar = c === 'witch-king' || c === 'mouth-of-sauron';
       if ((side === 'shadow' && isShadowChar) || (side === 'fp' && COMPANION_SET.has(c))) out.push({ char: c, from: id });
     }
@@ -106,7 +113,7 @@ export function characterMoveOptions(state: GameState, side: Side, cap = 12): Ar
     for (const to of targets) {
       if (out.length >= cap) return out;
       if (to === p.from) continue;
-      if (regionDistance(p.from, to) <= rangeOf(p.char) && canLand(state, to, side)) out.push({ char: p.char, from: p.from, to });
+      if (regionDistance(p.from, to) <= rangeOf(state, p.char, p.from) && canLand(state, to, side)) out.push({ char: p.char, from: p.from, to });
     }
   }
   return out;
