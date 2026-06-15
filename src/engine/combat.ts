@@ -7,7 +7,7 @@
 // (a card's initiative only matters when both sides' effects collide — see D5)
 // and a few intricate per-effect cards (e.g. Mûmakil's two timings).
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
-import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES } from './data';
+import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf } from './data';
 import { withRng } from './rng';
 import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement, settlementController } from './armies';
 import { onArmyAttacked } from './politics';
@@ -57,7 +57,7 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
   baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false): number {
   // Captain of the West: +1 Combat Strength (die) if such a Companion is in this FP Army.
-  const captain = side === 'fp' && state.regions[ownRegion]!.characters.some((c) => CAPTAINS.has(c)) ? 1 : 0;
+  const captain = side === 'fp' && !enemyMods.enemyCaptainCancel && state.regions[ownRegion]!.characters.some((c) => CAPTAINS.has(c)) ? 1 : 0;
   let count = Math.min(5, unitCount(state, ownRegion) + captain);
   if (enemyMods.maxDiceEnemy != null) count = Math.min(count, enemyMods.maxDiceEnemy);
   const target = clamp(2, 6, baseTarget - (ownMods.rollBonus ?? 0) + (enemyMods.enemyRollPenalty ?? 0));
@@ -70,7 +70,7 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     const nazgulLead = sr.nazgul + (sr.characters.includes('witch-king') ? 2 : 0);
     leadVal = Math.max(0, leadVal - (side === 'shadow' ? nazgulLead : 1));
   }
-  const lead = Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0));
+  const lead = Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0) - (enemyMods.enemyLeadershipPenalty ?? 0));
   const allowReroll = !enemyMods.negateEnemyReroll;
   let hits = withRng(state, (rng) => {
     let h = 0, failed = 0;
@@ -107,6 +107,23 @@ function applyCombatEliminations(state: GameState, enemy: RegionId, mods: Combat
     state.characters.eliminated.push(id);
     hits -= 1; // the hit is spent to make the kill
     log(state, null, 'combat', `${id} is eliminated at ${enemy}`);
+  }
+  // Black Breath: on a scoring round, additionally eliminate one enemy FP figure
+  // (no hit spent). Shadow-optimal target: the highest-Level Companion whose Level
+  // ≤ the round's hits, else one FP Leader. (Auto-resolved like the other combat-
+  // card eliminations; the "may"/target choice is taken in the owner's favour.)
+  if (mods.blackBreath && ownHits > 0) {
+    const comps = e.characters.filter((c) => COMPANION_IDS.has(c) && levelOf(c) <= ownHits).sort((a, b) => levelOf(b) - levelOf(a));
+    if (comps.length) {
+      const id = comps[0]!;
+      e.characters.splice(e.characters.indexOf(id), 1);
+      state.characters.eliminated.push(id);
+      delete state.characters.inPlay[id];
+      log(state, null, 'combat', `Black Breath: ${id} is eliminated at ${enemy}`);
+    } else if (e.leaders > 0) {
+      e.leaders -= 1;
+      log(state, null, 'combat', `Black Breath: an FP Leader is eliminated at ${enemy}`);
+    }
   }
   return hits;
 }
@@ -452,6 +469,7 @@ function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): 
   const defNation = REGIONS[pc.to]!.nation;
   const has = (s: string) => pre.includes(s);
 
+  if (has('Nazgûl is in the battle')) return sh.nazgul > 0 || sh.characters.includes('witch-king');
   if (has('same region as the Fellowship')) return pc.to === state.fellowship.location;
   if (has('Leader or a Companion')) return fp.leaders > 0 || companionInBattle;
   if (has('a Companion is in the battle')) return companionInBattle;

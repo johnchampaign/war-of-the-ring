@@ -49,6 +49,15 @@ export interface CombatMods {
   /** Roll N extra dice as a pre-combat attack on the enemy (hits on 4+),
    *  applied immediately before the normal round (Durin's Bane). */
   preCombatAttackDice?: number;
+  /** Reduce the ENEMY's effective Leadership by N this round (cancel a Companion's
+   *  Leadership — Words of Power). */
+  enemyLeadershipPenalty?: number;
+  /** Cancel the enemy's Captain-of-the-West die bonus this round (the "abilities"
+   *  half of Words of Power). */
+  enemyCaptainCancel?: boolean;
+  /** Black Breath: if the owner scored ≥1 hit, additionally eliminate one enemy FP
+   *  Leader in the battle, OR a Companion whose Level ≤ the round's hits. */
+  blackBreath?: boolean;
 }
 
 // Effects by combat title.
@@ -76,6 +85,10 @@ const BY_TITLE: Record<string, CombatMods> = {
   'Dread and Despair': { enemyRollPenalty: 1 },
   'Confusion': { enemyRollPenalty: 1 },
   'Foul Stench': { negateEnemyReroll: true },
+  // cancel one enemy Companion's Leadership + abilities for the round
+  'Words of Power': { enemyLeadershipPenalty: 1, enemyCaptainCancel: true },
+  // eliminate an FP Leader / Companion when the Leader re-roll scores a hit
+  'Black Breath': { blackBreath: true },
   // extra attacks
   'Charge': { extraAttackDice: 3 },
   'Sudden Strike': { extraAttackDice: 3 },
