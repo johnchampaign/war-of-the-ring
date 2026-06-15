@@ -176,6 +176,15 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const data = state.pendingChoice!.data as { figure: 'regular' | 'leader'; first: string };
         return recruitSecondTargets(state, actor, data.figure, data.first);
       }
+      case 'armyMove2': {
+        const data = state.pendingChoice!.data as { src: string; dest: string };
+        const acts: WotrAction[] = [{ kind: 'armyMove2', done: true }];
+        for (const [from, to] of moveTargets(state, actor)) {
+          if (from === data.src || from === data.dest) continue; // a different army
+          acts.push({ kind: 'armyMove2', from, to });
+        }
+        return acts;
+      }
       case 'huntPreventDraw':
         return [{ kind: 'huntPreventDraw', prevent: true }, { kind: 'huntPreventDraw', prevent: false }];
       case 'huntRedraw':
@@ -498,9 +507,27 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // contains a Leader/Nazgûl/Character (rules-spec §6).
       const src = state.regions[action.from]!;
       const leaderArmy = src.leaders > 0 || src.nazgul > 0 || src.characters.length > 0;
-      if (!consumeArmyDie(state, actor) && !(leaderArmy && consumeDie(state, actor, 'character'))) throw new Error('No Army die');
+      let viaArmyDie = false;
+      if (consumeArmyDie(state, actor)) viaArmyDie = true;
+      else if (leaderArmy && consumeDie(state, actor, 'character')) viaArmyDie = false;
+      else throw new Error('No Army die');
       if (!moveArmy(state, action.from, action.to, actor)) throw new Error('Illegal move');
-      passResolutionTurn(state, actor); break;
+      // An Army die may move a SECOND different army (rulebook p.27); a Character die moves only one.
+      if (viaArmyDie) state.pendingChoice = { owner: actor, kind: 'armyMove2', data: { src: action.from, dest: action.to } };
+      else passResolutionTurn(state, actor);
+      break;
+    }
+    case 'armyMove2': {
+      requireChoice(state, 'armyMove2', actor);
+      const data = state.pendingChoice!.data as { src: RegionId; dest: RegionId };
+      state.pendingChoice = null;
+      if (!action.done) {
+        // "Cannot move the same Army twice": the second move must be a different army.
+        if (action.from === data.dest || action.from === data.src) throw new Error('Cannot move the same army twice');
+        if (!moveArmy(state, action.from!, action.to!, actor)) throw new Error('Illegal second move');
+      }
+      passResolutionTurn(state, actor);
+      break;
     }
     case 'attack':
       requirePhase(state, 'actionResolution');

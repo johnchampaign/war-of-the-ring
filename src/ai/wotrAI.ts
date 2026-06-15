@@ -228,6 +228,8 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     case 'eventTarget': return chooseEventTarget(state, legal);
     case 'musterSecond': // place the second figure of a two-figure muster (fuller build)
       return legal.find((a) => a.kind === 'recruitSecond' && !a.done) ?? legal[0]!;
+    case 'armyMove2': // second army move on one die: the heuristic keeps one-army moves (AI strength TODO)
+      return legal.find((a) => a.kind === 'armyMove2' && a.done) ?? legal[0]!;
     default: return legal[0]!;
   }
 }

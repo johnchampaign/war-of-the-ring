@@ -46,6 +46,7 @@ export function describeAction(a: WotrAction): string {
     }
     case 'moveCharacter': return `Move ${a.char === 'nazgul' ? 'Nazgûl' : charName(a.char)} ${rName(a.from)} → ${rName(a.to)}`;
     case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;
+    case 'armyMove2': return a.done ? 'No second army move' : `Also move army ${rName(a.from!)} → ${rName(a.to!)}`;
     case 'attack': return `Attack ${rName(a.to)} (from ${rName(a.from)})`;
     case 'skipDie': return `Discard a ${a.face} die`;
     case 'pass': return 'Pass';

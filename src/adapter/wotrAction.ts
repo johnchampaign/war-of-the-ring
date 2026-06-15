@@ -28,7 +28,9 @@ export type WotrAction =
   // The second figure of a two-figure muster (separate Settlement), or decline it.
   | { kind: 'recruitSecond'; nation?: Nation; region?: RegionId; figure?: 'regular' | 'leader'; done?: boolean }
   | { kind: 'bringMinion'; minion: 'witch-king' | 'saruman' | 'mouth-of-sauron'; region: RegionId } // Muster die (Shadow)
-  | { kind: 'moveArmy'; from: RegionId; to: RegionId }   // Army die
+  | { kind: 'moveArmy'; from: RegionId; to: RegionId }   // Army die (may move a 2nd army via armyMove2)
+  // The optional SECOND army move of one Army die (a different army), or decline it.
+  | { kind: 'armyMove2'; from?: RegionId; to?: RegionId; done?: boolean }
   | { kind: 'attack'; from: RegionId; to: RegionId }      // Army die
   | { kind: 'skipDie'; face: DieFace } // discard a die, no effect
   | { kind: 'pass' }             // yield to opponent, no die spent
