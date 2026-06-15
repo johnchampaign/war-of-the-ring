@@ -10,18 +10,22 @@ import { LoadArtPanel } from './play/LoadArtPanel';
 
 type Mode =
   | { kind: 'lobby' }
-  | { kind: 'local'; seed: number }
+  | { kind: 'local'; seed: number; scenario?: 'combat' }
   | { kind: 'online'; gameId: string; token: string };
 
 export function App() {
   if (typeof window !== 'undefined' && window.location.hash === '#audit') return <PolygonAudit />;
   if (typeof window !== 'undefined' && window.location.hash === '#content') return <ContentAudit />;
+  const combatScenario = typeof window !== 'undefined' && window.location.hash === '#combat';
 
   const invite = readOnlineInvite();
-  const [mode, setMode] = useState<Mode>(invite ? { kind: 'online', gameId: invite.gameId, token: invite.token } : { kind: 'lobby' });
+  const [mode, setMode] = useState<Mode>(
+    combatScenario ? { kind: 'local', seed: 1, scenario: 'combat' }
+      : invite ? { kind: 'online', gameId: invite.gameId, token: invite.token }
+        : { kind: 'lobby' });
 
   const client = useMemo(() => {
-    if (mode.kind === 'local') return makeLocalClient(mode.seed);
+    if (mode.kind === 'local') return makeLocalClient(mode.seed, mode.scenario);
     if (mode.kind === 'online') return makeGameClient(mode.gameId, mode.token);
     return null;
   }, [mode]);

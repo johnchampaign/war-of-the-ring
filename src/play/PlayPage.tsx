@@ -1,7 +1,7 @@
 // Top-level play screen: drives the game through the framework useGame hook over
 // a GameClientApi (local hotseat or online HTTP). Renders the redacted view; it
 // never owns rules and never drives the opponent.
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useGame, ChatPanel } from 'digital-boardgame-framework/client';
 import type { GameClientApi } from '../online/gameClient';
 import type { GameState, RegionId, Side } from '../engine/types';
@@ -25,6 +25,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
   const [selected, setSelected] = useState<RegionId | null>(null);
 
+  // Guard against a rapid double-click submitting a now-stale action (e.g. clicking
+  // a combat decision twice before the re-render): drop submits while one is in flight.
+  const inFlight = useRef(false);
+  const submit = useCallback(async (a: WotrAction) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try { await g.submit(a); } finally { inFlight.current = false; }
+  }, [g]);
+
   // Chat is online-only (a remote opponent to talk to); the hotseat client omits
   // the messaging methods, so it's hidden in that mode.
   const chatClient = useMemo(
@@ -44,7 +53,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const onRegionClick = (id: RegionId) => {
     if (selected && destinations.has(id)) {
       const act = armyActs.find((a) => a.from === selected && a.to === id);
-      if (act) { setSelected(null); void g.submit(act); }
+      if (act) { setSelected(null); void submit(act); }
     } else if (sources.has(id)) {
       setSelected((s) => (s === id ? null : id));
     } else {
@@ -76,7 +85,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         <div style={{ width: 320, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <PoliticsPanel view={g.view} />
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            <ActionPanel actions={panelActions} onAction={g.submit} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
+            <ActionPanel actions={panelActions} onAction={submit} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
           </div>
           {chatClient && g.you && (
             <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
@@ -85,7 +94,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         </div>
       </div>
       <HandStrip view={g.view} you={g.you as Side} />
-      <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={g.submit} yourTurn={g.yourTurn} />
+      <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn} />
       <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
       {onExit &&<button onClick={onExit} style={{ position: 'fixed', top: 6, right: 8, padding: '3px 8px', fontSize: 12 }}>← Lobby</button>}
     </div>

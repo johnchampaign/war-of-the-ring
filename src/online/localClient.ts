@@ -8,9 +8,11 @@ import { wotrAdapter, startGame } from '../adapter/wotrAdapter';
 import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameClientApi, ViewResult } from './gameClient';
+import { applyCombatScenario } from '../devtabs/combatScenario';
 
-export function makeLocalClient(seed: number): GameClientApi {
+export function makeLocalClient(seed: number, scenario?: 'combat'): GameClientApi {
   let state: GameState = startGame(createGame({ seed }));
+  if (scenario === 'combat') state = applyCombatScenario(state);
 
   const snapshot = (): ViewResult => {
     const actor = wotrAdapter.currentActor(state) as Side | null;
