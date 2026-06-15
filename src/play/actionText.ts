@@ -21,6 +21,7 @@ export function describeAction(a: WotrAction): string {
     case 'hideFellowship': return 'Hide the Fellowship';
     case 'separateCompanion': return `Separate ${charName(a.companion)}`;
     case 'changeGuide': return `Make ${charName(a.companion)} the Guide`;
+    case 'companionMuster': return `${charName(a.companion)}: advance ${cap(a.nation)} (any die)`;
     case 'bringUpgrade': return a.which === 'aragorn' ? 'Crown Aragorn (Will of the West)' : 'Summon Gandalf the White';
     case 'drawEvent': return `Draw a ${a.deck} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;

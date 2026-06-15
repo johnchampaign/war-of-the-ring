@@ -9,7 +9,7 @@ import type { Hover } from './HoverPreview';
 
 /** What an action references for the hover inspector (a Companion/Minion or a card). */
 function actionHover(a: WotrAction): Hover {
-  if ((a.kind === 'changeGuide' || a.kind === 'separateCompanion') && a.companion) return { kind: 'character', id: a.companion };
+  if ((a.kind === 'changeGuide' || a.kind === 'separateCompanion' || a.kind === 'companionMuster') && a.companion) return { kind: 'character', id: a.companion };
   if (a.kind === 'eventTarget' && a.companion) return { kind: 'character', id: a.companion };
   if (a.kind === 'bringMinion') return { kind: 'character', id: a.minion };
   if (a.kind === 'playEvent') return { kind: 'card', id: a.cardId };

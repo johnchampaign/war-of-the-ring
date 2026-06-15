@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
@@ -19,13 +19,34 @@ import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, characterMoveOptions } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
-import type { DieFace, Nation } from '../engine/types';
+import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, type EventTarget } from '../engine/handlers/registry';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
 import { redactStateForViewer } from './redact';
 
 const clone = (s: GameState): GameState => JSON.parse(JSON.stringify(s));
 const opp = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
+
+// Companion political abilities (High Warden / Prince of Mirkwood / Dwarf of Erebor):
+// while the Companion stands in their own unconquered Settlement, any Action die may
+// advance their Nation one step. Returns the legal companionMuster actions.
+const COMPANION_POLITICS: { companion: string; nation: Nation; at: (r: RegionId) => boolean }[] = [
+  { companion: 'boromir', nation: 'gondor', at: (r) => REGIONS[r]!.nation === 'gondor' && (REGIONS[r]!.settlement === 'City' || REGIONS[r]!.settlement === 'Stronghold') },
+  { companion: 'legolas', nation: 'elves', at: (r) => REGIONS[r]!.nation === 'elves' && REGIONS[r]!.settlement === 'Stronghold' },
+  { companion: 'gimli', nation: 'dwarves', at: (r) => r === 'erebor' },
+];
+function companionMusterOptions(state: GameState): WotrAction[] {
+  const out: WotrAction[] = [];
+  for (const pa of COMPANION_POLITICS) {
+    const r = findCharacterRegion(state, pa.companion);
+    const ns = state.nations[pa.nation];
+    const canAdvance = ns.step > (ns.active ? 0 : 1);
+    if (r && pa.at(r) && settlementController(state, r) === 'fp' && canAdvance) {
+      out.push({ kind: 'companionMuster', companion: pa.companion, nation: pa.nation });
+    }
+  }
+  return out;
+}
 
 /** Who must act now, or null at an automatic phase (caller should advance()). */
 function currentActor(state: GameState): Side | null {
@@ -155,6 +176,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         for (const [from, to] of moveTargets(state, actor)) acts.push({ kind: 'moveArmy', from, to });
         for (const [from, to] of attackTargets(state, actor)) acts.push({ kind: 'attack', from, to });
       }
+      // Companion political abilities: any Action die advances their Nation.
+      if (actor === 'fp' && state.dice.fp.length > 0) acts.push(...companionMusterOptions(state));
       for (const f of faces) acts.push({ kind: 'skipDie', face: f });
       if (state.dice[actor].length < state.dice[opp(actor)].length) acts.push({ kind: 'pass' });
       return acts;
@@ -297,6 +320,15 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (actor === 'fp' && threatsAndPromisesActive(state) && !state.nations[action.nation].active) throw new Error('Threats and Promises bars advancing a passive Nation');
       if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
       advancePolitical(state, action.nation, 1); passResolutionTurn(state, actor); break;
+    }
+    case 'companionMuster': {
+      requirePhase(state, 'actionResolution');
+      if (actor !== 'fp') throw new Error('Not your ability');
+      const pa = COMPANION_POLITICS.find((p) => p.companion === action.companion);
+      const r = pa && findCharacterRegion(state, pa.companion);
+      if (!pa || !r || !pa.at(r) || settlementController(state, r) !== 'fp') throw new Error('Companion ability condition not met');
+      if (!consumeOneOf(state, 'fp', [...new Set(state.dice.fp)])) throw new Error('No Action die');
+      advancePolitical(state, pa.nation, 1); passResolutionTurn(state, actor); break;
     }
     case 'recruitUnit':
       requirePhase(state, 'actionResolution');

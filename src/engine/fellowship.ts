@@ -218,7 +218,7 @@ export function enterMordor(state: GameState): boolean {
 const ARAGORN_CITIES: RegionId[] = ['minas-tirith', 'dol-amroth', 'pelargir'];
 const GANDALF_WHITE_REGIONS: RegionId[] = ['fangorn', 'grey-havens', 'rivendell', 'lorien', 'woodland-realm'];
 
-function findCharacterRegion(state: GameState, id: CharacterId): RegionId | null {
+export function findCharacterRegion(state: GameState, id: CharacterId): RegionId | null {
   for (const r of Object.keys(state.regions)) if (state.regions[r]!.characters.includes(id)) return r;
   return null;
 }
