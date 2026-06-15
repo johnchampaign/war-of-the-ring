@@ -81,6 +81,23 @@ function placeUnits(state: GameState, nation: Nation, region: string, regular: n
   u.regular += reg; u.elite += el; r.units[nation] = u;
 }
 
+// Force-place units + a Leader into a NAMED region for an event recruit (bypasses the
+// At-War gate; capped by reinforcements + stacking). Leaders only go where the units do.
+function placeForce(state: GameState, nation: Nation, region: string, opts: { regular?: number; elite?: number; leader?: number }): void {
+  placeUnits(state, nation, region, opts.regular ?? 0, opts.elite ?? 0);
+  const lead = opts.leader ?? 0;
+  if (lead > 0) {
+    const pool = state.reinforcements[nation] as { leader?: number };
+    const k = Math.min(lead, pool.leader ?? 0);
+    if (k > 0) { state.regions[region]!.leaders += k; pool.leader = (pool.leader ?? 0) - k; }
+  }
+}
+/** A region an event may recruit into: not controlled or occupied by the enemy. */
+const recruitable = (state: GameState, side: Side, region: string): boolean => {
+  const enemy: Side = side === 'fp' ? 'shadow' : 'fp';
+  return settlementController(state, region) !== enemy && armySide(state, region) !== enemy;
+};
+
 const heal = (state: GameState, n: number): void => {
   state.fellowship.corruption = Math.max(0, state.fellowship.corruption - n);
 };
@@ -134,17 +151,21 @@ register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP nation
 });
 
 // --- Free Peoples: recruit (Event recruit, may ignore At War) -------------
+// Fixed-region FP recruit cards (place in a named region, with Leaders / draws).
+register('fp-str-14', { canPlay: (s) => recruitable(s, 'fp', 'minas-tirith'), apply: (s) => placeForce(s, 'gondor', 'minas-tirith', { regular: 1, leader: 1 }) }); // Guards of the Citadel
+register('fp-str-15', { canPlay: (s) => recruitable(s, 'fp', 'lorien'), apply: (s) => { placeForce(s, 'elves', 'lorien', { regular: 1 }); drawCard(s, 'fp', 'strategy'); } }); // Celeborn's Galadhrim
+register('fp-str-17', { canPlay: (s) => recruitable(s, 'fp', 'carrock'), apply: (s) => placeForce(s, 'north', 'carrock', { regular: 1, leader: 1 }) }); // Grimbeorn the Old
+register('fp-str-18', { canPlay: (s) => recruitable(s, 'fp', 'dol-amroth'), apply: (s) => placeForce(s, 'gondor', 'dol-amroth', { regular: 1, leader: 1 }) }); // Imrahil of Dol Amroth
+register('fp-str-19', { canPlay: (s) => recruitable(s, 'fp', 'dale'), apply: (s) => { placeForce(s, 'north', 'dale', { regular: 2 }); drawCard(s, 'fp', 'strategy'); } }); // King Brand's Men
+register('fp-str-22', { canPlay: (s) => recruitable(s, 'fp', 'erebor'), apply: (s) => placeForce(s, 'dwarves', 'erebor', { regular: 1, leader: 1 }) }); // Dáin Ironfoot's Guard
+register('fp-str-24', { canPlay: (s) => recruitable(s, 'fp', 'woodland-realm'), apply: (s) => { placeForce(s, 'elves', 'woodland-realm', { regular: 1 }); drawCard(s, 'fp', 'strategy'); } }); // Thranduil's Archers
+
+// Interactive FP recruit cards (player picks the region) — still generic stubs here,
+// replaced with region-accurate targets in the next batch.
 const fpRecruits: Array<[string, Nation]> = [
   ['fp-str-13', 'elves'],   // Círdan's Ships
-  ['fp-str-14', 'gondor'],  // Guards of the Citadel
-  ['fp-str-15', 'elves'],   // Celeborn's Galadhrim
   ['fp-str-16', 'rohan'],   // Riders of Théoden
-  ['fp-str-17', 'north'],   // Grimbeorn the Old
-  ['fp-str-18', 'gondor'],  // Imrahil of Dol Amroth
-  ['fp-str-22', 'dwarves'], // Dáin Ironfoot's Guard
   ['fp-str-23', 'rohan'],   // Éomer, Son of Éomund
-  ['fp-str-24', 'elves'],   // Thranduil's Archers
-  ['fp-str-19', 'north'],   // King Brand's Men
 ];
 
 // "Book of Mazarbul" — rouse the Dwarves directly to At War.
@@ -190,14 +211,27 @@ register('sh-char-18', { // The Lidless Eye: up to 3 unused Shadow dice → Eyes
 });
 
 // --- Shadow: recruit -----------------------------------------------------
+// Fixed-region Shadow recruit cards (named regions / counts).
+register('sh-str-16', { // A New Power is Rising: 2 Isengard Regulars in each Dunland + 2 in Orthanc
+  canPlay: (s) => recruitable(s, 'shadow', 'orthanc') || recruitable(s, 'shadow', 'north-dunland') || recruitable(s, 'shadow', 'south-dunland'),
+  apply: (s) => { placeForce(s, 'isengard', 'north-dunland', { regular: 2 }); placeForce(s, 'isengard', 'south-dunland', { regular: 2 }); placeForce(s, 'isengard', 'orthanc', { regular: 2 }); },
+});
+register('sh-str-20', { // Orcs Multiplying Again: 3 Sauron Regulars in Dol Guldur + 3 in Mount Gundabad
+  canPlay: (s) => recruitable(s, 'shadow', 'dol-guldur') || recruitable(s, 'shadow', 'mount-gundabad'),
+  apply: (s) => { placeForce(s, 'sauron', 'dol-guldur', { regular: 3 }); placeForce(s, 'sauron', 'mount-gundabad', { regular: 3 }); },
+});
+register('sh-str-22', { // Monsters Roused: 1 Sauron Regular each in Angmar/Ettenmoors/Weather Hills + 1 Elite in Trollshaws
+  canPlay: (s) => ['angmar', 'ettenmoors', 'weather-hills', 'trollshaws'].some((r) => recruitable(s, 'shadow', r)),
+  apply: (s) => { for (const r of ['angmar', 'ettenmoors', 'weather-hills']) placeForce(s, 'sauron', r, { regular: 1 }); placeForce(s, 'sauron', 'trollshaws', { elite: 1 }); },
+});
+
+// Interactive Shadow recruit cards (player picks the region) — generic stubs here,
+// replaced with region-accurate targets in the next batch.
 const shRecruits: Array<[string, Nation]> = [
   ['sh-str-11', 'isengard'],   // Rage of the Dunlendings
   ['sh-str-13', 'isengard'],   // Half-orcs and Goblin-men
   ['sh-str-14', 'sauron'],     // Olog-hai
-  ['sh-str-16', 'isengard'],   // A New Power is Rising
   ['sh-str-19', 'sauron'],     // Shadows on the Misty Mountains
-  ['sh-str-20', 'sauron'],     // Orcs Multiplying Again
-  ['sh-str-22', 'sauron'],     // Monsters Roused
   ['sh-str-17', 'southrons'],  // Many Kings to the Service of Mordor
 ];
 for (const [id, nation] of shRecruits) {
@@ -393,6 +427,7 @@ register('fp-str-20', {
   apply(state) {
     recruit(state, 'north', 'the-shire', 1, 0, { ignoreAtWar: true });
     recruit(state, 'dwarves', 'ered-luin', 1, 0, { ignoreAtWar: true });
+    drawCard(state, 'fp', 'strategy'); // "Then, draw one Strategy Event card."
   },
 });
 // The Grey Company: in Strider's Army, upgrade one Regular to an Elite.
