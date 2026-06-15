@@ -261,11 +261,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         for (const [from, to] of moveTargets(state, actor)) acts.push({ kind: 'moveArmy', from, to });
         for (const [from, to] of attackTargets(state, actor)) acts.push({ kind: 'attack', from, to });
       } else if (faces.has('character')) {
-        // Character die: move (not attack) one army containing a Leader/Nazgûl/Character.
-        for (const [from, to] of moveTargets(state, actor)) {
-          const r = state.regions[from]!;
-          if (r.leaders > 0 || r.nazgul > 0 || r.characters.length > 0) acts.push({ kind: 'moveArmy', from, to });
-        }
+        // Character die: move OR attack with one army containing a Leader/Nazgûl/Character.
+        const leaderArmy = (from: string) => { const r = state.regions[from]!; return r.leaders > 0 || r.nazgul > 0 || r.characters.length > 0; };
+        for (const [from, to] of moveTargets(state, actor)) if (leaderArmy(from)) acts.push({ kind: 'moveArmy', from, to });
+        for (const [from, to] of attackTargets(state, actor)) if (leaderArmy(from)) acts.push({ kind: 'attack', from, to });
       }
       // Companion political abilities: any Action die advances their Nation.
       if (actor === 'fp' && state.dice.fp.length > 0) acts.push(...companionMusterOptions(state));
@@ -539,9 +538,18 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'actionResolution');
       if (armySide(state, action.from) !== actor) throw new Error('No attacking army');
       if (actor === 'shadow' && shadowBarredFromRegion(state, action.to)) throw new Error('Region protected from Shadow');
-      const aErr = attackError(state, action.from, actor, action.rearguard, false);
+      // An Army die attacks any army; a Character die may attack with ONE army that
+      // contains a Leader/Nazgûl/Character (rulebook p.28).
+      const src = state.regions[action.from]!;
+      const leaderArmy = src.leaders > 0 || src.nazgul > 0 || src.characters.length > 0;
+      const faces = new Set(state.dice[actor]);
+      const hasArmyDie = faces.has('army') || faces.has('armyMuster') || (actor === 'fp' && faces.has('will'))
+        || (actor === 'shadow' && faces.has('muster') && mouthMessengerAvailable(state));
+      const viaCharacterDie = !hasArmyDie && leaderArmy && faces.has('character');
+      const aErr = attackError(state, action.from, actor, action.rearguard, viaCharacterDie);
       if (aErr) throw new Error(aErr);
-      if (!consumeArmyDie(state, actor)) throw new Error('No Army die');
+      if (viaCharacterDie) { if (!consumeDie(state, actor, 'character')) throw new Error('No Army die'); }
+      else if (!consumeArmyDie(state, actor)) throw new Error('No Army die');
       startBattle(state, actor, action.from, action.to, { rearguard: action.rearguard }); break; // finishCombat resumes the turn
     }
     // --- interactive combat choices (resolving state.pendingChoice) ---
