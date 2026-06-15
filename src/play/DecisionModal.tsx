@@ -25,6 +25,9 @@ const CHOICE_TITLE: Record<string, string> = {
   huntDamage: 'The Hunt strikes!',
   huntPreventDraw: 'Prevent the Hunt tile draw? (you won’t see it)',
   huntRedraw: 'Redraw the Hunt tile?',
+  siegeWithdraw: 'Withdraw into the siege, or fight in the open?',
+  bonusDraw: 'The Palantír of Orthanc — draw a card',
+  lureChoice: 'Lure of the Ring — the Ring tempts a Companion',
 };
 
 export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
