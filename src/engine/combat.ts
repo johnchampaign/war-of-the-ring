@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf } from './data';
 import { withRng } from './rng';
-import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement, settlementController } from './armies';
+import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement, settlementController, enforceSiegeCap } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, hasCombatEffect, EMPTY_MODS, type CombatMods } from './combatCards';
@@ -376,6 +376,7 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
   state.pendingChoice = null;
   if (withdraw) {
     state.regions[pc.to]!.besieged = true;
+    enforceSiegeCap(state, pc.to); // a besieged Stronghold holds at most 5 units (rulebook p.31)
     log(state, null, 'combat', `${pc.defender} withdraws into the siege at ${pc.to}`);
     finishCombat(state, false); // siege established; the assault itself is a later action
     return;

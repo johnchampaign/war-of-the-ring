@@ -622,6 +622,7 @@ function recruitRegions(state: GameState, side: Side, nation: Nation, cap = 4): 
     const def = REGIONS[id]!;
     if (def.nation !== nation || !def.settlement) continue;
     if (settlementController(state, id) !== side || armySide(state, id) === opp(side)) continue;
+    if (state.regions[id]!.besieged) continue; // can't muster into a besieged Stronghold (p.26)
     if (unitCount(state, id) >= STACKING_LIMIT) continue;
     out.push(id);
     if (out.length >= cap) break;

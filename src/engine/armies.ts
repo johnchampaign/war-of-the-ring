@@ -68,6 +68,9 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
   const side = sideOfNation(nation);
   if (settlementController(state, id) !== side) return false; // not friendly/free
   if (armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) return false;
+  // Can't MUSTER troops into a Stronghold besieged by the enemy (rulebook p.26).
+  // Event-card recruits (ignoreAtWar) may, per p.27.
+  if (!opts.ignoreAtWar && state.regions[id]!.besieged) return false;
   const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
   const leader = opts.leader ?? 0;
   if (regular > pool.regular || elite > pool.elite || leader > (pool.leader ?? 0)) return false;
@@ -89,8 +92,26 @@ export function canRecruitNazgul(state: GameState, id: RegionId): boolean {
   const def = REGIONS[id]!;
   if (def.nation !== 'sauron' || def.settlement !== 'Stronghold') return false;
   if (settlementController(state, id) !== 'shadow') return false;
-  if (armySide(state, id) === 'fp') return false;
+  if (armySide(state, id) === 'fp' || state.regions[id]!.besieged) return false;
   return (state.reinforcements.sauron as { nazgul?: number }).nazgul! > 0;
+}
+
+export const SIEGE_LIMIT = 5;
+/** Enforce the 5-Army-unit Stronghold siege cap (rulebook p.31): when a Stronghold
+ *  comes under siege, units beyond five are removed immediately (Regulars first,
+ *  then Elites), recycled to reinforcements. Leaders are unlimited. */
+export function enforceSiegeCap(state: GameState, id: RegionId): void {
+  const r = state.regions[id]!;
+  let excess = unitCount(state, id) - SIEGE_LIMIT;
+  if (excess <= 0) return;
+  const nations = Object.keys(r.units) as Nation[];
+  for (const kind of ['regular', 'elite'] as const) {
+    for (const n of nations) {
+      const u = r.units[n]; if (!u) continue;
+      while (excess > 0 && u[kind] > 0) { u[kind] -= 1; state.reinforcements[n][kind] += 1; excess -= 1; }
+    }
+    if (excess <= 0) break;
+  }
 }
 
 /** Muster a single Nazgûl into a Sauron Stronghold (the Shadow's "Leader/Nazgûl"
@@ -110,7 +131,9 @@ export function canMoveArmy(state: GameState, from: RegionId, to: RegionId, side
   if (armySide(state, from) !== side) return false;
   if (side === 'shadow' && shadowBarredFromRegion(state, to)) return false; // A Power too Great / Tom Bombadil
   if (!freeForMovement(state, to, side)) return false;
-  if (unitCount(state, from) + unitCount(state, to) > STACKING_LIMIT) return false;
+  // A besieged Stronghold holds at most 5 units, so reinforcing a siege is capped there.
+  const cap = state.regions[to]!.besieged ? SIEGE_LIMIT : STACKING_LIMIT;
+  if (unitCount(state, from) + unitCount(state, to) > cap) return false;
   // Non-belligerent nations cannot cross another nation's border (rules-spec §8).
   const dn = REGIONS[to]!.nation;
   for (const nation of Object.keys(state.regions[from]!.units) as Nation[]) {
