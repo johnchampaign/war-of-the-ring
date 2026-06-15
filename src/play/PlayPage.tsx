@@ -92,7 +92,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         <div style={{ width: 320, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <PoliticsPanel view={g.view} />
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            <ActionPanel actions={panelActions} onAction={submit} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
+            <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
           </div>
           <div style={{ flex: 1, minHeight: 140, display: 'flex', flexDirection: 'column' }}>
             <HoverPreview hover={hover} view={g.view} />
