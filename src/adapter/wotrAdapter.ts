@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
@@ -103,6 +103,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       if (fs.mordor === null && MORDOR_ENTRANCES.includes(fs.location)) {
         acts.push({ kind: 'enterMordor' });
       }
+      // Change the Guide: offer each Companion tied for the highest Level (besides the current Guide).
+      for (const c of eligibleGuides(state)) if (c !== fs.guide) acts.push({ kind: 'changeGuide', companion: c });
       return acts;
     }
     case 'huntAllocation': {
@@ -163,6 +165,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
   switch (action.kind) {
     case 'skipFellowshipPhase':
       requirePhase(state, 'fellowship'); state.phase = 'huntAllocation'; break;
+    case 'changeGuide':
+      requirePhase(state, 'fellowship');
+      if (!setGuide(state, action.companion)) throw new Error('Not an eligible Guide');
+      break; // free choice — stays in the Fellowship phase (may still declare/enter/skip)
     case 'declareFellowship': {
       requirePhase(state, 'fellowship');
       const fromLoc = state.fellowship.location;

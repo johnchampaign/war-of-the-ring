@@ -13,7 +13,8 @@ export type WotrAction =
   // Action Resolution (current player) — each consumes one die unless noted.
   | { kind: 'moveFellowship' }   // FP, Character die
   | { kind: 'hideFellowship' }   // FP, Character die
-  | { kind: 'separateCompanion'; companion: string } // FP, Character die
+  | { kind: 'separateCompanion'; companion: string }
+  | { kind: 'changeGuide'; companion: string } // Fellowship phase: pick the Guide (FP breaks Level ties) // FP, Character die
   | { kind: 'bringUpgrade'; which: 'aragorn' | 'gandalf-white' } // FP, Will of the West
   | { kind: 'drawEvent'; deck: Deck } // Event die
   | { kind: 'playEvent'; cardId: string } // Event die: play a card from hand

@@ -33,6 +33,23 @@ export function eliminateCompanion(state: GameState, id: CharacterId): number {
   return levelOf(id);
 }
 
+/** Companions eligible to be the Guide: those tied for the highest Level in the
+ *  Fellowship (the FP breaks ties — rules-spec §10). Empty if no Companions. */
+export function eligibleGuides(state: GameState): CharacterId[] {
+  const fs = state.fellowship;
+  if (fs.companions.length === 0) return [];
+  const max = Math.max(...fs.companions.map(levelOf));
+  return fs.companions.filter((c) => levelOf(c) === max);
+}
+
+/** Set the Guide to a Companion tied for the highest Level (Fellowship phase). */
+export function setGuide(state: GameState, id: CharacterId): boolean {
+  if (!eligibleGuides(state).includes(id)) return false;
+  state.fellowship.guide = id;
+  log(state, null, 'fellowship', `Guide is now ${id}`);
+  return true;
+}
+
 /** Resolve Lure of the Ring (FP's choice on the randomly-selected Companion). */
 export function resolveLureChoice(state: GameState, mode: 'corruption' | 'eliminate'): void {
   const d = state.pendingChoice!.data as { companion: CharacterId; level: number };
