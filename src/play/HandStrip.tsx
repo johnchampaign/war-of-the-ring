@@ -11,10 +11,19 @@ const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c)
 
 export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Side; onHoverCard?: (id: string | null) => void }) {
   const hand = view.cards?.[you]?.hand ?? [];
+  // "Play on the table" cards are face-up / public for both sides (Mithril Coat,
+  // Wizard's Staff, persistent effects, special-tile cards, …).
+  const tabled = [...(view.cards?.fp?.table ?? []), ...(view.cards?.shadow?.table ?? [])];
   const [zoom, setZoom] = useState<string | null>(null);
-  if (hand.length === 0) return null;
+  if (hand.length === 0 && tabled.length === 0) return null;
   return (
     <>
+      {tabled.length > 0 && (
+        <div style={{ ...wrap, borderTop: '1px solid #2a2418' }}>
+          <span style={{ fontSize: 11, color: '#998', alignSelf: 'center', marginRight: 4 }}>In play ({tabled.length}):</span>
+          {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
+        </div>
+      )}
       <div style={wrap}>
         <span style={{ fontSize: 11, color: '#998', alignSelf: 'center', marginRight: 4 }}>Hand ({hand.length}):</span>
         {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => id !== 'hidden' && setZoom(id)} onHover={onHoverCard} />)}

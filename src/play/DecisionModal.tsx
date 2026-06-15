@@ -51,6 +51,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
         {pc && <CombatHeader pc={pc} />}
         {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>{CHOICE_TITLE[choice.kind] ?? choice.kind}</div>}
         {choice?.kind === 'huntDamage' && <HuntDetail data={(choice as any).data} />}
+        {choice?.kind === 'huntRedraw' && <TileDetail tile={(choice as any).data?.tile} />}
 
         {mine ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
@@ -98,6 +99,17 @@ function PlayedCard({ id, who }: { id: string; who: string }) {
     <div style={{ fontSize: 11, color: '#aa9', textAlign: 'center' }}>
       <div>{who}: {cardName(id)}</div>
       {art && <img src={art} alt={cardName(id)} style={{ height: 80, borderRadius: 3, marginTop: 2 }} />}
+    </div>
+  );
+}
+
+function TileDetail({ tile }: { tile?: { value: number | string; reveal?: boolean; stop?: boolean } }) {
+  if (!tile) return null;
+  const dmg = typeof tile.value === 'number' ? `${tile.value} Hunt damage`
+    : tile.value === 'eye' ? 'an Eye (Shadow draws Hunt dice for damage)' : 'a die — rolled for damage';
+  return (
+    <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 2px' }}>
+      You drew: <b>{dmg}</b>{tile.reveal ? ' · Reveal' : ''}{tile.stop ? ' · Stop' : ''}. Redraw it, or keep it?
     </div>
   );
 }

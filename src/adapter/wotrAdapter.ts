@@ -249,6 +249,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (h.onTable) state.cards[actor].table.push(action.cardId);
       else state.cards[actor].discard[deck].push(action.cardId);
       if (palantirWasActive) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
+      guideEventDraw(state, actor, deck); // Gandalf the Grey's Guide ability
       passResolutionTurn(state, actor); break;
     }
     case 'eventTarget': {
@@ -269,6 +270,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
       state.cards[actor].discard[deck].push(data.card);
       if (data.palantir) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
+      if (!state.pendingCombat) guideEventDraw(state, actor, deck); // Gandalf the Grey's Guide ability
       // A card that started a battle (Grond / Uruk-hai) hands off to the combat
       // driver, which resumes the turn itself — don't pass it here.
       if (!state.pendingCombat) passResolutionTurn(state, actor);
@@ -420,6 +422,13 @@ function drawOne(state: GameState, side: Side, deck: 'character' | 'strategy'): 
   const top = p.draw[deck].shift();
   if (top) p.hand.push(top);
   while (p.hand.length > 6) p.discard.strategy.push(p.hand.shift()!);
+}
+
+/** Gandalf the Grey's Guide ability: after the FP plays an Event card while Gandalf
+ *  is the Guide, draw a card from the deck matching that card's type. (Applied
+ *  automatically — it's an always-beneficial "may"; matches the Palantír handling.) */
+function guideEventDraw(state: GameState, actor: Side, deck: 'character' | 'strategy'): void {
+  if (actor === 'fp' && state.fellowship.guide === 'gandalf-grey') drawOne(state, 'fp', deck);
 }
 
 export const wotrAdapter: GameAdapter<GameState, WotrAction, Side> = {
