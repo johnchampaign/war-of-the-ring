@@ -26,11 +26,19 @@ export function eliminateCompanion(state: GameState, id: CharacterId): number {
   const fs = state.fellowship;
   const i = fs.companions.indexOf(id);
   if (i < 0) return 0;
+  const lvl = levelOf(id);
   fs.companions.splice(i, 1);
-  if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
+  // Meriadoc / Peregrin "Take Them Alive!": eliminated from the Fellowship → re-placed
+  // on the map as if separated (the casualty/absorption still happens), not removed.
+  if (id === 'meriadoc' || id === 'peregrin') {
+    state.characters.inPlay[id] = fs.location;
+    state.regions[fs.location]!.characters.push(id);
+    log(state, null, 'hunt', `${COMPANIONS[id]?.name ?? id} taken alive — placed at ${fs.location}`);
+  } else if (!state.characters.eliminated.includes(id)) {
+    state.characters.eliminated.push(id);
+  }
   reassignGuide(state);
-  log(state, null, 'hunt', `${COMPANIONS[id]?.name ?? id} eliminated; guide now ${fs.guide}`);
-  return levelOf(id);
+  return lvl;
 }
 
 /** Companions eligible to be the Guide: those tied for the highest Level in the

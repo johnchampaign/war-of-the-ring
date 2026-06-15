@@ -38,6 +38,10 @@ export function leadership(state: GameState, id: RegionId, side: Side): number {
       l += d.leadership;
     }
   }
+  // Saruman's "Servants of the White Hand": each Isengard Elite is also a Leader.
+  if (side === 'shadow' && state.characters.entered.includes('saruman') && !state.characters.eliminated.includes('saruman')) {
+    l += r.units.isengard?.elite ?? 0;
+  }
   return Math.min(5, l);
 }
 

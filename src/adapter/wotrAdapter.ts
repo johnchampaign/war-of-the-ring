@@ -122,6 +122,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         else acts.push({ kind: 'hideFellowship' });
         if (fs.mordor === null) for (const c of fs.companions) acts.push({ kind: 'separateCompanion', companion: c });
       }
+      // Strider's Guide ability: a revealed Fellowship can be hidden with ANY die.
+      if (actor === 'fp' && !fs.hidden && fs.guide === 'strider' && state.dice.fp.length > 0
+        && !acts.some((a) => a.kind === 'hideFellowship')) {
+        acts.push({ kind: 'hideFellowship' });
+      }
       // Move independent characters (Nazgûl/Minions for SH, separated Companions
       // for FP) — a Character die, both sides.
       if (faces.has('character') || hasWill) {
@@ -203,11 +208,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!state.fellowship.hidden) throw new Error('Fellowship is revealed');
       if (!consumeOneOf(state, 'fp', ['character', 'will'])) throw new Error('No Character die');
       moveFellowship(state); passResolutionTurn(state, actor); break;
-    case 'hideFellowship':
+    case 'hideFellowship': {
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP hides the Fellowship');
-      if (!consumeOneOf(state, 'fp', ['character', 'will'])) throw new Error('No Character die');
+      // Strider's Guide ability lets any die hide; otherwise a Character/Will die.
+      const hideFaces = state.fellowship.guide === 'strider' ? [...new Set(state.dice.fp)] : (['character', 'will'] as DieFace[]);
+      if (!consumeOneOf(state, 'fp', hideFaces)) throw new Error('No usable die');
       hideFellowship(state); passResolutionTurn(state, actor); break;
+    }
     case 'separateCompanion':
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP separates Companions');

@@ -56,7 +56,9 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
  *  enemy's penalty mods. */
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
   baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods): number {
-  let count = Math.min(5, unitCount(state, ownRegion));
+  // Captain of the West: +1 Combat Strength (die) if such a Companion is in this FP Army.
+  const captain = side === 'fp' && state.regions[ownRegion]!.characters.some((c) => CAPTAINS.has(c)) ? 1 : 0;
+  let count = Math.min(5, unitCount(state, ownRegion) + captain);
   if (enemyMods.maxDiceEnemy != null) count = Math.min(count, enemyMods.maxDiceEnemy);
   const target = clamp(2, 6, baseTarget - (ownMods.rollBonus ?? 0) + (enemyMods.enemyRollPenalty ?? 0));
   // Forfeiting a Companion's Leadership (Mighty Attack) costs re-roll dice.
@@ -390,6 +392,8 @@ export const canRetreat = (state: GameState): boolean => retreatRegion(state, st
 // Companion ids (separated Companions can be "in the battle"); Hobbits among them.
 const COMPANION_IDS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 const HOBBIT_IDS = new Set(['meriadoc', 'peregrin']);
+// "Captain of the West": +1 Combat Strength to a FP Army these Companions are in.
+const CAPTAINS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'aragorn']);
 
 /** Which of the battle's two regions holds the FP vs the Shadow army. */
 function battleRegions(pc: PendingCombat): { fp: RegionId; sh: RegionId } {
