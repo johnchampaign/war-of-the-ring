@@ -11,15 +11,18 @@ export const SHADOW_DIE_FACES: DieFace[] = ['character', 'army', 'muster', 'army
 /** Dice-pool size for a side, including character bonuses. FP: +1 per
  *  Aragorn/Gandalf-the-White in play. Shadow: +1 per Minion in play, capped 10. */
 export function poolSize(state: GameState, side: Side): number {
-  const entered = state.characters.entered;
+  // A character grants its bonus die only while in play: entered AND not eliminated
+  // (the bonus is lost the moment that character dies — rules p.19).
+  const inPlay = (id: string): boolean =>
+    state.characters.entered.includes(id) && !state.characters.eliminated.includes(id);
   if (side === 'fp') {
     let n = BASE_DICE.fp;
-    if (entered.includes('aragorn')) n++;
-    if (entered.includes('gandalf-white')) n++;
+    if (inPlay('aragorn')) n++;
+    if (inPlay('gandalf-white')) n++;
     return n;
   }
   let n = BASE_DICE.shadow;
-  for (const m of ['saruman', 'witch-king', 'mouth-of-sauron']) if (entered.includes(m)) n++;
+  for (const m of ['saruman', 'witch-king', 'mouth-of-sauron']) if (inPlay(m)) n++;
   return Math.min(n, 10);
 }
 

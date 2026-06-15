@@ -2,7 +2,7 @@
 // capture (rules-spec §1, §6). Combat is in combat.ts.
 import type { GameState, Nation, RegionId, Side, ArmyUnits } from './types';
 import { REGIONS, sideOfNation, characterDef } from './data';
-import { isAtWar, onSettlementCaptured } from './politics';
+import { isAtWar, onSettlementCaptured, activateNation } from './politics';
 import { shadowBarredFromRegion } from './persistent';
 import { log } from './log';
 
@@ -112,6 +112,10 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
   src.units = {}; src.leaders = 0; src.nazgul = 0; src.characters = [];
   // Capture an undefended enemy Settlement.
   captureIfEnemySettlement(state, to, side);
+  // Entering a Nation's region activates that Nation (rules p.34) — covers regions
+  // with no Settlement, where capture wouldn't fire.
+  const dn = REGIONS[to]!.nation;
+  if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
   log(state, null, 'army', `Moved army ${from} -> ${to}`);
   return true;
 }
@@ -120,12 +124,23 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
   const def = REGIONS[id]!;
   if (!def.settlement) return;
   if (settlementController(state, id) === side) return;
-  // capturing
+  const owner = def.nation ? sideOfNation(def.nation) : null;
+  const enemy: Side = side === 'fp' ? 'shadow' : 'fp';
+  if (side === owner) {
+    // Recapture by the original owner: remove the Settlement Control marker and
+    // reverse the VP the enemy had gained when they captured it (rules p.32).
+    state.regions[id]!.control = null;
+    if (def.vp > 0) {
+      state.victoryPoints[enemy] = Math.max(0, state.victoryPoints[enemy] - def.vp);
+      log(state, null, 'army', `${side} recaptured ${id} (−${def.vp} VP from ${enemy}, total ${state.victoryPoints[enemy]})`);
+    }
+    return;
+  }
+  // Enemy capture: place the marker and gain VP; the owner's Nation reacts.
   state.regions[id]!.control = side;
-  const vp = def.vp;
-  if (vp > 0) {
-    state.victoryPoints[side] += vp;
-    log(state, null, 'army', `${side} captured ${id} (+${vp} VP, total ${state.victoryPoints[side]})`);
+  if (def.vp > 0) {
+    state.victoryPoints[side] += def.vp;
+    log(state, null, 'army', `${side} captured ${id} (+${def.vp} VP, total ${state.victoryPoints[side]})`);
   }
   if (def.nation) onSettlementCaptured(state, def.nation, id);
 }
