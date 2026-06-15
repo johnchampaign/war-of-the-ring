@@ -27,6 +27,20 @@ import { redactStateForViewer } from './redact';
 const clone = (s: GameState): GameState => JSON.parse(JSON.stringify(s));
 const opp = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 
+// Mouth of Sauron "Messenger of the Dark Tower": once per turn a Muster die may act as
+// an Army die. Available while the Mouth is in play and that hasn't been used yet.
+const mouthMessengerAvailable = (state: GameState): boolean =>
+  state.characters.entered.includes('mouth-of-sauron') && !state.characters.eliminated.includes('mouth-of-sauron') && !state.flags.mouthMusterUsedThisTurn;
+/** Consume a die for an Army action, honoring the Mouth's Messenger (Muster→Army). */
+function consumeArmyDie(state: GameState, actor: Side): boolean {
+  if (consumeOneOf(state, actor, ['army', 'armyMuster', 'will'])) return true;
+  if (actor === 'shadow' && mouthMessengerAvailable(state) && consumeDie(state, 'shadow', 'muster')) {
+    state.flags.mouthMusterUsedThisTurn = true;
+    return true;
+  }
+  return false;
+}
+
 // Companion political abilities (High Warden / Prince of Mirkwood / Dwarf of Erebor):
 // while the Companion stands in their own unconquered Settlement, any Action die may
 // advance their Nation one step. Returns the legal companionMuster actions.
@@ -171,7 +185,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         }
       }
       const hasMuster = faces.has('muster') || faces.has('armyMuster') || hasWill;
-      const hasArmy = faces.has('army') || faces.has('armyMuster') || hasWill;
+      const hasArmy = faces.has('army') || faces.has('armyMuster') || hasWill
+        || (actor === 'shadow' && faces.has('muster') && mouthMessengerAvailable(state)); // Mouth's Messenger
       if (hasMuster) {
         for (const n of advanceableNations(state, actor)) acts.push({ kind: 'diplomaticAction', nation: n });
         acts.push(...recruitTargets(state, actor));
@@ -363,14 +378,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       passResolutionTurn(state, actor); break;
     case 'moveArmy':
       requirePhase(state, 'actionResolution');
-      if (!consumeOneOf(state, actor, ['army', 'armyMuster', 'will'])) throw new Error('No Army die');
+      if (!consumeArmyDie(state, actor)) throw new Error('No Army die');
       if (!moveArmy(state, action.from, action.to, actor)) throw new Error('Illegal move');
       passResolutionTurn(state, actor); break;
     case 'attack':
       requirePhase(state, 'actionResolution');
       if (armySide(state, action.from) !== actor) throw new Error('No attacking army');
       if (actor === 'shadow' && shadowBarredFromRegion(state, action.to)) throw new Error('Region protected from Shadow');
-      if (!consumeOneOf(state, actor, ['army', 'armyMuster', 'will'])) throw new Error('No Army die');
+      if (!consumeArmyDie(state, actor)) throw new Error('No Army die');
       startBattle(state, actor, action.from, action.to); break; // finishCombat resumes the turn
     // --- interactive combat choices (resolving state.pendingChoice) ---
     case 'playCombatCard': {

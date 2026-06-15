@@ -208,6 +208,8 @@ export interface GameState {
     /** Set in phase 1 from last turn's Fellowship moves: forces Shadow to place
      *  ≥1 Hunt die this turn (rules-spec §3 phase 3). */
     huntMin1ThisTurn: boolean;
+    /** Mouth of Sauron "Messenger": a Muster die already used as an Army die this turn. */
+    mouthMusterUsedThisTurn?: boolean;
   };
   pendingChoice: PendingChoice | null;
   /** An interactive battle in progress, or null. */

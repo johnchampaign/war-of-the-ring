@@ -27,6 +27,7 @@ function runRecover(state: GameState): void {
   state.flags.fellowshipDeclaredOrMovedThisTurn = false;
   state.flags.fpUsedElvenRingThisTurn = false;
   state.flags.shadowUsedElvenRingThisTurn = false;
+  state.flags.mouthMusterUsedThisTurn = false;
   // Draw 2 Event cards each (1 Character, 1 Strategy), trim hands to 6.
   for (const side of ['fp', 'shadow'] as Side[]) drawEventCards(state, side);
 }

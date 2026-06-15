@@ -62,7 +62,17 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   if (enemyMods.maxDiceEnemy != null) count = Math.min(count, enemyMods.maxDiceEnemy);
   const target = clamp(2, 6, baseTarget - (ownMods.rollBonus ?? 0) + (enemyMods.enemyRollPenalty ?? 0));
   // Forfeiting a Companion's Leadership (Mighty Attack) costs re-roll dice.
-  const lead = Math.max(0, Math.min(5, leadership(state, ownRegion, side)) - (ownMods.ownLeadershipPenalty ?? 0));
+  let leadVal = Math.min(5, leadership(state, ownRegion, side));
+  // Gandalf the White "The White Rider": if he's in the FP Army, the FP forfeits his
+  // Leadership to negate all Nazgûl Leadership (incl. the Witch-king). Auto-applied
+  // when the Shadow has Nazgûl Leadership to negate (always beneficial there).
+  const fpRegion = side === 'fp' ? ownRegion : enemyRegion;
+  if (state.regions[fpRegion]!.characters.includes('gandalf-white')) {
+    const shR = side === 'shadow' ? ownRegion : enemyRegion, sr = state.regions[shR]!;
+    const nazgulLead = sr.nazgul + (sr.characters.includes('witch-king') ? 2 : 0);
+    if (nazgulLead > 0) leadVal = Math.max(0, leadVal - (side === 'shadow' ? nazgulLead : 1));
+  }
+  const lead = Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0));
   const allowReroll = !enemyMods.negateEnemyReroll;
   let hits = withRng(state, (rng) => {
     let h = 0, failed = 0;
