@@ -49,14 +49,24 @@ const COMPANION_POLITICS: { companion: string; nation: Nation; at: (r: RegionId)
   { companion: 'legolas', nation: 'elves', at: (r) => REGIONS[r]!.nation === 'elves' && REGIONS[r]!.settlement === 'Stronghold' },
   { companion: 'gimli', nation: 'dwarves', at: (r) => r === 'erebor' },
 ];
-// Voice of Saruman: while Orthanc is Shadow-held and not besieged and Saruman is in
-// play, a Muster die recruits one Isengard Regular in every Isengard Settlement.
+// Voice of Saruman: while Orthanc is Shadow-held + unbesieged and Saruman is in play, a
+// Muster die may EITHER recruit one Isengard Regular in every Isengard Settlement, OR
+// replace two Regular Isengard units in Orthanc with two Elites.
 const isengardSettlements = (): RegionId[] => Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'isengard' && !!REGIONS[id]!.settlement);
-function voiceOfSarumanAvailable(state: GameState): boolean {
-  if (!state.characters.entered.includes('saruman') || state.characters.eliminated.includes('saruman')) return false;
-  if (settlementController(state, 'orthanc') !== 'shadow' || state.regions['orthanc']!.besieged) return false;
-  if (state.reinforcements.isengard.regular <= 0) return false;
-  return isengardSettlements().some((id) => settlementController(state, id) === 'shadow' && unitCount(state, id) < STACKING_LIMIT);
+const voiceOfSarumanActive = (state: GameState): boolean =>
+  state.characters.entered.includes('saruman') && !state.characters.eliminated.includes('saruman')
+  && settlementController(state, 'orthanc') === 'shadow' && !state.regions['orthanc']!.besieged;
+const canSarumanRecruit = (state: GameState): boolean =>
+  state.reinforcements.isengard.regular > 0
+  && isengardSettlements().some((id) => settlementController(state, id) === 'shadow' && unitCount(state, id) < STACKING_LIMIT);
+const canSarumanUpgrade = (state: GameState): boolean =>
+  (state.regions['orthanc']!.units.isengard?.regular ?? 0) >= 2 && state.reinforcements.isengard.elite >= 2;
+function sarumanMusterOptions(state: GameState): WotrAction[] {
+  if (!voiceOfSarumanActive(state)) return [];
+  const out: WotrAction[] = [];
+  if (canSarumanRecruit(state)) out.push({ kind: 'sarumanMuster', mode: 'recruit' });
+  if (canSarumanUpgrade(state)) out.push({ kind: 'sarumanMuster', mode: 'upgrade' });
+  return out;
 }
 function companionMusterOptions(state: GameState): WotrAction[] {
   const out: WotrAction[] = [];
@@ -204,7 +214,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
           for (const m of MINION_IDS) {
             if (canBringMinion(state, m)) { const r = entryRegion(state, m); if (r) acts.push({ kind: 'bringMinion', minion: m, region: r }); }
           }
-          if (voiceOfSarumanAvailable(state)) acts.push({ kind: 'sarumanMuster' });
+          acts.push(...sarumanMusterOptions(state));
         }
       }
       if (hasArmy) {
@@ -376,10 +386,17 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'sarumanMuster': {
       requirePhase(state, 'actionResolution');
-      if (actor !== 'shadow' || !voiceOfSarumanAvailable(state)) throw new Error('Voice of Saruman not available');
+      if (actor !== 'shadow' || !voiceOfSarumanActive(state)) throw new Error('Voice of Saruman not available');
+      if (action.mode === 'upgrade' ? !canSarumanUpgrade(state) : !canSarumanRecruit(state)) throw new Error('Voice of Saruman option not available');
       if (!consumeOneOf(state, 'shadow', ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
-      for (const id of isengardSettlements()) {
-        if (settlementController(state, id) === 'shadow') recruit(state, 'isengard', id, 1, 0, { ignoreAtWar: true });
+      if (action.mode === 'upgrade') {
+        const u = state.regions['orthanc']!.units.isengard!; // ≥2 Regulars (checked above)
+        u.regular -= 2; u.elite += 2;
+        state.reinforcements.isengard.regular += 2; state.reinforcements.isengard.elite -= 2;
+      } else {
+        for (const id of isengardSettlements()) {
+          if (settlementController(state, id) === 'shadow') recruit(state, 'isengard', id, 1, 0, { ignoreAtWar: true });
+        }
       }
       passResolutionTurn(state, actor); break;
     }
