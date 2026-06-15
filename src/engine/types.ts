@@ -183,6 +183,10 @@ export interface PendingCombat {
    *  the battle — pending the Shadow's optional matching-deck Event draw. */
   sorcererDeck?: 'character' | 'strategy';
   sorcererAsked?: boolean;
+  /** Attack split (rulebook p.28): figures of the attacking Army left OUT of the
+   *  battle (the rearguard). Held aside from `from` for the battle's duration and
+   *  restored into `from` when it ends; they take no part and can't advance. */
+  rearguard?: { units: Partial<Record<Nation, { regular: number; elite: number }>>; leaders: number; nazgul: number; characters: string[] };
 }
 
 // --- The whole game state ------------------------------------------------

@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf } from './data';
 import { withRng } from './rng';
-import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement, settlementController, enforceSiegeCap } from './armies';
+import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement, settlementController, enforceSiegeCap, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, hasCombatEffect, EMPTY_MODS, type CombatMods } from './combatCards';
@@ -158,10 +158,78 @@ export function applyCasualties(state: GameState, id: RegionId, side: Side, hits
   if (unitCount(state, id) === 0) { r.leaders = 0; r.nazgul = 0; r.characters = []; }
 }
 
+// --- Attack split: the rearguard (rulebook p.28) -----------------------------
+const nationAtWar = (state: GameState, n: Nation): boolean => state.nations[n].step === 0;
+
+/** The figures that must be left out of the battle: the player's explicit rearguard
+ *  selection, plus ALL units of the attacker's not-At-War Nations (which may never
+ *  join a battle — a split is mandatory when such units are present). */
+type Rearguard = NonNullable<PendingCombat['rearguard']>;
+function fullRearguard(state: GameState, from: RegionId, side: Side, explicit?: MoveSelection): Rearguard {
+  const r = state.regions[from]!;
+  const units: Record<string, { regular: number; elite: number }> = {};
+  for (const [n, u] of Object.entries(explicit?.units ?? {})) units[n] = { regular: u?.regular ?? 0, elite: u?.elite ?? 0 };
+  for (const n of Object.keys(r.units) as Nation[]) {
+    if (sideOfNation(n) === side && !nationAtWar(state, n) && (r.units[n]!.regular + r.units[n]!.elite) > 0) {
+      units[n] = { regular: r.units[n]!.regular, elite: r.units[n]!.elite }; // all not-At-War units stay
+    }
+  }
+  return { units, leaders: explicit?.leaders ?? 0, nazgul: explicit?.nazgul ?? 0, characters: explicit?.characters ?? [] };
+}
+
+/** Validate an attack's (optional) rearguard split. Returns an error string, or null. */
+export function attackError(state: GameState, from: RegionId, side: Side, explicit?: MoveSelection, viaCharacterDie = false): string | null {
+  if (armySide(state, from) !== side) return 'No attacking army';
+  const r = state.regions[from]!;
+  const rg = fullRearguard(state, from, side, explicit);
+  let armyUnits = 0, rgUnits = 0;
+  for (const n of Object.keys(r.units) as Nation[]) armyUnits += r.units[n]!.regular + r.units[n]!.elite;
+  for (const [n, u] of Object.entries(rg.units)) {
+    const have = r.units[n as Nation] ?? { regular: 0, elite: 0 };
+    if (u.regular < 0 || u.elite < 0 || u.regular > have.regular || u.elite > have.elite) return 'Rearguard exceeds the army';
+    rgUnits += u.regular + u.elite;
+  }
+  if (rg.leaders > r.leaders || rg.nazgul > r.nazgul) return 'Rearguard exceeds the army';
+  for (const c of rg.characters) if (!r.characters.includes(c)) return 'Rearguard figure not present';
+  if (armyUnits - rgUnits < 1) return 'The attacking army must keep at least one unit';
+  const rgHasFigure = rgUnits > 0 || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
+  if (rgHasFigure && rgUnits < 1) return 'A rearguard must contain at least one unit';
+  if (viaCharacterDie && (r.leaders - rg.leaders) + (r.nazgul - rg.nazgul) + (r.characters.length - rg.characters.length) < 1) {
+    return 'A Character-die attack must include a Leader or Character';
+  }
+  return null;
+}
+
+/** Remove the rearguard figures from `from`, returning the stash (held in the
+ *  PendingCombat for the battle's duration). */
+function stashRearguard(state: GameState, from: RegionId, rg: Rearguard): PendingCombat['rearguard'] {
+  const r = state.regions[from]!;
+  const stash = { units: {} as Record<string, { regular: number; elite: number }>, leaders: rg.leaders, nazgul: rg.nazgul, characters: [...rg.characters] };
+  for (const [n, u] of Object.entries(rg.units)) {
+    if (u.regular + u.elite === 0) continue;
+    r.units[n as Nation]!.regular -= u.regular; r.units[n as Nation]!.elite -= u.elite;
+    stash.units[n] = { regular: u.regular, elite: u.elite };
+    if (r.units[n as Nation]!.regular === 0 && r.units[n as Nation]!.elite === 0) delete r.units[n as Nation];
+  }
+  r.leaders -= rg.leaders; r.nazgul -= rg.nazgul;
+  for (const c of rg.characters) r.characters.splice(r.characters.indexOf(c), 1);
+  return stash;
+}
+
+/** Put a stashed rearguard back into a region (when the battle ends). */
+function restoreRearguard(state: GameState, region: RegionId, stash: NonNullable<PendingCombat['rearguard']>): void {
+  const r = state.regions[region]!;
+  for (const [n, u] of Object.entries(stash.units)) {
+    const d = r.units[n as Nation] ?? { regular: 0, elite: 0 };
+    d.regular += u.regular; d.elite += u.elite; r.units[n as Nation] = d;
+  }
+  r.leaders += stash.leaders; r.nazgul += stash.nazgul; r.characters.push(...stash.characters);
+}
+
 /** Begin a battle: political reactions, then set up the sub-machine. The driver
  *  (combatStep, run from advance) takes it from here. */
 export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId,
-  opts: { siegeRounds?: number; fpCardLock?: boolean; defenderDicePenalty?: number } = {}): void {
+  opts: { siegeRounds?: number; fpCardLock?: boolean; defenderDicePenalty?: number; rearguard?: MoveSelection } = {}): void {
   for (const n of nationsWithUnits(state, to)) onArmyAttacked(state, n, to);
   const dReg = REGIONS[to]!;
   const defender = other(attacker);
@@ -181,8 +249,12 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   } else if (isStronghold && settlementController(state, to) === defender) {
     pc.step = 'siegeWithdraw'; // the defender may withdraw into the siege instead of a field battle
   }
+  // Split off the rearguard (explicit + forced not-At-War units) before the battle.
+  const rg = fullRearguard(state, from, attacker, opts.rearguard);
+  const rgHasFigure = Object.values(rg.units).some((u) => u.regular + u.elite > 0) || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
+  if (rgHasFigure) pc.rearguard = stashRearguard(state, from, rg);
   state.pendingCombat = pc;
-  log(state, null, 'combat', `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}`);
+  log(state, null, 'combat', `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`);
 }
 
 function retreatRegion(state: GameState, pc: PendingCombat): RegionId | null {
@@ -233,6 +305,8 @@ function finishCombat(state: GameState, advance: boolean): void {
   if (advance && unitCount(state, pc.from) > 0) { advanceInto(state, pc.attacker, pc.from, pc.to); state.regions[pc.to]!.besieged = false; }
   if (pc.siege && unitCount(state, pc.from) === 0) state.regions[pc.to]!.besieged = false; // siege lifted: attacker gone
   log(state, null, 'combat', `battle at ${pc.to} ended (atk ${unitCount(state, pc.from)} / def ${unitCount(state, pc.to)})`);
+  // The rearguard rejoins its origin region (it never advances into the battle).
+  if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
   // Resume Action Resolution: opponent of attacker acts if able (else attacker).
   const opp = other(pc.attacker);
   state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;

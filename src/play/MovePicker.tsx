@@ -11,9 +11,11 @@ import mapData from '../../assets/map.json';
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 
 export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
-  from: string; to: string; kind: 'moveArmy' | 'armyMove2'; view: GameState;
+  from: string; to: string; kind: 'moveArmy' | 'armyMove2' | 'attack'; view: GameState;
   onConfirm: (a: WotrAction) => void; onCancel: () => void;
 }) {
+  const attackMode = kind === 'attack';
+  const verb = attackMode ? 'Attack' : 'Move';
   const r = view.regions[from];
   const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
   // Default selection = the whole Army (so an unchanged picker is a normal move).
@@ -36,7 +38,21 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
     if (chars.size) sel.characters = [...chars];
     return sel;
   };
-  const make = (move?: MoveSel): WotrAction => kind === 'armyMove2' ? { kind: 'armyMove2', from, to, move } : { kind: 'moveArmy', from, to, move };
+  // For an attack, the selection is the ATTACKING force; the rearguard is the rest.
+  const buildRearguard = (): MoveSel => {
+    const units: MoveSel['units'] = {};
+    for (const n of nations) { const rr = r.units[n]!.regular - (reg[n] ?? 0), re = r.units[n]!.elite - (eli[n] ?? 0); const u: { regular?: number; elite?: number } = {}; if (rr) u.regular = rr; if (re) u.elite = re; if (u.regular || u.elite) units[n] = u; }
+    const rg: MoveSel = { units };
+    if (r.leaders - leaders) rg.leaders = r.leaders - leaders;
+    if (r.nazgul - nazgul) rg.nazgul = r.nazgul - nazgul;
+    const left = r.characters.filter((c) => !chars.has(c));
+    if (left.length) rg.characters = left;
+    return rg;
+  };
+  const make = (split: boolean): WotrAction =>
+    kind === 'attack' ? { kind: 'attack', from, to, rearguard: split ? buildRearguard() : undefined }
+      : kind === 'armyMove2' ? { kind: 'armyMove2', from, to, move: split ? buildSel() : undefined }
+        : { kind: 'moveArmy', from, to, move: split ? buildSel() : undefined };
 
   const Step = ({ label, val, max, set }: { label: string; val: number; max: number; set: (v: number) => void }) => (
     <div style={row}>
@@ -50,8 +66,10 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
   return (
     <div style={backdrop} onClick={onCancel}>
       <div style={card} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ margin: '0 0 6px' }}>Move {rName(from)} → {rName(to)}</h3>
-        <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>Choose what moves; the rest stays behind (split). Move all for a normal move.</div>
+        <h3 style={{ margin: '0 0 6px' }}>{verb} {rName(from)} → {rName(to)}</h3>
+        <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
+          {attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.' : 'Choose what moves; the rest stays behind (split). Move all for a normal move.'}
+        </div>
         {nations.map((n) => (
           <div key={n} style={{ marginBottom: 4 }}>
             <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{cap(n)}</div>
@@ -68,8 +86,8 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
           </label>
         ))}
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-          <button style={primary} onClick={() => onConfirm(make())}>Move all</button>
-          <button style={primary} disabled={totalUnits < 1 || isWhole} onClick={() => onConfirm(make(buildSel()))}>Move selected</button>
+          <button style={primary} onClick={() => onConfirm(make(false))}>{verb} all</button>
+          <button style={primary} disabled={totalUnits < 1 || isWhole} onClick={() => onConfirm(make(true))}>{verb} selected</button>
           <button style={ghost} onClick={onCancel}>Cancel</button>
         </div>
       </div>

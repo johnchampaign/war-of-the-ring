@@ -13,7 +13,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul,
 } from '../engine/armies';
-import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
+import { startBattle, attackError, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
@@ -535,12 +535,15 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       passResolutionTurn(state, actor);
       break;
     }
-    case 'attack':
+    case 'attack': {
       requirePhase(state, 'actionResolution');
       if (armySide(state, action.from) !== actor) throw new Error('No attacking army');
       if (actor === 'shadow' && shadowBarredFromRegion(state, action.to)) throw new Error('Region protected from Shadow');
+      const aErr = attackError(state, action.from, actor, action.rearguard, false);
+      if (aErr) throw new Error(aErr);
       if (!consumeArmyDie(state, actor)) throw new Error('No Army die');
-      startBattle(state, actor, action.from, action.to); break; // finishCombat resumes the turn
+      startBattle(state, actor, action.from, action.to, { rearguard: action.rearguard }); break; // finishCombat resumes the turn
+    }
     // --- interactive combat choices (resolving state.pendingChoice) ---
     case 'playCombatCard': {
       requireChoice(state, 'combatCard', actor);

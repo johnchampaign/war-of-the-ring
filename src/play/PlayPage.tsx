@@ -26,7 +26,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Realtime move push when available (online); polling fallback otherwise.
   const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
   const [selected, setSelected] = useState<RegionId | null>(null);
-  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string } | null>(null);
+  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' } | null>(null);
   const [hover, setHover] = useState<Hover>(null);
   const onHoverRegion = useCallback((id: RegionId | null) => setHover(id ? { kind: 'region', id } : null), []);
   const onHoverCard = useCallback((id: string | null) => setHover(id ? { kind: 'card', id } : null), []);
@@ -62,8 +62,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       const act = armyActs.find((a) => a.from === selected && a.to === id);
       if (act) {
         setSelected(null);
-        // A move opens the split picker (move whole army or a portion); an attack is immediate.
-        if (act.kind === 'moveArmy') setMoveDraft({ from: act.from, to: act.to });
+        // Both moves and attacks open the picker (whole army, or split off a portion /
+        // rearguard); only the kind differs.
+        if (act.kind === 'moveArmy') setMoveDraft({ from: act.from, to: act.to, kind: 'moveArmy' });
+        else if (act.kind === 'attack') setMoveDraft({ from: act.from, to: act.to, kind: 'attack' });
         else void submit(act);
       }
     } else if (sources.has(id)) {
@@ -114,7 +116,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       </div>
       <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
       {moveDraft && (
-        <MovePicker from={moveDraft.from} to={moveDraft.to} kind="moveArmy" view={g.view}
+        <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view}
           onConfirm={(a) => { setMoveDraft(null); void submit(a); }} onCancel={() => setMoveDraft(null)} />
       )}
       <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn} />

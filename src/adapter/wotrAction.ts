@@ -41,7 +41,9 @@ export type WotrAction =
   | { kind: 'moveArmy'; from: RegionId; to: RegionId; move?: MoveSel }
   // The optional SECOND army move of one Army die (a different army), or decline it.
   | { kind: 'armyMove2'; from?: RegionId; to?: RegionId; move?: MoveSel; done?: boolean }
-  | { kind: 'attack'; from: RegionId; to: RegionId }      // Army die
+  // Army die. `rearguard` (optional) is the split: figures left OUT of the battle
+  // (rulebook p.28). Not-At-War units are forced into the rearguard automatically.
+  | { kind: 'attack'; from: RegionId; to: RegionId; rearguard?: MoveSel }
   | { kind: 'skipDie'; face: DieFace } // discard a die, no effect
   | { kind: 'pass' }             // yield to opponent, no die spent
   // Interactive combat sub-machine (resolving a PendingChoice).
