@@ -240,6 +240,12 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       if (hasArmy) {
         for (const [from, to] of moveTargets(state, actor)) acts.push({ kind: 'moveArmy', from, to });
         for (const [from, to] of attackTargets(state, actor)) acts.push({ kind: 'attack', from, to });
+      } else if (faces.has('character')) {
+        // Character die: move (not attack) one army containing a Leader/Nazgûl/Character.
+        for (const [from, to] of moveTargets(state, actor)) {
+          const r = state.regions[from]!;
+          if (r.leaders > 0 || r.nazgul > 0 || r.characters.length > 0) acts.push({ kind: 'moveArmy', from, to });
+        }
       }
       // Companion political abilities: any Action die advances their Nation.
       if (actor === 'fp' && state.dice.fp.length > 0) acts.push(...companionMusterOptions(state));
@@ -448,7 +454,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
       if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
-      if (!recruit(state, action.nation, action.region, action.regular, action.elite)) throw new Error('Illegal recruit');
+      if (!recruit(state, action.nation, action.region, action.regular, action.elite, { leader: action.leader ?? 0 })) throw new Error('Illegal recruit');
       passResolutionTurn(state, actor); break;
     case 'bringMinion':
       requirePhase(state, 'actionResolution');
@@ -456,11 +462,16 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
       if (!bringMinion(state, action.minion, action.region)) throw new Error('Cannot bring that Minion');
       passResolutionTurn(state, actor); break;
-    case 'moveArmy':
+    case 'moveArmy': {
       requirePhase(state, 'actionResolution');
-      if (!consumeArmyDie(state, actor)) throw new Error('No Army die');
+      // An Army die moves any army; a Character die may move ONE army that
+      // contains a Leader/Nazgûl/Character (rules-spec §6).
+      const src = state.regions[action.from]!;
+      const leaderArmy = src.leaders > 0 || src.nazgul > 0 || src.characters.length > 0;
+      if (!consumeArmyDie(state, actor) && !(leaderArmy && consumeDie(state, actor, 'character'))) throw new Error('No Army die');
       if (!moveArmy(state, action.from, action.to, actor)) throw new Error('Illegal move');
       passResolutionTurn(state, actor); break;
+    }
     case 'attack':
       requirePhase(state, 'actionResolution');
       if (armySide(state, action.from) !== actor) throw new Error('No attacking army');
@@ -564,22 +575,30 @@ function upgradeOptions(state: GameState): WotrAction[] {
   return out;
 }
 
-/** Representative recruit options: one Regular into a friendly free At-War
- *  Settlement per eligible nation (capped). */
+/** Recruit options for a Muster die: per eligible nation, the legal single-
+ *  settlement bundles a Muster die buys — 1 Regular, 1 Elite, 1 Regular + 1 Leader,
+ *  2 Leaders (rules-spec §6). The two-settlement "2 Regulars" split is not modelled
+ *  (a 1-Regular partial stands in for it; deviation E1). Capped to keep the action
+ *  space tractable. */
 function recruitTargets(state: GameState, side: Side): WotrAction[] {
   const out: WotrAction[] = [];
   for (const nation of Object.keys(state.nations) as Nation[]) {
-    if (out.length >= 6) break;
+    if (out.length >= 16) break;
     if (sideOfNation(nation) !== side || !isAtWar(state, nation)) continue;
-    const pool = state.reinforcements[nation];
-    if (pool.regular <= 0) continue;
+    const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
+    const lead = pool.leader ?? 0;
     for (const id of Object.keys(state.regions)) {
       const def = REGIONS[id]!;
       if (def.nation !== nation || !def.settlement) continue;
       if (settlementController(state, id) !== side) continue;
       if (armySide(state, id) === opp(side)) continue;
-      if (unitCount(state, id) >= STACKING_LIMIT) continue;
-      out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0 });
+      const room = STACKING_LIMIT - unitCount(state, id);
+      if (room <= 0) continue;
+      const hasUnit = unitCount(state, id) > 0;
+      if (pool.regular >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0 });
+      if (pool.elite >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 1 });
+      if (pool.regular >= 1 && lead >= 1 && room >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, leader: 1 });
+      if (lead >= 2 && hasUnit) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 0, leader: 2 });
       break; // one settlement per nation in the representative set
     }
   }

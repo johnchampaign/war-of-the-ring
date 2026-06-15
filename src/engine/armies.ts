@@ -61,22 +61,27 @@ export function freeForMovement(state: GameState, id: RegionId, side: Side): boo
 /** Recruit reinforcements into a free, friendly, At-War Settlement (Muster die,
  *  simplified). Places `regular`/`elite` of `nation`; returns false if illegal. */
 export function recruit(state: GameState, nation: Nation, id: RegionId, regular: number, elite: number,
-  opts: { ignoreAtWar?: boolean } = {}): boolean {
+  opts: { ignoreAtWar?: boolean; leader?: number } = {}): boolean {
   const def = REGIONS[id]!;
   if (!def.settlement || def.nation !== nation) return false;
   if (!opts.ignoreAtWar && !isAtWar(state, nation)) return false; // Event cards may recruit before At War (rules-spec §6)
   const side = sideOfNation(nation);
   if (settlementController(state, id) !== side) return false; // not friendly/free
   if (armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) return false;
-  const pool = state.reinforcements[nation];
-  if (regular > pool.regular || elite > pool.elite) return false;
+  const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
+  const leader = opts.leader ?? 0;
+  if (regular > pool.regular || elite > pool.elite || leader > (pool.leader ?? 0)) return false;
   if (unitCount(state, id) + regular + elite > STACKING_LIMIT) return false;
+  // A Leader can't be recruited into a region without an Army unit of its Faction
+  // (existing units, or the units this same recruit places).
+  if (leader > 0 && unitCount(state, id) + regular + elite === 0) return false;
   pool.regular -= regular; pool.elite -= elite;
   const r = state.regions[id]!;
   const u: ArmyUnits = r.units[nation] ?? { regular: 0, elite: 0 };
   u.regular += regular; u.elite += elite;
   r.units[nation] = u;
-  log(state, null, 'muster', `Recruited ${regular}R/${elite}E ${nation} in ${id}`);
+  if (leader > 0) { pool.leader = (pool.leader ?? 0) - leader; r.leaders += leader; }
+  log(state, null, 'muster', `Recruited ${regular}R/${elite}E${leader ? `/${leader}L` : ''} ${nation} in ${id}`);
   return true;
 }
 

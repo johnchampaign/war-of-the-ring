@@ -21,7 +21,7 @@ export type WotrAction =
   | { kind: 'drawEvent'; deck: Deck } // Event die
   | { kind: 'playEvent'; cardId: string } // Event die: play a card from hand
   | { kind: 'diplomaticAction'; nation: Nation } // Muster die: advance political track
-  | { kind: 'recruitUnit'; nation: Nation; region: RegionId; regular: number; elite: number } // Muster die
+  | { kind: 'recruitUnit'; nation: Nation; region: RegionId; regular: number; elite: number; leader?: number } // Muster die: one bundle (2R / 2L / 1R+1L / 1E)
   | { kind: 'bringMinion'; minion: 'witch-king' | 'saruman' | 'mouth-of-sauron'; region: RegionId } // Muster die (Shadow)
   | { kind: 'moveArmy'; from: RegionId; to: RegionId }   // Army die
   | { kind: 'attack'; from: RegionId; to: RegionId }      // Army die
