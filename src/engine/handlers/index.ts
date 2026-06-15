@@ -160,13 +160,9 @@ register('fp-str-19', { canPlay: (s) => recruitable(s, 'fp', 'dale'), apply: (s)
 register('fp-str-22', { canPlay: (s) => recruitable(s, 'fp', 'erebor'), apply: (s) => placeForce(s, 'dwarves', 'erebor', { regular: 1, leader: 1 }) }); // Dáin Ironfoot's Guard
 register('fp-str-24', { canPlay: (s) => recruitable(s, 'fp', 'woodland-realm'), apply: (s) => { placeForce(s, 'elves', 'woodland-realm', { regular: 1 }); drawCard(s, 'fp', 'strategy'); } }); // Thranduil's Archers
 
-// Interactive FP recruit cards (player picks the region) — still generic stubs here,
-// replaced with region-accurate targets in the next batch.
-const fpRecruits: Array<[string, Nation]> = [
-  ['fp-str-13', 'elves'],   // Círdan's Ships
-  ['fp-str-16', 'rohan'],   // Riders of Théoden
-  ['fp-str-23', 'rohan'],   // Éomer, Son of Éomund
-];
+// (Interactive FP recruit cards — Círdan / Riders / Éomer — are registered below with
+// region-accurate targets.)
+const fpRecruits: Array<[string, Nation]> = [];
 
 // "Book of Mazarbul" — rouse the Dwarves directly to At War.
 register('fp-str-04', {
@@ -225,20 +221,79 @@ register('sh-str-22', { // Monsters Roused: 1 Sauron Regular each in Angmar/Ette
   apply: (s) => { for (const r of ['angmar', 'ettenmoors', 'weather-hills']) placeForce(s, 'sauron', r, { regular: 1 }); placeForce(s, 'sauron', 'trollshaws', { elite: 1 }); },
 });
 
-// Interactive Shadow recruit cards (player picks the region) — generic stubs here,
-// replaced with region-accurate targets in the next batch.
-const shRecruits: Array<[string, Nation]> = [
-  ['sh-str-11', 'isengard'],   // Rage of the Dunlendings
-  ['sh-str-13', 'isengard'],   // Half-orcs and Goblin-men
-  ['sh-str-14', 'sauron'],     // Olog-hai
-  ['sh-str-19', 'sauron'],     // Shadows on the Misty Mountains
-  ['sh-str-17', 'southrons'],  // Many Kings to the Service of Mordor
-];
+// (Interactive Shadow recruit cards are registered below with region-accurate targets.)
+const shRecruits: Array<[string, Nation]> = [];
 for (const [id, nation] of shRecruits) {
   register(id, {
     canPlay: (state) => canEventRecruit(state, nation),
     apply(state, side) { eventRecruit(state, side, nation, 1, 0); },
   });
+}
+
+// --- Interactive recruit cards: the player picks the legal region(s) -----------
+const COASTAL = ['ered-luin', 'north-ered-luin', 'south-ered-luin', 'forlindon', 'harlindon', 'grey-havens', 'tower-hills', 'andrast', 'anfalas', 'dol-amroth', 'lossarnach', 'pelargir'];
+const regionsWithShadowArmy = (s: GameState): EventTarget[] =>
+  Object.keys(s.regions).filter((id) => armySide(s, id) === 'shadow' && unitCount(s, id) > 0 && recruitable(s, 'shadow', id)).map((region) => ({ region }));
+const ROHAN_REGIONS = Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'rohan');
+
+register('fp-str-13', { // Círdan's Ships: 2 Elven in a coastal region with an FP Army
+  canPlay: (s) => s.reinforcements.elves.regular + s.reinforcements.elves.elite > 0 && COASTAL.some((r) => armySide(s, r) === 'fp'),
+  targets: (s) => COASTAL.filter((r) => armySide(s, r) === 'fp').map((region) => ({ region })),
+  applyTarget: (s, _side, t) => placeForce(s, 'elves', t.region!, { regular: 2 }),
+});
+register('fp-str-16', { // Riders of Théoden: 1 Rohan + Leader in Edoras or a Rohan region with a Companion
+  canPlay: (s) => recruitable(s, 'fp', 'edoras') || ROHAN_REGIONS.some((r) => s.regions[r]!.characters.some((c) => COMPANION_SET.has(c))),
+  targets: (s) => {
+    const set = new Set<string>();
+    if (recruitable(s, 'fp', 'edoras')) set.add('edoras');
+    for (const r of ROHAN_REGIONS) if (s.regions[r]!.characters.some((c) => COMPANION_SET.has(c)) && recruitable(s, 'fp', r)) set.add(r);
+    return [...set].map((region) => ({ region }));
+  },
+  applyTarget: (s, _side, t) => placeForce(s, 'rohan', t.region!, { regular: 1, leader: 1 }),
+});
+register('fp-str-23', { // Éomer: 1 Rohan + Leader in a free Rohan region with a Settlement
+  canPlay: (s) => ROHAN_REGIONS.some((r) => REGIONS[r]!.settlement && recruitable(s, 'fp', r)),
+  targets: (s) => ROHAN_REGIONS.filter((r) => REGIONS[r]!.settlement && recruitable(s, 'fp', r)).map((region) => ({ region })),
+  applyTarget: (s, _side, t) => placeForce(s, 'rohan', t.region!, { regular: 1, leader: 1 }),
+});
+register('sh-str-13', { // Half-orcs and Goblin-men: 1 Isengard in a region with a Shadow Army
+  canPlay: (s) => s.reinforcements.isengard.regular + s.reinforcements.isengard.elite > 0 && regionsWithShadowArmy(s).length > 0,
+  targets: regionsWithShadowArmy,
+  applyTarget: (s, _side, t) => placeForce(s, 'isengard', t.region!, { regular: 1 }),
+});
+register('sh-str-14', { // Olog-hai: 1 Sauron in a region with a Shadow Army
+  canPlay: (s) => s.reinforcements.sauron.regular + s.reinforcements.sauron.elite > 0 && regionsWithShadowArmy(s).length > 0,
+  targets: regionsWithShadowArmy,
+  applyTarget: (s, _side, t) => placeForce(s, 'sauron', t.region!, { regular: 1 }),
+});
+register('sh-str-11', { // Rage of the Dunlendings: 2 Isengard Regulars in a free region adjacent to a Dunland
+  canPlay: (s) => s.reinforcements.isengard.regular > 0 && rageTargets(s).length > 0,
+  targets: rageTargets,
+  // (The card's optional "move up to 4 Isengard from Dunland to this region" is not
+  // modelled — logged as a minor deviation.)
+  applyTarget: (s, _side, t) => placeForce(s, 'isengard', t.region!, { regular: 2 }),
+});
+register('sh-str-19', { // Shadows on the Misty Mountains: 2 Sauron + 1 Nazgûl in Mount Gram or Moria
+  canPlay: (s) => ['mount-gram', 'moria'].some((r) => recruitable(s, 'shadow', r)) && (s.reinforcements.sauron.regular > 0 || (s.reinforcements.sauron.nazgul ?? 0) > 0),
+  targets: (s) => ['mount-gram', 'moria'].filter((r) => recruitable(s, 'shadow', r)).map((region) => ({ region })),
+  applyTarget: (s, _side, t) => {
+    placeForce(s, 'sauron', t.region!, { regular: 2 });
+    const k = Math.min(1, s.reinforcements.sauron.nazgul ?? 0);
+    if (k > 0) { s.regions[t.region!]!.nazgul += k; s.reinforcements.sauron.nazgul = (s.reinforcements.sauron.nazgul ?? 0) - k; }
+  },
+});
+register('sh-str-17', { // Many Kings: 2 S&E Regulars in each of three different S&E Settlements
+  repeat: 3,
+  canPlay: (s) => s.reinforcements.southrons.regular > 0 && seSettlements(s).length > 0,
+  targets: (s, _side, applied = []) => { const used = new Set(applied.map((a) => a.region)); return seSettlements(s).filter((r) => !used.has(r)).map((region) => ({ region })); },
+  applyTarget: (s, _side, t) => placeForce(s, 'southrons', t.region!, { regular: 2 }),
+});
+function rageTargets(s: GameState): EventTarget[] {
+  const adj = new Set([...REGIONS['north-dunland']!.adjacency, ...REGIONS['south-dunland']!.adjacency]);
+  return [...adj].filter((r) => recruitable(s, 'shadow', r)).map((region) => ({ region }));
+}
+function seSettlements(s: GameState): string[] {
+  return Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'southrons' && REGIONS[id]!.settlement && recruitable(s, 'shadow', id));
 }
 
 // --- Interactive movement cards (the player picks a target after playing) -----
