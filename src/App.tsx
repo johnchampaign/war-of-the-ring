@@ -10,7 +10,7 @@ import { LoadArtPanel } from './play/LoadArtPanel';
 
 type Mode =
   | { kind: 'lobby' }
-  | { kind: 'local'; seed: number; scenario?: 'combat' }
+  | { kind: 'local'; seed: number; scenario?: 'combat'; aiSide?: 'fp' | 'shadow' }
   | { kind: 'online'; gameId: string; token: string };
 
 export function App() {
@@ -25,16 +25,17 @@ export function App() {
         : { kind: 'lobby' });
 
   const client = useMemo(() => {
-    if (mode.kind === 'local') return makeLocalClient(mode.seed, mode.scenario);
+    if (mode.kind === 'local') return makeLocalClient(mode.seed, { scenario: mode.scenario, aiSide: mode.aiSide });
     if (mode.kind === 'online') return makeGameClient(mode.gameId, mode.token);
     return null;
   }, [mode]);
 
   if (client) return <PlayPage client={client} onExit={mode.kind === 'local' ? () => setMode({ kind: 'lobby' }) : undefined} />;
-  return <Lobby onHotseat={() => setMode({ kind: 'local', seed: Math.floor(Math.random() * 1e9) })} />;
+  const startLocal = (aiSide?: 'fp' | 'shadow') => setMode({ kind: 'local', seed: Math.floor(Math.random() * 1e9), aiSide });
+  return <Lobby onStart={startLocal} />;
 }
 
-function Lobby({ onHotseat }: { onHotseat: () => void }) {
+function Lobby({ onStart }: { onStart: (aiSide?: 'fp' | 'shadow') => void }) {
   const [invites, setInvites] = useState<Record<'fp' | 'shadow', string> | null>(null);
   const [creating, setCreating] = useState(false);
   const createOnline = async () => {
@@ -48,7 +49,11 @@ function Lobby({ onHotseat }: { onHotseat: () => void }) {
       <div style={{ textAlign: 'center', maxWidth: 460 }}>
         <h1 style={{ fontVariant: 'small-caps', letterSpacing: 1 }}>War of the Ring</h1>
         <p style={{ color: '#a99' }}>Unofficial digital port · 2-player (Free Peoples vs Shadow)</p>
-        <button onClick={onHotseat} style={primary}>New hotseat game</button>
+        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Play vs the AI:</div>
+        <button onClick={() => onStart('shadow')} style={{ ...primary, background: '#2f4f9e' }}>Play Free Peoples (vs AI Shadow)</button>
+        <button onClick={() => onStart('fp')} style={{ ...primary, background: '#a83232' }}>Play Shadow (vs AI Free Peoples)</button>
+        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Two players, one screen:</div>
+        <button onClick={() => onStart()} style={secondary}>New hotseat game (2 humans)</button>
         <button onClick={createOnline} disabled={creating} style={secondary}>{creating ? 'Creating…' : 'New online game'}</button>
         {invites && (
           <div style={{ marginTop: 18, textAlign: 'left', background: '#1a160f', padding: 14, borderRadius: 8 }}>
