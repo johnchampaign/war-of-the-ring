@@ -9,7 +9,7 @@ import eventCards from '../../assets/event-cards.json';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
 
-export function HandStrip({ view, you }: { view: GameState; you: Side }) {
+export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Side; onHoverCard?: (id: string | null) => void }) {
   const hand = view.cards?.[you]?.hand ?? [];
   const [zoom, setZoom] = useState<string | null>(null);
   if (hand.length === 0) return null;
@@ -17,21 +17,22 @@ export function HandStrip({ view, you }: { view: GameState; you: Side }) {
     <>
       <div style={wrap}>
         <span style={{ fontSize: 11, color: '#998', alignSelf: 'center', marginRight: 4 }}>Hand ({hand.length}):</span>
-        {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => id !== 'hidden' && setZoom(id)} />)}
+        {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => id !== 'hidden' && setZoom(id)} onHover={onHoverCard} />)}
       </div>
       {zoom && <CardZoom id={zoom} onClose={() => setZoom(null)} />}
     </>
   );
 }
 
-function HandCard({ id, onZoom }: { id: string; onZoom: () => void }) {
+function HandCard({ id, onZoom, onHover }: { id: string; onZoom: () => void; onHover?: (id: string | null) => void }) {
   const art = useCardArt(id === 'hidden' ? null : id);
   const def = CARD.get(id);
-  if (art) return <img src={art} alt={def?.name ?? id} title={`${def?.name ?? id} — click to enlarge`} style={img} onClick={onZoom} />;
+  const hov = { onMouseEnter: () => onHover?.(id), onMouseLeave: () => onHover?.(null) };
+  if (art) return <img src={art} alt={def?.name ?? id} title={`${def?.name ?? id} — click to enlarge`} style={img} onClick={onZoom} {...hov} />;
   // Text-card placeholder.
   const side = def?.side === 'Shadow' ? '#5a2222' : '#1f3a5a';
   return (
-    <div style={{ ...textCard, background: side, cursor: 'pointer' }} onClick={onZoom} title={def?.eventText ?? ''}>
+    <div style={{ ...textCard, background: side, cursor: 'pointer' }} onClick={onZoom} title={def?.eventText ?? ''} {...hov}>
       <div style={{ fontSize: 9, color: '#ccb', textTransform: 'uppercase' }}>{def?.deck ?? '?'} · {def?.initiative ?? '–'}</div>
       <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.15 }}>{def?.name ?? id}</div>
     </div>

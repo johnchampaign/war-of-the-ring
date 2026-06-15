@@ -4,7 +4,7 @@
 // miniatures), so armies render as informative tokens — side colour, regular vs
 // elite split, leader/Nazgûl pip. Without the downloaded map it falls back to
 // nation-coloured polygons; fully playable either way.
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
 import { useBoardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage } from '../data/geometry';
@@ -46,8 +46,8 @@ export interface BoardHighlights {
   destinations?: Set<RegionId>;  // valid targets for the chosen source (yellow)
 }
 
-export function Board({ view, onPickRegion, highlights }: {
-  view: GameState; onPickRegion?: (id: RegionId) => void; highlights?: BoardHighlights;
+export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, highlights }: {
+  view: GameState; onPickRegion?: (id: RegionId) => void; onHoverRegion?: (id: RegionId | null) => void; highlights?: BoardHighlights;
 }) {
   const W = mapImage.width, H = mapImage.height;
   const hl = highlights ?? {};
@@ -73,7 +73,9 @@ export function Board({ view, onPickRegion, highlights }: {
           so the map shows through; strokes/highlights stay for click targeting. */}
       {boardArt && <image href={boardArt} x={0} y={0} width={W} height={H} preserveAspectRatio="none" />}
       {regionEls.map((e) => e && (
-        <g key={e.id} onClick={() => onPickRegion?.(e.id)} style={{ cursor: onPickRegion ? 'pointer' : 'default' }}>
+        <g key={e.id} onClick={() => onPickRegion?.(e.id)}
+          onMouseEnter={() => onHoverRegion?.(e.id)} onMouseLeave={() => onHoverRegion?.(null)}
+          style={{ cursor: onPickRegion ? 'pointer' : 'default' }}>
           <title>{rName(e.id)}{e.def?.settlement ? ` — ${e.def.settlement}` : ''}</title>
           <path d={polyPath(e.poly)} fill={e.fill}
             fillOpacity={boardArt ? (hl.selected === e.id ? 0.3 : hl.destinations?.has(e.id) || hl.sources?.has(e.id) ? 0.18 : 0) : (hl.selected === e.id ? 0.75 : 0.5)}
@@ -102,7 +104,7 @@ export function Board({ view, onPickRegion, highlights }: {
       <FellowshipMarker view={view} />
     </svg>
   );
-}
+});
 
 // An army marker: a two-tone pill — side colour for Regulars, gold for Elites —
 // plus a corner pip counting Leaders (FP) / Nazgûl (Shadow). Sized to stay legible

@@ -13,6 +13,7 @@ import { HandStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal } from './DecisionModal';
 import { ReportButton } from './ReportButton';
+import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction } from './actionText';
 
 const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ? 'Shadow' : s);
@@ -24,6 +25,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Realtime move push when available (online); polling fallback otherwise.
   const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
   const [selected, setSelected] = useState<RegionId | null>(null);
+  const [hover, setHover] = useState<Hover>(null);
+  const onHoverRegion = useCallback((id: RegionId | null) => setHover(id ? { kind: 'region', id } : null), []);
+  const onHoverCard = useCallback((id: string | null) => setHover(id ? { kind: 'card', id } : null), []);
 
   // Guard against a rapid double-click submitting a now-stale action (e.g. clicking
   // a combat decision twice before the re-render): drop submits while one is in flight.
@@ -50,7 +54,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     [armyActs, selected],
   );
 
-  const onRegionClick = (id: RegionId) => {
+  const onRegionClick = useCallback((id: RegionId) => {
     if (selected && destinations.has(id)) {
       const act = armyActs.find((a) => a.from === selected && a.to === id);
       if (act) { setSelected(null); void submit(act); }
@@ -59,7 +63,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     } else {
       setSelected(null);
     }
-  };
+  }, [selected, destinations, sources, armyActs, submit]);
+  // Stable highlight object so a memoized Board ignores hover-only re-renders.
+  const highlights = useMemo(() => ({ sources, selected, destinations }), [sources, selected, destinations]);
+  const pickRegion = g.yourTurn && !g.view?.pendingChoice ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
@@ -73,8 +80,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       {g.error && <div style={{ background: '#7a1f1f', color: '#fff', padding: 6, fontFamily: 'system-ui', fontSize: 13 }}>⚠ {g.error.message}</div>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
-          <Board view={g.view} onPickRegion={g.yourTurn && !g.view.pendingChoice ? onRegionClick : undefined}
-            highlights={{ sources, selected, destinations }} />
+          <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
           {sources.size > 0 && (
             <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px' }}>
               {selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
@@ -86,6 +92,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <PoliticsPanel view={g.view} />
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             <ActionPanel actions={panelActions} onAction={submit} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
+            <HoverPreview hover={hover} view={g.view} />
           </div>
           {chatClient && g.you && (
             <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
@@ -93,7 +100,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           )}
         </div>
       </div>
-      <HandStrip view={g.view} you={g.you as Side} />
+      <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
       <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn} />
       <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
       {onExit &&<button onClick={onExit} style={{ position: 'fixed', top: 6, right: 8, padding: '3px 8px', fontSize: 12 }}>← Lobby</button>}
