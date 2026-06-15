@@ -33,6 +33,9 @@ function eliminateNazgul(state: GameState, region: string, n: number): void {
   const r = state.regions[region]!; const k = Math.min(n, r.nazgul);
   r.nazgul -= k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + k;
 }
+// The five Sauron Strongholds (for Nazgûl relocation effects).
+const SAURON_STRONGHOLDS = Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'sauron' && REGIONS[id]!.settlement === 'Stronghold');
+const MINIONS = ['witch-king', 'saruman', 'mouth-of-sauron'];
 const allAtWar = (state: GameState, nations: Nation[]): boolean => nations.every((n) => state.nations[n].step === 0);
 const isFpNation = (n: string): boolean => (FP_NATIONS as string[]).includes(n);
 /** The region holding character `id` (separated/in play), or null. */
@@ -138,7 +141,16 @@ register('fp-char-09', { // Athelas
     heal(state, healed); log(state, null, 'event', `Athelas heals ${healed}`);
   },
 });
-register('fp-char-10', { apply(state) { heal(state, 1); } }); // There Is Another Way
+// There Is Another Way: heal 1; if Gollum is the Guide, the Fellowship may also
+// hide. (Auto-hides when revealed — the safe use; the optional *move* alternative,
+// which triggers a Hunt, is a player gamble we don't auto-take. Deviation logged.)
+register('fp-char-10', { apply(state) {
+  heal(state, 1);
+  if (isGollumGuide(state) && !state.fellowship.hidden) {
+    state.fellowship.hidden = true;
+    log(state, null, 'fellowship', 'There Is Another Way: Fellowship hidden (Gollum)');
+  }
+} });
 register('fp-char-12', { apply(state) { heal(state, isGollumGuide(state) ? 2 : 1); } }); // Bilbo's Song
 
 // --- Free Peoples: political ---------------------------------------------
@@ -530,9 +542,19 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       && state.regions['fangorn']!.characters.some((c) => COMPANION_SET.has(c))
       && armySide(state, 'orthanc') === 'shadow',
     apply(state) {
+      // Snapshot Nazgûl + Minions before combat resolution: applyCasualties clears
+      // them when the Army is destroyed, but the card wants them eliminated with it.
+      const naz0 = state.regions['orthanc']!.nazgul;
+      const minionsHere = state.regions['orthanc']!.characters.filter((c) => MINIONS.includes(c));
       const hits = rollDice(state, 3, 4);
       if (hits > 0) applyCasualties(state, 'orthanc', 'shadow', hits, 'regularsFirst');
-      log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on Orthanc`);
+      let extra = '';
+      if (unitCount(state, 'orthanc') === 0) {
+        state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + naz0; // recycle
+        for (const m of minionsHere) { if (!state.characters.eliminated.includes(m)) state.characters.eliminated.push(m); extra += `, eliminated ${m}`; }
+      }
+      log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on Orthanc${extra}`);
+      // Deviation: the optional "play another Character Event free" rider is not modelled.
     },
   });
 }
@@ -555,7 +577,11 @@ register('fp-char-18', {
     const sh = pair[1];
     const kills = rollDice(state, state.regions[sh]!.nazgul, 5);
     eliminateNazgul(state, sh, kills);
-    log(state, null, 'event', `The Eagles are Coming!: eliminated ${kills} Nazgûl at ${sh}`);
+    // Surviving Nazgûl must move to any one unconquered Sauron Stronghold (card text).
+    const survivors = state.regions[sh]!.nazgul;
+    const dest = SAURON_STRONGHOLDS.find((r) => r !== sh && settlementController(state, r) === 'shadow');
+    if (survivors > 0 && dest) { state.regions[dest]!.nazgul += survivors; state.regions[sh]!.nazgul = 0; }
+    log(state, null, 'event', `The Eagles are Coming!: eliminated ${kills} Nazgûl at ${sh}${survivors > 0 && dest ? `; ${survivors} fled to ${dest}` : ''}`);
   },
 });
 // Dreadful Spells (Shadow): hit an FP Army adjacent to/with a Nazgûl force.
