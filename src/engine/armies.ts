@@ -145,6 +145,65 @@ export function canMoveArmy(state: GameState, from: RegionId, to: RegionId, side
 /** Move all of a region's Army (with its Leaders/Nazgûl/Characters) to an
  *  adjacent free region; captures an enemy Settlement entered with no defender.
  *  Simplified: moves the whole stack (no splitting yet). */
+/** A partial selection of an Army's figures, for a split move (rulebook p.27).
+ *  Omitted fields move nothing of that kind; an omitted `sel` entirely moves the
+ *  whole Army. */
+export interface MoveSelection {
+  units?: Partial<Record<Nation, { regular?: number; elite?: number }>>;
+  leaders?: number;
+  nazgul?: number;
+  characters?: string[];
+}
+
+/** Validate + apply a SPLIT move: only the selected figures move; the rest stay as
+ *  a separate Army (rulebook p.27). Enforces the same movement legality as
+ *  canMoveArmy plus the split rules: ≥1 unit moves, FP Leaders can't be left with no
+ *  combat units, and (Character-die moves) ≥1 Leader/Character must join the movers. */
+export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, side: Side, sel: MoveSelection, viaCharacterDie = false): boolean {
+  const src = state.regions[from]!, dst = state.regions[to]!;
+  if (!REGIONS[from]!.adjacency.includes(to)) return false;
+  if (armySide(state, from) !== side) return false;
+  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return false;
+  if (!freeForMovement(state, to, side)) return false;
+  // The selection must be available, and move at least one combat unit.
+  let movingUnits = 0;
+  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
+    const have = src.units[n] ?? { regular: 0, elite: 0 };
+    const mr = u.regular ?? 0, me = u.elite ?? 0;
+    if (mr < 0 || me < 0 || mr > have.regular || me > have.elite) return false;
+    movingUnits += mr + me;
+  }
+  if (movingUnits < 1) return false;
+  const movingLeaders = sel.leaders ?? 0, movingNazgul = sel.nazgul ?? 0, chars = sel.characters ?? [];
+  if (movingLeaders < 0 || movingLeaders > src.leaders || movingNazgul < 0 || movingNazgul > src.nazgul) return false;
+  for (const c of chars) if (!src.characters.includes(c)) return false;
+  // Only the moving Nations matter for the not-At-War border rule.
+  const dn = REGIONS[to]!.nation;
+  for (const n of Object.keys(sel.units ?? {}) as Nation[]) if (!isAtWar(state, n) && dn && dn !== n) return false;
+  const cap = dst.besieged ? SIEGE_LIMIT : STACKING_LIMIT;
+  if (unitCount(state, to) + movingUnits > cap) return false;
+  // FP Leaders can never be in a region with no combat units: if the origin keeps
+  // Leaders it must keep ≥1 unit (so a full vacate forces all FP Leaders to follow).
+  const remainingUnits = unitCount(state, from) - movingUnits;
+  if (side === 'fp' && remainingUnits === 0 && src.leaders - movingLeaders > 0) return false;
+  // A Character-die move that splits must take ≥1 Leader/Character with the movers.
+  if (viaCharacterDie && movingLeaders === 0 && chars.length === 0) return false;
+  // Apply.
+  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
+    const have = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
+    const mr = u.regular ?? 0, me = u.elite ?? 0;
+    have.regular -= mr; have.elite -= me; d.regular += mr; d.elite += me; dst.units[n] = d;
+    if (have.regular === 0 && have.elite === 0) delete src.units[n];
+  }
+  src.leaders -= movingLeaders; dst.leaders += movingLeaders;
+  src.nazgul -= movingNazgul; dst.nazgul += movingNazgul;
+  for (const c of chars) { src.characters.splice(src.characters.indexOf(c), 1); dst.characters.push(c); }
+  captureIfEnemySettlement(state, to, side);
+  if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
+  log(state, null, 'army', `Split army ${from} -> ${to} (${movingUnits} unit${movingUnits > 1 ? 's' : ''})`);
+  return true;
+}
+
 export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: Side): boolean {
   if (!canMoveArmy(state, from, to, side)) return false;
   const src = state.regions[from]!, dst = state.regions[to]!;

@@ -10,7 +10,7 @@ import {
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import {
-  recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
+  recruit, moveArmy, moveArmySplit, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul,
 } from '../engine/armies';
 import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
@@ -511,7 +511,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (consumeArmyDie(state, actor)) viaArmyDie = true;
       else if (leaderArmy && consumeDie(state, actor, 'character')) viaArmyDie = false;
       else throw new Error('No Army die');
-      if (!moveArmy(state, action.from, action.to, actor)) throw new Error('Illegal move');
+      const moved = action.move
+        ? moveArmySplit(state, action.from, action.to, actor, action.move, !viaArmyDie)
+        : moveArmy(state, action.from, action.to, actor);
+      if (!moved) throw new Error('Illegal move');
       // An Army die may move a SECOND different army (rulebook p.27); a Character die moves only one.
       if (viaArmyDie) state.pendingChoice = { owner: actor, kind: 'armyMove2', data: { src: action.from, dest: action.to } };
       else passResolutionTurn(state, actor);
@@ -524,7 +527,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!action.done) {
         // "Cannot move the same Army twice": the second move must be a different army.
         if (action.from === data.dest || action.from === data.src) throw new Error('Cannot move the same army twice');
-        if (!moveArmy(state, action.from!, action.to!, actor)) throw new Error('Illegal second move');
+        const ok2 = action.move
+          ? moveArmySplit(state, action.from!, action.to!, actor, action.move, false)
+          : moveArmy(state, action.from!, action.to!, actor);
+        if (!ok2) throw new Error('Illegal second move');
       }
       passResolutionTurn(state, actor);
       break;
