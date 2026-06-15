@@ -13,7 +13,7 @@
 import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
-import { REGIONS } from '../engine/data';
+import { REGIONS, levelOf } from '../engine/data';
 import { unitCount } from '../engine/armies';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 
@@ -160,6 +160,12 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     case 'huntDamage': {
       const damage = (state.pendingChoice!.data as { damage: number }).damage;
       const wouldCorrupt = state.fellowship.corruption + damage;
+      // Spend a cheap −1 reduction (discard an on-table card) once Corruption is
+      // climbing — it costs no Companion and lowers the hit before we absorb it.
+      if (wouldCorrupt >= 7) {
+        const reduceCard = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'reduceCard');
+        if (reduceCard) return reduceCard;
+      }
       // Trade a Companion (random, to keep the Guide) only when Corruption is
       // about to get dangerous; otherwise absorb.
       if (wouldCorrupt >= 8 && state.fellowship.companions.length > 0) {
@@ -178,6 +184,51 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const want = legal.find((a) => a.kind === 'combatRetreat' && a.retreat === losing);
       return want ?? legal[0]!;
     }
+    case 'siegeWithdraw': {
+      // Defender: withdraw into the Stronghold (deny the capture / VP, force a siege)
+      // unless we strongly outnumber the attacker and can win in the open.
+      const hold = !pc || unitCount(state, pc.to) < unitCount(state, pc.from) + 2;
+      return legal.find((a) => a.kind === 'siegeWithdraw' && a.withdraw === hold) ?? legal[0]!;
+    }
+    case 'lureChoice': {
+      // FP: absorb as Corruption unless that nears death — then sacrifice the Companion.
+      const level = (state.pendingChoice!.data as { level: number }).level;
+      const deadly = state.fellowship.corruption + level >= 10;
+      return legal.find((a) => a.kind === 'lureChoice' && a.mode === (deadly ? 'eliminate' : 'corruption')) ?? legal[0]!;
+    }
+    case 'huntPreventDraw': // FP Wizard's Staff: spend it to skip the draw when Corruption is dangerous
+      return legal.find((a) => a.kind === 'huntPreventDraw' && a.prevent === (state.fellowship.corruption >= 7)) ?? legal[0]!;
+    case 'huntRedraw': { // FP Mithril Coat: redraw a heavy tile
+      const tile = (state.pendingChoice!.data as { tile: { value: number | string } }).tile;
+      const heavy = typeof tile.value === 'number' ? tile.value >= 2 : true; // eye/die ⇒ redraw
+      return legal.find((a) => a.kind === 'huntRedraw' && a.redraw === heavy) ?? legal[0]!;
+    }
+    case 'bonusDraw': // Shadow Palantír: take a Strategy card (army-building)
+      return legal.find((a) => a.kind === 'bonusDraw' && a.deck === 'strategy') ?? legal[0]!;
+    case 'retreatTo': { // retreat toward a friendly Settlement if possible
+      const me: Side = state.pendingChoice!.owner;
+      const friendly = legal.find((a) => a.kind === 'retreatTo' && settlementCtrl(state, a.region) === me);
+      return friendly ?? legal[0]!;
+    }
+    case 'eventTarget': return chooseEventTarget(state, legal);
     default: return legal[0]!;
   }
+}
+
+/** Pick an interactive event-card target: prefer an attack/move toward the campaign
+ *  target; for a Companion separation keep the strong ones (separate the lowest Level). */
+function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
+  const ets = legal.filter((a) => a.kind === 'eventTarget') as Extract<WotrAction, { kind: 'eventTarget' }>[];
+  if (ets.length === 0) return legal[0]!;
+  const owner: Side = state.pendingChoice!.owner;
+  const target = campaignTarget(state, owner);
+  const score = (a: typeof ets[number]): number => {
+    if (a.done) return -1;                                            // stop multi-move only if nothing better
+    if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
+    if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;
+    if (a.to) return 30 - (target ? dist(a.to, target) : 0);          // move toward the target
+    if (a.region) return 20 - (target ? dist(a.region, target) : 0);
+    return 10;
+  };
+  return ets.reduce((best, a) => (score(a) > score(best) ? a : best), ets[0]!);
 }
