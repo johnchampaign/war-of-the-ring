@@ -176,7 +176,7 @@ die already showing an Eye.
   **Deviation:** declaring the Fellowship in a region does not activate that Nation in this
   engine, so Wormtongue's "declared in Edoras/Helm's Deep" exception is moot. Worn with
   Sorrow's "you may" is auto-applied (always to the Shadow's benefit).
-- **Handlers** (`handlers/index.ts`, ~95/96 implemented): each registered card
+- **Handlers** (`handlers/index.ts`, all 96/96 implemented): each registered card
   applies its effect; unimplemented cards aren't offered. **Interactive cards**
   (those whose effect needs a player-chosen target) use an `EventHandler.targets`/
   `applyTarget` pair: playing pauses with an `eventTarget` PendingChoice, the

@@ -134,7 +134,7 @@ export function applyCasualties(state: GameState, id: RegionId, side: Side, hits
 /** Begin a battle: political reactions, then set up the sub-machine. The driver
  *  (combatStep, run from advance) takes it from here. */
 export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId,
-  opts: { siegeRounds?: number; fpCardLock?: boolean } = {}): void {
+  opts: { siegeRounds?: number; fpCardLock?: boolean; defenderDicePenalty?: number } = {}): void {
   for (const n of nationsWithUnits(state, to)) onArmyAttacked(state, n, to);
   const dReg = REGIONS[to]!;
   const defender = other(attacker);
@@ -144,6 +144,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
     attacker, defender, from, to, round: 0,
     fortified: dReg.settlement === 'City' || dReg.settlement === 'Fortification' || dReg.settlement === 'Stronghold',
     step: 'attackerCard', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0,
+    defDicePenalty: opts.defenderDicePenalty,
   };
   if (opts.siegeRounds) {
     // Grond / The Fighting Uruk-hai force a multi-round assault on a besieged Stronghold.
@@ -250,7 +251,11 @@ export function combatStep(state: GameState): void {
         // battle, and EVERY round of a siege assault.
         const atkTarget = pc.fortified && (pc.siege || pc.round === 0) ? 6 : 5;
         const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods);
-        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, aMods);
+        // Help Unlooked For: cap the defender's dice (min 1) via the existing maxDiceEnemy mod.
+        const defEnemyMods = pc.defDicePenalty
+          ? { ...aMods, maxDiceEnemy: Math.max(1, Math.min(5, unitCount(state, pc.to)) - pc.defDicePenalty) }
+          : aMods;
+        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods);
         // Hit cancellation: Shield-wall, plus Heroic Death's sacrifice-a-Leader.
         const dCancel = (dMods.cancelHits ?? 0) + (dMods.sacrificeLeaderToCancelHit ?? 0);
         const aCancel = (aMods.cancelHits ?? 0) + (aMods.sacrificeLeaderToCancelHit ?? 0);

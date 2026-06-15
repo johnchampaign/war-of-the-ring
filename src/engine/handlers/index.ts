@@ -806,6 +806,32 @@ register('sh-str-21', {
   applyTarget(state, _side, t) { placeUnits(state, 'southrons', t.region!, 5, 0); log(state, null, 'event', `Hordes From the East muster in ${t.region}`); },
 });
 
+// Help Unlooked For: an FP Army relieves a besieged Stronghold — attack the Shadow
+// besieger; that Army rolls one die less per FP unit in the besieged Stronghold (min 1).
+function besiegedFpStrongholdNear(state: GameState, region: string): string | null {
+  for (const adj of REGIONS[region]!.adjacency)
+    if (REGIONS[adj]!.settlement === 'Stronghold' && state.regions[adj]!.besieged && settlementController(state, adj) === 'fp') return adj;
+  return null;
+}
+function helpUnlookedForTargets(state: GameState): EventTarget[] {
+  const out: EventTarget[] = [];
+  for (const to of Object.keys(state.regions)) {
+    if (armySide(state, to) !== 'shadow' || !besiegedFpStrongholdNear(state, to)) continue;
+    for (const from of REGIONS[to]!.adjacency) if (armySide(state, from) === 'fp') out.push({ from, to, mode: 'attack' });
+  }
+  return out;
+}
+register('fp-str-10', {
+  canPlay: (state) => helpUnlookedForTargets(state).length > 0,
+  targets: helpUnlookedForTargets,
+  applyTarget(state, _side, t) {
+    const sh = besiegedFpStrongholdNear(state, t.to!);
+    const garrison = sh ? unitCount(state, sh) : 0;
+    startBattle(state, 'fp', t.from!, t.to!, { defenderDicePenalty: garrison });
+    log(state, null, 'event', `Help Unlooked For: relief attack ${t.from} → ${t.to} (Shadow −${garrison} dice)`);
+  },
+});
+
 // The Spirit of Mordor: choose a Shadow Army of ≥2 Nations, roll 5 dice, hit on 5+.
 function multiNationShadowArmies(state: GameState): EventTarget[] {
   const out: EventTarget[] = [];

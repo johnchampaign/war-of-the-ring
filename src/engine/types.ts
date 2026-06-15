@@ -173,6 +173,8 @@ export interface PendingCombat {
   /** Grond / The Fighting Uruk-hai: the FP may not play a Combat card in the first
    *  siege round unless a Companion is in the besieged Stronghold. */
   fpCardLock?: boolean;
+  /** Help Unlooked For: the defender rolls this many fewer Combat dice (min 1 die). */
+  defDicePenalty?: number;
 }
 
 // --- The whole game state ------------------------------------------------
