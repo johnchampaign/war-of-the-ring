@@ -2,6 +2,7 @@
 // board region shows a zoomed crop of the map there (plus the region's name and
 // contents); mousing over a hand card shows the card enlarged. Read-only — it never
 // submits actions, just magnifies whatever the cursor is over.
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useCardArt, useBoardArt } from './artCache';
 import { regionPolygon, mapImage } from '../data/geometry';
 import mapData from '../../assets/map.json';
@@ -25,10 +26,40 @@ const polyPath = (poly: { x: number; y: number }[]) =>
 export function HoverPreview({ hover, view }: { hover: Hover; view: GameState }) {
   return (
     <div style={panel}>
-      {hover?.kind === 'region' ? <RegionPreview id={hover.id} view={view} />
-        : hover?.kind === 'card' ? <CardPreview id={hover.id} />
-          : hover?.kind === 'character' ? <CharacterPreview id={hover.id} />
-            : <div style={hint}>Hover the board, a card, or the Guide to inspect it here.</div>}
+      <FitBox dep={hover ? `${hover.kind}:${hover.id}` : 'none'}>
+        {hover?.kind === 'region' ? <RegionPreview id={hover.id} view={view} />
+          : hover?.kind === 'card' ? <CardPreview id={hover.id} />
+            : hover?.kind === 'character' ? <CharacterPreview id={hover.id} />
+              : <div style={hint}>Hover the board, a card, or the Guide to inspect it here.</div>}
+      </FitBox>
+    </div>
+  );
+}
+
+// Scales its content down (never up) so it always fits the panel's height — no
+// scrollbars to chase (moving to a scrollbar would drop the hover and clear this).
+function FitBox({ dep, children }: { dep: string; children: React.ReactNode }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  useLayoutEffect(() => {
+    const box = boxRef.current, content = contentRef.current;
+    if (!box || !content) return;
+    // scrollHeight is the natural (pre-transform) layout height, so the ratio is stable.
+    const fit = () => {
+      const avail = box.clientHeight, natural = content.scrollHeight;
+      setScale(natural > 0 && avail > 0 ? Math.min(1, avail / natural) : 1);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [dep]);
+  return (
+    <div ref={boxRef} style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div ref={contentRef} style={{ transformOrigin: 'top left', transform: scale < 1 ? `scale(${scale})` : undefined, width: '100%' }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -103,6 +134,6 @@ function CharacterPreview({ id }: { id: string }) {
   );
 }
 
-const panel: React.CSSProperties = { borderTop: '1px solid #2a2418', padding: 8, fontFamily: 'system-ui', color: '#e9e1cc', overflow: 'auto' };
+const panel: React.CSSProperties = { borderTop: '1px solid #2a2418', padding: 8, fontFamily: 'system-ui', color: '#e9e1cc', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' };
 const hint: React.CSSProperties = { color: '#776', fontSize: 12, fontStyle: 'italic', padding: '12px 4px' };
 const info: React.CSSProperties = { padding: '6px 2px', display: 'flex', flexDirection: 'column', gap: 2 };
