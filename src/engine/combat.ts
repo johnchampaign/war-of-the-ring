@@ -236,6 +236,12 @@ export function combatStep(state: GameState): void {
       state.pendingChoice = { owner: 'fp', kind: 'whiteRider' }; // FP is always a participant
       return;
     }
+    // Witch-king "Sorcerer": after the Shadow's round-1 Combat card, offer the draw.
+    if (pc.sorcererDeck && !pc.sorcererAsked) {
+      pc.sorcererAsked = true;
+      state.pendingChoice = { owner: 'shadow', kind: 'sorcererDraw', data: { deck: pc.sorcererDeck } };
+      return;
+    }
     switch (pc.step) {
       case 'attackerCard': {
         if (hasPlayableCombatCard(state, pc.attacker)) { state.pendingChoice = { owner: pc.attacker, kind: 'combatCard' }; return; }

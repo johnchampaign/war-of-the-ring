@@ -122,6 +122,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'bonusDraw', deck: 'character' }, { kind: 'bonusDraw', deck: 'strategy' }, { kind: 'bonusDraw', deck: 'none' }];
       case 'guideDraw':
         return [{ kind: 'guideDraw', draw: true }, { kind: 'guideDraw', draw: false }];
+      case 'sorcererDraw':
+        return [{ kind: 'sorcererDraw', draw: true }, { kind: 'sorcererDraw', draw: false }];
       case 'lureChoice':
         return [{ kind: 'lureChoice', mode: 'corruption' }, { kind: 'lureChoice', mode: 'eliminate' }];
       case 'huntDamage': {
@@ -349,6 +351,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (action.draw) drawOne(state, 'fp', (state.pendingChoice!.data as { deck: 'character' | 'strategy' }).deck);
       state.pendingChoice = null; break;
     }
+    case 'sorcererDraw': {
+      requireChoice(state, 'sorcererDraw', actor); // Witch-king Sorcerer draw (or decline) — combat resumes via advance()
+      if (action.draw) drawOne(state, 'shadow', (state.pendingChoice!.data as { deck: 'character' | 'strategy' }).deck);
+      state.pendingChoice = null; break;
+    }
     case 'diplomaticAction': {
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
@@ -402,12 +409,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'combatCard', actor);
       resolvePlayCombatCard(state, action.cardId);
       // Witch-king "Sorcerer": Shadow plays a Combat card in the first round with the
-      // Witch-king in the battle → draw an Event card from the matching deck.
+      // Witch-king in the battle → flag an optional matching-deck Event draw, which the
+      // combat driver pauses for (sorcererDraw choice) before the round resolves.
       const pc = state.pendingCombat;
-      if (actor === 'shadow' && action.cardId && pc && pc.round === 0) {
+      if (actor === 'shadow' && action.cardId && pc && pc.round === 0 && !pc.sorcererAsked) {
         const shR = pc.attacker === 'shadow' ? pc.from : pc.to;
         if (state.regions[shR]!.characters.includes('witch-king')) {
-          drawOne(state, 'shadow', EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy');
+          pc.sorcererDeck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
         }
       }
       break;

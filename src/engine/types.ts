@@ -179,6 +179,10 @@ export interface PendingCombat {
    *  Gandalf the White's Leadership to negate all Nazgûl Leadership this battle. */
   whiteRiderAsked?: boolean;
   whiteRiderForfeit?: boolean;
+  /** Witch-king "Sorcerer": a Shadow Combat card was played in round 1 with the WK in
+   *  the battle — pending the Shadow's optional matching-deck Event draw. */
+  sorcererDeck?: 'character' | 'strategy';
+  sorcererAsked?: boolean;
 }
 
 // --- The whole game state ------------------------------------------------

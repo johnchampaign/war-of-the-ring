@@ -207,6 +207,8 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'bonusDraw' && a.deck === 'strategy') ?? legal[0]!;
     case 'guideDraw': // Gandalf the Grey: take the free card
       return legal.find((a) => a.kind === 'guideDraw' && a.draw) ?? legal[0]!;
+    case 'sorcererDraw': // Witch-king: take the free card
+      return legal.find((a) => a.kind === 'sorcererDraw' && a.draw) ?? legal[0]!;
     case 'retreatTo': { // retreat toward a friendly Settlement if possible
       const me: Side = state.pendingChoice!.owner;
       const friendly = legal.find((a) => a.kind === 'retreatTo' && settlementCtrl(state, a.region) === me);

@@ -45,6 +45,8 @@ export type WotrAction =
   | { kind: 'bonusDraw'; deck: 'character' | 'strategy' | 'none' }
   // Gandalf the Grey Guide draw (FP): take the matching-deck card, or decline.
   | { kind: 'guideDraw'; draw: boolean }
+  // Witch-king Sorcerer draw (Shadow): take the matching-deck card after a combat card, or decline.
+  | { kind: 'sorcererDraw'; draw: boolean }
   // Lure of the Ring (FP responds): take Corruption equal to the Companion's Level, or eliminate him.
   | { kind: 'lureChoice'; mode: 'corruption' | 'eliminate' }
   // Hunt damage resolution (FP): absorb as Corruption, lose a Companion, or use a

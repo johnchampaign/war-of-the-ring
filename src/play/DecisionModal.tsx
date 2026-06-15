@@ -30,6 +30,7 @@ const CHOICE_TITLE: Record<string, string> = {
   balrog: 'Balrog of Moria — discard it to draw an extra Hunt tile?',
   bonusDraw: 'The Palantír of Orthanc — draw a card?',
   guideDraw: 'Gandalf the Grey — draw a card?',
+  sorcererDraw: 'The Witch-king’s Sorcery — draw a card?',
   lureChoice: 'Lure of the Ring — the Ring tempts a Companion',
 };
 
