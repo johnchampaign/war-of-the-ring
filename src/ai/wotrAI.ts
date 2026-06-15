@@ -99,7 +99,10 @@ function campaignTarget(state: GameState, actor: Side): RegionId | null {
 function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | null): number {
   const fs = state.fellowship;
   switch (a.kind) {
-    case 'moveFellowship': return fs.corruption >= 11 ? 8 : 65;       // push hard, ease off at the brink
+    case 'moveFellowship':
+      // On the Mordor Track, NOT moving costs +1 Corruption/turn — push every turn.
+      if (fs.mordor !== null) return fs.corruption >= 11 ? 40 : 95;
+      return fs.corruption >= 11 ? 8 : 65;                            // pre-Mordor: push, ease at the brink
     case 'hideFellowship': return 85;                                  // must hide to keep moving
     case 'separateCompanion': {                                        // rouse a passive nation
       const passiveFp = (['dwarves', 'gondor', 'north', 'rohan'] as Nation[]).some((n) => state.nations[n].step > 0 && !state.nations[n].active);
