@@ -229,6 +229,12 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
           if (canPlayCard(state, cardId, actor)) acts.push({ kind: 'playEvent', cardId });
         }
       }
+      // The Ents Awake: FP may play one Character Event without an Action die.
+      if (actor === 'fp' && state.flags.fpFreeCharEventThisTurn && !(faces.has('event') || hasWill)) {
+        for (const cardId of state.cards.fp.hand) {
+          if (EVENT_BY_ID[cardId]?.deck === 'Character' && canPlayCard(state, cardId, 'fp')) acts.push({ kind: 'playEvent', cardId });
+        }
+      }
       const hasMuster = faces.has('muster') || faces.has('armyMuster') || hasWill;
       const hasArmy = faces.has('army') || faces.has('armyMuster') || hasWill
         || (actor === 'shadow' && faces.has('muster') && mouthMessengerAvailable(state)); // Mouth's Messenger
@@ -345,7 +351,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (idx < 0) throw new Error('Card not in hand');
       const h = getHandler(action.cardId);
       if (!h || !canPlayCard(state, action.cardId, actor)) throw new Error('Card not playable');
-      if (!consumeOneOf(state, actor, ['event', 'will'])) throw new Error('No Event die');
+      // The Ents Awake free play: an FP Character Event costs no die (consumes the flag).
+      const freePlay = actor === 'fp' && state.flags.fpFreeCharEventThisTurn && EVENT_BY_ID[action.cardId]!.deck === 'Character';
+      if (freePlay) state.flags.fpFreeCharEventThisTurn = false;
+      else if (!consumeOneOf(state, actor, ['event', 'will'])) throw new Error('No Event die');
       // Palantír of Orthanc grants a bonus draw — captured BEFORE this play so the
       // card doesn't trigger off its own play.
       const palantirWasActive = actor === 'shadow' && palantirActive(state);

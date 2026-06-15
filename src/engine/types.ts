@@ -218,6 +218,8 @@ export interface GameState {
     huntMin1ThisTurn: boolean;
     /** Mouth of Sauron "Messenger": a Muster die already used as an Army die this turn. */
     mouthMusterUsedThisTurn?: boolean;
+    /** The Ents Awake: FP may play one Character Event card without an Action die. */
+    fpFreeCharEventThisTurn?: boolean;
   };
   pendingChoice: PendingChoice | null;
   /** An interactive battle in progress, or null. */

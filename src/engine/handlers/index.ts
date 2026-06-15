@@ -278,12 +278,29 @@ register('sh-str-14', { // Olog-hai: 1 Sauron in a region with a Shadow Army
   targets: regionsWithShadowArmy,
   applyTarget: (s, _side, t) => placeForce(s, 'sauron', t.region!, { regular: 1 }),
 });
-register('sh-str-11', { // Rage of the Dunlendings: 2 Isengard Regulars in a free region adjacent to a Dunland
+// Rage of the Dunlendings: recruit 2 Isengard Regulars in a free region adjacent to a
+// Dunland, then OPTIONALLY move up to 4 Isengard units there from N/S Dunland (RAW).
+const RAGE_SOURCES = ['north-dunland', 'south-dunland'];
+const rageHasIsengard = (s: GameState, d: string): boolean => ((s.regions[d]?.units.isengard?.regular ?? 0) + (s.regions[d]?.units.isengard?.elite ?? 0)) > 0;
+register('sh-str-11', {
   canPlay: (s) => s.reinforcements.isengard.regular > 0 && rageTargets(s).length > 0,
-  targets: rageTargets,
-  // (The card's optional "move up to 4 Isengard from Dunland to this region" is not
-  // modelled — logged as a minor deviation.)
-  applyTarget: (s, _side, t) => placeForce(s, 'isengard', t.region!, { regular: 2 }),
+  repeat: 5, // 1 recruit + up to 4 consolidation moves
+  targets: (s, _side, applied = []) => {
+    if (applied.length === 0) return rageTargets(s); // choose the recruit region
+    const region = applied[0]!.region!;
+    if (applied.length - 1 >= 4 || unitCount(s, region) >= STACKING_LIMIT) return []; // moved the max / no room
+    return RAGE_SOURCES.filter((d) => d !== region && rageHasIsengard(s, d)).map((from) => ({ from, region, mode: 'move' as const }));
+  },
+  applyTarget: (s, _side, t) => {
+    if (!t.from) { placeForce(s, 'isengard', t.region!, { regular: 2 }); return; }
+    // Move one Isengard unit (Regular first) from the Dunland source into the recruit region.
+    const src = s.regions[t.from]!.units.isengard; const dst = s.regions[t.region!]!;
+    if (!src || unitCount(s, t.region!) >= STACKING_LIMIT) return;
+    const du = dst.units.isengard ?? { regular: 0, elite: 0 };
+    if (src.regular > 0) { src.regular -= 1; du.regular += 1; }
+    else if (src.elite > 0) { src.elite -= 1; du.elite += 1; }
+    dst.units.isengard = du;
+  },
 });
 register('sh-str-19', { // Shadows on the Misty Mountains: 2 Sauron + 1 Nazgûl in Mount Gram or Moria
   canPlay: (s) => ['mount-gram', 'moria'].some((r) => recruitable(s, 'shadow', r)) && (s.reinforcements.sauron.regular > 0 || (s.reinforcements.sauron.nazgul ?? 0) > 0),
@@ -554,7 +571,13 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
         for (const m of minionsHere) { if (!state.characters.eliminated.includes(m)) state.characters.eliminated.push(m); extra += `, eliminated ${m}`; }
       }
       log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on Orthanc${extra}`);
-      // Deviation: the optional "play another Character Event free" rider is not modelled.
+      // If Gandalf the White is in Fangorn or a Rohan region, the FP may play one more
+      // Character Event card without an Action die (consumed in the next playEvent).
+      const gw = charRegion(state, 'gandalf-white');
+      if (gw && (gw === 'fangorn' || REGIONS[gw]!.nation === 'rohan')) {
+        state.flags.fpFreeCharEventThisTurn = true;
+        log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event without a die');
+      }
     },
   });
 }
