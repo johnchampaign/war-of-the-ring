@@ -28,7 +28,8 @@ export function describeAction(a: WotrAction): string {
     case 'eventTarget': {
       if (a.done) return `${cardName(a.card)}: done`;
       const dest = a.companion ? cap(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
-      return `${cardName(a.card)}: ${a.from ? `${rName(a.from)} → ` : ''}${dest}`;
+      const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';
+      return `${cardName(a.card)}: ${verb}${a.from ? `${rName(a.from)} → ` : ''}${dest}`;
     }
     case 'moveCharacter': return `Move ${a.char === 'nazgul' ? 'Nazgûl' : cap(a.char.replace(/-/g, ' '))} ${rName(a.from)} → ${rName(a.to)}`;
     case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;

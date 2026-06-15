@@ -6,7 +6,7 @@ import type { GameState, Side, Nation } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget } from './registry';
-import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement } from '../armies';
+import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy } from '../armies';
 import { applyCasualties, startBattle } from '../combat';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
@@ -573,6 +573,54 @@ register('sh-char-15', { onTable: true, apply() { /* Worn with Sorrow and Toil �
 register('sh-char-22', { onTable: true, apply() { /* Wormtongue — see politics.ts (activateNation) */ } });
 register('sh-char-16', { onTable: true, apply() { /* Flocks of Crebain — +1 Hunt dice, see hunt.ts resolveHunt */ } });
 register('sh-char-17', { onTable: true, apply() { /* Balrog of Moria — extra Hunt tile on a Moria declaration, see wotrAdapter declareFellowship */ } });
+
+// --- Card-granted Army actions with a Nazgûl. A "Shadow Army containing a Nazgûl"
+//     is a region with Shadow units and ≥1 Nazgûl. The card grants a real prompt to
+//     move and/or attack with such an Army (move = whole stack; attack = startBattle).
+const nazgulArmies = (state: GameState): string[] =>
+  Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow' && state.regions[id]!.nazgul > 0 && unitCount(state, id) > 0);
+/** Legal move/attack EventTargets for Nazgûl-led Armies. `allowAttack` gates the
+ *  attack option (Ringwraiths: only as the sole action); `exclude` skips Armies that
+ *  have already moved this card. */
+function nazgulArmyActions(state: GameState, allowAttack: boolean, exclude: Set<string> = new Set()): EventTarget[] {
+  const out: EventTarget[] = [];
+  for (const from of nazgulArmies(state)) {
+    if (exclude.has(from)) continue;
+    for (const to of REGIONS[from]!.adjacency) {
+      if (canMoveArmy(state, from, to, 'shadow')) out.push({ from, to, mode: 'move' });
+      else if (allowAttack && armySide(state, to) === 'fp') out.push({ from, to, mode: 'attack' });
+    }
+  }
+  return out;
+}
+function applyNazgulArmyAction(state: GameState, t: EventTarget): void {
+  if (t.mode === 'attack') { startBattle(state, 'shadow', t.from!, t.to!); log(state, null, 'event', `Nazgûl-led attack ${t.from} → ${t.to}`); }
+  else { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `Nazgûl-led Army moves ${t.from} → ${t.to}`); }
+}
+
+register('sh-char-23', { // The Ringwraiths Are Abroad — move up to two Nazgûl Armies, or attack with one
+  repeat: 2,
+  canPlay: (state) => nazgulArmyActions(state, true).length > 0,
+  targets: (state, _side, applied = []) => {
+    if (applied.some((a) => a.mode === 'attack')) return [];
+    const moved = new Set(applied.filter((a) => a.mode === 'move').map((a) => a.from!));
+    return nazgulArmyActions(state, applied.length === 0, moved); // attack only as the first/sole action
+  },
+  applyTarget: (state, _side, t) => applyNazgulArmyAction(state, t),
+});
+
+register('sh-char-24', { // The Black Captain Commands — recruit two Nazgûl at the Witch-king, then move/attack a Nazgûl Army
+  canPlay: (state) => inPlay(state, 'witch-king') || nazgulArmyActions(state, true).length > 0,
+  apply(state) {
+    const wk = charRegion(state, 'witch-king');
+    if (wk) {
+      const k = Math.min(2, state.reinforcements.sauron.nazgul ?? 0);
+      if (k > 0) { state.regions[wk]!.nazgul += k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) - k; log(state, null, 'event', `The Black Captain Commands: ${k} Nazgûl muster at ${wk}`); }
+    }
+  },
+  targets: (state) => nazgulArmyActions(state, true),
+  applyTarget: (state, _side, t) => applyNazgulArmyAction(state, t),
+});
 register('sh-char-14', { // The Breaking of the Fellowship — separate N Companions to the Fellowship's region
   canPlay: (state) => !state.fellowship.hidden && state.fellowship.companions.some((c) => COMPANION_SET.has(c)),
   apply(state) {

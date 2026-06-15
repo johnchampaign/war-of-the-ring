@@ -65,7 +65,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'eventTarget': {
         const data = state.pendingChoice!.data as { card: string; applied: EventTarget[]; repeat: number };
         const h = getHandler(data.card);
-        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, ...t }));
+        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, region: t.region, companion: t.companion, mode: t.mode }));
         // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
         if ((h?.repeat ?? 1) > 1 && data.applied.length > 0) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         return opts;
@@ -234,6 +234,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // (out of hand) until the eventTarget resolves.
       const opts = h.targets ? h.targets(state, actor) : null;
       if (opts && opts.length > 0) {
+        h.apply?.(state, actor); // immediate part (if any) runs before the interactive follow-up
         state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId, repeat: h.repeat ?? 1, left: h.repeat ?? 1, applied: [], palantir: palantirWasActive } };
         break;
       }
@@ -250,12 +251,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
-        const target: EventTarget = { from: action.from, to: action.to, region: action.region, companion: action.companion };
+        const target: EventTarget = { from: action.from, to: action.to, region: action.region, companion: action.companion, mode: action.mode };
         h.applyTarget(state, actor, target);
         data.applied.push(target);
         data.left -= 1;
-        // Multi-target card with moves left and still-legal targets? Re-prompt (hold the card).
-        if (data.left > 0 && (h.targets?.(state, actor, data.applied)?.length ?? 0) > 0) break;
+        // Multi-target card with moves left and still-legal targets? Re-prompt (hold the
+        // card) — unless an attack just started a battle (the combat driver takes over).
+        if (!state.pendingCombat && data.left > 0 && (h.targets?.(state, actor, data.applied)?.length ?? 0) > 0) break;
       }
       state.pendingChoice = null;
       const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
