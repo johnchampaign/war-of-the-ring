@@ -34,6 +34,8 @@ export type WotrAction =
   | { kind: 'combatRetreat'; retreat: boolean } // defender: retreat or stand
   | { kind: 'retreatTo'; region: RegionId }     // defender: chosen retreat destination
   | { kind: 'siegeWithdraw'; withdraw: boolean } // defender: withdraw into the siege or fight
+  | { kind: 'whiteRider'; forfeit: boolean } // FP: forfeit Gandalf the White's Leadership to negate Nazgûl Leadership
+  | { kind: 'balrog'; use: boolean } // Shadow: discard Balrog of Moria to draw an extra Hunt tile
   // Move an independent character via a Character die: 'nazgul' (a region's
   // Nazgûl group), a Minion id, or a separated Companion id.
   | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId }

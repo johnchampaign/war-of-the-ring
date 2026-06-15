@@ -55,7 +55,7 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
 /** Hits for one side's roll, applying that side's combat-card mods and the
  *  enemy's penalty mods. */
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
-  baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods): number {
+  baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false): number {
   // Captain of the West: +1 Combat Strength (die) if such a Companion is in this FP Army.
   const captain = side === 'fp' && state.regions[ownRegion]!.characters.some((c) => CAPTAINS.has(c)) ? 1 : 0;
   let count = Math.min(5, unitCount(state, ownRegion) + captain);
@@ -63,14 +63,12 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   const target = clamp(2, 6, baseTarget - (ownMods.rollBonus ?? 0) + (enemyMods.enemyRollPenalty ?? 0));
   // Forfeiting a Companion's Leadership (Mighty Attack) costs re-roll dice.
   let leadVal = Math.min(5, leadership(state, ownRegion, side));
-  // Gandalf the White "The White Rider": if he's in the FP Army, the FP forfeits his
-  // Leadership to negate all Nazgûl Leadership (incl. the Witch-king). Auto-applied
-  // when the Shadow has Nazgûl Leadership to negate (always beneficial there).
-  const fpRegion = side === 'fp' ? ownRegion : enemyRegion;
-  if (state.regions[fpRegion]!.characters.includes('gandalf-white')) {
+  // Gandalf the White "The White Rider": when the FP chose (at battle start) to forfeit
+  // his Leadership, all Nazgûl Leadership (incl. the Witch-king) is negated this battle.
+  if (whiteRiderForfeit) {
     const shR = side === 'shadow' ? ownRegion : enemyRegion, sr = state.regions[shR]!;
     const nazgulLead = sr.nazgul + (sr.characters.includes('witch-king') ? 2 : 0);
-    if (nazgulLead > 0) leadVal = Math.max(0, leadVal - (side === 'shadow' ? nazgulLead : 1));
+    leadVal = Math.max(0, leadVal - (side === 'shadow' ? nazgulLead : 1));
   }
   const lead = Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0));
   const allowReroll = !enemyMods.negateEnemyReroll;
@@ -231,6 +229,13 @@ export function combatStep(state: GameState): void {
   if (!pc) return;
   for (;;) {
     if (unitCount(state, pc.from) === 0 || unitCount(state, pc.to) === 0) { finishCombat(state, true); return; }
+    // The White Rider: once per battle, if Gandalf the White is in the FP Army and the
+    // Shadow has Nazgûl Leadership to negate, ask the FP whether to forfeit his Leadership.
+    if (!pc.whiteRiderAsked && whiteRiderApplicable(state, pc)) {
+      pc.whiteRiderAsked = true;
+      state.pendingChoice = { owner: 'fp', kind: 'whiteRider' }; // FP is always a participant
+      return;
+    }
     switch (pc.step) {
       case 'attackerCard': {
         if (hasPlayableCombatCard(state, pc.attacker)) { state.pendingChoice = { owner: pc.attacker, kind: 'combatCard' }; return; }
@@ -262,12 +267,12 @@ export function combatStep(state: GameState): void {
         // Stronghold gives the attacker a 6-to-hit: the first round of a field
         // battle, and EVERY round of a siege assault.
         const atkTarget = pc.fortified && (pc.siege || pc.round === 0) ? 6 : 5;
-        const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods);
+        const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, pc.whiteRiderForfeit);
         // Help Unlooked For: cap the defender's dice (min 1) via the existing maxDiceEnemy mod.
         const defEnemyMods = pc.defDicePenalty
           ? { ...aMods, maxDiceEnemy: Math.max(1, Math.min(5, unitCount(state, pc.to)) - pc.defDicePenalty) }
           : aMods;
-        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods);
+        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit);
         // Hit cancellation: Shield-wall, plus Heroic Death's sacrifice-a-Leader.
         const dCancel = (dMods.cancelHits ?? 0) + (dMods.sacrificeLeaderToCancelHit ?? 0);
         const aCancel = (aMods.cancelHits ?? 0) + (aMods.sacrificeLeaderToCancelHit ?? 0);
@@ -398,6 +403,21 @@ function moveStack(state: GameState, from: RegionId, to: RegionId): void {
 }
 
 export const canRetreat = (state: GameState): boolean => retreatRegion(state, state.pendingCombat!) !== null;
+
+/** The White Rider choice is offered only when Gandalf the White is in the FP Army and
+ *  the Shadow has Nazgûl Leadership worth negating. */
+export function whiteRiderApplicable(state: GameState, pc: PendingCombat): boolean {
+  const fpR = pc.attacker === 'fp' ? pc.from : pc.to;
+  const shR = pc.attacker === 'shadow' ? pc.from : pc.to;
+  if (!state.regions[fpR]!.characters.includes('gandalf-white')) return false;
+  const sr = state.regions[shR]!;
+  return sr.nazgul + (sr.characters.includes('witch-king') ? 2 : 0) > 0;
+}
+/** Resolve the White Rider battle-start choice (combat resumes via advance). */
+export function resolveWhiteRider(state: GameState, forfeit: boolean): void {
+  state.pendingCombat!.whiteRiderForfeit = forfeit;
+  state.pendingChoice = null;
+}
 
 // Companion ids (separated Companions can be "in the battle"); Hobbits among them.
 const COMPANION_IDS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);

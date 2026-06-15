@@ -210,6 +210,10 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const friendly = legal.find((a) => a.kind === 'retreatTo' && settlementCtrl(state, a.region) === me);
       return friendly ?? legal[0]!;
     }
+    case 'whiteRider': // only offered when there's Nazgûl Leadership to negate → forfeit
+      return legal.find((a) => a.kind === 'whiteRider' && a.forfeit) ?? legal[0]!;
+    case 'balrog': // extra Hunt pressure now is worth it
+      return legal.find((a) => a.kind === 'balrog' && a.use) ?? legal[0]!;
     case 'eventTarget': return chooseEventTarget(state, legal);
     default: return legal[0]!;
   }

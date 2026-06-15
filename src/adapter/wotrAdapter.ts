@@ -12,7 +12,7 @@ import { extraHunt } from '../engine/hunt';
 import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
-import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
+import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
@@ -100,6 +100,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'combatContinue', cont: true }, { kind: 'combatContinue', cont: false }];
       case 'siegeWithdraw':
         return [{ kind: 'siegeWithdraw', withdraw: true }, { kind: 'siegeWithdraw', withdraw: false }];
+      case 'whiteRider':
+        return [{ kind: 'whiteRider', forfeit: true }, { kind: 'whiteRider', forfeit: false }];
+      case 'balrog':
+        return [{ kind: 'balrog', use: true }, { kind: 'balrog', use: false }];
       case 'combatRetreat':
         return canRetreat(state)
           ? [{ kind: 'combatRetreat', retreat: true }, { kind: 'combatRetreat', retreat: false }]
@@ -228,15 +232,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const stepsBefore = Math.min(state.fellowship.progress, pathTo(fromLoc, action.target).length);
       const traversed = [fromLoc, ...pathTo(fromLoc, action.target).slice(0, stepsBefore)];
       declareFellowship(state, action.target);
-      // Balrog of Moria: a declaration that moves the Fellowship through Moria lets
-      // the Shadow draw an extra Hunt tile (discarding the on-table card).
-      const balrog = state.cards.shadow.table.indexOf('sh-char-17');
-      if (balrog >= 0 && traversed.includes('moria')) {
-        state.cards.shadow.table.splice(balrog, 1);
-        state.cards.shadow.discard.character.push('sh-char-17');
-        extraHunt(state);
+      state.phase = 'huntAllocation';
+      // Balrog of Moria: a declaration that moves the Fellowship through Moria lets the
+      // Shadow CHOOSE to discard the on-table card to draw an extra Hunt tile. Pausing
+      // for the Shadow's choice before Hunt Allocation proceeds.
+      if (state.cards.shadow.table.includes('sh-char-17') && traversed.includes('moria')) {
+        state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: {} };
       }
-      state.phase = 'huntAllocation'; break;
+      break;
     }
     case 'enterMordor':
       requirePhase(state, 'fellowship');
@@ -410,6 +413,19 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'combatRetreat', actor); resolveRetreat(state, action.retreat); break;
     case 'siegeWithdraw':
       requireChoice(state, 'siegeWithdraw', actor); resolveSiegeWithdraw(state, action.withdraw); break;
+    case 'whiteRider':
+      requireChoice(state, 'whiteRider', actor); resolveWhiteRider(state, action.forfeit); break;
+    case 'balrog': {
+      requireChoice(state, 'balrog', actor);
+      state.pendingChoice = null;
+      const i = state.cards.shadow.table.indexOf('sh-char-17');
+      if (action.use && i >= 0) {
+        state.cards.shadow.table.splice(i, 1);
+        state.cards.shadow.discard.character.push('sh-char-17');
+        extraHunt(state); // may set a huntDamage choice for the FP
+      }
+      break; // Hunt Allocation phase was already set
+    }
     case 'retreatTo':
       requireChoice(state, 'retreatTo', actor); resolveRetreatTo(state, action.region); break;
     case 'moveCharacter': {
