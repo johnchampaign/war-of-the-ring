@@ -41,8 +41,10 @@ export type WotrAction =
   | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId }
   // Follow-up target choice for an interactive event card (fields per card).
   | { kind: 'eventTarget'; card: string; from?: RegionId; to?: RegionId; region?: RegionId; companion?: string; mode?: 'move' | 'attack'; done?: boolean }
-  // Palantír of Orthanc bonus draw (Shadow): choose which deck to draw from.
-  | { kind: 'bonusDraw'; deck: 'character' | 'strategy' }
+  // Palantír of Orthanc bonus draw (Shadow): a deck to draw from, or 'none' to decline.
+  | { kind: 'bonusDraw'; deck: 'character' | 'strategy' | 'none' }
+  // Gandalf the Grey Guide draw (FP): take the matching-deck card, or decline.
+  | { kind: 'guideDraw'; draw: boolean }
   // Lure of the Ring (FP responds): take Corruption equal to the Companion's Level, or eliminate him.
   | { kind: 'lureChoice'; mode: 'corruption' | 'eliminate' }
   // Hunt damage resolution (FP): absorb as Corruption, lose a Companion, or use a

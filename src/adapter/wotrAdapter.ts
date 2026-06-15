@@ -119,7 +119,9 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return opts;
       }
       case 'bonusDraw':
-        return [{ kind: 'bonusDraw', deck: 'character' }, { kind: 'bonusDraw', deck: 'strategy' }];
+        return [{ kind: 'bonusDraw', deck: 'character' }, { kind: 'bonusDraw', deck: 'strategy' }, { kind: 'bonusDraw', deck: 'none' }];
+      case 'guideDraw':
+        return [{ kind: 'guideDraw', draw: true }, { kind: 'guideDraw', draw: false }];
       case 'lureChoice':
         return [{ kind: 'lureChoice', mode: 'corruption' }, { kind: 'lureChoice', mode: 'eliminate' }];
       case 'huntDamage': {
@@ -338,9 +340,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'lureChoice':
       requireChoice(state, 'lureChoice', actor); resolveLureChoice(state, action.mode); break; // turn already passed
     case 'bonusDraw': {
-      requireChoice(state, 'bonusDraw', actor); // Palantír of Orthanc bonus draw
-      drawOne(state, actor, action.deck);
+      requireChoice(state, 'bonusDraw', actor); // Palantír of Orthanc bonus draw (or decline)
+      if (action.deck !== 'none') drawOne(state, actor, action.deck);
       state.pendingChoice = null; break; // the turn already passed when the Event resolved
+    }
+    case 'guideDraw': {
+      requireChoice(state, 'guideDraw', actor); // Gandalf the Grey Guide draw (or decline)
+      if (action.draw) drawOne(state, 'fp', (state.pendingChoice!.data as { deck: 'character' | 'strategy' }).deck);
+      state.pendingChoice = null; break;
     }
     case 'diplomaticAction': {
       requirePhase(state, 'actionResolution');
@@ -526,11 +533,13 @@ function drawOne(state: GameState, side: Side, deck: 'character' | 'strategy'): 
   while (p.hand.length > 6) p.discard.strategy.push(p.hand.shift()!);
 }
 
-/** Gandalf the Grey's Guide ability: after the FP plays an Event card while Gandalf
- *  is the Guide, draw a card from the deck matching that card's type. (Applied
- *  automatically — it's an always-beneficial "may"; matches the Palantír handling.) */
+/** Gandalf the Grey's Guide ability: after the FP plays an Event card while Gandalf is
+ *  the Guide, the FP MAY draw a card from the matching deck — offered as a prompt. If a
+ *  choice is already pending (rare chained effect), fall back to drawing automatically. */
 function guideEventDraw(state: GameState, actor: Side, deck: 'character' | 'strategy'): void {
-  if (actor === 'fp' && state.fellowship.guide === 'gandalf-grey') drawOne(state, 'fp', deck);
+  if (actor !== 'fp' || state.fellowship.guide !== 'gandalf-grey') return;
+  if (state.pendingChoice) { drawOne(state, 'fp', deck); return; }
+  state.pendingChoice = { owner: 'fp', kind: 'guideDraw', data: { deck } };
 }
 
 export const wotrAdapter: GameAdapter<GameState, WotrAction, Side> = {
