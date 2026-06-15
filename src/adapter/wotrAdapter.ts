@@ -13,7 +13,7 @@ import {
   recruit, moveArmy, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
 } from '../engine/armies';
 import { startBattle, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
-import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw } from '../engine/hunt';
+import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
@@ -104,6 +104,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'whiteRider', forfeit: true }, { kind: 'whiteRider', forfeit: false }];
       case 'balrog':
         return [{ kind: 'balrog', use: true }, { kind: 'balrog', use: false }];
+      case 'crebain':
+        return [{ kind: 'crebain', use: true }, { kind: 'crebain', use: false }];
       case 'combatRetreat':
         return canRetreat(state)
           ? [{ kind: 'combatRetreat', retreat: true }, { kind: 'combatRetreat', retreat: false }]
@@ -430,6 +432,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'siegeWithdraw', actor); resolveSiegeWithdraw(state, action.withdraw); break;
     case 'whiteRider':
       requireChoice(state, 'whiteRider', actor); resolveWhiteRider(state, action.forfeit); break;
+    case 'crebain':
+      requireChoice(state, 'crebain', actor); resolveCrebain(state, action.use); break; // makes the deferred Hunt roll
     case 'balrog': {
       requireChoice(state, 'balrog', actor);
       state.pendingChoice = null;

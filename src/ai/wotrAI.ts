@@ -218,6 +218,10 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'whiteRider' && a.forfeit) ?? legal[0]!;
     case 'balrog': // extra Hunt pressure now is worth it
       return legal.find((a) => a.kind === 'balrog' && a.use) ?? legal[0]!;
+    case 'crebain': { // spend the one-shot only on a hunt big enough to matter
+      const level = (state.pendingChoice!.data as { level: number }).level;
+      return legal.find((a) => a.kind === 'crebain' && a.use === (level >= 2)) ?? legal[0]!;
+    }
     case 'eventTarget': return chooseEventTarget(state, legal);
     default: return legal[0]!;
   }

@@ -205,22 +205,25 @@ export function drawHuntTileNumber(state: GameState): number | null {
   return withRng(state, (rng) => rng.rollDie(6)); // 'die' tile: roll for the number
 }
 
-/** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. */
+/** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. If the
+ *  Shadow holds Flocks of Crebain, pause for their choice to discard it for +1 to all
+ *  Hunt dice; otherwise roll immediately. */
 export function resolveHunt(state: GameState): void {
   const h = state.hunt;
   const level = Math.min(5, h.box);
-  let bonus = h.fpDiceInBox;     // dice already in the box (before this move's die)
+  const bonus = h.fpDiceInBox;   // dice already in the box (before this move's die)
   if (!fellowshipDieSkipsHuntBox(state)) h.fpDiceInBox += 1; // FP die enters the Hunt Box (unless "The Last Battle")
   if (level <= 0) return;
-  // Flocks of Crebain (on the Shadow table): +1 to all Hunt dice, then discarded.
-  const crebain = state.cards.shadow.table.indexOf('sh-char-16');
-  if (crebain >= 0) {
-    bonus += 1;
-    state.cards.shadow.table.splice(crebain, 1);
-    state.cards.shadow.discard.character.push('sh-char-16');
-    log(state, null, 'hunt', 'Flocks of Crebain: +1 to all Hunt dice');
+  if (state.cards.shadow.table.includes('sh-char-16')) {
+    state.pendingChoice = { owner: 'shadow', kind: 'crebain', data: { level, bonus, rerolls: huntRerolls(state) } };
+    return; // defer the roll until the Shadow decides
   }
-  const rerolls = huntRerolls(state);
+  huntRoll(state, level, bonus, huntRerolls(state));
+}
+
+/** Roll the Hunt dice (each hits on 6+ after the box bonus; 1 always fails) plus the
+ *  allowed re-rolls, and draw on a success. */
+function huntRoll(state: GameState, level: number, bonus: number, rerolls: number): void {
   const successes = withRng(state, (rng) => {
     let hits = 0, failed = 0;
     for (let i = 0; i < level; i++) { const d = rng.rollDie(6); if (d !== 1 && d + bonus >= 6) hits++; else failed++; }
@@ -228,6 +231,20 @@ export function resolveHunt(state: GameState): void {
     return hits;
   });
   if (successes >= 1) beginHuntDraw(state, successes, false);
+}
+
+/** Resolve the Flocks of Crebain choice: optionally discard it for +1 to all Hunt
+ *  dice, then make the (deferred) Hunt roll. */
+export function resolveCrebain(state: GameState, use: boolean): void {
+  const d = state.pendingChoice!.data as { level: number; bonus: number; rerolls: number };
+  state.pendingChoice = null;
+  let bonus = d.bonus;
+  if (use) {
+    const i = state.cards.shadow.table.indexOf('sh-char-16');
+    if (i >= 0) { state.cards.shadow.table.splice(i, 1); state.cards.shadow.discard.character.push('sh-char-16'); bonus += 1; }
+    log(state, null, 'hunt', 'Flocks of Crebain: +1 to all Hunt dice');
+  }
+  huntRoll(state, d.level, bonus, d.rerolls);
 }
 
 /** Resolve a step on the Mordor Track: draw a tile (advancing unless it's a Stop)
