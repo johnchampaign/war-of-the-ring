@@ -36,27 +36,36 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat'; aiSid
     }
   };
 
+  // Log index where the "what happened while you were away" summary begins — the
+  // first entry the current viewer didn't cause. vs-AI: just after the human's
+  // action (summary = the AI's turn). Hotseat: before the acting player's action (so
+  // the NEXT player sees that turn). Surfaced on the view for the TurnSummary UI.
+  let oppLogStart = 0;
+  let opened = false;
+
   const snapshot = (): ViewResult => {
     const actor = wotrAdapter.currentActor(state) as Side | null;
     const over = !!wotrAdapter.result?.(state);
     // vs-AI: always show the human's view, and it's their turn only when they're up.
     // hotseat: show whoever is currently up (they control this screen).
     const viewer: Side = aiSide ? human : (actor ?? 'fp');
-    return {
-      view: wotrAdapter.viewFor(state, viewer) as GameState,
-      yourTurn: !over && (aiSide ? actor === human : true),
-      turn: state.turn,
-      gameOver: over,
-      you: viewer,
-    };
+    const view = wotrAdapter.viewFor(state, viewer) as GameState;
+    (view as unknown as { oppLogStart: number }).oppLogStart = oppLogStart;
+    return { view, yourTurn: !over && (aiSide ? actor === human : true), turn: state.turn, gameOver: over, you: viewer };
   };
 
   return {
-    fetch: async () => { runAI(); return snapshot(); }, // run the AI if it opens the game
+    // Opening sets the marker to "nothing new"; later refreshes must NOT reset it
+    // (in local play the opponent acts inside submit, so a poll mustn't wipe the
+    // pending summary).
+    fetch: async () => { runAI(); if (!opened) { oppLogStart = state.log.length; opened = true; } return snapshot(); },
     submit: async (action: WotrAction) => {
+      const before = state.log.length;
       const actor = wotrAdapter.currentActor(state) as Side | null;
       if (actor && (!aiSide || actor === human)) state = wotrAdapter.applyAction(state, action, actor);
+      const afterHuman = state.log.length;
       runAI();                                            // then let the AI take its turn(s)
+      oppLogStart = aiSide ? afterHuman : before;         // vs-AI: AI's entries; hotseat: the acting player's turn (for the next viewer)
       return snapshot();
     },
     legalActions: async () => {
