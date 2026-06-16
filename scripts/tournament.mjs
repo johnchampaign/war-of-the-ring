@@ -27,7 +27,18 @@ const CTRL = { fp: strArg('--fp', 'heuristic'), shadow: strArg('--shadow', 'heur
 const pick = (ctrl, state, actor, legal, rng) =>
   ctrl === 'random' ? rng.pick(legal) : chooseAction(state, actor, legal, rng);
 
-let stalls = 0, illegals = 0, timeouts = 0, leaks = 0;
+// Total Army units (regular+elite) on the board plus in reinforcements. Move-family
+// actions only relocate/recycle units, so this total must NOT change across them —
+// a drop means a unit vanished (the reported "moved and the troop disappeared" bug).
+const armyUnitTotal = (s) => {
+  let n = 0;
+  for (const r of Object.values(s.regions)) for (const u of Object.values(r.units)) n += u.regular + u.elite;
+  for (const p of Object.values(s.reinforcements)) n += (p.regular ?? 0) + (p.elite ?? 0);
+  return n;
+};
+const MOVE_KINDS = new Set(['moveArmy', 'armyMove2', 'removeExcess']);
+
+let stalls = 0, illegals = 0, timeouts = 0, leaks = 0, vanished = 0;
 const wins = { fp: 0, shadow: 0 };
 const reasons = {};
 const turnCounts = [];
@@ -44,9 +55,17 @@ for (let game = 0; game < GAMES; game++) {
     const legal = wotrAdapter.legalActions(state, actor);
     if (legal.length === 0) { stalls++; break; }
     const action = pick(CTRL[actor], state, actor, legal, ai);
+    // Conservation guard for move-family actions (no combat in play): the army-unit
+    // total must be identical before/after — a drop is a vanished unit.
+    const checkConserve = MOVE_KINDS.has(action.kind) && !state.pendingCombat;
+    const before = checkConserve ? armyUnitTotal(state) : 0;
     const res = wotrAdapter.tryApplyAction(state, action, actor);
     if (!res.ok) { illegals++; console.error(`  illegal: ${JSON.stringify(action)} -> ${res.reason}`); break; }
     state = res.state;
+    if (checkConserve && !state.pendingCombat) {
+      const after = armyUnitTotal(state);
+      if (after !== before) { vanished++; console.error(`  UNIT VANISHED (${before}->${after}) on ${JSON.stringify(action)} [game ${game} seed ${seed}]`); break; }
+    }
     actions++;
 
     // Periodic codec round-trip + redaction leak check.
@@ -72,8 +91,8 @@ console.log(`Games: ${GAMES} (FP=${CTRL.fp}, Shadow=${CTRL.shadow})`);
 console.log(`  winners: FP ${wins.fp}, Shadow ${wins.shadow}`);
 console.log(`  win reasons: ${JSON.stringify(reasons)}`);
 console.log(`  turns: min ${turnCounts[0] ?? '-'}, median ${med}, avg ${avg.toFixed(1)}, max ${turnCounts.at(-1) ?? '-'}`);
-console.log(`  stalls: ${stalls}, illegal-accepted: ${illegals}, timeouts: ${timeouts}, view-leaks: ${leaks}`);
+console.log(`  stalls: ${stalls}, illegal-accepted: ${illegals}, timeouts: ${timeouts}, view-leaks: ${leaks}, vanished-units: ${vanished}`);
 
-const ok = stalls === 0 && illegals === 0 && timeouts === 0 && leaks === 0 && (wins.fp + wins.shadow) === GAMES;
+const ok = stalls === 0 && illegals === 0 && timeouts === 0 && leaks === 0 && vanished === 0 && (wins.fp + wins.shadow) === GAMES;
 console.log(ok ? '\nsoak OK — all games terminated cleanly' : '\nSOAK FAILED');
 process.exit(ok ? 0 : 1);
