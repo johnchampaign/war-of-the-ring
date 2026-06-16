@@ -13,6 +13,7 @@ import { HandStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal } from './DecisionModal';
 import { MovePicker } from './MovePicker';
+import { DiceTray } from './DiceTray';
 import { ReportButton } from './ReportButton';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction } from './actionText';
@@ -89,16 +90,19 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} />
       {g.error && <div style={{ background: '#7a1f1f', color: '#fff', padding: 6, fontFamily: 'system-ui', fontSize: 13 }}>⚠ {g.error.message}</div>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
-          <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 8 }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
+          </div>
           {sources.size > 0 && (
-            <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px' }}>
+            <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px', flexShrink: 0 }}>
               {selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
                 : 'Click a highlighted (green) region to move or attack its army.'}
             </div>
           )}
         </div>
-        <div style={{ width: 320, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ width: 340, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <DiceTray view={g.view} you={g.you as Side} />
           <PoliticsPanel view={g.view} />
           {/* Actions size to their content (scroll past ~45% of the column); the hover
               preview takes the rest so cards/region crops show as large as possible. */}

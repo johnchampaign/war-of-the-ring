@@ -66,7 +66,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   }), [view]);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: '100%', display: 'block' }}>
       <rect x={0} y={0} width={W} height={H} fill="#9fb8cf" />
       {/* Real board image (first-run download) sits behind the polygons, aligned
           1:1 to their pixel space. When present, region fills go near-transparent

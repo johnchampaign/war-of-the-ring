@@ -16,20 +16,19 @@ export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Si
   const tabled = [...(view.cards?.fp?.table ?? []), ...(view.cards?.shadow?.table ?? [])];
   const [zoom, setZoom] = useState<string | null>(null);
   if (hand.length === 0 && tabled.length === 0) return null;
+  // A single compact row: in-play (table) cards first, then a divider, then the hand.
   return (
-    <>
-      {tabled.length > 0 && (
-        <div style={{ ...wrap, borderTop: '1px solid #2a2418' }}>
-          <span style={{ fontSize: 11, color: '#998', alignSelf: 'center', marginRight: 4 }}>In play ({tabled.length}):</span>
-          {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
-        </div>
-      )}
-      <div style={wrap}>
-        <span style={{ fontSize: 11, color: '#998', alignSelf: 'center', marginRight: 4 }}>Hand ({hand.length}):</span>
-        {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => id !== 'hidden' && setZoom(id)} onHover={onHoverCard} />)}
-      </div>
+    <div style={wrap}>
+      {tabled.length > 0 && <>
+        <span style={label}>In play:</span>
+        {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
+        <span style={{ width: 1, alignSelf: 'stretch', background: '#3a342a', margin: '0 4px' }} />
+      </>}
+      <span style={label}>Hand ({hand.length}):</span>
+      {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => id !== 'hidden' && setZoom(id)} onHover={onHoverCard} />)}
+      <span style={{ marginLeft: 'auto', alignSelf: 'center', fontSize: 10, color: '#776', paddingRight: 4 }}>hover to preview · click to enlarge</span>
       {zoom && <CardZoom id={zoom} onClose={() => setZoom(null)} />}
-    </>
+    </div>
   );
 }
 
@@ -68,8 +67,9 @@ function CardZoom({ id, onClose }: { id: string; onClose: () => void }) {
   );
 }
 
-const wrap: React.CSSProperties = { display: 'flex', gap: 6, overflowX: 'auto', padding: '6px 8px', background: '#14110b', borderTop: '1px solid #2a2418' };
-const img: React.CSSProperties = { height: 96, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', cursor: 'pointer' };
+const wrap: React.CSSProperties = { display: 'flex', gap: 6, overflowX: 'auto', padding: '5px 8px', background: '#14110b', borderTop: '1px solid #2a2418', alignItems: 'center' };
+const label: React.CSSProperties = { fontSize: 11, color: '#998', alignSelf: 'center', marginRight: 2, whiteSpace: 'nowrap', flexShrink: 0 };
+const img: React.CSSProperties = { height: 76, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', cursor: 'pointer' };
 const zoomBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.8)', display: 'grid', placeItems: 'center', zIndex: 60, cursor: 'zoom-out' };
 const zoomText: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 10, maxWidth: 440, cursor: 'default' };
-const textCard: React.CSSProperties = { width: 70, height: 96, flexShrink: 0, borderRadius: 4, padding: 5, color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443' };
+const textCard: React.CSSProperties = { width: 58, height: 76, flexShrink: 0, borderRadius: 4, padding: 4, color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443', fontSize: 9 };
