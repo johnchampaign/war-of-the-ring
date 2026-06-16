@@ -4,7 +4,7 @@
 // miniatures), so armies render as informative tokens — side colour, regular vs
 // elite split, leader/Nazgûl pip. Without the downloaded map it falls back to
 // nation-coloured polygons; fully playable either way.
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
 import { useBoardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage } from '../data/geometry';
@@ -65,15 +65,48 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
     return { id, poly, fill, def, armies, layout, control, r };
   }), [view]);
 
+  // --- Zoom / pan (the whole map is detailed; let the player get close to read it).
+  const ASPECT = H / W;
+  const [vb, setVb] = useState({ x: 0, y: 0, w: W, h: H });
+  const svgRef = useRef<SVGSVGElement>(null);
+  const drag = useRef<{ x: number; y: number; vx: number; vy: number; w: number; h: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
+  const clampVb = (v: { x: number; y: number; w: number; h: number }) => {
+    const w = Math.min(W, Math.max(W / 8, v.w)), h = w * ASPECT;
+    return { w, h, x: Math.min(Math.max(v.x, -w * 0.15), W - w * 0.85), y: Math.min(Math.max(v.y, -h * 0.15), H - h * 0.85) };
+  };
+  const zoomAt = useCallback((px: number, py: number, factor: number) => {
+    setVb((cur) => {
+      const w = Math.min(W, Math.max(W / 8, cur.w * factor)), h = w * ASPECT;
+      return clampVb({ x: cur.x + px * cur.w - px * w, y: cur.y + py * cur.h - py * h, w, h });
+    });
+  }, [ASPECT, W, H]);
+  const onWheel = useCallback((e: React.WheelEvent) => {
+    const r = svgRef.current!.getBoundingClientRect();
+    zoomAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, e.deltaY < 0 ? 0.85 : 1 / 0.85);
+  }, [zoomAt]);
+  const onPointerDown = (e: React.PointerEvent) => { if (e.button === 0) drag.current = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y, w: vb.w, h: vb.h, moved: false }; };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current; if (!d) return;
+    const r = svgRef.current!.getBoundingClientRect();
+    if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 4) d.moved = true;
+    if (d.moved) setVb(clampVb({ x: d.vx - (e.clientX - d.x) / r.width * d.w, y: d.vy - (e.clientY - d.y) / r.height * d.h, w: d.w, h: d.h }));
+  };
+  const onPointerUp = () => { if (drag.current?.moved) suppressClick.current = true; drag.current = null; };
+  const pickRegion = (id: RegionId) => { if (suppressClick.current) { suppressClick.current = false; return; } onPickRegion?.(id); };
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: '100%', display: 'block' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <svg ref={svgRef} viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet"
+      onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
+      style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', cursor: onPickRegion ? 'grab' : 'default' }}>
       <rect x={0} y={0} width={W} height={H} fill="#9fb8cf" />
       {/* Real board image (first-run download) sits behind the polygons, aligned
           1:1 to their pixel space. When present, region fills go near-transparent
           so the map shows through; strokes/highlights stay for click targeting. */}
       {boardArt && <image href={boardArt} x={0} y={0} width={W} height={H} preserveAspectRatio="none" />}
       {regionEls.map((e) => e && (
-        <g key={e.id} onClick={() => onPickRegion?.(e.id)}
+        <g key={e.id} onClick={() => pickRegion(e.id)}
           onMouseEnter={() => onHoverRegion?.(e.id)} onMouseLeave={() => onHoverRegion?.(null)}
           style={{ cursor: onPickRegion ? 'pointer' : 'default' }}>
           <title>{rName(e.id)}{e.def?.settlement ? ` — ${e.def.settlement}` : ''}</title>
@@ -103,8 +136,17 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
       {/* Fellowship marker (last-known position) */}
       <FellowshipMarker view={view} />
     </svg>
+      <div style={zoomCtl}>
+        <button style={zoomBtn} title="Zoom in (or scroll)" onClick={() => zoomAt(0.5, 0.5, 0.8)}>+</button>
+        <button style={zoomBtn} title="Zoom out (or scroll)" onClick={() => zoomAt(0.5, 0.5, 1.25)}>−</button>
+        <button style={{ ...zoomBtn, fontSize: 11, width: 'auto', padding: '0 8px' }} title="Reset to fit" onClick={() => setVb({ x: 0, y: 0, w: W, h: H })}>Fit</button>
+      </div>
+    </div>
   );
 });
+
+const zoomCtl: React.CSSProperties = { position: 'absolute', top: 8, left: 8, display: 'flex', gap: 4, background: 'rgba(20,17,11,0.7)', padding: 4, borderRadius: 6 };
+const zoomBtn: React.CSSProperties = { width: 28, height: 28, fontSize: 18, lineHeight: 1, background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 // An army marker: a two-tone pill — side colour for Regulars, gold for Elites —
 // plus a corner pip counting Leaders (FP) / Nazgûl (Shadow). Sized to stay legible
