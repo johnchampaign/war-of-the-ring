@@ -7,8 +7,8 @@
 import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
 import { useBoardArt } from './artCache';
-import { regionIds, regionPolygon, mapImage } from '../data/geometry';
-import { blockedAreas, blockedAreaPath, boardCrop } from '../data/blockedAreas';
+import { regionIds, regionPolygon, mapImage, playableBounds } from '../data/geometry';
+import { blockedAreas, blockedAreaPath } from '../data/blockedAreas';
 import mapData from '../../assets/map.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
@@ -67,9 +67,11 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   }), [view]);
 
   // --- Zoom / pan (the whole map is detailed; let the player get close to read it).
-  // Default view is the authored "Board Crop" rectangle (drops the dead side
-  // margins / track strips); falls back to the full image if none is authored.
-  const CROP = boardCrop ?? { x: 0, y: 0, w: W, h: H };
+  // Default view is the playable area — derived from the region polygons (the same
+  // geometry the board renders from, so it can't go stale separately, unlike the
+  // earlier blocked-areas.json crop), which drops the dead margins (army boxes,
+  // tracks, title banner).
+  const CROP = playableBounds;
   const ASPECT = CROP.h / CROP.w;
   const [vb, setVb] = useState({ ...CROP });
   const svgRef = useRef<SVGSVGElement>(null);
