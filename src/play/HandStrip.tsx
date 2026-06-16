@@ -16,17 +16,20 @@ export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Si
   const tabled = [...(view.cards?.fp?.table ?? []), ...(view.cards?.shadow?.table ?? [])];
   const [zoom, setZoom] = useState<string | null>(null);
   if (hand.length === 0 && tabled.length === 0) return null;
-  // A single compact row: in-play (table) cards first, then a divider, then the hand.
+  // A compact card row (in-play cards, divider, then the hand), with the hint on its
+  // own line underneath so it doesn't steal horizontal space.
   return (
-    <div style={wrap}>
-      {tabled.length > 0 && <>
-        <span style={label}>In play:</span>
-        {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
-        <span style={{ width: 1, alignSelf: 'stretch', background: '#3a342a', margin: '0 4px' }} />
-      </>}
-      <span style={label}>Hand ({hand.length}):</span>
-      {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => id !== 'hidden' && setZoom(id)} onHover={onHoverCard} />)}
-      <span style={{ marginLeft: 'auto', alignSelf: 'center', fontSize: 10, color: '#776', paddingRight: 4 }}>hover to preview · click to enlarge</span>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#14110b' }}>
+      <div style={wrap}>
+        {tabled.length > 0 && <>
+          <span style={label}>In play:</span>
+          {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
+          <span style={{ width: 1, alignSelf: 'stretch', background: '#3a342a', margin: '0 4px' }} />
+        </>}
+        <span style={label}>Hand ({hand.length}):</span>
+        {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => id !== 'hidden' && setZoom(id)} onHover={onHoverCard} />)}
+      </div>
+      <div style={{ fontSize: 10, color: '#776', padding: '2px 8px 4px', flexShrink: 0 }}>hover to preview · click to enlarge</div>
       {zoom && <CardZoom id={zoom} onClose={() => setZoom(null)} />}
     </div>
   );
