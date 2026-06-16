@@ -99,8 +99,16 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   const onPointerUp = () => { if (drag.current?.moved) suppressClick.current = true; drag.current = null; };
   const pickRegion = (id: RegionId) => { if (suppressClick.current) { suppressClick.current = false; return; } onPickRegion?.(id); };
 
+  const resetView = () => setVb({ ...CROP });
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    {/* Snap back to the default cropped view (also recovers from zoom/pan). */}
+    <button onClick={resetView} title="Reset view to the board crop"
+      style={{ position: 'absolute', top: 6, left: 6, zIndex: 5, padding: '3px 8px', fontSize: 12,
+        background: 'rgba(28,23,16,0.85)', color: '#e9e1cc', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
+      ⟲ Reset view
+    </button>
     <svg ref={svgRef} viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet"
       onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
       style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', cursor: onPickRegion ? 'grab' : 'default' }}>
