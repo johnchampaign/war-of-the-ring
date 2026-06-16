@@ -278,15 +278,24 @@ export function resolveMordorStep(state: GameState): void {
 
 /** After a −1 damage reduction (Hobbit-Guide separate, applied by the adapter; or
  *  Gollum reveal here): re-prompt with the lower damage, or finish if it hit 0. */
+/** Apply the final (no-more-choices) Hunt outcome: remaining damage → Corruption,
+ *  then reveal if the tile called for it. */
+function finishHunt(state: GameState, damage: number, reveal: boolean): void {
+  const fs = state.fellowship;
+  state.pendingChoice = null;
+  if (damage > 0) fs.corruption = Math.min(12, fs.corruption + damage);
+  if (reveal) beginReveal(state); // may set the revealMove choice — after clearing this one
+  log(state, null, 'hunt', `Hunt resolved; corruption ${fs.corruption}, hidden ${fs.hidden}`);
+}
+/** Re-prompt the huntDamage choice if damage remains AND the FP could still reduce it
+ *  (a Companion to sacrifice or a reduction ability); otherwise finish. */
 function repromptOrFinish(state: GameState, damage: number, reveal: boolean): void {
   const fs = state.fellowship;
-  if (damage > 0) {
+  if (damage > 0 && (fs.companions.length > 0 || huntReductionAvailable(state))) {
     state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal } };
     return;
   }
-  state.pendingChoice = null;
-  if (reveal) beginReveal(state); // may set the revealMove choice — after clearing this one
-  log(state, null, 'hunt', `Hunt reduced to 0; hidden ${fs.hidden}`);
+  finishHunt(state, damage, reveal);
 }
 
 /** Drop Hunt damage by 1 and re-prompt/finish — called by the adapter after it
@@ -323,18 +332,19 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
   // reduceSeparate is handled in the adapter (needs separateCompanion); it calls
   // reduceHuntDamageBySeparate. It should not reach here.
 
-  state.pendingChoice = null;
-  let remaining = d.damage;
-  if (mode !== 'corruption' && fs.companions.length > 0) {
+  if (mode === 'corruption') { finishHunt(state, d.damage, d.reveal); return; } // take it all as Corruption
+  // guide / random: eliminate ONE Companion (its Level reduces the damage), then
+  // re-prompt so the FP may sacrifice MORE (stacking Levels) or take the rest as
+  // Corruption (rulebook p.42: "eliminate one or more Companions").
+  if (fs.companions.length > 0) {
     const victim = mode === 'guide'
       ? (fs.companions.includes(fs.guide) ? fs.guide : fs.companions[0]!)
       : withRng(state, (rng) => rng.pick(fs.companions));
     const level = eliminateCompanionInline(state, victim);
-    remaining = Math.max(0, remaining - level); // excess still becomes Corruption
+    repromptOrFinish(state, Math.max(0, d.damage - level), d.reveal);
+  } else {
+    finishHunt(state, d.damage, d.reveal);
   }
-  if (remaining > 0) fs.corruption = Math.min(12, fs.corruption + remaining);
-  if (d.reveal) beginReveal(state);
-  log(state, null, 'hunt', `Hunt resolved (mode ${mode}); corruption ${fs.corruption}, hidden ${fs.hidden}`);
 }
 
 // Local copy to avoid a fellowship<->hunt import cycle at module scope.
