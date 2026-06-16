@@ -76,7 +76,14 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   // tracks, title banner).
   const CROP = playableBounds;
   const ASPECT = CROP.h / CROP.w;
-  const [vb, setVb] = useState({ ...CROP });
+  // `null` = show the current crop (default). Only an explicit pan/zoom stores an
+  // override. Deriving the default from CROP (instead of seeding state once) means
+  // a code change to the crop applies immediately — even over hot-reload, which
+  // preserves state and would otherwise keep a stale full-image view.
+  const [override, setOverride] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const vb = override ?? CROP;
+  const setVb = (next: { x: number; y: number; w: number; h: number } | ((cur: { x: number; y: number; w: number; h: number }) => { x: number; y: number; w: number; h: number })) =>
+    setOverride((cur) => (typeof next === 'function' ? next(cur ?? CROP) : next));
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; w: number; h: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
@@ -104,7 +111,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   const onPointerUp = () => { if (drag.current?.moved) suppressClick.current = true; drag.current = null; };
   const pickRegion = (id: RegionId) => { if (suppressClick.current) { suppressClick.current = false; return; } onPickRegion?.(id); };
 
-  const resetView = () => setVb({ ...CROP });
+  const resetView = () => setOverride(null);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
