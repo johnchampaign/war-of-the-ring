@@ -2,7 +2,7 @@
 // onto the framework GameServer (see _lib/server.ts). Token auth via ?as=TOKEN.
 // Mirrors the integration-guide route table.
 import { makeServer, type Env } from '../_lib/server';
-import { ConflictError } from 'digital-boardgame-framework/server';
+import { ConflictError, type BugReportRow } from 'digital-boardgame-framework/server';
 import { createGame } from '../../src/engine/setup';
 import { startGame } from '../../src/adapter/wotrAdapter';
 
@@ -33,6 +33,29 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         emails: body?.emails,
       });
       return json(result, 201);
+    }
+
+    // Report triage — PUBLIC, per the agent-collaboration trust-tier split:
+    //  • read returns a PII-stripped SUMMARY only (no server snapshot, reporter
+    //    view, client log, or user-agent — those can carry the reporter's hidden
+    //    info, e.g. the Fellowship position, so they stay token-gated).
+    //  • resolve is a routine, reversible triage write (attach a note). The cost
+    //    of a wrong write is "we re-open a report", so it needs no token.
+    // GET /api/reports[?unresolved=1][&severity=..][&category=..]
+    if (seg.length === 1 && seg[0] === 'reports' && method === 'GET') {
+      const u = url.searchParams.get('unresolved');
+      const reports = await server.listReports({
+        unresolved: u === '1' || u === 'true' ? true : undefined,
+        severity: url.searchParams.get('severity') ?? undefined,
+        category: url.searchParams.get('category') ?? undefined,
+      });
+      return json({ reports: reports.map(summarizeReport) });
+    }
+    // POST /api/reports/:id/resolve  { note }
+    if (seg.length === 3 && seg[0] === 'reports' && seg[2] === 'resolve' && method === 'POST') {
+      const body = await safeJson(request);
+      await server.resolveReport(seg[1]!, String(body?.note ?? body?.resolution ?? '').slice(0, 2000));
+      return json({ ok: true });
     }
 
     // /api/games/:id[...]
@@ -72,6 +95,18 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
     return json({ error: msg }, status);
   }
 };
+
+// Public report summary: triage-relevant fields only. Deliberately omits
+// serverSnapshot / reporterView / clientLog (can carry the reporter's hidden
+// game state) and userAgent (fingerprinting) — those are token-gated reads.
+function summarizeReport(r: BugReportRow) {
+  return {
+    reportId: r.reportId, gameId: r.gameId, reporterSide: r.reporterSide,
+    turnNumber: r.turnNumber, message: r.message, severity: r.severity,
+    category: r.category, clientBuild: r.clientBuild,
+    createdAt: r.createdAt, resolution: r.resolution,
+  };
+}
 
 async function safeJson(request: Request): Promise<any> {
   try { return await request.json(); } catch { return undefined; }
