@@ -115,8 +115,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} />
       {g.error && <div style={{ background: '#7a1f1f', color: '#fff', padding: 6, fontFamily: 'system-ui', fontSize: 13 }}>⚠ {g.error.message}</div>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ flex: '0 1 auto', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
+          {/* Board sized to the crop's aspect and left-aligned, so there are no
+              letterbox bars around it; the info panel (flex:1) takes the freed width. */}
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', aspectRatio: '1511 / 1318', alignSelf: 'flex-start', maxWidth: '100%' }}>
             <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
           </div>
           {blockMsg && (
@@ -136,7 +138,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             </div>
           )}
         </div>
-        <div style={{ width: 380, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ flex: '1 1 380px', minWidth: 340, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <DiceTray view={g.view} you={g.you as Side} />
           {/* Politics is reference info — capped + scrolls so it never crowds the actions. */}
           <div style={{ flexShrink: 0, maxHeight: '24%', overflow: 'auto' }}>
