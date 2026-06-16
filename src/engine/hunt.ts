@@ -93,7 +93,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): 
   // capped; seq marks a new draw. Public — drawn tiles are open info.
   const prev = state.hunt.draws ?? [];
   const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
-  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, onMordor: fs.mordor !== null }].slice(-16);
+  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, onMordor: fs.mordor !== null, roll: state.hunt.lastRoll }].slice(-16);
 
   if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) beginReveal(state); return; }
   if (damage === 0) { if (reveal) beginReveal(state); return; }
@@ -244,12 +244,16 @@ export function resolveHunt(state: GameState): void {
 /** Roll the Hunt dice (each hits on 6+ after the box bonus; 1 always fails) plus the
  *  allowed re-rolls, and draw on a success. */
 function huntRoll(state: GameState, level: number, bonus: number, rerolls: number): void {
-  const successes = withRng(state, (rng) => {
-    let hits = 0, failed = 0;
-    for (let i = 0; i < level; i++) { const d = rng.rollDie(6); if (d !== 1 && d + bonus >= 6) hits++; else failed++; }
-    for (let i = 0; i < Math.min(rerolls, failed); i++) { const d = rng.rollDie(6); if (d !== 1 && d + bonus >= 6) hits++; }
-    return hits;
+  const { successes, dice, rerollDice } = withRng(state, (rng) => {
+    const faces: number[] = [], rfaces: number[] = [];
+    let hits = 0;
+    const failedIdx: number[] = [];
+    for (let i = 0; i < level; i++) { const d = rng.rollDie(6); faces.push(d); if (d !== 1 && d + bonus >= 6) hits++; else failedIdx.push(i); }
+    for (let i = 0; i < Math.min(rerolls, failedIdx.length); i++) { const d = rng.rollDie(6); rfaces.push(d); if (d !== 1 && d + bonus >= 6) hits++; }
+    return { successes: hits, dice: faces, rerollDice: rfaces };
   });
+  state.hunt.lastRoll = { level, bonus, dice, rerolls: rerollDice, successes, mordor: false };
+  log(state, null, 'hunt', `Hunt roll: ${level} die${level === 1 ? '' : 'ce'}${bonus ? ` (+${bonus})` : ''} [${dice.join(',')}]${rerollDice.length ? ` re-roll [${rerollDice.join(',')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`);
   if (successes >= 1) beginHuntDraw(state, successes, false);
 }
 
@@ -273,7 +277,10 @@ export function resolveMordorStep(state: GameState): void {
   const fs = state.fellowship;
   if (fs.mordor === null) return;
   if (!fellowshipDieSkipsHuntBox(state)) state.hunt.fpDiceInBox += 1; // FP die enters the Hunt Box (unless "The Last Battle")
-  beginHuntDraw(state, Math.min(5, state.hunt.box), true);
+  const level = Math.min(5, state.hunt.box);
+  // On the Mordor Track the tile is drawn automatically (no Hunt roll); record that.
+  state.hunt.lastRoll = { level, bonus: 0, dice: [], rerolls: [], successes: level, mordor: true };
+  beginHuntDraw(state, level, true);
 }
 
 /** After a −1 damage reduction (Hobbit-Guide separate, applied by the adapter; or

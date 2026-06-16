@@ -85,6 +85,8 @@ export interface HuntState {
   box: number;
   /** Free Peoples dice in the Hunt Box this turn (each adds +1 to Hunt rolls). */
   fpDiceInBox: number;
+  /** The most recent Hunt roll (set just before drawing), stamped onto each draw. */
+  lastRoll?: HuntRoll;
   /** Remaining standard Hunt Pool tiles (drawable); each entry is a tile index
    *  into the standard tile multiset. */
   pool: number[];
@@ -99,7 +101,20 @@ export interface HuntState {
   /** Recent Hunt-tile draws (newest last, capped), for the UI's informational popup.
    *  `seq` increments per draw so the UI can show every not-yet-seen tile (even 0/
    *  blank ones). Public info — drawn tiles are open in WotR. */
-  draws?: { seq: number; value: number | string; damage: number; reveal: boolean; onMordor: boolean }[];
+  draws?: { seq: number; value: number | string; damage: number; reveal: boolean; onMordor: boolean;
+    /** The Hunt roll that produced this draw, for the informational popup (public). */
+    roll?: HuntRoll }[];
+}
+
+/** A resolved Hunt roll: how many dice, the box bonus, the actual die faces, and
+ *  the resulting successes. `mordor` rolls draw automatically (no dice). Public. */
+export interface HuntRoll {
+  level: number;
+  bonus: number;
+  dice: number[];
+  rerolls: number[];
+  successes: number;
+  mordor: boolean;
 }
 
 // --- Event / Combat cards ------------------------------------------------
