@@ -15,6 +15,46 @@ import { withRng } from './rng';
 import { settlementController, armySide } from './armies';
 import { log } from './log';
 
+/** Shortest region path from→to (BFS), excluding `from`; [] if none/equal. Local to
+ *  hunt.ts to avoid the fellowship<->hunt import cycle. */
+function shortestPath(from: string, to: string): string[] {
+  if (from === to) return [];
+  const prev = new Map<string, string>(); const seen = new Set([from]); let layer = [from];
+  while (layer.length) {
+    const next: string[] = [];
+    for (const r of layer) for (const a of REGIONS[r]?.adjacency ?? []) {
+      if (seen.has(a)) continue;
+      seen.add(a); prev.set(a, r);
+      if (a === to) { const path: string[] = []; let cur: string | undefined = to; while (cur && cur !== from) { path.unshift(cur); cur = prev.get(cur); } return path; }
+      next.push(a);
+    }
+    layer = next;
+  }
+  return [];
+}
+
+/** Reveal the Fellowship (rulebook p.39): move the figure up to Progress regions
+ *  toward Mordor (it may never end in an FP-controlled City/Stronghold), reset
+ *  Progress, and flip to Revealed. DEVIATIONS: the Free Peoples player doesn't pick
+ *  the reveal path (we head toward Morannon), and the extra Hunt tile drawn per
+ *  Shadow Stronghold on the traced path isn't modelled yet (see rules-spec). */
+export function revealFellowship(state: GameState): void {
+  const fs = state.fellowship;
+  fs.hidden = false;
+  if (fs.progress <= 0 || fs.mordor !== null) { fs.progress = 0; return; }
+  const path = shortestPath(fs.location, 'morannon');
+  let steps = Math.min(fs.progress, path.length);
+  while (steps > 0) {
+    const dest = path[steps - 1]!; const def = REGIONS[dest]!;
+    const fpSettle = (def.settlement === 'City' || def.settlement === 'Stronghold') && settlementController(state, dest) === 'fp';
+    if (!fpSettle) break;
+    steps -= 1;
+  }
+  if (steps > 0) fs.location = path[steps - 1]!;
+  fs.progress = 0;
+  log(state, null, 'fellowship', `Fellowship revealed; figure moved to ${fs.location}`);
+}
+
 type TileRef = { std: number } | { spec: string };
 
 /** Draw one tile from the active Hunt Pool — standard tiles (indices) PLUS any
@@ -75,8 +115,8 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): 
   // not reveal the Fellowship.
   const reveal = !!tile.reveal && !(fs.guide === 'gollum' && typeof tile.value === 'number');
 
-  if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) fs.hidden = false; return; }
-  if (damage === 0) { if (reveal) fs.hidden = false; return; }
+  if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) revealFellowship(state); return; }
+  if (damage === 0) { if (reveal) revealFellowship(state); return; }
 
   // Interactive resolution when FP has any choice — a Companion to spend, a Hobbit
   // Guide to separate, or Gollum's reveal-to-reduce — otherwise apply directly.
@@ -85,7 +125,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): 
     log(state, null, 'hunt', `Hunt damage ${damage} pending (FP decision)`);
   } else {
     fs.corruption = Math.min(12, fs.corruption + damage);
-    if (reveal) fs.hidden = false;
+    if (reveal) revealFellowship(state);
     log(state, null, 'hunt', `Hunt damage ${damage} -> Corruption ${fs.corruption}`);
   }
 }
@@ -264,7 +304,7 @@ function repromptOrFinish(state: GameState, damage: number, reveal: boolean): vo
     state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal } };
     return;
   }
-  if (reveal) fs.hidden = false;
+  if (reveal) revealFellowship(state);
   state.pendingChoice = null;
   log(state, null, 'hunt', `Hunt reduced to 0; hidden ${fs.hidden}`);
 }
@@ -284,7 +324,7 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
 
   // Gollum's active ability: reveal the Fellowship to reduce the damage by 1.
   if (mode === 'reduceReveal') {
-    fs.hidden = false;
+    revealFellowship(state);
     repromptOrFinish(state, d.damage - 1, false); // already revealed
     return;
   }
@@ -312,7 +352,7 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
     remaining = Math.max(0, remaining - level); // excess still becomes Corruption
   }
   if (remaining > 0) fs.corruption = Math.min(12, fs.corruption + remaining);
-  if (d.reveal) fs.hidden = false;
+  if (d.reveal) revealFellowship(state);
   log(state, null, 'hunt', `Hunt resolved (mode ${mode}); corruption ${fs.corruption}, hidden ${fs.hidden}`);
 }
 
