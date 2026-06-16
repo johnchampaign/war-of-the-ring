@@ -103,16 +103,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         </div>
         <div style={{ width: 380, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <DiceTray view={g.view} you={g.you as Side} />
-          {/* Politics is capped + scrolls so the actions and hover preview get room. */}
-          <div style={{ flexShrink: 0, maxHeight: '28%', overflow: 'auto' }}>
+          {/* Politics is reference info — capped + scrolls so it never crowds the actions. */}
+          <div style={{ flexShrink: 0, maxHeight: '24%', overflow: 'auto' }}>
             <PoliticsPanel view={g.view} />
           </div>
-          {/* Actions size to their content (scroll past ~38% of the column); the hover
-              preview takes the rest so cards/region crops show as large as possible. */}
-          <div style={{ flex: '0 1 auto', minHeight: 0, maxHeight: '38%', overflow: 'auto' }}>
+          {/* Actions are the PRIMARY interaction — they get the lion's share (grow + scroll). */}
+          <div style={{ flex: '1 1 auto', minHeight: 120, overflow: 'auto' }}>
             <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
           </div>
-          <div style={{ flex: '1 1 0', minHeight: 300, display: 'flex', flexDirection: 'column' }}>
+          {/* Hover preview is secondary — a capped strip at the bottom. (Click any card to read it full-screen.) */}
+          <div style={{ flexShrink: 0, height: '32%', minHeight: 150, display: 'flex', flexDirection: 'column' }}>
             <HoverPreview hover={hover} view={g.view} />
           </div>
           {chatClient && g.you && (

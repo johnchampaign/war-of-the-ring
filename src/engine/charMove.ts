@@ -99,21 +99,28 @@ function movablePieces(state: GameState, side: Side): Array<{ char: string; from
 /** Representative legal character moves for the Character die (a subset, like the
  *  army enumerator): each movable piece toward a small set of useful targets —
  *  the Fellowship's region (Nazgûl hunt there) and the actor's army regions. */
-export function characterMoveOptions(state: GameState, side: Side, cap = 12): Array<{ char: string; from: RegionId; to: RegionId }> {
+export function characterMoveOptions(state: GameState, side: Side, cap = 18): Array<{ char: string; from: RegionId; to: RegionId }> {
   const pieces = movablePieces(state, side);
   if (!pieces.length) return [];
-  const targets = new Set<RegionId>();
-  targets.add(state.fellowship.location);
+  // Restricted target set for FAR-RANGING pieces (Nazgûl/Witch-king/Minion) — toward
+  // the Fellowship or a friendly Army — keeps that (large) action space bounded.
+  const restricted = new Set<RegionId>([state.fellowship.location]);
   for (const id of Object.keys(state.regions)) {
-    if (targets.size >= 5) break;
-    if (armySide(state, id) === side) targets.add(id);
+    if (restricted.size >= 6) break;
+    if (armySide(state, id) === side) restricted.add(id);
   }
+  const isCompanion = (c: string): boolean => side === 'fp' && COMPANION_SET.has(c);
+  const allRegions = Object.keys(state.regions);
   const out: Array<{ char: string; from: RegionId; to: RegionId }> = [];
   for (const p of pieces) {
-    for (const to of targets) {
+    const range = rangeOf(state, p.char, p.from);
+    // A separated Companion (small Level range) may move to ANY region in range (RAW);
+    // Nazgûl/Minions (fly / range ≤3 but many destinations) use the restricted set.
+    const candidates: Iterable<RegionId> = isCompanion(p.char) ? allRegions : restricted;
+    for (const to of candidates) {
       if (out.length >= cap) return out;
       if (to === p.from) continue;
-      if (regionDistance(p.from, to) <= rangeOf(state, p.char, p.from) && canLand(state, to, side)) out.push({ char: p.char, from: p.from, to });
+      if (regionDistance(p.from, to) <= range && canLand(state, to, side)) out.push({ char: p.char, from: p.from, to });
     }
   }
   return out;
