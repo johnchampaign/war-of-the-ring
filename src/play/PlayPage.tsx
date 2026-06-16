@@ -19,6 +19,8 @@ import { TurnSummary } from './TurnSummary';
 import { ReportButton } from './ReportButton';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction } from './actionText';
+import { moveBlockReason } from '../engine/armies';
+import { REGIONS } from '../engine/data';
 
 const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ? 'Shadow' : s);
 
@@ -30,6 +32,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
   const [selected, setSelected] = useState<RegionId | null>(null);
   const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' } | null>(null);
+  // Why the last attempted move/merge was refused (shown so it isn't a silent no-op).
+  const [blockMsg, setBlockMsg] = useState<string | null>(null);
   const [hover, setHover] = useState<Hover>(null);
   const onHoverRegion = useCallback((id: RegionId | null) => setHover(id ? { kind: 'region', id } : null), []);
   const onHoverCard = useCallback((id: string | null) => setHover(id ? { kind: 'card', id } : null), []);
@@ -66,6 +70,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   );
 
   const onRegionClick = useCallback((id: RegionId) => {
+    setBlockMsg(null);
     // Placing the Fellowship figure (declare, or move-on-reveal): click a highlighted region.
     if (declareTargets.has(id)) {
       const a = placeActs.find((x) => x.target === id);
@@ -82,12 +87,18 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         else if (act.kind === 'attack') setMoveDraft({ from: act.from, to: act.to, kind: 'attack' });
         else void submit(act);
       }
+    } else if (selected && id !== selected && g.view && REGIONS[selected]?.adjacency.includes(id)) {
+      // Adjacent but not a legal destination (e.g. a refused merge): explain why,
+      // instead of silently re-selecting the other army.
+      const reason = moveBlockReason(g.view, selected, id, g.you as Side);
+      if (reason) setBlockMsg(reason);
+      else if (sources.has(id)) setSelected(id);
     } else if (sources.has(id)) {
       setSelected((s) => (s === id ? null : id));
     } else {
       setSelected(null);
     }
-  }, [selected, destinations, sources, armyActs, declareTargets, placeActs, submit]);
+  }, [selected, destinations, sources, armyActs, declareTargets, placeActs, submit, g.view, g.you]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected, destinations }), [sources, selected, destinations]);
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal) ? onRegionClick : undefined;
@@ -107,6 +118,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
           </div>
+          {blockMsg && (
+            <div onClick={() => setBlockMsg(null)} title="Click to dismiss"
+              style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', margin: '2px 8px', borderRadius: 6, flexShrink: 0, cursor: 'pointer' }}>
+              ⚠ {blockMsg}
+            </div>
+          )}
           {sources.size > 0 && (
             <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px', flexShrink: 0 }}>
               {isReveal

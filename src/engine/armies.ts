@@ -127,19 +127,40 @@ export function recruitNazgul(state: GameState, id: RegionId): boolean {
 /** Whether `side` may move the whole Army from `from` to `to` (rules-spec §6, §8).
  *  Shared by moveArmy and the legal-action enumerator so the two never diverge. */
 export function canMoveArmy(state: GameState, from: RegionId, to: RegionId, side: Side): boolean {
-  if (!REGIONS[from]!.adjacency.includes(to)) return false;
-  if (armySide(state, from) !== side) return false;
-  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return false; // A Power too Great / Tom Bombadil
-  if (!freeForMovement(state, to, side)) return false;
-  // A besieged Stronghold holds at most 5 units, so reinforcing a siege is capped there.
+  return moveBlockReason(state, from, to, side) === null;
+}
+
+const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Why `side` may NOT move the whole Army from `from` to `to`, or null if the move
+ *  is legal. Single source of truth — canMoveArmy and the legal-action enumerator
+ *  both derive from this, and the UI surfaces the string so a refused merge/move
+ *  explains itself instead of silently doing nothing. Rules: rulebook p.26–27. */
+export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side): string | null {
+  if (!REGIONS[from]!.adjacency.includes(to)) return 'Those regions are not adjacent.';
+  if (armySide(state, from) !== side) return 'You have no Army to move there.';
+  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return 'A card effect bars the Shadow from that region.';
+  // Enemy units present: that's an attack (handled elsewhere), not a move/merge.
+  const occ = armySide(state, to);
+  if (occ !== null && occ !== side) {
+    const dn = REGIONS[to]!.nation;
+    const blockedNation = (Object.keys(state.regions[from]!.units) as Nation[]).find((n) => !isAtWar(state, n) && dn && dn !== n);
+    return blockedNation
+      ? `Enemy units there, and ${cap1(blockedNation)} is not At War — you can neither attack nor move into that region until ${cap1(blockedNation)} reaches War.`
+      : 'Enemy units there — attack the region instead of moving into it.';
+  }
+  // Stacking limit (a besieged Stronghold holds at most 5 units).
   const cap = state.regions[to]!.besieged ? SIEGE_LIMIT : STACKING_LIMIT;
-  if (unitCount(state, from) + unitCount(state, to) > cap) return false;
-  // Non-belligerent nations cannot cross another nation's border (rules-spec §8).
+  const combined = unitCount(state, from) + unitCount(state, to);
+  if (combined > cap) return `Merging would put ${combined} units there, over the ${cap}-unit stacking limit. Move only part of the Army (split), or leave some behind.`;
+  // Non-belligerent nations cannot cross another nation's border (rulebook p.27).
   const dn = REGIONS[to]!.nation;
   for (const nation of Object.keys(state.regions[from]!.units) as Nation[]) {
-    if (!isAtWar(state, nation) && dn && dn !== nation) return false;
+    if (!isAtWar(state, nation) && dn && dn !== nation) {
+      return `${cap1(nation)} is not At War — its units cannot enter ${cap1(dn)}'s borders. Advance ${cap1(nation)} to War first (or split off only its At-War units).`;
+    }
   }
-  return true;
+  return null;
 }
 
 /** Move all of a region's Army (with its Leaders/Nazgûl/Characters) to an
