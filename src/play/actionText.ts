@@ -3,6 +3,7 @@
 // (ActionPanel, DecisionModal) export only components — otherwise React Fast
 // Refresh can't hot-update them ("incompatible export") and forces full reloads.
 import type { WotrAction } from '../adapter/wotrAction';
+import type { GameState, Side, DieFace } from '../engine/types';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { charName } from './charInfo';
@@ -96,6 +97,27 @@ export function actionDie(a: WotrAction): string | null {
     case 'drawEvent': case 'playEvent': return 'event';
     case 'bringUpgrade': return 'will';
     default: return null; // companionMuster (any die), Elven Ring (free), skip/pass, fellowship/hunt-phase actions
+  }
+}
+
+/** The distinct dice in the actor's pool that could spend on this action (the
+ *  die-picker offers a choice when there's more than one). Mirrors the engine's
+ *  consume face-lists. Empty = no choice (free/single-die action). */
+export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[] {
+  const pool = view.dice[you] ?? [];
+  const pick = (faces: DieFace[]): DieFace[] => [...new Set(pool.filter((f) => faces.includes(f)))];
+  switch (a.kind) {
+    case 'companionMuster': return [...new Set(pool)]; // any die advances the Nation
+    case 'hideFellowship': return view.fellowship.guide === 'strider' ? [...new Set(pool)] : pick(['character', 'will']);
+    case 'moveFellowship': case 'separateCompanion': case 'moveCharacter': return pick(['character', 'will']);
+    case 'recruitUnit': case 'diplomaticAction': case 'bringMinion': case 'sarumanMuster': return pick(['muster', 'armyMuster', 'will']);
+    case 'drawEvent': case 'playEvent': return pick(['event', 'will']);
+    case 'moveArmy': case 'attack': {
+      const r = view.regions[a.from];
+      const leader = !!r && (r.leaders > 0 || r.nazgul > 0 || r.characters.length > 0);
+      return pick(['army', 'armyMuster', 'will', ...(leader ? ['character' as DieFace] : [])]);
+    }
+    default: return [];
   }
 }
 

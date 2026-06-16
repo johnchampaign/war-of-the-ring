@@ -353,20 +353,20 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP moves the Fellowship');
       if (!state.fellowship.hidden) throw new Error('Fellowship is revealed');
-      if (!consumeOneOf(state, 'fp', ['character', 'will'])) throw new Error('No Character die');
+      if (!consumePreferred(state, 'fp', ['character', 'will'], action.die)) throw new Error('No Character die');
       moveFellowship(state); passResolutionTurn(state, actor); break;
     case 'hideFellowship': {
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP hides the Fellowship');
       // Strider's Guide ability lets any die hide; otherwise a Character/Will die.
       const hideFaces = state.fellowship.guide === 'strider' ? [...new Set(state.dice.fp)] : (['character', 'will'] as DieFace[]);
-      if (!consumeOneOf(state, 'fp', hideFaces)) throw new Error('No usable die');
+      if (!consumePreferred(state, 'fp', hideFaces, action.die)) throw new Error('No usable die');
       hideFellowship(state); passResolutionTurn(state, actor); break;
     }
     case 'separateCompanion':
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP separates Companions');
-      if (!consumeOneOf(state, 'fp', ['character', 'will'])) throw new Error('No Character die');
+      if (!consumePreferred(state, 'fp', ['character', 'will'], action.die)) throw new Error('No Character die');
       if (!separateCompanion(state, action.companion)) throw new Error('Cannot separate that Companion');
       passResolutionTurn(state, actor); break;
     case 'bringUpgrade':
@@ -377,7 +377,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       passResolutionTurn(state, actor); break;
     case 'drawEvent':
       requirePhase(state, 'actionResolution');
-      if (!consumeOneOf(state, actor, ['event', 'will'])) throw new Error('No Event die');
+      if (!consumePreferred(state, actor, ['event', 'will'], action.die)) throw new Error('No Event die');
       drawOne(state, actor, action.deck); passResolutionTurn(state, actor); break;
     case 'playEvent': {
       requirePhase(state, 'actionResolution');
@@ -389,7 +389,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // The Ents Awake free play: an FP Character Event costs no die (consumes the flag).
       const freePlay = actor === 'fp' && state.flags.fpFreeCharEventThisTurn && EVENT_BY_ID[action.cardId]!.deck === 'Character';
       if (freePlay) state.flags.fpFreeCharEventThisTurn = false;
-      else if (!consumeOneOf(state, actor, ['event', 'will'])) throw new Error('No Event die');
+      else if (!consumePreferred(state, actor, ['event', 'will'], action.die)) throw new Error('No Event die');
       // Palantír of Orthanc grants a bonus draw — captured BEFORE this play so the
       // card doesn't trigger off its own play.
       const palantirWasActive = actor === 'shadow' && palantirActive(state);
@@ -458,7 +458,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
       if (actor === 'fp' && threatsAndPromisesActive(state) && !state.nations[action.nation].active) throw new Error('Threats and Promises bars advancing a passive Nation');
-      if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
+      if (!consumePreferred(state, actor, ['muster', 'armyMuster', 'will'], action.die)) throw new Error('No Muster die');
       advancePolitical(state, action.nation, 1); passResolutionTurn(state, actor); break;
     }
     case 'companionMuster': {
@@ -467,7 +467,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const pa = COMPANION_POLITICS.find((p) => p.companion === action.companion);
       const r = pa && findCharacterRegion(state, pa.companion);
       if (!pa || !r || !pa.at(r) || settlementController(state, r) !== 'fp') throw new Error('Companion ability condition not met');
-      if (!consumeOneOf(state, 'fp', [...new Set(state.dice.fp)])) throw new Error('No Action die');
+      if (!consumePreferred(state, 'fp', [...new Set(state.dice.fp)], action.die)) throw new Error('No Action die');
       advancePolitical(state, pa.nation, 1); passResolutionTurn(state, actor); break;
     }
     case 'useElvenRing': {
@@ -490,7 +490,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'actionResolution');
       if (actor !== 'shadow' || !voiceOfSarumanActive(state)) throw new Error('Voice of Saruman not available');
       if (action.mode === 'upgrade' ? !canSarumanUpgrade(state) : !canSarumanRecruit(state)) throw new Error('Voice of Saruman option not available');
-      if (!consumeOneOf(state, 'shadow', ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
+      if (!consumePreferred(state, 'shadow', ['muster', 'armyMuster', 'will'], action.die)) throw new Error('No Muster die');
       if (action.mode === 'upgrade') {
         const u = state.regions['orthanc']!.units.isengard!; // ≥2 Regulars (checked above)
         u.regular -= 2; u.elite += 2;
@@ -505,7 +505,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'recruitUnit': {
       requirePhase(state, 'actionResolution');
       if (sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
-      if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
+      if (!consumePreferred(state, actor, ['muster', 'armyMuster', 'will'], action.die)) throw new Error('No Muster die');
       if (!placeFigure(state, actor, action.nation, action.region, firstFigure(action))) throw new Error('Illegal recruit');
       // A two-figure muster: the second figure goes to a SEPARATE Settlement (RAW p.26).
       if (action.then) state.pendingChoice = { owner: actor, kind: 'musterSecond', data: { figure: action.then, first: action.region } };
@@ -527,7 +527,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'bringMinion':
       requirePhase(state, 'actionResolution');
       if (actor !== 'shadow') throw new Error('Only Shadow brings Minions');
-      if (!consumeOneOf(state, actor, ['muster', 'armyMuster', 'will'])) throw new Error('No Muster die');
+      if (!consumePreferred(state, actor, ['muster', 'armyMuster', 'will'], action.die)) throw new Error('No Muster die');
       if (!bringMinion(state, action.minion, action.region)) throw new Error('Cannot bring that Minion');
       passResolutionTurn(state, actor); break;
     case 'moveArmy': {
@@ -537,7 +537,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const src = state.regions[action.from]!;
       const leaderArmy = src.leaders > 0 || src.nazgul > 0 || src.characters.length > 0;
       let viaArmyDie = false;
-      if (consumeArmyDie(state, actor)) viaArmyDie = true;
+      if (action.die && consumeDie(state, actor, action.die)) viaArmyDie = action.die !== 'character';
+      else if (consumeArmyDie(state, actor)) viaArmyDie = true;
       else if (leaderArmy && consumeDie(state, actor, 'character')) viaArmyDie = false;
       else throw new Error('No Army die');
       const moved = action.move
@@ -575,10 +576,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const faces = new Set(state.dice[actor]);
       const hasArmyDie = faces.has('army') || faces.has('armyMuster') || (actor === 'fp' && faces.has('will'))
         || (actor === 'shadow' && faces.has('muster') && mouthMessengerAvailable(state));
-      const viaCharacterDie = !hasArmyDie && leaderArmy && faces.has('character');
+      const viaCharacterDie = action.die ? action.die === 'character' : (!hasArmyDie && leaderArmy && faces.has('character'));
       const aErr = attackError(state, action.from, actor, action.rearguard, viaCharacterDie);
       if (aErr) throw new Error(aErr);
-      if (viaCharacterDie) { if (!consumeDie(state, actor, 'character')) throw new Error('No Army die'); }
+      if (action.die) { if (!consumeDie(state, actor, action.die)) throw new Error('No Army die'); }
+      else if (viaCharacterDie) { if (!consumeDie(state, actor, 'character')) throw new Error('No Army die'); }
       else if (!consumeArmyDie(state, actor)) throw new Error('No Army die');
       startBattle(state, actor, action.from, action.to, { rearguard: action.rearguard }); break; // finishCombat resumes the turn
     }
@@ -625,7 +627,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'retreatTo', actor); resolveRetreatTo(state, action.region); break;
     case 'moveCharacter': {
       requirePhase(state, 'actionResolution');
-      if (!consumeOneOf(state, actor, ['character', 'will'])) throw new Error('No Character die');
+      if (!consumePreferred(state, actor, ['character', 'will'], action.die)) throw new Error('No Character die');
       if (!moveCharacter(state, actor, action.char, action.from, action.to)) throw new Error('Illegal character move');
       passResolutionTurn(state, actor); break;
     }
@@ -689,6 +691,12 @@ function requireChoice(state: GameState, kind: string, actor: Side): void {
 function consumeOneOf(state: GameState, side: Side, faces: DieFace[]): boolean {
   for (const f of faces) if (consumeDie(state, side, f)) return true;
   return false;
+}
+/** Spend the player's explicitly-chosen die (the die-picker) when it's one of the
+ *  usable faces and available; otherwise auto-pick (specific die first). */
+function consumePreferred(state: GameState, side: Side, faces: DieFace[], preferred?: DieFace): boolean {
+  if (preferred && faces.includes(preferred) && consumeDie(state, side, preferred)) return true;
+  return consumeOneOf(state, side, faces);
 }
 
 /** Will-of-the-West upgrade options currently available (FP). */

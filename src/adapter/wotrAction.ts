@@ -21,32 +21,35 @@ export type WotrAction =
   | { kind: 'enterMordor' }
   // Hunt Allocation phase (Shadow).
   | { kind: 'allocateHunt'; dice: number }
-  // Action Resolution (current player) — each consumes one die unless noted.
-  | { kind: 'moveFellowship' }   // FP, Character die
-  | { kind: 'hideFellowship' }   // FP, Character die
-  | { kind: 'separateCompanion'; companion: string }
+  // Action Resolution (current player) — each consumes one die unless noted. `die`
+  // (optional) is the player's explicit pick of WHICH die to spend when more than one
+  // would do (the die-picker); omitted = the engine auto-picks (specific die first,
+  // preserving Will of the West).
+  | { kind: 'moveFellowship'; die?: DieFace }   // FP, Character die
+  | { kind: 'hideFellowship'; die?: DieFace }   // FP, Character die (Strider: any die)
+  | { kind: 'separateCompanion'; companion: string; die?: DieFace }
   | { kind: 'changeGuide'; companion: string } // Fellowship phase: pick the Guide (FP breaks Level ties)
-  | { kind: 'companionMuster'; companion: string; nation: Nation } // companion ability: any die advances their Nation
-  | { kind: 'sarumanMuster'; mode: 'recruit' | 'upgrade' } // Voice of Saruman: recruit in every Isengard Settlement, or upgrade 2 Orthanc Regulars to Elites
+  | { kind: 'companionMuster'; companion: string; nation: Nation; die?: DieFace } // companion ability: any die advances their Nation
+  | { kind: 'sarumanMuster'; mode: 'recruit' | 'upgrade'; die?: DieFace } // Voice of Saruman: recruit in every Isengard Settlement, or upgrade 2 Orthanc Regulars to Elites
   | { kind: 'bringUpgrade'; which: 'aragorn' | 'gandalf-white' } // FP, Will of the West
-  | { kind: 'drawEvent'; deck: Deck } // Event die
-  | { kind: 'playEvent'; cardId: string } // Event die: play a card from hand
-  | { kind: 'diplomaticAction'; nation: Nation } // Muster die: advance political track
+  | { kind: 'drawEvent'; deck: Deck; die?: DieFace } // Event die
+  | { kind: 'playEvent'; cardId: string; die?: DieFace } // Event die: play a card from hand
+  | { kind: 'diplomaticAction'; nation: Nation; die?: DieFace } // Muster die: advance political track
   // Muster die: place the FIRST figure of a recruit. `then` (when present) means a
   // second figure of that type follows — placed in a SEPARATE Settlement via the
   // 'recruitSecond' choice (rules-spec §6). Exactly one of regular/elite/leader/nazgul is 1.
-  | { kind: 'recruitUnit'; nation: Nation; region: RegionId; regular: number; elite: number; leader?: number; nazgul?: number; then?: 'regular' | 'leader' }
+  | { kind: 'recruitUnit'; nation: Nation; region: RegionId; regular: number; elite: number; leader?: number; nazgul?: number; then?: 'regular' | 'leader'; die?: DieFace }
   // The second figure of a two-figure muster (separate Settlement), or decline it.
   | { kind: 'recruitSecond'; nation?: Nation; region?: RegionId; figure?: 'regular' | 'leader'; done?: boolean }
-  | { kind: 'bringMinion'; minion: 'witch-king' | 'saruman' | 'mouth-of-sauron'; region: RegionId } // Muster die (Shadow)
+  | { kind: 'bringMinion'; minion: 'witch-king' | 'saruman' | 'mouth-of-sauron'; region: RegionId; die?: DieFace } // Muster die (Shadow)
   // Army die (may move a 2nd army via armyMove2). `move` (when present) is a SPLIT:
   // only the listed figures move, the rest stay behind (rulebook p.27).
-  | { kind: 'moveArmy'; from: RegionId; to: RegionId; move?: MoveSel }
+  | { kind: 'moveArmy'; from: RegionId; to: RegionId; move?: MoveSel; die?: DieFace }
   // The optional SECOND army move of one Army die (a different army), or decline it.
   | { kind: 'armyMove2'; from?: RegionId; to?: RegionId; move?: MoveSel; done?: boolean }
   // Army die. `rearguard` (optional) is the split: figures left OUT of the battle
   // (rulebook p.28). Not-At-War units are forced into the rearguard automatically.
-  | { kind: 'attack'; from: RegionId; to: RegionId; rearguard?: MoveSel }
+  | { kind: 'attack'; from: RegionId; to: RegionId; rearguard?: MoveSel; die?: DieFace }
   | { kind: 'skipDie'; face: DieFace } // discard a die, no effect
   | { kind: 'pass' }             // yield to opponent, no die spent
   // Interactive combat sub-machine (resolving a PendingChoice).
@@ -62,7 +65,7 @@ export type WotrAction =
   | { kind: 'useElvenRing'; from: DieFace; to: DieFace } // change one unused die's face via an Elven Ring
   // Move an independent character via a Character die: 'nazgul' (a region's
   // Nazgûl group), a Minion id, or a separated Companion id.
-  | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId }
+  | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId; die?: DieFace }
   // Follow-up target choice for an interactive event card (fields per card).
   | { kind: 'eventTarget'; card: string; from?: RegionId; to?: RegionId; region?: RegionId; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none'; done?: boolean }
   // Palantír of Orthanc bonus draw (Shadow): a deck to draw from, or 'none' to decline.

@@ -4,9 +4,10 @@ import { useState } from 'react';
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState } from '../engine/types';
 import { useCardArt } from './artCache';
-import { describeAction, actionDie } from './actionText';
+import { describeAction, actionDie, dieOptions } from './actionText';
 import { FACE } from './DiceTray';
 import type { Hover } from './HoverPreview';
+import type { Side, DieFace } from '../engine/types';
 
 /** Small colour-coded chip marking which action die this action spends (matches the
  *  DiceTray colours), so the cost is visible at a glance. */
@@ -24,8 +25,8 @@ function actionHover(a: WotrAction): Hover {
   return null;
 }
 
-export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view }: {
-  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState;
+export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you }: {
+  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null;
 }) {
   const [busy, setBusy] = useState(false);
   const click = async (a: WotrAction) => { setBusy(true); try { await onAction(a); } finally { setBusy(false); } };
@@ -39,26 +40,43 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // ordinary action menu (the caller filters those out before passing actions).
   return (
     <div style={panel}>
-      {actions.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={() => click(a)} onHover={onHover} />)}
+      {actions.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
+        options={you ? dieOptions(a, view, you) : []} />)}
       {actions.length === 0 && <div style={{ color: '#999' }}>No actions.</div>}
     </div>
   );
 }
 
 // A normal action button. For "Play event" it shows the card-art thumbnail (when
-// downloaded) so the player sees what they're playing, not just the title.
-function ActionButton({ action, disabled, onClick, onHover }: { action: WotrAction; disabled: boolean; onClick: () => void; onHover?: (h: Hover) => void }) {
+// downloaded). When more than one die could pay for the action, the first click opens
+// a die-picker (the player chooses which to spend); one option submits directly.
+function ActionButton({ action, disabled, onClick, onHover, options }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[] }) {
+  const [picking, setPicking] = useState(false);
   const cardId = action.kind === 'playEvent' ? action.cardId : null;
   const art = useCardArt(cardId);
   const target = actionHover(action);
   const hov = target && onHover ? { onMouseEnter: () => onHover(target), onMouseLeave: () => onHover(null) } : {};
   const die = actionDie(action);
+  const ambiguous = options.length > 1;
+  const onMain = () => { if (ambiguous) setPicking((p) => !p); else onClick(action); };
   return (
-    <button disabled={disabled} onClick={onClick} {...hov} style={{ ...btn, display: 'flex', alignItems: 'center', gap: 8 }}>
-      {die && <DieTag face={die} />}
-      {art && <img src={art} alt="" style={{ height: 48, borderRadius: 3, flexShrink: 0 }} />}
-      <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
-    </button>
+    <div>
+      <button disabled={disabled} onClick={onMain} {...hov} style={{ ...btn, display: 'flex', alignItems: 'center', gap: 8 }}>
+        {die && <DieTag face={die} />}
+        {art && <img src={art} alt="" style={{ height: 48, borderRadius: 3, flexShrink: 0 }} />}
+        <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
+        {ambiguous && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cb8' }}>choose die ▸</span>}
+      </button>
+      {picking && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '2px 0 6px 10px' }}>
+          <span style={{ fontSize: 11, color: '#998', alignSelf: 'center' }}>spend:</span>
+          {options.map((f) => (
+            <button key={f} disabled={disabled} onClick={() => { setPicking(false); onClick({ ...action, die: f } as WotrAction); }}
+              style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
