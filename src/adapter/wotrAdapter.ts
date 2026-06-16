@@ -114,6 +114,17 @@ function currentActor(state: GameState): Side | null {
   }
 }
 
+/** Regions within `n` adjacency-steps of `from` (excludes `from`). */
+function regionsWithin(from: RegionId, n: number): RegionId[] {
+  const seen = new Set<RegionId>([from]); let layer: RegionId[] = [from]; const out: RegionId[] = [];
+  for (let d = 0; d < n; d++) {
+    const next: RegionId[] = [];
+    for (const r of layer) for (const a of REGIONS[r]?.adjacency ?? []) if (!seen.has(a)) { seen.add(a); next.push(a); out.push(a); }
+    layer = next;
+  }
+  return out;
+}
+
 function legalActions(state: GameState, actor: Side): WotrAction[] {
   if (currentActor(state) !== actor) return [];
   const fs = state.fellowship;
@@ -195,8 +206,12 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
   switch (state.phase) {
     case 'fellowship': {
       const acts: WotrAction[] = [{ kind: 'skipFellowshipPhase' }];
+      // Declare the Fellowship in ANY region within Progress region-steps of its
+      // last-known position (the figure moves there; the player chooses — not a
+      // forced march toward Mordor). The hidden Fellowship sneaks through anywhere,
+      // including Shadow-Stronghold regions (Moria, Mordor), so no region is excluded.
       if (fs.hidden && fs.mordor === null && fs.progress > 0) {
-        acts.push({ kind: 'declareFellowship', target: 'morannon' });
+        for (const r of regionsWithin(fs.location, fs.progress)) acts.push({ kind: 'declareFellowship', target: r });
       }
       if (fs.mordor === null && MORDOR_ENTRANCES.includes(fs.location)) {
         acts.push({ kind: 'enterMordor' });

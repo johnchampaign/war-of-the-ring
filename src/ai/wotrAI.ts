@@ -36,8 +36,12 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
   if (state.phase === 'fellowship') {
     const enter = legal.find((a) => a.kind === 'enterMordor');
     if (enter) return enter;
-    const declare = legal.find((a) => a.kind === 'declareFellowship');
-    if (declare && state.fellowship.progress >= 2) return declare;
+    // Declare when advanced, choosing the reachable target closest to Mordor (Morannon)
+    // — i.e. the declaration that pushes the Fellowship furthest toward the goal.
+    const declares = legal.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' }> => a.kind === 'declareFellowship');
+    if (declares.length && state.fellowship.progress >= 2) {
+      return declares.reduce((best, a) => (dist(a.target, 'morannon') < dist(best.target, 'morannon') ? a : best), declares[0]!);
+    }
     return legal.find((a) => a.kind === 'skipFellowshipPhase') ?? legal[0]!;
   }
 
