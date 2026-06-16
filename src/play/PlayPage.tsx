@@ -14,6 +14,7 @@ import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal } from './DecisionModal';
 import { MovePicker } from './MovePicker';
 import { DiceTray } from './DiceTray';
+import { HuntPopup } from './HuntPopup';
 import { ReportButton } from './ReportButton';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction } from './actionText';
@@ -144,6 +145,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           onConfirm={(a) => { setMoveDraft(null); void submit(a); }} onCancel={() => setMoveDraft(null)} />
       )}
       <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn} />
+      <HuntPopup view={g.view} />
       <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
       {onExit &&<button onClick={onExit} style={{ position: 'fixed', top: 6, right: 8, padding: '3px 8px', fontSize: 12 }}>← Lobby</button>}
     </div>
