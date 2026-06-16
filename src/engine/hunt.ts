@@ -89,8 +89,11 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): 
   // not reveal the Fellowship.
   const reveal = !!tile.reveal && !(fs.guide === 'gollum' && typeof tile.value === 'number');
 
-  // Record the draw for the UI's informational popup (public; seq marks a new draw).
-  state.hunt.lastDraw = { seq: (state.hunt.lastDraw?.seq ?? 0) + 1, value: tile.value, damage, reveal, onMordor: fs.mordor !== null };
+  // Record every draw (even 0/blank) for the UI's informational popup. Newest last,
+  // capped; seq marks a new draw. Public — drawn tiles are open info.
+  const prev = state.hunt.draws ?? [];
+  const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
+  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, onMordor: fs.mordor !== null }].slice(-16);
 
   if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) beginReveal(state); return; }
   if (damage === 0) { if (reveal) beginReveal(state); return; }
