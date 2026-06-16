@@ -126,7 +126,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           {/* Actions are the PRIMARY interaction — they get the whole column now (the
               hover inspector moved to the wide bottom bar). */}
           <div style={{ flex: '1 1 auto', minHeight: 120, overflow: 'auto' }}>
-            <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} />
+            <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} />
           </div>
           {chatClient && g.you && (
             <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"

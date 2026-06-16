@@ -25,8 +25,8 @@ function actionHover(a: WotrAction): Hover {
   return null;
 }
 
-export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you }: {
-  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null;
+export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardActions = 0 }: {
+  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null; boardActions?: number;
 }) {
   const [busy, setBusy] = useState(false);
   const click = async (a: WotrAction) => { setBusy(true); try { await onAction(a); } finally { setBusy(false); } };
@@ -40,9 +40,16 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // ordinary action menu (the caller filters those out before passing actions).
   return (
     <div style={panel}>
+      {/* Army moves/attacks live on the MAP (not in this list) — point the player there. */}
+      {boardActions > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#23341f', border: '1px solid #4a6a3a', borderRadius: 5, padding: '6px 9px', margin: '3px 0', fontSize: 12, color: '#cfe6c0' }}>
+          <span style={{ background: FACE.army.bg, color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>Army</span>
+          <span>Move or attack on the map — click a <b style={{ color: '#9f9' }}>green</b> army.</span>
+        </div>
+      )}
       {actions.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
         options={you ? dieOptions(a, view, you) : []} />)}
-      {actions.length === 0 && <div style={{ color: '#999' }}>No actions.</div>}
+      {actions.length === 0 && boardActions === 0 && <div style={{ color: '#999' }}>No actions.</div>}
     </div>
   );
 }
