@@ -52,7 +52,10 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
 }) {
   const W = mapImage.width, H = mapImage.height;
   const hl = highlights ?? {};
-  const boardArt = useBoardArt(); // map_en.jpg (1920x1324), aligns 1:1 with the polygons
+  const art = useBoardArt(); // map_en.jpg (1920x1324), aligns 1:1 with the polygons
+  // Let the player switch to the clean polygon map even when the art is downloaded.
+  const [polyOnly, setPolyOnly] = useState(false);
+  const boardArt = polyOnly ? null : art;
 
   const regionEls = useMemo(() => regionIds.map((id) => {
     const poly = regionPolygon(id);
@@ -106,11 +109,18 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
     {/* Snap back to the default cropped view (also recovers from zoom/pan). */}
-    <button onClick={resetView} title="Reset view to the board crop"
-      style={{ position: 'absolute', top: 6, left: 6, zIndex: 5, padding: '3px 8px', fontSize: 12,
-        background: 'rgba(28,23,16,0.85)', color: '#e9e1cc', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
-      ⟲ Reset view
-    </button>
+    <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 5, display: 'flex', gap: 6 }}>
+      <button onClick={resetView} title="Reset view to the board crop"
+        style={{ padding: '3px 8px', fontSize: 12, background: 'rgba(28,23,16,0.85)', color: '#e9e1cc', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
+        ⟲ Reset view
+      </button>
+      {art && (
+        <button onClick={() => setPolyOnly((v) => !v)} title="Switch between the board image and the clean polygon map"
+          style={{ padding: '3px 8px', fontSize: 12, background: 'rgba(28,23,16,0.85)', color: '#e9e1cc', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
+          Map: {polyOnly ? 'Polygon' : 'Image'}
+        </button>
+      )}
+    </div>
     <svg ref={svgRef} viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet"
       onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
       style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', cursor: onPickRegion ? 'grab' : 'default' }}>
@@ -147,9 +157,9 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           )}
         </g>
       ))}
-      {/* Unused "special areas" (off-map tracks/boxes printed on the board image)
-          masked out so they read as inert. Authored in the #blocked dev tab. */}
-      {blockedAreas.map((a, i) => (
+      {/* Unused "special areas" printed on the board IMAGE, masked so they read as
+          inert. Only needed over the image — the polygon map has no such art. */}
+      {boardArt && blockedAreas.map((a, i) => (
         <path key={`blocked-${i}`} d={blockedAreaPath(a.polygon)} fill="rgba(8,6,3,0.82)"
           stroke="#000" strokeWidth={1} style={{ pointerEvents: 'none' }} />
       ))}

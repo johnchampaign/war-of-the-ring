@@ -115,7 +115,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} />
       {g.error && <div style={{ background: '#7a1f1f', color: '#fff', padding: 6, fontFamily: 'system-ui', fontSize: 13 }}>⚠ {g.error.message}</div>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 8 }}>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
           </div>
@@ -160,7 +160,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       </div>
       {/* Bottom bar: hand + in-play cards on the left, the hover inspector filling the
           (previously wasted) wide space on the right. */}
-      <div style={{ display: 'flex', alignItems: 'stretch', borderTop: '1px solid #2a2418', height: 168, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', borderTop: '1px solid #2a2418', height: 124, flexShrink: 0 }}>
         <div style={{ flexShrink: 0, maxWidth: '52%', overflowX: 'auto', display: 'flex' }}>
           <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
         </div>
