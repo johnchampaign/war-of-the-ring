@@ -12,8 +12,9 @@ import type { WotrAction } from '../adapter/wotrAction';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 
+const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
-const cardName = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.name ?? id;
+const cardName = (id: string): string => CARD.get(id)?.name ?? id;
 const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
 
 const CHOICE_TITLE: Record<string, string> = {
@@ -39,6 +40,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
   view: GameState; you: Side; actions: WotrAction[]; onAction: (a: WotrAction) => void; yourTurn: boolean;
 }) {
   const [busy, setBusy] = useState(false);
+  const [hoverCard, setHoverCard] = useState<string | null>(null);
   const pc = view.pendingCombat;
   const choice = view.pendingChoice;
   const decisions = actions.filter(isDecisionAction);
@@ -59,9 +61,12 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
         {choice?.kind === 'huntRedraw' && <TileDetail tile={(choice as any).data?.tile} />}
 
         {mine ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-            {decisions.map((a, i) => <DecisionButton key={i} action={a} disabled={busy} onClick={() => click(a)} />)}
-          </div>
+          <>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+              {decisions.map((a, i) => <DecisionButton key={i} action={a} disabled={busy} onClick={() => click(a)} onHover={setHoverCard} />)}
+            </div>
+            <CardBlurb id={hoverCard} />
+          </>
         ) : (
           <div style={{ color: '#cc9', marginTop: 12 }}>Waiting for {sideName(pc ? (choice?.owner ?? pc.attacker) : you)} to decide…</div>
         )}
@@ -129,18 +134,39 @@ function HuntDetail({ data }: { data?: { damage?: number; reveal?: boolean } }) 
   );
 }
 
-function DecisionButton({ action, disabled, onClick }: { action: WotrAction; disabled: boolean; onClick: () => void }) {
+function DecisionButton({ action, disabled, onClick, onHover }: { action: WotrAction; disabled: boolean; onClick: () => void; onHover?: (id: string | null) => void }) {
   // Combat-card choices get the card thumbnail (the combat box is on the event card).
   const cardId = action.kind === 'playCombatCard' ? action.cardId : null;
   const art = useCardArt(cardId);
+  const hov = cardId && onHover ? { onMouseEnter: () => onHover(cardId), onMouseLeave: () => onHover(null) } : {};
   return (
-    <button onClick={onClick} disabled={disabled} style={dbtn}>
+    <button onClick={onClick} disabled={disabled} style={dbtn} {...hov}>
       {art && <img src={art} alt="" style={{ height: 56, borderRadius: 3, display: 'block', marginBottom: 4 }} />}
       {describeAction(action)}
     </button>
   );
 }
 
+// Describes the hovered combat card (its Combat box is what matters here, plus the
+// Event text for context) inside the modal, since the modal covers the inspector.
+function CardBlurb({ id }: { id: string | null }) {
+  const def = id ? CARD.get(id) : null;
+  return (
+    <div style={blurb}>
+      {def ? (
+        <>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>{def.name} <span style={{ color: '#aa9', fontWeight: 400 }}>· {def.side} · init {def.initiative ?? '–'}</span></div>
+          {def.combat?.title && <div style={{ fontSize: 12, margin: '3px 0' }}><b>Combat — {def.combat.title}:</b> {def.combat.text}</div>}
+          {def.eventText && <div style={{ fontSize: 12, color: '#c9c2ad', margin: '3px 0' }}><b>Event:</b> {def.eventText}</div>}
+        </>
+      ) : (
+        <span style={{ color: '#776', fontStyle: 'italic' }}>Hover a card to read its effect.</span>
+      )}
+    </div>
+  );
+}
+
 const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.72)', display: 'grid', placeItems: 'center', zIndex: 50 };
 const modal: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #5a4a2a', maxWidth: 560, boxShadow: '0 8px 40px #000' };
 const dbtn: React.CSSProperties = { background: '#7a1f1f', color: '#fff', border: '1px solid #944', borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontSize: 13, minWidth: 110 };
+const blurb: React.CSSProperties = { marginTop: 10, padding: '8px 10px', background: '#1a160f', border: '1px solid #3a342a', borderRadius: 6, minHeight: 38, color: '#e9e1cc' };
