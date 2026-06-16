@@ -196,6 +196,18 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         }
         return acts;
       }
+      case 'revealMove': {
+        // The FP chooses where the figure moves (up to Progress); never ending in an
+        // FP-controlled City/Stronghold (rulebook p.39).
+        const fs = state.fellowship;
+        const acts: WotrAction[] = [];
+        for (const r of regionsWithin(fs.location, fs.progress)) {
+          const def = REGIONS[r]!;
+          if ((def.settlement === 'City' || def.settlement === 'Stronghold') && settlementController(state, r) === 'fp') continue;
+          acts.push({ kind: 'revealMove', target: r });
+        }
+        return acts.length ? acts : [{ kind: 'revealMove', target: fs.location }]; // fallback: reveal in place
+      }
       case 'huntPreventDraw':
         return [{ kind: 'huntPreventDraw', prevent: true }, { kind: 'huntPreventDraw', prevent: false }];
       case 'huntRedraw':
@@ -628,6 +640,26 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         resolveHuntDamage(state, action.mode);
       }
       break;
+    case 'revealMove': {
+      requireChoice(state, 'revealMove', 'fp');
+      const fs = state.fellowship;
+      const fromLoc = fs.location;
+      const path = pathTo(fromLoc, action.target);
+      const steps = Math.min(fs.progress, path.length);
+      const traversed = [fromLoc, ...path.slice(0, steps)];
+      if (steps > 0) fs.location = path[steps - 1]!;
+      fs.progress = 0;
+      fs.hidden = false;
+      state.pendingChoice = null;
+      // Revealing through a Shadow Stronghold draws a Hunt tile per such Stronghold on
+      // the traced path (rulebook p.39). (If a tile opens an FP choice, further
+      // Strongholds' tiles defer — same as declaration; deviation log.)
+      for (const r of traversed) {
+        if (state.pendingChoice) break;
+        if (REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow') extraHunt(state);
+      }
+      break; // checkRingVictory + advance run at dispatch end
+    }
     case 'huntPreventDraw':
       requireChoice(state, 'huntPreventDraw', actor); resolveHuntPreventDraw(state, action.prevent); break;
     case 'huntRedraw':

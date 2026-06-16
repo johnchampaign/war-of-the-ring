@@ -53,9 +53,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   );
 
   const armyActs = useMemo(() => g.legalActions.filter(isSpatial), [g.legalActions]);
-  // Fellowship-phase declaration: pick the region to declare in (board-click).
-  const declareActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' }> => a.kind === 'declareFellowship'), [g.legalActions]);
-  const declareTargets = useMemo(() => new Set(declareActs.map((a) => a.target)), [declareActs]);
+  // Board-click placement of the Fellowship figure: declaring it (Fellowship phase) or
+  // choosing where it moves when revealed by the Hunt (revealMove choice).
+  const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove'), [g.legalActions]);
+  const declareTargets = useMemo(() => new Set(placeActs.map((a) => a.target)), [placeActs]);
+  const isReveal = g.view?.pendingChoice?.kind === 'revealMove';
   const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets]), [armyActs, declareTargets]);
   const destinations = useMemo(
     () => new Set(armyActs.filter((a) => a.from === selected).map((a) => a.to)),
@@ -63,9 +65,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   );
 
   const onRegionClick = useCallback((id: RegionId) => {
-    // Declaring the Fellowship: clicking a highlighted region declares it there.
+    // Placing the Fellowship figure (declare, or move-on-reveal): click a highlighted region.
     if (declareTargets.has(id)) {
-      const a = declareActs.find((x) => x.target === id);
+      const a = placeActs.find((x) => x.target === id);
       if (a) { setSelected(null); void submit(a); }
       return;
     }
@@ -84,10 +86,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     } else {
       setSelected(null);
     }
-  }, [selected, destinations, sources, armyActs, declareTargets, declareActs, submit]);
+  }, [selected, destinations, sources, armyActs, declareTargets, placeActs, submit]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected, destinations }), [sources, selected, destinations]);
-  const pickRegion = g.yourTurn && !g.view?.pendingChoice ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
@@ -106,10 +108,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           </div>
           {sources.size > 0 && (
             <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px', flexShrink: 0 }}>
-              {declareTargets.size > 0
-                ? `Declare the Fellowship: click a highlighted region to reveal it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`
-                : selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
-                  : 'Click a highlighted (green) region to move or attack its army.'}
+              {isReveal
+                ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
+                : declareTargets.size > 0
+                  ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`
+                  : selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
+                    : 'Click a highlighted (green) region to move or attack its army.'}
             </div>
           )}
         </div>

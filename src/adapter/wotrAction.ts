@@ -15,6 +15,9 @@ export type WotrAction =
   // Fellowship phase (FP) — one action ends the phase.
   | { kind: 'skipFellowshipPhase' }
   | { kind: 'declareFellowship'; target: RegionId }
+  // Where the Ring-bearers figure moves when the Hunt reveals the Fellowship (FP's
+  // choice, up to Progress; never an FP City/Stronghold). Resolves a 'revealMove' choice.
+  | { kind: 'revealMove'; target: RegionId }
   | { kind: 'enterMordor' }
   // Hunt Allocation phase (Shadow).
   | { kind: 'allocateHunt'; dice: number }

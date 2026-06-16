@@ -229,6 +229,8 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const level = (state.pendingChoice!.data as { level: number }).level;
       return legal.find((a) => a.kind === 'crebain' && a.use === (level >= 2)) ?? legal[0]!;
     }
+    case 'revealMove': // figure moves toward Mordor (Morannon) when revealed
+      return legal.reduce((best, a) => (a.kind === 'revealMove' && best.kind === 'revealMove' && dist(a.target, 'morannon') < dist(best.target, 'morannon')) ? a : best, legal[0]!);
     case 'eventTarget': return chooseEventTarget(state, legal);
     case 'musterSecond': // place the second figure of a two-figure muster (fuller build)
       return legal.find((a) => a.kind === 'recruitSecond' && !a.done) ?? legal[0]!;
