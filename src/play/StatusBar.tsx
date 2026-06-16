@@ -4,7 +4,6 @@ import { charName } from './charInfo';
 
 export function StatusBar({ view, you, onHoverChar }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void }) {
   const fs = view.fellowship;
-  const diceStr = (s: 'fp' | 'shadow') => view.dice[s].join(' ') || '—';
   return (
     <div style={bar}>
       <span style={pill}>Turn {view.turn}</span>
@@ -18,8 +17,7 @@ export function StatusBar({ view, you, onHoverChar }: { view: GameState; you: st
         onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
         style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span> · {fs.companions.length} companions</span>
       <span style={pill}>Hunt box {view.hunt.box}</span>
-      <span style={{ ...pill, background: '#1e3a6e' }}>FP dice: {diceStr('fp')}</span>
-      <span style={{ ...pill, background: '#6e1e1e' }}>Shadow dice: {diceStr('shadow')}</span>
+      {/* Dice are shown in the DiceTray (right column) — not duplicated here. */}
     </div>
   );
 }

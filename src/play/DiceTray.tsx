@@ -4,7 +4,7 @@
 // (usedDice) are listed dimmed so you can see what you've already done.
 import type { GameState, Side, DieFace } from '../engine/types';
 
-const FACE: Record<string, { label: string; bg: string }> = {
+export const FACE: Record<string, { label: string; bg: string }> = {
   character: { label: 'Char', bg: '#3a6ea5' },
   army: { label: 'Army', bg: '#8a5a2b' },
   muster: { label: 'Muster', bg: '#4a7a3a' },

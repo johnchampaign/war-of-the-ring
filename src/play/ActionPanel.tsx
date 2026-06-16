@@ -4,8 +4,16 @@ import { useState } from 'react';
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState } from '../engine/types';
 import { useCardArt } from './artCache';
-import { describeAction } from './actionText';
+import { describeAction, actionDie } from './actionText';
+import { FACE } from './DiceTray';
 import type { Hover } from './HoverPreview';
+
+/** Small colour-coded chip marking which action die this action spends (matches the
+ *  DiceTray colours), so the cost is visible at a glance. */
+function DieTag({ face }: { face: string }) {
+  const f = FACE[face] ?? { label: face, bg: '#555' };
+  return <span style={{ background: f.bg, color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{f.label}</span>;
+}
 
 /** What an action references for the hover inspector (a Companion/Minion or a card). */
 function actionHover(a: WotrAction): Hover {
@@ -44,15 +52,14 @@ function ActionButton({ action, disabled, onClick, onHover }: { action: WotrActi
   const art = useCardArt(cardId);
   const target = actionHover(action);
   const hov = target && onHover ? { onMouseEnter: () => onHover(target), onMouseLeave: () => onHover(null) } : {};
-  if (art) {
-    return (
-      <button disabled={disabled} onClick={onClick} {...hov} style={{ ...btn, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src={art} alt="" style={{ height: 48, borderRadius: 3, flexShrink: 0 }} />
-        <span>{describeAction(action)}</span>
-      </button>
-    );
-  }
-  return <button disabled={disabled} onClick={onClick} {...hov} style={btn}>{describeAction(action)}</button>;
+  const die = actionDie(action);
+  return (
+    <button disabled={disabled} onClick={onClick} {...hov} style={{ ...btn, display: 'flex', alignItems: 'center', gap: 8 }}>
+      {die && <DieTag face={die} />}
+      {art && <img src={art} alt="" style={{ height: 48, borderRadius: 3, flexShrink: 0 }} />}
+      <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
+    </button>
+  );
 }
 
 const panel: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 12, background: '#211c14', color: '#eee', fontFamily: 'system-ui' };

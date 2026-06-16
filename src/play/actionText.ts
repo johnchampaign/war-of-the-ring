@@ -84,6 +84,21 @@ export function describeAction(a: WotrAction): string {
   }
 }
 
+/** The action-die face an action spends during Action Resolution (a FACE key, to
+ *  colour-match the DiceTray), or null for free/phase actions that cost no die. The
+ *  canonical die — a Will of the West can substitute, and the engine spends the most
+ *  specific die first. */
+export function actionDie(a: WotrAction): string | null {
+  switch (a.kind) {
+    case 'moveFellowship': case 'hideFellowship': case 'separateCompanion': case 'moveCharacter': return 'character';
+    case 'recruitUnit': case 'recruitSecond': case 'diplomaticAction': case 'bringMinion': case 'sarumanMuster': return 'muster';
+    case 'moveArmy': case 'armyMove2': case 'attack': return 'army';
+    case 'drawEvent': case 'playEvent': return 'event';
+    case 'bringUpgrade': return 'will';
+    default: return null; // companionMuster (any die), Elven Ring (free), skip/pass, fellowship/hunt-phase actions
+  }
+}
+
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
 const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'siegeWithdraw', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice']);
