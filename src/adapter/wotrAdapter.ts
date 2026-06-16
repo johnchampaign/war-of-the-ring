@@ -791,12 +791,12 @@ function recruitSecondTargets(state: GameState, side: Side, figure: 'regular' | 
 
 /** Army-move options: every legal adjacent move for each of the side's stacks (so
  *  the AI can steer direction), capped. */
-function moveTargets(state: GameState, side: Side, cap = 28): Array<[string, string]> {
+function moveTargets(state: GameState, side: Side): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   for (const from of Object.keys(state.regions)) {
     if (armySide(state, from) !== side) continue;
     for (const to of REGIONS[from]!.adjacency) {
-      if (canMoveArmy(state, from, to, side)) { out.push([from, to]); if (out.length >= cap) return out; }
+      if (canMoveArmy(state, from, to, side)) out.push([from, to]); // every legal move (incl. merging onto a friendly army); no cap — the UI needs them all
     }
   }
   return out;

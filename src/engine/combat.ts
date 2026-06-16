@@ -600,13 +600,13 @@ export function resolvePlayCombatCard(state: GameState, cardId: string | null): 
 }
 
 /** Regions where `side` has an At-War Army adjacent to an enemy Army. */
-export function attackTargets(state: GameState, side: Side, cap = 8): Array<[RegionId, RegionId]> {
+export function attackTargets(state: GameState, side: Side): Array<[RegionId, RegionId]> {
   const out: Array<[RegionId, RegionId]> = [];
   const enemy = other(side);
   for (const from of Object.keys(state.regions)) {
-    if (out.length >= cap) break;
     if (armySide(state, from) !== side || !hasAtWarUnit(state, from, side)) continue;
-    for (const to of REGIONS[from]!.adjacency) if (armySide(state, to) === enemy && !(side === 'shadow' && shadowBarredFromRegion(state, to))) { out.push([from, to]); break; }
+    // Every adjacent enemy army is a target (an army may face several); no cap.
+    for (const to of REGIONS[from]!.adjacency) if (armySide(state, to) === enemy && !(side === 'shadow' && shadowBarredFromRegion(state, to))) out.push([from, to]);
   }
   return out;
 }
