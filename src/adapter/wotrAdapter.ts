@@ -177,8 +177,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
           acts.push({ kind: 'huntDamage', mode: 'guide' }, { kind: 'huntDamage', mode: 'random' });
         }
         // Guide damage-reduction abilities (−1 each): separate a Hobbit Guide, or
-        // Gollum reveals the Fellowship.
-        if (fs.guide === 'meriadoc' || fs.guide === 'peregrin') acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
+        // Gollum reveals the Fellowship. The Hobbit "separate −1" is NOT available in
+        // Mordor — Companions can't be separated there (rulebook p.43); eliminate one
+        // as a casualty instead (the 'guide'/'random' options give the same −1 for a
+        // Level-1 Hobbit).
+        if ((fs.guide === 'meriadoc' || fs.guide === 'peregrin') && fs.mordor === null) acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
         if (fs.guide === 'gollum' && fs.hidden) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
         if (huntReduceCardAvailable(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard' });
         return acts;
@@ -664,8 +667,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'huntDamage', actor);
       if (action.mode === 'reduceSeparate') {
         // The Hobbit Guide leaves the Fellowship (separateCompanion reassigns the
-        // Guide); hunt damage drops by 1, then re-prompt / finish.
-        separateCompanion(state, state.fellowship.guide);
+        // Guide); hunt damage drops by 1, then re-prompt / finish. Guard against
+        // Mordor, where separateCompanion returns false — without this check the
+        // reduction would apply for free (no Companion removed).
+        if (!separateCompanion(state, state.fellowship.guide)) throw new Error('The Guide cannot be separated here (Companions cannot be separated in Mordor) — eliminate a Companion as a casualty instead.');
         reduceHuntDamageBySeparate(state);
       } else {
         resolveHuntDamage(state, action.mode);
