@@ -26,10 +26,15 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
   // --- pending choices (combat / hunt) ---
   if (state.pendingChoice) return resolveChoice(state, legal);
 
-  // --- hunt allocation (Shadow): allocate the maximum offered ---
+  // --- hunt allocation (Shadow): put a FEW dice in the Hunt Box (pressure scales with
+  //     the Fellowship's progress) but keep most for actions — never dump them all,
+  //     which would leave Shadow with no Action dice this turn. ---
   if (state.phase === 'huntAllocation') {
-    return legal.reduce((best, a) =>
-      (a.kind === 'allocateHunt' && (best.kind !== 'allocateHunt' || a.dice > best.dice)) ? a : best, legal[0]!);
+    const opts = legal.filter((a) => a.kind === 'allocateHunt') as Extract<WotrAction, { kind: 'allocateHunt' }>[];
+    if (!opts.length) return legal[0]!;
+    const lo = Math.min(...opts.map((a) => a.dice)), hi = Math.max(...opts.map((a) => a.dice));
+    const want = Math.max(lo, Math.min(hi, state.fellowship.mordor !== null ? 3 : state.fellowship.progress >= 3 ? 2 : 1));
+    return opts.reduce((best, a) => (Math.abs(a.dice - want) < Math.abs(best.dice - want) ? a : best), opts[0]!);
   }
 
   // --- fellowship phase (FP): enter Mordor > declare when advanced > skip ---
