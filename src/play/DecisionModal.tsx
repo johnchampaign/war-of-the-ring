@@ -34,6 +34,7 @@ const CHOICE_TITLE: Record<string, string> = {
   guideDraw: 'Gandalf the Grey — draw a card?',
   sorcererDraw: 'The Witch-king’s Sorcery — draw a card?',
   lureChoice: 'Lure of the Ring — the Ring tempts a Companion',
+  removeExcess: 'Over the 10-unit stacking limit — remove the excess',
 };
 
 export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
@@ -59,6 +60,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
         {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>{CHOICE_TITLE[choice.kind] ?? choice.kind}</div>}
         {choice?.kind === 'huntDamage' && <HuntDetail data={(choice as any).data} />}
         {choice?.kind === 'huntRedraw' && <TileDetail tile={(choice as any).data?.tile} />}
+        {choice?.kind === 'removeExcess' && <RemoveExcessDetail view={view} data={(choice as any).data} />}
 
         {mine ? (
           <>
@@ -120,6 +122,20 @@ function TileDetail({ tile }: { tile?: { value: number | string; reveal?: boolea
   return (
     <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 2px' }}>
       You drew: <b>{dmg}</b>{tile.reveal ? ' · Reveal' : ''}{tile.stop ? ' · Stop' : ''}. Redraw it, or keep it?
+    </div>
+  );
+}
+
+function RemoveExcessDetail({ view, data }: { view: GameState; data?: { region?: string } }) {
+  const region = data?.region;
+  if (!region) return null;
+  const r = view.regions[region];
+  const total = r ? Object.values(r.units).reduce((n, u) => n + u!.regular + u!.elite, 0) : 0;
+  const over = Math.max(0, total - 10);
+  return (
+    <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 2px' }}>
+      <b>{rName(region)}</b> holds {total} units (limit 10). Choose <b>{over}</b> unit{over === 1 ? '' : 's'} to remove —
+      they return to reinforcements and can be recruited again later.
     </div>
   );
 }

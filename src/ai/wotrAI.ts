@@ -159,6 +159,9 @@ function combatCardValue(m: CombatMods | null): number {
 function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
   const pc = state.pendingCombat;
   switch (state.pendingChoice!.kind) {
+    case 'removeExcess':
+      // Shed over-stacked units cheaply: drop a Regular before an Elite.
+      return legal.find((a) => a.kind === 'removeExcess' && a.figure === 'regular') ?? legal[0]!;
     case 'combatCard': {
       // Play the most valuable combat card, or none if nothing helps enough.
       let best: WotrAction = { kind: 'playCombatCard', cardId: null }, bestVal = 1.5;

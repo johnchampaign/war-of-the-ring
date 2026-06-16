@@ -53,6 +53,7 @@ export function describeAction(a: WotrAction): string {
     case 'moveCharacter': return `Move ${a.char === 'nazgul' ? 'Nazgûl' : charName(a.char)} ${rName(a.from)} → ${rName(a.to)}`;
     case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;
     case 'armyMove2': return a.done ? 'No second army move' : `Also move army ${rName(a.from!)} → ${rName(a.to!)}`;
+    case 'removeExcess': return `Remove a ${cap(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'}`;
     case 'attack': return `Attack ${rName(a.to)} (from ${rName(a.from)})`;
     case 'skipDie': return `Discard a ${a.face} die`;
     case 'pass': return 'Pass';
@@ -123,5 +124,5 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'siegeWithdraw', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice']);
+const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'siegeWithdraw', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);

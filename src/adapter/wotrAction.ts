@@ -47,6 +47,8 @@ export type WotrAction =
   | { kind: 'moveArmy'; from: RegionId; to: RegionId; move?: MoveSel; die?: DieFace }
   // The optional SECOND army move of one Army die (a different army), or decline it.
   | { kind: 'armyMove2'; from?: RegionId; to?: RegionId; move?: MoveSel; done?: boolean }
+  // Resolve an over-the-10-limit merge: pick one excess figure to remove (rulebook p.26).
+  | { kind: 'removeExcess'; nation: Nation; figure: 'regular' | 'elite' }
   // Army die. `rearguard` (optional) is the split: figures left OUT of the battle
   // (rulebook p.28). Not-At-War units are forced into the rearguard automatically.
   | { kind: 'attack'; from: RegionId; to: RegionId; rearguard?: MoveSel; die?: DieFace }

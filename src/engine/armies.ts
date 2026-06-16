@@ -149,10 +149,13 @@ export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, 
       ? `Enemy units there, and ${cap1(blockedNation)} is not At War — you can neither attack nor move into that region until ${cap1(blockedNation)} reaches War.`
       : 'Enemy units there — attack the region instead of moving into it.';
   }
-  // Stacking limit (a besieged Stronghold holds at most 5 units).
-  const cap = state.regions[to]!.besieged ? SIEGE_LIMIT : STACKING_LIMIT;
-  const combined = unitCount(state, from) + unitCount(state, to);
-  if (combined > cap) return `Merging would put ${combined} units there, over the ${cap}-unit stacking limit. Move only part of the Army (split), or leave some behind.`;
+  // A besieged Stronghold's garrison is a HARD cap of 5 (rulebook p.31-32) — no
+  // "remove excess" relief there. The normal 10-unit stacking limit is NOT a
+  // refusal: the move is allowed and the excess is removed afterward (p.26), so
+  // it isn't checked here.
+  if (state.regions[to]!.besieged && unitCount(state, from) + unitCount(state, to) > SIEGE_LIMIT) {
+    return `A besieged Stronghold's garrison holds at most ${SIEGE_LIMIT} units.`;
+  }
   // Non-belligerent nations cannot cross another nation's border (rulebook p.27).
   const dn = REGIONS[to]!.nation;
   for (const nation of Object.keys(state.regions[from]!.units) as Nation[]) {
@@ -201,8 +204,9 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   // Only the moving Nations matter for the not-At-War border rule.
   const dn = REGIONS[to]!.nation;
   for (const n of Object.keys(sel.units ?? {}) as Nation[]) if (!isAtWar(state, n) && dn && dn !== n) return false;
-  const cap = dst.besieged ? SIEGE_LIMIT : STACKING_LIMIT;
-  if (unitCount(state, to) + movingUnits > cap) return false;
+  // Besieged garrison is a hard cap of 5; the normal 10 limit is enforced by
+  // removing the excess after the move (see removeExcessUnits), not by refusing.
+  if (dst.besieged && unitCount(state, to) + movingUnits > SIEGE_LIMIT) return false;
   // FP Leaders can never be in a region with no combat units: if the origin keeps
   // Leaders it must keep ≥1 unit (so a full vacate forces all FP Leaders to follow).
   const remainingUnits = unitCount(state, from) - movingUnits;
@@ -243,6 +247,27 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
   const dn = REGIONS[to]!.nation;
   if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
   log(state, null, 'army', `Moved army ${from} -> ${to}`);
+  return true;
+}
+
+/** Units over the 10-unit stacking limit in a (non-besieged) region — these must
+ *  be removed by the controlling player after a move/muster (rulebook p.26). */
+export function overStack(state: GameState, id: RegionId): number {
+  if (state.regions[id]!.besieged) return 0; // besieged garrison is a hard cap, never over-stacks
+  return Math.max(0, unitCount(state, id) - STACKING_LIMIT);
+}
+
+/** Remove one Army figure (a regular or elite of `nation`) from a region back to
+ *  its reinforcement pool — units removed for over-stacking "can re-enter the game
+ *  later as reinforcements" (p.26). Returns false if there's no such figure. */
+export function removeStackUnit(state: GameState, id: RegionId, nation: Nation, figure: 'regular' | 'elite'): boolean {
+  const u = state.regions[id]!.units[nation];
+  if (!u || u[figure] < 1) return false;
+  u[figure] -= 1;
+  if (u.regular === 0 && u.elite === 0) delete state.regions[id]!.units[nation];
+  const pool = state.reinforcements[nation] as { regular: number; elite: number };
+  pool[figure] += 1;
+  log(state, null, 'army', `Removed an over-stacked ${nation} ${figure} from ${id} (over the ${STACKING_LIMIT}-unit limit)`);
   return true;
 }
 

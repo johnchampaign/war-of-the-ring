@@ -27,6 +27,11 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
 
   const totalUnits = nations.reduce((s, n) => s + (reg[n] ?? 0) + (eli[n] ?? 0), 0);
   const armyUnits = nations.reduce((s, n) => s + r.units[n]!.regular + r.units[n]!.elite, 0);
+  // Merging onto a friendly army may push the destination over the 10-unit limit;
+  // the excess is removed afterward (rulebook p.26). Warn so it isn't a surprise.
+  const destUnits = !attackMode ? Object.values(view.regions[to]?.units ?? {}).reduce((s, u) => s + u!.regular + u!.elite, 0) : 0;
+  const overAll = Math.max(0, destUnits + armyUnits - 10);
+  const overSel = Math.max(0, destUnits + totalUnits - 10);
   const isWhole = totalUnits === armyUnits && leaders === r.leaders && nazgul === r.nazgul && chars.size === r.characters.length;
 
   const buildSel = (): MoveSel => {
@@ -70,6 +75,13 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
         <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
           {attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.' : 'Choose what moves; the rest stays behind (split). Move all for a normal move.'}
         </div>
+        {!attackMode && destUnits > 0 && (
+          <div style={{ fontSize: 12, color: overAll || overSel ? '#f0d090' : '#9c9', marginBottom: 8 }}>
+            {rName(to)} already holds {destUnits} unit{destUnits === 1 ? '' : 's'} (limit 10).
+            {overAll > 0 && ` Move all → you'll remove ${overAll} excess.`}
+            {overSel > 0 && overSel !== overAll && ` Move selected → remove ${overSel} excess.`}
+          </div>
+        )}
         {nations.map((n) => (
           <div key={n} style={{ marginBottom: 4 }}>
             <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{cap(n)}</div>
