@@ -7,8 +7,9 @@
 import type { GameState, RegionId, Side } from '../types';
 
 /** A chosen target for an interactive event card (fields used per card). `mode`
- *  distinguishes a card-granted Army move from an attack. */
-export interface EventTarget { from?: RegionId; to?: RegionId; region?: RegionId; companion?: string; mode?: 'move' | 'attack' }
+ *  distinguishes a card-granted Army move from an attack (and the Fellowship
+ *  hide/move/decline choice on "There Is Another Way"). */
+export interface EventTarget { from?: RegionId; to?: RegionId; region?: RegionId; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' }
 
 export interface EventHandler {
   /** "Play on the table" — the card persists (its id goes to cards[side].table)
@@ -27,6 +28,10 @@ export interface EventHandler {
   /** Multi-target cards: the max number of targets to apply (the player may stop
    *  early with a "done" option). Default 1 (single target). */
   repeat?: number;
+  /** Run AFTER the card is fully resolved (discarded, turn passed). Use for an
+   *  effect that itself raises a follow-up PendingChoice (e.g. a Fellowship move
+   *  that triggers a Hunt) — set last, it survives the eventTarget cleanup. */
+  finalize?(state: GameState, side: Side, applied: EventTarget[]): void;
 }
 
 const handlers = new Map<string, EventHandler>();

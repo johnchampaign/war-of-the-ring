@@ -405,6 +405,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // A card that started a battle (Grond / Uruk-hai) hands off to the combat
       // driver, which resumes the turn itself — don't pass it here.
       if (!state.pendingCombat) passResolutionTurn(state, actor);
+      // Post-resolution effect that may itself raise a follow-up choice (e.g. a
+      // Fellowship move's Hunt) — run last so its PendingChoice isn't cleared above.
+      if (!state.pendingCombat) h.finalize?.(state, actor, data.applied);
       break;
     }
     case 'lureChoice':

@@ -40,6 +40,11 @@ export function describeAction(a: WotrAction): string {
     case 'bringMinion': return `Bring ${charName(a.minion)} into play`;
     case 'eventTarget': {
       if (a.done) return `${cardName(a.card)}: done`;
+      // Fellowship hide/move/decline choice (There Is Another Way).
+      if (!a.region && !a.to && !a.companion && a.mode) {
+        const label = a.mode === 'hide' ? 'hide the Fellowship' : a.mode === 'move' ? 'move the Fellowship (triggers a Hunt)' : 'do neither';
+        return `${cardName(a.card)}: ${label}`;
+      }
       const dest = a.companion ? charName(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
       const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';
       return `${cardName(a.card)}: ${verb}${a.from ? `${rName(a.from)} → ` : ''}${dest}`;

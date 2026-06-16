@@ -243,6 +243,10 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
   const target = campaignTarget(state, owner);
   const score = (a: typeof ets[number]): number => {
     if (a.done) return -1;                                            // stop multi-move only if nothing better
+    // There Is Another Way (Gollum): hide is a safe benefit; moving pushes but risks the Hunt.
+    if (a.mode === 'hide') return 50;
+    if (a.mode === 'none') return 5;
+    if (a.mode === 'move' && !a.to && !a.region) return 25;
     if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
     if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;
     if (a.to) return 30 - (target ? dist(a.to, target) : 0);          // move toward the target

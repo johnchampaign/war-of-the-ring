@@ -11,7 +11,7 @@ import { applyCasualties, startBattle } from '../combat';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf } from '../data';
-import { separateCompanion, reassignGuide, pruneFellowshipOnTableCards } from '../fellowship';
+import { separateCompanion, reassignGuide, pruneFellowshipOnTableCards, moveFellowship } from '../fellowship';
 import { log } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
@@ -141,16 +141,22 @@ register('fp-char-09', { // Athelas
     heal(state, healed); log(state, null, 'event', `Athelas heals ${healed}`);
   },
 });
-// There Is Another Way: heal 1; if Gollum is the Guide, the Fellowship may also
-// hide. (Auto-hides when revealed — the safe use; the optional *move* alternative,
-// which triggers a Hunt, is a player gamble we don't auto-take. Deviation logged.)
-register('fp-char-10', { apply(state) {
-  heal(state, 1);
-  if (isGollumGuide(state) && !state.fellowship.hidden) {
-    state.fellowship.hidden = true;
-    log(state, null, 'fellowship', 'There Is Another Way: Fellowship hidden (Gollum)');
-  }
-} });
+// There Is Another Way: heal 1; then, if Gollum is the Guide, the Fellowship MAY
+// also hide (if revealed) or move (if hidden, following normal movement rules — the
+// move triggers a Hunt, run via `finalize` so its follow-up choice survives), or
+// decline. A real player choice (RAW).
+register('fp-char-10', {
+  apply: (state) => { heal(state, 1); },
+  targets: (state) => {
+    if (!isGollumGuide(state)) return [];
+    return state.fellowship.hidden ? [{ mode: 'move' }, { mode: 'none' }] : [{ mode: 'hide' }, { mode: 'none' }];
+  },
+  applyTarget: (state, _side, t) => {
+    if (t.mode === 'hide') { state.fellowship.hidden = true; log(state, null, 'fellowship', 'There Is Another Way: Fellowship hidden (Gollum)'); }
+    // 'move' is deferred to finalize (it raises a Hunt choice); 'none' does nothing.
+  },
+  finalize: (state, _side, applied) => { if (applied.some((t) => t.mode === 'move')) moveFellowship(state); },
+});
 register('fp-char-12', { apply(state) { heal(state, isGollumGuide(state) ? 2 : 1); } }); // Bilbo's Song
 
 // --- Free Peoples: political ---------------------------------------------
