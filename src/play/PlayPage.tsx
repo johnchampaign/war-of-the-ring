@@ -21,7 +21,9 @@ import { ReportButton } from './ReportButton';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction } from './actionText';
 import { moveBlockReason } from '../engine/armies';
+import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { REGIONS } from '../engine/data';
+import { charName } from './charInfo';
 
 const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ? 'Shadow' : s);
 
@@ -33,6 +35,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
   const [selected, setSelected] = useState<RegionId | null>(null);
   const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' } | null>(null);
+  // Board-driven independent-character (Nazgûl / Minion / Companion) move in progress.
+  const [charPick, setCharPick] = useState<{ from: RegionId; char: string } | null>(null);
+  // When a clicked region offers more than one thing to move (e.g. the army AND its
+  // Nazgûl), let the player choose which.
+  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined } | { kind: 'char'; char: string }> } | null>(null);
   // Why the last attempted move/merge was refused (shown so it isn't a silent no-op).
   const [blockMsg, setBlockMsg] = useState<string | null>(null);
   const [hover, setHover] = useState<Hover>(null);
@@ -64,51 +71,92 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove'), [g.legalActions]);
   const declareTargets = useMemo(() => new Set(placeActs.map((a) => a.target)), [placeActs]);
   const isReveal = g.view?.pendingChoice?.kind === 'revealMove';
-  const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets]), [armyActs, declareTargets]);
+  // Independent characters (Nazgûl/Minion/Companion) are board-movable when a
+  // Character (or Will) die is available — detected by any moveCharacter being legal.
+  const canMoveChars = useMemo(() => g.legalActions.some((a) => a.kind === 'moveCharacter'), [g.legalActions]);
+  const charSources = useMemo(() => {
+    const s = new Set<RegionId>();
+    if (g.view && canMoveChars && g.you) for (const id of Object.keys(g.view.regions)) {
+      if (movableCharsAt(g.view, g.you as Side, id).length) s.add(id);
+    }
+    return s;
+  }, [g.view, canMoveChars, g.you]);
+  const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets, ...charSources]), [armyActs, declareTargets, charSources]);
+  // The region currently "selected" for highlighting (an army source, a char source, or a menu region).
+  const activeRegion = selected ?? charPick?.from ?? moveMenu?.region ?? null;
+  const charDestinations = useMemo(
+    () => (g.view && charPick && g.you ? new Set(characterDestinations(g.view, g.you as Side, charPick.char, charPick.from)) : new Set<RegionId>()),
+    [g.view, charPick, g.you],
+  );
   const destinations = useMemo(
-    () => new Set(armyActs.filter((a) => a.from === selected).map((a) => a.to)),
-    [armyActs, selected],
+    () => new Set<RegionId>([...armyActs.filter((a) => a.from === selected).map((a) => a.to), ...charDestinations]),
+    [armyActs, selected, charDestinations],
   );
 
+  const clearMove = () => { setSelected(null); setCharPick(null); setMoveMenu(null); };
+
+  // Begin moving whatever was chosen from a region: an army (select for the picker)
+  // or a specific independent character (Nazgûl/Minion/Companion).
+  const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'char'; char: string }) => {
+    setMoveMenu(null);
+    if (opt.kind === 'army') { setCharPick(null); setSelected(region); }
+    else { setSelected(null); setCharPick({ from: region, char: opt.char }); }
+  }, []);
+
   const onRegionClick = useCallback((id: RegionId) => {
-    setBlockMsg(null);
+    setBlockMsg(null); setMoveMenu(null);
     // Placing the Fellowship figure (declare, or move-on-reveal): click a highlighted region.
     if (declareTargets.has(id)) {
       const a = placeActs.find((x) => x.target === id);
-      if (a) { setSelected(null); void submit(a); }
+      if (a) { clearMove(); void submit(a); }
       return;
     }
+    // A character move is in progress: click a highlighted destination to move it there.
+    if (charPick) {
+      if (charDestinations.has(id)) { void submit({ kind: 'moveCharacter', char: charPick.char, from: charPick.from, to: id }); clearMove(); return; }
+      if (id === charPick.from) { setCharPick(null); return; } // click the piece again to cancel
+    }
+    // An army move is in progress: click a highlighted destination (army-only set).
     if (selected && destinations.has(id)) {
       const act = armyActs.find((a) => a.from === selected && a.to === id);
       if (act) {
         setSelected(null);
-        // Both moves and attacks open the picker (whole army, or split off a portion /
-        // rearguard); only the kind differs.
         if (act.kind === 'moveArmy') setMoveDraft({ from: act.from, to: act.to, kind: 'moveArmy' });
         else if (act.kind === 'attack') setMoveDraft({ from: act.from, to: act.to, kind: 'attack' });
         else void submit(act);
       }
-    } else if (selected && id !== selected && g.view && REGIONS[selected]?.adjacency.includes(id)) {
-      // Adjacent but not a legal destination (e.g. a refused merge): explain why,
-      // instead of silently re-selecting the other army.
+      return;
+    }
+    // Clicking a region that has something to move: army, character(s), or both.
+    const armyHere = armyActs.some((a) => a.from === id);
+    const charsHere = (g.view && canMoveChars && g.you) ? movableCharsAt(g.view, g.you as Side, id) : [];
+    const opts: Array<{ kind: 'army' } | { kind: 'char'; char: string }> = [
+      ...(armyHere ? [{ kind: 'army' as const }] : []),
+      ...charsHere.map((c) => ({ kind: 'char' as const, char: c })),
+    ];
+    if (opts.length > 1) { clearMove(); setMoveMenu({ region: id, options: opts }); return; }
+    if (opts.length === 1) {
+      // Toggle off if re-clicking the already-active piece's region.
+      if ((selected === id && opts[0]!.kind === 'army') || (charPick?.from === id)) { clearMove(); return; }
+      beginMove(id, opts[0]!);
+      return;
+    }
+    // Adjacent-but-illegal (e.g. a refused merge): explain why instead of a silent no-op.
+    if (selected && id !== selected && g.view && REGIONS[selected]?.adjacency.includes(id)) {
       const reason = moveBlockReason(g.view, selected, id, g.you as Side);
       if (reason) setBlockMsg(reason);
-      else if (sources.has(id)) setSelected(id);
-    } else if (sources.has(id)) {
-      setSelected((s) => (s === id ? null : id));
-    } else {
-      setSelected(null);
     }
-  }, [selected, destinations, sources, armyActs, declareTargets, placeActs, submit, g.view, g.you]);
+    clearMove();
+  }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, submit, beginMove, canMoveChars, g.view, g.you]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
-  const highlights = useMemo(() => ({ sources, selected, destinations }), [sources, selected, destinations]);
+  const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations }), [sources, activeRegion, destinations]);
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
-  // Army moves/attacks are done on the board; combat/hunt decisions go to the
-  // modal. Keep both out of the plain action-button list.
-  const panelActions = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a));
+  // Army moves/attacks AND independent-character (Nazgûl/Companion) moves are done on
+  // the board; combat/hunt decisions go to the modal. Keep them out of the button list.
+  const panelActions = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter');
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
@@ -135,8 +183,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
                 : declareTargets.size > 0
                   ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`
-                  : selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
-                    : 'Click a highlighted (green) region to move or attack its army.'}
+                  : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : charName(charPick.char)} — click a highlighted region to move there (or click the piece again to cancel).`
+                    : selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
+                      : 'Click a highlighted (green) region to move an army or an independent character (Nazgûl, Companion).'}
             </div>
           )}
         </div>
@@ -175,6 +224,23 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       {moveDraft && (
         <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view}
           onConfirm={(a) => { setMoveDraft(null); void submit(a); }} onCancel={() => setMoveDraft(null)} />
+      )}
+      {/* A region offered more than one thing to move (e.g. the army AND its Nazgûl). */}
+      {moveMenu && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.55)', display: 'grid', placeItems: 'center', zIndex: 60 }}
+          onClick={() => setMoveMenu(null)}>
+          <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 16, borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 240, boxShadow: '0 8px 40px #000' }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>What do you want to move?</div>
+            {moveMenu.options.map((o, i) => (
+              <button key={i} onClick={() => beginMove(moveMenu.region, o)}
+                style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
+                {o.kind === 'army' ? 'The army' : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
+              </button>
+            ))}
+            <button onClick={() => setMoveMenu(null)} style={{ marginTop: 6, padding: '5px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
       )}
       <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn} />
       <HuntPopup view={g.view} />

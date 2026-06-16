@@ -96,6 +96,27 @@ function movablePieces(state: GameState, side: Side): Array<{ char: string; from
   return out;
 }
 
+/** The actor's movable independent characters sitting in `from` ('nazgul' for a
+ *  Nazgûl group, plus any Minion/Companion figures that can still move). For the
+ *  board UI's click-to-move. */
+export function movableCharsAt(state: GameState, side: Side, from: RegionId): string[] {
+  return movablePieces(state, side).filter((p) => p.from === from).map((p) => p.char);
+}
+
+/** Every legal destination region for `char` moving from `from` — the full set
+ *  (unlike characterMoveOptions, which caps a curated subset for the AI). For the
+ *  board UI: highlight these when the player picks a character to move. */
+export function characterDestinations(state: GameState, side: Side, char: string, from: RegionId): RegionId[] {
+  const range = rangeOf(state, char, from);
+  if (range <= 0) return [];
+  const out: RegionId[] = [];
+  for (const to of Object.keys(state.regions)) {
+    if (to === from) continue;
+    if (regionDistance(from, to) <= range && canLand(state, to, side)) out.push(to);
+  }
+  return out;
+}
+
 /** Representative legal character moves for the Character die (a subset, like the
  *  army enumerator): each movable piece toward a small set of useful targets —
  *  the Fellowship's region (Nazgûl hunt there) and the actor's army regions. */
