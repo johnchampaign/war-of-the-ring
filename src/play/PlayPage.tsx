@@ -16,6 +16,7 @@ import { MovePicker } from './MovePicker';
 import { DiceTray } from './DiceTray';
 import { HuntPopup } from './HuntPopup';
 import { TurnSummary } from './TurnSummary';
+import { LogPanel } from './LogPanel';
 import { ReportButton } from './ReportButton';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction } from './actionText';
@@ -145,6 +146,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               hover inspector moved to the wide bottom bar). */}
           <div style={{ flex: '1 1 auto', minHeight: 120, overflow: 'auto' }}>
             <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} />
+          </div>
+          {/* Always-visible game log so a unit's fate (moved / merged / removed /
+              killed) is traceable in the moment. Capped so it never crowds actions. */}
+          <div style={{ flexShrink: 0, height: '26%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <LogPanel view={g.view} />
           </div>
           {chatClient && g.you && (
             <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
