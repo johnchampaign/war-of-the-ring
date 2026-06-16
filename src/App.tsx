@@ -1,6 +1,6 @@
 // App shell: lobby + routing. Hotseat (local in-browser engine) or online (HTTP
 // to /api). #audit -> the dev polygon-audit overlay.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PlayPage } from './play/PlayPage';
 import { PolygonAudit } from './devtabs/PolygonAudit';
 import { ContentAudit } from './devtabs/ContentAudit';
@@ -15,11 +15,16 @@ type Mode =
   | { kind: 'online'; gameId: string; token: string };
 
 export function App() {
-  if (typeof window !== 'undefined' && window.location.hash === '#audit') return <PolygonAudit />;
-  if (typeof window !== 'undefined' && window.location.hash === '#content') return <ContentAudit />;
-  if (typeof window !== 'undefined' && window.location.hash === '#blocked') return <BlockedAreasEditor />;
-  const combatScenario = typeof window !== 'undefined' && window.location.hash === '#combat';
+  // Re-render on hash change so the dev routes (#audit / #content / #blocked /
+  // #combat) switch live from the lobby links instead of only on a fresh load.
+  const [hash, setHash] = useState(() => (typeof window !== 'undefined' ? window.location.hash : ''));
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
+  const combatScenario = hash === '#combat';
   const invite = readOnlineInvite();
   const [mode, setMode] = useState<Mode>(
     combatScenario ? { kind: 'local', seed: 1, scenario: 'combat' }
@@ -31,6 +36,11 @@ export function App() {
     if (mode.kind === 'online') return makeGameClient(mode.gameId, mode.token);
     return null;
   }, [mode]);
+
+  // Dev routes — checked after the hooks above so hook order stays stable.
+  if (hash === '#audit') return <PolygonAudit />;
+  if (hash === '#content') return <ContentAudit />;
+  if (hash === '#blocked') return <BlockedAreasEditor />;
 
   if (client) return <PlayPage client={client} onExit={mode.kind === 'local' ? () => setMode({ kind: 'lobby' }) : undefined} />;
   const startLocal = (aiSide?: 'fp' | 'shadow') => setMode({ kind: 'local', seed: Math.floor(Math.random() * 1e9), aiSide });
