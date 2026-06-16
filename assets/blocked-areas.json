@@ -1,5 +1,5 @@
 {
-  "_doc": "Off-map / unused 'special areas' printed on the board image (tracks, boxes, scoring strips) that are NOT playable regions. Polygons are in the same pixel space as region-geometry.json (the reference map image). The play board masks these out so they read as inert. Authored with the #blocked dev tab.",
+  "_doc": "Off-map / unused 'special areas' printed on the board image (tracks, boxes, scoring strips) that are NOT playable regions. Polygons are in the same pixel space as region-geometry.json (the reference map image). The play board masks these out so they read as inert. One special entry labeled 'Board Crop' is NOT a mask — its bounding box is the board's default view (crops the dead side margins). Authored with the #blocked dev tab.",
   "areas": [
     {
       "label": "blocked-1",
@@ -89,6 +89,15 @@
         [1820, 875],
         [1899, 866],
         [1899, 447]
+      ]
+    },
+    {
+      "label": "Board Crop",
+      "polygon": [
+        [240, 11],
+        [251, 1320],
+        [1751, 1319],
+        [1733, 2]
       ]
     }
   ]

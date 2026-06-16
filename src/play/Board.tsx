@@ -8,7 +8,7 @@ import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
 import { useBoardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage } from '../data/geometry';
-import { blockedAreas, blockedAreaPath } from '../data/blockedAreas';
+import { blockedAreas, blockedAreaPath, boardCrop } from '../data/blockedAreas';
 import mapData from '../../assets/map.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
@@ -67,21 +67,24 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   }), [view]);
 
   // --- Zoom / pan (the whole map is detailed; let the player get close to read it).
-  const ASPECT = H / W;
-  const [vb, setVb] = useState({ x: 0, y: 0, w: W, h: H });
+  // Default view is the authored "Board Crop" rectangle (drops the dead side
+  // margins / track strips); falls back to the full image if none is authored.
+  const CROP = boardCrop ?? { x: 0, y: 0, w: W, h: H };
+  const ASPECT = CROP.h / CROP.w;
+  const [vb, setVb] = useState({ ...CROP });
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; w: number; h: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
   const clampVb = (v: { x: number; y: number; w: number; h: number }) => {
-    const w = Math.min(W, Math.max(W / 8, v.w)), h = w * ASPECT;
-    return { w, h, x: Math.min(Math.max(v.x, -w * 0.15), W - w * 0.85), y: Math.min(Math.max(v.y, -h * 0.15), H - h * 0.85) };
+    const w = Math.min(CROP.w, Math.max(CROP.w / 8, v.w)), h = w * ASPECT;
+    return { w, h, x: Math.min(Math.max(v.x, CROP.x - w * 0.15), CROP.x + CROP.w - w * 0.85), y: Math.min(Math.max(v.y, CROP.y - h * 0.15), CROP.y + CROP.h - h * 0.85) };
   };
   const zoomAt = useCallback((px: number, py: number, factor: number) => {
     setVb((cur) => {
-      const w = Math.min(W, Math.max(W / 8, cur.w * factor)), h = w * ASPECT;
+      const w = Math.min(CROP.w, Math.max(CROP.w / 8, cur.w * factor)), h = w * ASPECT;
       return clampVb({ x: cur.x + px * cur.w - px * w, y: cur.y + py * cur.h - py * h, w, h });
     });
-  }, [ASPECT, W, H]);
+  }, [ASPECT, CROP.w, CROP.x, CROP.h, CROP.y]);
   const onWheel = useCallback((e: React.WheelEvent) => {
     const r = svgRef.current!.getBoundingClientRect();
     zoomAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, e.deltaY < 0 ? 0.85 : 1 / 0.85);
