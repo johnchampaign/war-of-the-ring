@@ -8,7 +8,7 @@ import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
 import { useBoardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage, playableBounds } from '../data/geometry';
-import { blockedAreas, blockedAreaPath } from '../data/blockedAreas';
+import { blockedAreas, blockedAreaPath, boardCrop } from '../data/blockedAreas';
 import mapData from '../../assets/map.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
@@ -70,11 +70,10 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   }), [view]);
 
   // --- Zoom / pan (the whole map is detailed; let the player get close to read it).
-  // Default view is the playable area — derived from the region polygons (the same
-  // geometry the board renders from, so it can't go stale separately, unlike the
-  // earlier blocked-areas.json crop), which drops the dead margins (army boxes,
-  // tracks, title banner).
-  const CROP = playableBounds;
+  // Default view is the authored "Board Crop" rectangle (x 240–1751, y 2–1320) — it
+  // trims the printed side columns off the board image. Falls back to the region-
+  // polygon bounding box only if no crop is authored.
+  const CROP = boardCrop ?? playableBounds;
   const ASPECT = CROP.h / CROP.w;
   // `null` = show the current crop (default). Only an explicit pan/zoom stores an
   // override. Deriving the default from CROP (instead of seeding state once) means
