@@ -107,13 +107,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ flexShrink: 0, maxHeight: '24%', overflow: 'auto' }}>
             <PoliticsPanel view={g.view} />
           </div>
-          {/* Actions are the PRIMARY interaction — they get the lion's share (grow + scroll). */}
+          {/* Actions are the PRIMARY interaction — they get the whole column now (the
+              hover inspector moved to the wide bottom bar). */}
           <div style={{ flex: '1 1 auto', minHeight: 120, overflow: 'auto' }}>
             <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} />
-          </div>
-          {/* Hover preview is secondary — a capped strip at the bottom. (Click any card to read it full-screen.) */}
-          <div style={{ flexShrink: 0, height: '32%', minHeight: 150, display: 'flex', flexDirection: 'column' }}>
-            <HoverPreview hover={hover} view={g.view} />
           </div>
           {chatClient && g.you && (
             <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
@@ -121,7 +118,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           )}
         </div>
       </div>
-      <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
+      {/* Bottom bar: hand + in-play cards on the left, the hover inspector filling the
+          (previously wasted) wide space on the right. */}
+      <div style={{ display: 'flex', alignItems: 'stretch', borderTop: '1px solid #2a2418', height: 168, flexShrink: 0 }}>
+        <div style={{ flexShrink: 0, maxWidth: '52%', overflowX: 'auto', display: 'flex' }}>
+          <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418' }}>
+          <HoverPreview hover={hover} view={g.view} bottom />
+        </div>
+      </div>
       {moveDraft && (
         <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view}
           onConfirm={(a) => { setMoveDraft(null); void submit(a); }} onCancel={() => setMoveDraft(null)} />
