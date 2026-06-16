@@ -136,17 +136,9 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
       {/* Fellowship marker (last-known position) */}
       <FellowshipMarker view={view} />
     </svg>
-      <div style={zoomCtl}>
-        <button style={zoomBtn} title="Zoom in (or scroll)" onClick={() => zoomAt(0.5, 0.5, 0.8)}>+</button>
-        <button style={zoomBtn} title="Zoom out (or scroll)" onClick={() => zoomAt(0.5, 0.5, 1.25)}>−</button>
-        <button style={{ ...zoomBtn, fontSize: 11, width: 'auto', padding: '0 8px' }} title="Reset to fit" onClick={() => setVb({ x: 0, y: 0, w: W, h: H })}>Fit</button>
-      </div>
     </div>
   );
 });
-
-const zoomCtl: React.CSSProperties = { position: 'absolute', top: 8, left: 8, display: 'flex', gap: 4, background: 'rgba(20,17,11,0.7)', padding: 4, borderRadius: 6 };
-const zoomBtn: React.CSSProperties = { width: 28, height: 28, fontSize: 18, lineHeight: 1, background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 // An army marker: a two-tone pill — side colour for Regulars, gold for Elites —
 // plus a corner pip counting Leaders (FP) / Nazgûl (Shadow). Sized to stay legible
