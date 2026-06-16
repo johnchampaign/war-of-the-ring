@@ -40,6 +40,12 @@ function supabase(env: Env): SupabaseClient {
   return cachedSupabase;
 }
 
+/** Bare Supabase store — for direct report writes (e.g. game-log uploads) that
+ *  aren't tied to a server-side game. */
+export function makeStore(env: Env): SupabaseStore {
+  return new SupabaseStore(supabase(env));
+}
+
 const baseUrl = (env: Env) => env.PUBLIC_BASE_URL ?? 'https://war-of-the-ring.pages.dev';
 const gameUrlFor = (env: Env) => (gameId: string, token: string) =>
   `${baseUrl(env)}/play/${gameId}?as=${token}`;

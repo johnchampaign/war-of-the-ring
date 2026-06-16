@@ -1,13 +1,21 @@
 // Cloudflare Pages Function: the /api/* lobby for online async play. Routes map
 // onto the framework GameServer (see _lib/server.ts). Token auth via ?as=TOKEN.
 // Mirrors the integration-guide route table.
-import { makeServer, type Env } from '../_lib/server';
+import { makeServer, makeStore, type Env } from '../_lib/server';
 import { ConflictError, type BugReportRow } from 'digital-boardgame-framework/server';
 import { createGame } from '../../src/engine/setup';
 import { startGame } from '../../src/adapter/wotrAdapter';
 
-const json = (data: unknown, status = 200): Response =>
-  new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+// Game-log uploads come from any origin (incl. the dev client on localhost), so
+// that one public endpoint is CORS-open. It writes non-PII AI-tuning data only.
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+const json = (data: unknown, status = 200, extra: Record<string, string> = {}): Response =>
+  new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...extra } });
+const randomId = (): string => {
+  const a = new Uint8Array(10);
+  (globalThis.crypto ?? require('node:crypto').webcrypto).getRandomValues(a);
+  return Array.from(a, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 16);
+};
 
 interface Ctx { request: Request; env: Env; params: { path?: string[] }; }
 
@@ -33,6 +41,32 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         emails: body?.emails,
       });
       return json(result, 201);
+    }
+
+    // POST /api/gamelog — PUBLIC: a FINISHED game's log, uploaded to improve the AI
+    // (the Axis & Allies / Tyrants pattern). Non-PII tuning data; CORS-open so the
+    // dev client (different origin) can post too. Stored as a 'wotr-gamelog' report.
+    if (seg.length === 1 && seg[0] === 'gamelog') {
+      if (method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+      if (method === 'POST') {
+        const body = await safeJson(request);
+        const id = randomId();
+        await makeStore(env).putReport({
+          reportId: id,
+          gameId: String(body?.gameId ?? 'local').slice(0, 64),
+          reporterSide: String(body?.you ?? '?').slice(0, 16),
+          turnNumber: Number(body?.turns) || 0,
+          serverSnapshot: '',
+          reporterView: '',
+          clientLog: Array.isArray(body?.log) ? body.log.slice(-3000) : [],
+          message: String(body?.message ?? 'GAME COMPLETE — uploaded for AI tuning').slice(0, 600),
+          severity: 'feedback',
+          category: 'wotr-gamelog',
+          clientBuild: typeof body?.clientBuild === 'string' ? body.clientBuild : undefined,
+          createdAt: new Date().toISOString(),
+        });
+        return json({ ok: true, reportId: id }, 200, CORS);
+      }
     }
 
     // Report triage — PUBLIC, per the agent-collaboration trust-tier split:
