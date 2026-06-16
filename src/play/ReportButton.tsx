@@ -22,7 +22,9 @@ export function ReportButton({ report, clientBuild }: {
     if (!msg.trim()) return;
     setBusy(true); setErr(null);
     try {
-      const r = await report({ message: msg.trim(), severity: sev, category: 'game', clientBuild });
+      // Distinct category so the shared Supabase project's report queue can be
+      // filtered to this game (Axis & Allies / Tyrants / … share the table).
+      const r = await report({ message: msg.trim(), severity: sev, category: 'wotr', clientBuild });
       setSentId(r.reportId);
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }

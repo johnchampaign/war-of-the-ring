@@ -44,10 +44,13 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
     // GET /api/reports[?unresolved=1][&severity=..][&category=..]
     if (seg.length === 1 && seg[0] === 'reports' && method === 'GET') {
       const u = url.searchParams.get('unresolved');
+      // Default to this game's reports only — the Supabase project is shared with
+      // other games. Pass ?category= (e.g. an empty value via ?category=*) to widen.
+      const cat = url.searchParams.get('category');
       const reports = await server.listReports({
         unresolved: u === '1' || u === 'true' ? true : undefined,
         severity: url.searchParams.get('severity') ?? undefined,
-        category: url.searchParams.get('category') ?? undefined,
+        category: cat === null ? 'wotr' : cat === '*' ? undefined : cat,
       });
       return json({ reports: reports.map(summarizeReport) });
     }
