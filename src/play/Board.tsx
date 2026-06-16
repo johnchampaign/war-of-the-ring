@@ -8,6 +8,7 @@ import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
 import { useBoardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage } from '../data/geometry';
+import { blockedAreas, blockedAreaPath } from '../data/blockedAreas';
 import mapData from '../../assets/map.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
@@ -132,6 +133,12 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
             <circle cx={(e.layout?.anchor.x ?? e.poly[0]!.x) - 16} cy={(e.layout?.anchor.y ?? e.poly[0]!.y) - 16} r={6} fill="#2a1d3a" stroke="#fff" strokeWidth={1} />
           )}
         </g>
+      ))}
+      {/* Unused "special areas" (off-map tracks/boxes printed on the board image)
+          masked out so they read as inert. Authored in the #blocked dev tab. */}
+      {blockedAreas.map((a, i) => (
+        <path key={`blocked-${i}`} d={blockedAreaPath(a.polygon)} fill="rgba(8,6,3,0.82)"
+          stroke="#000" strokeWidth={1} style={{ pointerEvents: 'none' }} />
       ))}
       {/* Fellowship marker (last-known position) */}
       <FellowshipMarker view={view} />
