@@ -10,8 +10,8 @@ import {
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import {
-  recruit, moveArmy, moveArmySplit, canMoveArmy, armySide, settlementController, unitCount, STACKING_LIMIT,
-  recruitNazgul, canRecruitNazgul,
+  recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
+  recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
 } from '../engine/armies';
 import { startBattle, attackError, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
@@ -186,6 +186,16 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'musterSecond': {
         const data = state.pendingChoice!.data as { figure: 'regular' | 'leader'; first: string };
         return recruitSecondTargets(state, actor, data.figure, data.first);
+      }
+      case 'removeExcess': {
+        const data = state.pendingChoice!.data as { region: RegionId };
+        const r = state.regions[data.region]!;
+        const acts: WotrAction[] = [];
+        for (const n of Object.keys(r.units) as Nation[]) {
+          if (r.units[n]!.regular > 0) acts.push({ kind: 'removeExcess', nation: n, figure: 'regular' });
+          if (r.units[n]!.elite > 0) acts.push({ kind: 'removeExcess', nation: n, figure: 'elite' });
+        }
+        return acts;
       }
       case 'armyMove2': {
         const data = state.pendingChoice!.data as { src: string; dest: string };
@@ -544,10 +554,15 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const moved = action.move
         ? moveArmySplit(state, action.from, action.to, actor, action.move, !viaArmyDie)
         : moveArmy(state, action.from, action.to, actor);
-      if (!moved) throw new Error('Illegal move');
+      if (!moved) {
+        const reason = moveBlockReason(state, action.from, action.to, actor);
+        throw new Error(reason ?? (action.move
+          ? 'That split is not legal — a Character-die army move must include a Leader/Nazgûl/Character with the moving units, and at least one Army unit must move.'
+          : 'Illegal move.'));
+      }
       // An Army die may move a SECOND different army (rulebook p.27); a Character die moves only one.
-      if (viaArmyDie) state.pendingChoice = { owner: actor, kind: 'armyMove2', data: { src: action.from, dest: action.to } };
-      else passResolutionTurn(state, actor);
+      // Over-stacking (>10) prompts the player to remove the excess first (p.26).
+      afterMove(state, actor, action.to, viaArmyDie ? { kind: 'armyMove2', src: action.from, dest: action.to } : { kind: 'pass' });
       break;
     }
     case 'armyMove2': {
@@ -560,9 +575,23 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         const ok2 = action.move
           ? moveArmySplit(state, action.from!, action.to!, actor, action.move, false)
           : moveArmy(state, action.from!, action.to!, actor);
-        if (!ok2) throw new Error('Illegal second move');
+        if (!ok2) {
+          const reason = moveBlockReason(state, action.from!, action.to!, actor);
+          throw new Error(reason ?? 'That second move is not legal (check the stacking limit and the moving nation\'s political status).');
+        }
+        afterMove(state, actor, action.to!, { kind: 'pass' }); // the 2nd move may also over-stack
+      } else {
+        passResolutionTurn(state, actor);
       }
-      passResolutionTurn(state, actor);
+      break;
+    }
+    case 'removeExcess': {
+      requireChoice(state, 'removeExcess', actor);
+      const data = state.pendingChoice!.data as { region: RegionId; next: MoveNext };
+      if (!removeStackUnit(state, data.region, action.nation, action.figure)) throw new Error('No such unit to remove');
+      if (overStack(state, data.region) > 0) break; // still over the limit — keep prompting
+      state.pendingChoice = null;
+      applyMoveNext(state, actor, data.next);
       break;
     }
     case 'attack': {
@@ -787,6 +816,25 @@ function recruitSecondTargets(state: GameState, side: Side, figure: 'regular' | 
     if (out.length >= 8) break;
   }
   return out;
+}
+
+// What happens once a move (and any over-stack removal) is fully resolved: either
+// offer the Army die's optional second move, or pass the resolution turn.
+type MoveNext = { kind: 'armyMove2'; src: RegionId; dest: RegionId } | { kind: 'pass' };
+
+/** After a move lands, prompt to remove any units over the 10-stacking limit
+ *  (rulebook p.26) before continuing; otherwise continue immediately. */
+function afterMove(state: GameState, actor: Side, to: RegionId, next: MoveNext): void {
+  if (overStack(state, to) > 0) {
+    state.pendingChoice = { owner: actor, kind: 'removeExcess', data: { region: to, next } };
+    return;
+  }
+  applyMoveNext(state, actor, next);
+}
+
+function applyMoveNext(state: GameState, actor: Side, next: MoveNext): void {
+  if (next.kind === 'armyMove2') state.pendingChoice = { owner: actor, kind: 'armyMove2', data: { src: next.src, dest: next.dest } };
+  else passResolutionTurn(state, actor);
 }
 
 /** Army-move options: every legal adjacent move for each of the side's stacks (so
