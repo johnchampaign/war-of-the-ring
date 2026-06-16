@@ -24,15 +24,17 @@ export function PoliticsPanel({ view }: { view: GameState }) {
           VP <b style={{ color: '#7fb6e6' }}>{view.victoryPoints.fp}</b> · <b style={{ color: '#e6857f' }}>{view.victoryPoints.shadow}</b>
         </span>
       </div>
-      <NationGroup view={view} nations={FP_NATIONS} label="Free Peoples" />
-      <NationGroup view={view} nations={SHADOW_NATIONS} label="Shadow" />
+      <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
+        <NationGroup view={view} nations={FP_NATIONS} label="Free Peoples" />
+        <NationGroup view={view} nations={SHADOW_NATIONS} label="Shadow" />
+      </div>
     </div>
   );
 }
 
 function NationGroup({ view, nations, label }: { view: GameState; nations: Nation[]; label: string }) {
   return (
-    <div style={{ marginTop: 6 }}>
+    <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
       {nations.map((n) => <NationRow key={n} n={n} ns={view.nations[n]} />)}
     </div>
