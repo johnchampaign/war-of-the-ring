@@ -7,11 +7,16 @@
 import { useCallback, useRef, useState } from 'react';
 import { mapImage } from '../data/geometry';
 import { blockedAreas as existing, type BlockedArea } from '../data/blockedAreas';
+import { useBoardArt } from '../play/artCache';
 
 type Pt = { x: number; y: number };
 
 export function BlockedAreasEditor() {
   const W = mapImage.width, H = mapImage.height;
+  // Prefer the downloaded board art (IndexedDB) so the editor works on the deployed
+  // site (where /dev-assets is stripped); fall back to the dev file for local dev.
+  const boardArt = useBoardArt();
+  const mapHref = boardArt ?? `/dev-assets/${mapImage.src}`;
   const [areas, setAreas] = useState<BlockedArea[]>(() => existing.map((a) => ({ ...a, polygon: a.polygon.map((p) => [...p] as [number, number]) })));
   const [draft, setDraft] = useState<Pt[]>([]);
   const [showMap, setShowMap] = useState(true);
@@ -77,7 +82,7 @@ export function BlockedAreasEditor() {
         <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width={1280} height={1280 * H / W}
           onClick={addPoint}
           style={{ display: 'block', border: '1px solid #333', background: '#000', maxWidth: '100%', cursor: 'crosshair', flexShrink: 0 }}>
-          {showMap && <image href={`/dev-assets/${mapImage.src}`} x={0} y={0} width={W} height={H} />}
+          {showMap && <image href={mapHref} x={0} y={0} width={W} height={H} />}
           {/* committed areas */}
           {areas.map((a, i) => (
             <g key={i}>
