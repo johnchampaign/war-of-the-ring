@@ -4,7 +4,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useGame, ChatPanel } from 'digital-boardgame-framework/client';
 import type { GameClientApi } from '../online/gameClient';
-import type { GameState, RegionId, Side } from '../engine/types';
+import type { GameState, RegionId, Side, DieFace } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import { Board } from './Board';
 import { ActionPanel } from './ActionPanel';
@@ -20,7 +20,7 @@ import { LogPanel } from './LogPanel';
 import { GameOverUpload } from './GameOverUpload';
 import { ReportButton } from './ReportButton';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { isDecisionAction } from './actionText';
+import { isDecisionAction, dieOptions } from './actionText';
 import { moveBlockReason } from '../engine/armies';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { REGIONS } from '../engine/data';
@@ -31,9 +31,24 @@ const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ?
 type SpatialAction = Extract<WotrAction, { kind: 'moveArmy' | 'attack' }>;
 const isSpatial = (a: WotrAction): a is SpatialAction => a.kind === 'moveArmy' || a.kind === 'attack';
 
+// Die-first filter: when the player has picked a specific die to spend, an action is
+// shown only if that die can pay for it. Free/phase actions (dieOptions empty — Pass,
+// Elven Ring, Hunt/Fellowship-phase steps) are always shown.
+const dieAllowsAction = (a: WotrAction, view: GameState, you: Side, die: DieFace): boolean => {
+  const opts = dieOptions(a, view, you);
+  return opts.length === 0 || opts.includes(die);
+};
+
 export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: () => void }) {
   // Realtime move push when available (online); polling fallback otherwise.
   const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
+  // Die-first turn flow (Ira #8): pick one of your dice → only that die's actions show
+  // (in the panel AND on the board). null = no filter (every legal action visible).
+  const [die, setDie] = useState<DieFace | null>(null);
+  const me: Side = g.you === 'shadow' ? 'shadow' : 'fp';
+  // Drop a stale selection (die spent / new round) so we never filter to a die you no longer have.
+  const activeDie = die && (g.view?.dice[me] ?? []).includes(die) ? die : null;
+  const charDieOk = !activeDie || activeDie === 'character' || activeDie === 'will';
   const [selected, setSelected] = useState<RegionId | null>(null);
   const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' } | null>(null);
   // Board-driven independent-character (Nazgûl / Minion / Companion) move in progress.
@@ -54,7 +69,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const submit = useCallback(async (a: WotrAction) => {
     if (inFlight.current) return;
     inFlight.current = true;
-    try { await g.submit(a); } finally { inFlight.current = false; }
+    try { await g.submit(a); setDie(null); } finally { inFlight.current = false; }
   }, [g]);
 
   // Chat is online-only (a remote opponent to talk to); the hotseat client omits
@@ -66,7 +81,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     [client],
   );
 
-  const armyActs = useMemo(() => g.legalActions.filter(isSpatial), [g.legalActions]);
+  const armyActs = useMemo(() => {
+    const acts = g.legalActions.filter(isSpatial);
+    return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
+  }, [g.legalActions, activeDie, g.view, g.you]);
   // Board-click placement of the Fellowship figure: declaring it (Fellowship phase) or
   // choosing where it moves when revealed by the Hunt (revealMove choice).
   const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' | 'separateMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove' || a.kind === 'separateMove'), [g.legalActions]);
@@ -78,11 +96,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const canMoveChars = useMemo(() => g.legalActions.some((a) => a.kind === 'moveCharacter'), [g.legalActions]);
   const charSources = useMemo(() => {
     const s = new Set<RegionId>();
-    if (g.view && canMoveChars && g.you) for (const id of Object.keys(g.view.regions)) {
+    if (g.view && canMoveChars && charDieOk && g.you) for (const id of Object.keys(g.view.regions)) {
       if (movableCharsAt(g.view, g.you as Side, id).length) s.add(id);
     }
     return s;
-  }, [g.view, canMoveChars, g.you]);
+  }, [g.view, canMoveChars, charDieOk, g.you]);
   const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets, ...charSources]), [armyActs, declareTargets, charSources]);
   // The region currently "selected" for highlighting (an army source, a char source, or a menu region).
   const activeRegion = selected ?? charPick?.from ?? moveMenu?.region ?? null;
@@ -131,7 +149,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // Clicking a region that has something to move: army, character(s), or both.
     const armyHere = armyActs.some((a) => a.from === id);
-    const charsHere = (g.view && canMoveChars && g.you) ? movableCharsAt(g.view, g.you as Side, id) : [];
+    const charsHere = (g.view && canMoveChars && charDieOk && g.you) ? movableCharsAt(g.view, g.you as Side, id) : [];
     const opts: Array<{ kind: 'army' } | { kind: 'char'; char: string }> = [
       ...(armyHere ? [{ kind: 'army' as const }] : []),
       ...charsHere.map((c) => ({ kind: 'char' as const, char: c })),
@@ -149,7 +167,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (reason) setBlockMsg(reason);
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, submit, beginMove, canMoveChars, g.view, g.you]);
+  }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, submit, beginMove, canMoveChars, charDieOk, g.view, g.you]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations }), [sources, activeRegion, destinations]);
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove) ? onRegionClick : undefined;
@@ -158,7 +176,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   // Army moves/attacks AND independent-character (Nazgûl/Companion) moves are done on
   // the board; combat/hunt decisions go to the modal. Keep them out of the button list.
-  const panelActions = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove');
+  const panelActionsAll = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove');
+  const panelActions = activeDie && g.you
+    ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
+    : panelActionsAll;
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
@@ -194,7 +215,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           )}
         </div>
         <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <DiceTray view={g.view} you={g.you as Side} />
+          <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn ? setDie : undefined} />
           {/* Politics is reference info — capped + scrolls so it never crowds the actions. */}
           <div style={{ flexShrink: 0, maxHeight: '24%', overflow: 'auto' }}>
             <PoliticsPanel view={g.view} />
@@ -202,7 +223,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           {/* Actions are the PRIMARY interaction — they get the whole column now (the
               hover inspector moved to the wide bottom bar). */}
           <div style={{ flex: '1 1 auto', minHeight: 120, overflow: 'auto' }}>
-            <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} />
+            <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} />
           </div>
           {/* Always-visible game log so a unit's fate (moved / merged / removed /
               killed) is traceable in the moment. Capped so it never crowds actions. */}

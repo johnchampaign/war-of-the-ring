@@ -25,8 +25,8 @@ function actionHover(a: WotrAction): Hover {
   return null;
 }
 
-export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardActions = 0 }: {
-  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null; boardActions?: number;
+export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardActions = 0, selectedDie, onClearDie }: {
+  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null; boardActions?: number; selectedDie?: DieFace | null; onClearDie?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const click = async (a: WotrAction) => { setBusy(true); try { await onAction(a); } finally { setBusy(false); } };
@@ -36,10 +36,28 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   }
   if (!yourTurn) return <div style={panel}>Waiting for the other player…</div>;
 
+  // Pass is promoted to a prominent top button (Ira #8) so it's never lost in the list.
+  const pass = actions.find((a) => a.kind === 'pass');
+  const rest = actions.filter((a) => a.kind !== 'pass');
+  const sel = selectedDie ?? null;
+  const faceLabel = sel ? (FACE[sel]?.label ?? sel) : null;
+
   // Combat/hunt decisions are handled by the DecisionModal; this list is the
   // ordinary action menu (the caller filters those out before passing actions).
   return (
     <div style={panel}>
+      {sel && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 6px', fontSize: 12, color: '#e8dcb8' }}>
+          <span>Actions for the <DieTag face={sel} /> die:</span>
+          <button onClick={onClearDie} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #5a4a2a', color: '#cb8', borderRadius: 5, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>← show all dice</button>
+        </div>
+      )}
+      {pass && (
+        <button disabled={busy} onClick={() => click(pass)}
+          style={{ display: 'block', width: '100%', textAlign: 'center', margin: '0 0 8px', padding: '9px 10px', background: '#4a3a1a', color: '#ffe08a', border: '1px solid #7a5f24', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
+          Pass (do nothing this turn)
+        </button>
+      )}
       {/* Army moves/attacks live on the MAP (not in this list) — point the player there. */}
       {boardActions > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#23341f', border: '1px solid #4a6a3a', borderRadius: 5, padding: '6px 9px', margin: '3px 0', fontSize: 12, color: '#cfe6c0' }}>
@@ -47,9 +65,11 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
           <span>Move or attack on the map — click a <b style={{ color: '#9f9' }}>green</b> army.</span>
         </div>
       )}
-      {actions.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
-        options={you ? dieOptions(a, view, you) : []} />)}
-      {actions.length === 0 && boardActions === 0 && <div style={{ color: '#999' }}>No actions.</div>}
+      {rest.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
+        options={you ? dieOptions(a, view, you) : []} forceDie={sel} />)}
+      {rest.length === 0 && boardActions === 0 && (
+        <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>
+      )}
     </div>
   );
 }
@@ -57,19 +77,26 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
 // A normal action button. For "Play event" it shows the card-art thumbnail (when
 // downloaded). When more than one die could pay for the action, the first click opens
 // a die-picker (the player chooses which to spend); one option submits directly.
-function ActionButton({ action, disabled, onClick, onHover, options }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[] }) {
+function ActionButton({ action, disabled, onClick, onHover, options, forceDie }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null }) {
   const [picking, setPicking] = useState(false);
   const cardId = action.kind === 'playEvent' ? action.cardId : null;
   const art = useCardArt(cardId);
   const target = actionHover(action);
   const hov = target && onHover ? { onMouseEnter: () => onHover(target), onMouseLeave: () => onHover(null) } : {};
   const die = actionDie(action);
-  const ambiguous = options.length > 1;
-  const onMain = () => { if (ambiguous) setPicking((p) => !p); else onClick(action); };
+  // When the player has pre-selected a die that can pay for this action, spend it
+  // directly (no per-action die-picker) — the choice was already made up top.
+  const forced = forceDie && options.includes(forceDie) ? forceDie : null;
+  const ambiguous = !forced && options.length > 1;
+  const onMain = () => {
+    if (forced) onClick({ ...action, die: forced } as WotrAction);
+    else if (ambiguous) setPicking((p) => !p);
+    else onClick(action);
+  };
   return (
     <div>
       <button disabled={disabled} onClick={onMain} {...hov} style={{ ...btn, display: 'flex', alignItems: 'center', gap: 8 }}>
-        {die && <DieTag face={die} />}
+        {(forced ?? die) && <DieTag face={(forced ?? die)!} />}
         {art && <img src={art} alt="" style={{ height: 48, borderRadius: 3, flexShrink: 0 }} />}
         <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
         {ambiguous && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cb8' }}>choose die ▸</span>}
