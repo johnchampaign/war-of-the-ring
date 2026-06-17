@@ -37,7 +37,7 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
   );
 }
 
-export function StatusBar({ view, you, onHoverChar }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void }) {
+export function StatusBar({ view, you, onHoverChar, trailing }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void; trailing?: React.ReactNode }) {
   const fs = view.fellowship;
   return (
     <div style={bar}>
@@ -73,6 +73,7 @@ export function StatusBar({ view, you, onHoverChar }: { view: GameState; you: st
         </span>
       </span>
       {/* Dice are shown in the DiceTray (right column) — not duplicated here. */}
+      {trailing}
     </div>
   );
 }

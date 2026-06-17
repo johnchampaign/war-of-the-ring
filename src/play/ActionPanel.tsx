@@ -25,8 +25,8 @@ function actionHover(a: WotrAction): Hover {
   return null;
 }
 
-export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardActions = 0, selectedDie, onClearDie }: {
-  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null; boardActions?: number; selectedDie?: DieFace | null; onClearDie?: () => void;
+export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardActions = 0, selectedDie, onClearDie, compact }: {
+  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null; boardActions?: number; selectedDie?: DieFace | null; onClearDie?: () => void; compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const click = async (a: WotrAction) => { setBusy(true); try { await onAction(a); } finally { setBusy(false); } };
@@ -54,7 +54,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       )}
       {pass && (
         <button disabled={busy} onClick={() => click(pass)}
-          style={{ display: 'block', width: '100%', textAlign: 'center', margin: '0 0 8px', padding: '9px 10px', background: '#4a3a1a', color: '#ffe08a', border: '1px solid #7a5f24', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
+          style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 4px' : '0 0 8px', padding: compact ? '4px 10px' : '9px 10px', background: '#4a3a1a', color: '#ffe08a', border: '1px solid #7a5f24', borderRadius: 6, cursor: 'pointer', fontSize: compact ? 12 : 14, fontWeight: 700 }}>
           Pass (do nothing this turn)
         </button>
       )}
@@ -66,7 +66,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
         </div>
       )}
       {rest.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
-        options={you ? dieOptions(a, view, you) : []} forceDie={sel} />)}
+        options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} />)}
       {rest.length === 0 && boardActions === 0 && (
         <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>
       )}
@@ -77,7 +77,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
 // A normal action button. For "Play event" it shows the card-art thumbnail (when
 // downloaded). When more than one die could pay for the action, the first click opens
 // a die-picker (the player chooses which to spend); one option submits directly.
-function ActionButton({ action, disabled, onClick, onHover, options, forceDie }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null }) {
+function ActionButton({ action, disabled, onClick, onHover, options, forceDie, compact }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null; compact?: boolean }) {
   const [picking, setPicking] = useState(false);
   const cardId = action.kind === 'playEvent' ? action.cardId : null;
   const art = useCardArt(cardId);
@@ -93,11 +93,12 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie }:
     else if (ambiguous) setPicking((p) => !p);
     else onClick(action);
   };
+  const bstyle = compact ? { ...btn, margin: '1px 0', padding: '2px 9px', fontSize: 12 } : btn;
   return (
     <div>
-      <button disabled={disabled} onClick={onMain} {...hov} style={{ ...btn, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <button disabled={disabled} onClick={onMain} {...hov} style={{ ...bstyle, display: 'flex', alignItems: 'center', gap: 8 }}>
         {(forced ?? die) && <DieTag face={(forced ?? die)!} />}
-        {art && <img src={art} alt="" style={{ height: 48, borderRadius: 3, flexShrink: 0 }} />}
+        {art && <img src={art} alt="" style={{ height: compact ? 30 : 48, borderRadius: 3, flexShrink: 0 }} />}
         <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
         {ambiguous && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cb8' }}>choose die ▸</span>}
       </button>

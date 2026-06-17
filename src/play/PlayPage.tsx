@@ -196,6 +196,17 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (!s?.canUndo) return;
     if (s.foreknowledge) setUndoConfirm(true); else void runUndo();
   };
+  // Undo button lives inline in the status bar (to the right of the Elven Rings).
+  const undoButton = undoCap ? (
+    <button onClick={onUndoClick} disabled={!undoCap.canUndo}
+      title={undoCap.reason ?? (undoCap.canUndo ? 'Undo your last action' : 'Nothing to undo')}
+      style={{ padding: '3px 10px', fontSize: 12, fontWeight: 600, borderRadius: 10, whiteSpace: 'nowrap', cursor: undoCap.canUndo ? 'pointer' : 'not-allowed',
+        background: undoCap.canUndo ? (undoCap.foreknowledge ? '#4a3a1a' : '#2c3a2c') : '#231f18',
+        color: undoCap.canUndo ? (undoCap.foreknowledge ? '#ffe08a' : '#cfe6c0') : '#776',
+        border: `1px solid ${undoCap.canUndo ? (undoCap.foreknowledge ? '#7a5f24' : '#3a5a3a') : '#3a342a'}` }}>
+      ↶ Undo{undoCap.canUndo && undoCap.foreknowledge ? ' (reveals info)' : ''}
+    </button>
+  ) : null;
 
   const panelActionsAll = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove');
   const panelActions = activeDie && g.you
@@ -236,23 +247,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           )}
         </div>
         <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          {/* The status bar lives at the top of the right column (may wrap to several rows). */}
-          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} />
-          {undoCap && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: '#1a160f', borderBottom: '1px solid #2a2418', flexShrink: 0 }}>
-              <button onClick={onUndoClick} disabled={!undoCap.canUndo}
-                title={undoCap.reason ?? (undoCap.canUndo ? 'Undo your last action' : 'Nothing to undo')}
-                style={{ padding: '4px 12px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: undoCap.canUndo ? 'pointer' : 'not-allowed',
-                  background: undoCap.canUndo ? (undoCap.foreknowledge ? '#4a3a1a' : '#2c3a2c') : '#231f18',
-                  color: undoCap.canUndo ? (undoCap.foreknowledge ? '#ffe08a' : '#cfe6c0') : '#776',
-                  border: `1px solid ${undoCap.canUndo ? (undoCap.foreknowledge ? '#7a5f24' : '#3a5a3a') : '#3a342a'}` }}>
-                ↶ Undo{undoCap.canUndo && undoCap.foreknowledge ? ' (reveals info)' : ''}
-              </button>
-              {undoCap.foreknowledge && !undoCap.canUndo && (
-                <span style={{ fontSize: 11, color: '#a98' }}>Can’t undo past a roll/draw in a 2-player game.</span>
-              )}
-            </div>
-          )}
+          {/* The status bar lives at the top of the right column (may wrap to several
+              rows). The Undo button rides along at its right end (after Elven Rings). */}
+          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} trailing={undoButton} />
           {/* Dice pool and Politics share one row at the top of the column. */}
           <div style={{ display: 'flex', flexShrink: 0, maxHeight: '32%', borderBottom: '1px solid #2a2418' }}>
             <div style={{ flexShrink: 0, overflow: 'auto' }}>
@@ -262,25 +259,28 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               <PoliticsPanel view={g.view} />
             </div>
           </div>
-          {/* Action buttons — flex, so they yield space to the fixed inspector below
-              (and scroll when the list is long) rather than squeezing it. */}
-          <div style={{ flex: '1 1 auto', minHeight: 80, overflow: 'auto' }}>
-            <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} />
-          </div>
-          {/* The game log moved to a pop-up (opened from the floating Log button). */}
-          {chatClient && g.you && (
-            <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
-              subscribe={client.subscribeMessages} style={{ borderTop: '1px solid #2a2418', maxHeight: '34vh' }} />
-          )}
-          {/* Hand + in-play (played) cards, full-width, in their own row above the inspector. */}
-          <div style={{ flexShrink: 0, height: 116, borderTop: '1px solid #2a2418' }}>
-            <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
-          </div>
-          {/* Large, FIXED-size inspector in the lower-right corner: enlarged cards &
-              board territories. flexShrink:0 + a set height so the action buttons and
-              hand above never resize it. */}
-          <div style={{ flexShrink: 0, height: 300, borderTop: '1px solid #2a2418' }}>
-            <HoverPreview hover={hover} view={g.view} bottom />
+          {/* Lower area: action buttons + hand on the LEFT, the big enlarge/inspect
+              area filling the RIGHT (it takes all the room that's left there). */}
+          <div style={{ display: 'flex', flex: '1 1 auto', minHeight: 0, borderTop: '1px solid #2a2418' }}>
+            <div style={{ flex: '0 0 44%', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              {/* Action buttons (compact — half height). */}
+              <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
+                <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} compact />
+              </div>
+              {chatClient && g.you && (
+                <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
+                  subscribe={client.subscribeMessages} style={{ borderTop: '1px solid #2a2418', maxHeight: '28vh' }} />
+              )}
+              {/* Hand + in-play (played) cards. */}
+              <div style={{ flexShrink: 0, height: 116, borderTop: '1px solid #2a2418' }}>
+                <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
+              </div>
+            </div>
+            {/* The enlarge/inspect area — fills the whole right side of the lower area
+                (enlarged cards & board territories). The Report / Log buttons float over it. */}
+            <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418' }}>
+              <HoverPreview hover={hover} view={g.view} bottom />
+            </div>
           </div>
         </div>
       </div>
