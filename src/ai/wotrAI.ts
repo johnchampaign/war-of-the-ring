@@ -33,7 +33,14 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     const opts = legal.filter((a) => a.kind === 'allocateHunt') as Extract<WotrAction, { kind: 'allocateHunt' }>[];
     if (!opts.length) return legal[0]!;
     const lo = Math.min(...opts.map((a) => a.dice)), hi = Math.max(...opts.map((a) => a.dice));
-    const want = Math.max(lo, Math.min(hi, state.fellowship.mordor !== null ? 3 : state.fellowship.progress >= 3 ? 2 : 1));
+    // Hunt pressure is the Shadow's win condition; the cap is the Companion count
+    // (rulebook p.18). When the Fellowship is in Mordor or far along, max out the
+    // Hunt box (corruption is now the priority over saving Action dice); ease off
+    // when it's near its last-known spot. Uploaded games showed fast Mordor rushes
+    // slipping through under-pressured Hunts.
+    const fs = state.fellowship;
+    const target = (fs.mordor !== null || fs.progress >= 4) ? hi : fs.progress >= 2 ? 2 : 1;
+    const want = Math.max(lo, Math.min(hi, target));
     return opts.reduce((best, a) => (Math.abs(a.dice - want) < Math.abs(best.dice - want) ? a : best), opts[0]!);
   }
 
