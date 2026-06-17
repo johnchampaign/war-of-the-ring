@@ -262,9 +262,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               <PoliticsPanel view={g.view} />
             </div>
           </div>
-          {/* Actions are the PRIMARY interaction — they get the whole column now (the
-              hover inspector moved to the wide bottom bar). */}
-          <div style={{ flex: '1 1 auto', minHeight: 120, overflow: 'auto' }}>
+          {/* Action buttons — flex, so they yield space to the fixed inspector below
+              (and scroll when the list is long) rather than squeezing it. */}
+          <div style={{ flex: '1 1 auto', minHeight: 80, overflow: 'auto' }}>
             <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} />
           </div>
           {/* The game log moved to a pop-up (opened from the floating Log button). */}
@@ -272,15 +272,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
               subscribe={client.subscribeMessages} style={{ borderTop: '1px solid #2a2418', maxHeight: '34vh' }} />
           )}
-          {/* Hand + in-play cards on the left, the hover inspector on the right — at the
-              bottom of the right-hand column (was a full-width bottom bar). */}
-          <div style={{ display: 'flex', alignItems: 'stretch', borderTop: '1px solid #2a2418', height: 124, flexShrink: 0 }}>
-            <div style={{ flexShrink: 0, maxWidth: '52%', overflowX: 'auto', display: 'flex' }}>
-              <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418' }}>
-              <HoverPreview hover={hover} view={g.view} bottom />
-            </div>
+          {/* Hand + in-play (played) cards, full-width, in their own row above the inspector. */}
+          <div style={{ flexShrink: 0, height: 116, borderTop: '1px solid #2a2418' }}>
+            <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
+          </div>
+          {/* Large, FIXED-size inspector in the lower-right corner: enlarged cards &
+              board territories. flexShrink:0 + a set height so the action buttons and
+              hand above never resize it. */}
+          <div style={{ flexShrink: 0, height: 300, borderTop: '1px solid #2a2418' }}>
+            <HoverPreview hover={hover} view={g.view} bottom />
           </div>
         </div>
       </div>
