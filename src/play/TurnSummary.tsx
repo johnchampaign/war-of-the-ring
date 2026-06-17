@@ -6,11 +6,18 @@
 // each time the AI acts — easy to dismiss.
 import { useState } from 'react';
 import type { GameState, Side } from '../engine/types';
+import { FACE } from './DiceTray';
 
 const KIND_COLOR: Record<string, string> = {
   combat: '#e6857f', army: '#d8cfa8', muster: '#9cc77a', hunt: '#e6a3d0',
   fellowship: '#e6b85a', event: '#9fb6e6', politics: '#cbb',
 };
+
+/** Small chip for the action die a logged step spent (so "which die" is visible). */
+function DieChip({ face }: { face: string }) {
+  const f = FACE[face] ?? { label: face, bg: '#555' };
+  return <span style={{ background: f.bg, color: '#fff', borderRadius: 4, padding: '0 5px', fontSize: 9, fontWeight: 700, flexShrink: 0, alignSelf: 'flex-start', marginTop: 1 }}>{f.label}</span>;
+}
 
 export function TurnSummary({ view, yourTurn, you }: { view: GameState; yourTurn: boolean; you: Side | null }) {
   const [dismissed, setDismissed] = useState(-1);
@@ -27,13 +34,14 @@ export function TurnSummary({ view, yourTurn, you }: { view: GameState; yourTurn
     <div style={backdrop} onClick={dismiss}>
       <div style={card} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>
-          While {oppName} played — {items.length} event{items.length === 1 ? '' : 's'}
+          While you waited, {oppName} took {items.length} action{items.length === 1 ? '' : 's'}
         </div>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, textAlign: 'left', maxHeight: '55vh', overflowY: 'auto' }}>
           {items.map((e, i) => (
-            <li key={i} style={{ fontSize: 13, padding: '3px 0', borderBottom: '1px solid #2a2418', display: 'flex', gap: 8 }}>
-              <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 64 }}>{e.kind}</span>
-              <span>{e.msg}</span>
+            <li key={i} style={{ fontSize: 13, padding: '3px 0', borderBottom: '1px solid #2a2418', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 58, marginTop: 1 }}>{e.kind}</span>
+              {e.die && <DieChip face={e.die} />}
+              <span style={{ flex: 1 }}>{e.msg}</span>
             </li>
           ))}
         </ul>

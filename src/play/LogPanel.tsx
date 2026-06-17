@@ -5,6 +5,7 @@
 // bottom, auto-scrolled. No hidden info: it shows exactly what the seat may see.
 import { useEffect, useRef } from 'react';
 import type { GameState } from '../engine/types';
+import { FACE } from './DiceTray';
 
 const KIND_COLOR: Record<string, string> = {
   combat: '#e6857f', army: '#d8cfa8', muster: '#9cc77a', hunt: '#e6a3d0',
@@ -29,6 +30,7 @@ export function LogPanel({ view }: { view: GameState }) {
             <div key={i} style={{ fontSize: 12, lineHeight: 1.35, padding: '1px 0', display: 'flex', gap: 6 }}>
               <span style={{ flexShrink: 0, color: '#665', width: 22, textAlign: 'right' }}>T{e.turn}</span>
               <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 52 }}>{e.kind}</span>
+              {e.die && <span title="action die spent" style={{ flexShrink: 0, background: (FACE[e.die] ?? { bg: '#555' }).bg, color: '#fff', borderRadius: 3, padding: '0 4px', fontSize: 8, fontWeight: 700, alignSelf: 'center' }}>{(FACE[e.die] ?? { label: e.die }).label}</span>}
               <span style={{ color: '#ddd' }}>{e.msg}</span>
             </div>
           ))}

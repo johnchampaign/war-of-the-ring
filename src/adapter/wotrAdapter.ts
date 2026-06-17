@@ -339,6 +339,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
   const must = currentActor(state);
   if (must !== actor) throw new Error(`Not ${actor}'s turn (actor is ${must ?? 'none'}, phase ${state.phase})`);
 
+  // Snapshot so we can tag this action's log entries with the die it spent (Ira #9).
+  const usedBefore = state.usedDice?.[actor]?.length ?? 0;
+  const logBefore = state.log.length;
+
   switch (action.kind) {
     case 'skipFellowshipPhase':
       requirePhase(state, 'fellowship'); state.phase = 'huntAllocation'; break;
@@ -751,6 +755,16 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'actionResolution');
       passResolutionTurn(state, actor); break; // yield to opponent (who has more dice)
     default: throw new Error(`Unknown action ${(action as { kind: string }).kind}`);
+  }
+  // Tag the entries this action just logged with the die it spent, so the UI (turn
+  // summary, log) can show "which die" the player used. The last face appended to
+  // usedDice this dispatch is the die consumed; nothing appended = a free/phase action.
+  const used = state.usedDice?.[actor] ?? [];
+  if (used.length > usedBefore) {
+    const spent = used[used.length - 1];
+    for (let i = logBefore; i < state.log.length; i++) {
+      if (state.log[i]!.die === undefined) state.log[i]!.die = spent;
+    }
   }
   checkRingVictory(state);
   advance(state);

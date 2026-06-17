@@ -260,4 +260,7 @@ export interface LogEntry {
   side: Side | null;
   kind: string;
   msg: string;
+  /** The action die spent on this action, when one was (set by the adapter dispatch
+   *  for the UI; absent for free/phase log entries). */
+  die?: DieFace;
 }
