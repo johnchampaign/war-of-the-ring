@@ -25,6 +25,8 @@ export function ReportButton({ report, clientBuild }: {
       // Distinct category so the shared Supabase project's report queue can be
       // filtered to this game (Axis & Allies / Tyrants / … share the table).
       const r = await report({ message: msg.trim(), severity: sev, category: 'wotr', clientBuild });
+      // Only confirm on a real, server-issued id — never show a false "thank you".
+      if (!r?.reportId) throw new Error("Couldn't save the report. Please try again.");
       setSentId(r.reportId);
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }

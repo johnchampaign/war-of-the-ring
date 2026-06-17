@@ -128,17 +128,17 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat'; aiSid
     // endpoint (same-origin on the deployed site; the CORS-open deployed endpoint
     // from the local dev client, which has no Functions runtime).
     report: async (body) => {
-      try {
-        const res = await fetch(REPORT_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...body, you: aiSide ? human : (wotrAdapter.currentActor(state) ?? human), turn: state.turn }),
-        });
-        const j = await res.json().catch(() => ({} as { reportId?: string }));
-        return { reportId: j.reportId ?? 'local' };
-      } catch {
-        return { reportId: 'local' };
-      }
+      // Let failures surface (no silent swallow): a thrown error / missing id makes
+      // the UI show a real error instead of a false "thank you".
+      const res = await fetch(REPORT_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, you: aiSide ? human : (wotrAdapter.currentActor(state) ?? human), turn: state.turn }),
+      });
+      if (!res.ok) throw new Error(`Couldn't save the report (server returned ${res.status}). Please try again.`);
+      const j = (await res.json().catch(() => ({}))) as { reportId?: string };
+      if (!j.reportId) throw new Error("Couldn't save the report. Please try again.");
+      return { reportId: j.reportId };
     },
   };
 }
