@@ -272,11 +272,22 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         for (const m of characterMoveOptions(state, actor)) acts.push({ kind: 'moveCharacter', ...m });
       }
       if (hasWill) for (const u of upgradeOptions(state)) acts.push(u);
+      // Drawing an Event card needs an Event (Palantír) or Will die.
       if (faces.has('event') || hasWill) {
         if (state.cards[actor].draw.character.length) acts.push({ kind: 'drawEvent', deck: 'character' });
         if (state.cards[actor].draw.strategy.length) acts.push({ kind: 'drawEvent', deck: 'strategy' });
+      }
+      // Playing an Event card (rulebook p.22): an Event/Will die plays ANY card; a
+      // Character die plays a Character-deck card; an Army/Muster die plays a
+      // Strategy-deck (Army/Muster) card.
+      {
+        const evtDie = faces.has('event') || hasWill;
+        const charDie = faces.has('character');
+        const stratDie = faces.has('army') || faces.has('muster') || faces.has('armyMuster');
         for (const cardId of state.cards[actor].hand) {
-          if (canPlayCard(state, cardId, actor)) acts.push({ kind: 'playEvent', cardId });
+          const deck = EVENT_BY_ID[cardId]?.deck;
+          const byType = (deck === 'Character' && charDie) || (deck === 'Strategy' && stratDie);
+          if ((evtDie || byType) && canPlayCard(state, cardId, actor)) acts.push({ kind: 'playEvent', cardId });
         }
       }
       // The Ents Awake: FP may play one Character Event without an Action die.
@@ -402,8 +413,15 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!h || !canPlayCard(state, action.cardId, actor)) throw new Error('Card not playable');
       // The Ents Awake free play: an FP Character Event costs no die (consumes the flag).
       const freePlay = actor === 'fp' && state.flags.fpFreeCharEventThisTurn && EVENT_BY_ID[action.cardId]!.deck === 'Character';
+      // Which dice can pay for this card: its type die (Character / Army-Muster),
+      // plus the Event (Palantír) and Will wildcards (rulebook p.22). The type die is
+      // preferred so the scarce Event die is saved unless the player picks it.
+      const playDeck = EVENT_BY_ID[action.cardId]?.deck;
+      const playFaces: DieFace[] = playDeck === 'Character'
+        ? ['character', 'event', 'will']
+        : ['army', 'armyMuster', 'muster', 'event', 'will'];
       if (freePlay) state.flags.fpFreeCharEventThisTurn = false;
-      else if (!consumePreferred(state, actor, ['event', 'will'], action.die)) throw new Error('No Event die');
+      else if (!consumePreferred(state, actor, playFaces, action.die)) throw new Error('No usable die to play this card');
       // Palantír of Orthanc grants a bonus draw — captured BEFORE this play so the
       // card doesn't trigger off its own play.
       const palantirWasActive = actor === 'shadow' && palantirActive(state);

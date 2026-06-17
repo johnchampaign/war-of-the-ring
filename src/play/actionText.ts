@@ -10,6 +10,7 @@ import { charName } from './charInfo';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 const cardName = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.name ?? id;
+const cardDeck = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.deck ?? '';
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function describeAction(a: WotrAction): string {
@@ -112,7 +113,9 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
     case 'hideFellowship': return view.fellowship.guide === 'strider' ? [...new Set(pool)] : pick(['character', 'will']);
     case 'moveFellowship': case 'separateCompanion': case 'moveCharacter': return pick(['character', 'will']);
     case 'recruitUnit': case 'diplomaticAction': case 'bringMinion': case 'sarumanMuster': return pick(['muster', 'armyMuster', 'will']);
-    case 'drawEvent': case 'playEvent': return pick(['event', 'will']);
+    case 'drawEvent': return pick(['event', 'will']);
+    // A card plays via its type die (Character / Army-Muster) or the Event/Will wildcards (p.22).
+    case 'playEvent': return pick(cardDeck(a.cardId) === 'Character' ? ['character', 'event', 'will'] : ['army', 'armyMuster', 'muster', 'event', 'will']);
     case 'moveArmy': case 'attack': {
       const r = view.regions[a.from];
       const leader = !!r && (r.leaders > 0 || r.nazgul > 0 || r.characters.length > 0);
