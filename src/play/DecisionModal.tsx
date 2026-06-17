@@ -182,7 +182,12 @@ function CardBlurb({ id }: { id: string | null }) {
   );
 }
 
-const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.72)', display: 'grid', placeItems: 'center', zIndex: 50 };
-const modal: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #5a4a2a', maxWidth: 560, boxShadow: '0 8px 40px #000' };
+// Anchor near the top (not vertically centred) so the card blurb growing on hover
+// extends the modal DOWNWARD instead of re-centring it — otherwise the buttons slide
+// out from under the cursor and you can't click them.
+const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.72)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '7vh', boxSizing: 'border-box', zIndex: 50 };
+const modal: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #5a4a2a', maxWidth: 560, maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 8px 40px #000' };
 const dbtn: React.CSSProperties = { background: '#7a1f1f', color: '#fff', border: '1px solid #944', borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontSize: 13, minWidth: 110 };
-const blurb: React.CSSProperties = { marginTop: 10, padding: '8px 10px', background: '#1a160f', border: '1px solid #3a342a', borderRadius: 6, minHeight: 38, color: '#e9e1cc' };
+// Reserve enough height for a typical combat card so the modal barely changes size on
+// hover (the top-anchor already keeps the buttons fixed even if it does grow).
+const blurb: React.CSSProperties = { marginTop: 10, padding: '8px 10px', background: '#1a160f', border: '1px solid #3a342a', borderRadius: 6, minHeight: 96, color: '#e9e1cc' };

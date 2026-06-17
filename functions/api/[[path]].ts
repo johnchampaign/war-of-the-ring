@@ -86,7 +86,11 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         severity: url.searchParams.get('severity') ?? undefined,
         category: cat === null ? 'wotr' : cat === '*' ? undefined : cat,
       });
-      return json({ reports: reports.map(summarizeReport) });
+      // ?full=1 additionally includes the move log — but ONLY for 'wotr-gamelog'
+      // entries (a finished game's public moves; safe to expose). Never for bug
+      // reports, whose client log can carry the reporter's hidden game state.
+      const full = url.searchParams.get('full') === '1';
+      return json({ reports: reports.map((r) => summarizeReport(r, full)) });
     }
     // POST /api/reports/:id/resolve  { note }
     if (seg.length === 3 && seg[0] === 'reports' && seg[2] === 'resolve' && method === 'POST') {
@@ -136,13 +140,15 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
 // Public report summary: triage-relevant fields only. Deliberately omits
 // serverSnapshot / reporterView / clientLog (can carry the reporter's hidden
 // game state) and userAgent (fingerprinting) — those are token-gated reads.
-function summarizeReport(r: BugReportRow) {
-  return {
+function summarizeReport(r: BugReportRow, full = false) {
+  const base = {
     reportId: r.reportId, gameId: r.gameId, reporterSide: r.reporterSide,
     turnNumber: r.turnNumber, message: r.message, severity: r.severity,
     category: r.category, clientBuild: r.clientBuild,
     createdAt: r.createdAt, resolution: r.resolution,
   };
+  // The move log is public finished-game data for game-log uploads only.
+  return full && r.category === 'wotr-gamelog' ? { ...base, clientLog: r.clientLog } : base;
 }
 
 async function safeJson(request: Request): Promise<any> {
