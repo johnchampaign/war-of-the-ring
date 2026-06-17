@@ -22,6 +22,7 @@ const NATION_COLOR: Record<string, string> = {
 };
 const polyPath = (poly: { x: number; y: number }[]) =>
   poly.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + ' Z';
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function HoverPreview({ hover, view, bottom }: { hover: Hover; view: GameState; bottom?: boolean }) {
   // Bottom bar: a wide horizontal inspector (thumbnail + readable text) that fills
@@ -88,11 +89,11 @@ function RegionPreview({ id, view, bottom }: { id: string; view: GameState; bott
   const vb = `${minX - pad} ${minY - pad} ${w + 2 * pad} ${h + 2 * pad}`;
   const fill = def?.nation ? NATION_COLOR[def.nation] ?? '#888' : '#cfcab8';
 
-  // Per-side unit summary.
-  let fpReg = 0, fpElite = 0, shReg = 0, shElite = 0;
-  for (const [n, u] of Object.entries(r?.units ?? {})) {
-    if (FP_SET.has(n)) { fpReg += u!.regular; fpElite += u!.elite; } else { shReg += u!.regular; shElite += u!.elite; }
-  }
+  // Per-NATION unit breakdown, so North / Elves / Dwarves etc. are distinguishable.
+  const nationLines = Object.entries(r?.units ?? {})
+    .filter(([, u]) => u!.regular + u!.elite > 0)
+    .map(([n, u]) => ({ nation: n as Nation, reg: u!.regular, elite: u!.elite }))
+    .sort((a, b) => (FP_SET.has(a.nation) ? 0 : 1) - (FP_SET.has(b.nation) ? 0 : 1));
   const control = r?.control ? (r.control === 'fp' ? 'Free Peoples' : 'Shadow') : (def?.nation ? (FP_SET.has(def.nation) ? 'Free Peoples' : 'Shadow') : null);
 
   const crop = (
@@ -111,8 +112,13 @@ function RegionPreview({ id, view, bottom }: { id: string; view: GameState; bott
       <div style={{ color: '#b9b29c', fontSize: 12 }}>
         {def?.settlement ?? 'open region'}{def?.vp ? ` · ${def.vp} VP` : ''}{control ? ` · ${control}` : ''}{r?.besieged ? ' · besieged' : ''}
       </div>
-      {(fpReg + fpElite + (r?.leaders ?? 0)) > 0 && <div style={{ color: '#7fb6e6', fontSize: 12 }}>FP: {fpReg}R / {fpElite}E{r?.leaders ? ` · ${r.leaders} Leader${r.leaders > 1 ? 's' : ''}` : ''}</div>}
-      {(shReg + shElite + (r?.nazgul ?? 0)) > 0 && <div style={{ color: '#e6857f', fontSize: 12 }}>Shadow: {shReg}R / {shElite}E{r?.nazgul ? ` · ${r.nazgul} Nazgûl` : ''}</div>}
+      {nationLines.map((nl) => (
+        <div key={nl.nation} style={{ color: NATION_COLOR[nl.nation] ?? '#ccc', fontSize: 12, fontWeight: 600 }}>
+          {cap(nl.nation)}: {nl.reg}R / {nl.elite}E
+        </div>
+      ))}
+      {(r?.leaders ?? 0) > 0 && <div style={{ color: '#cfd8e6', fontSize: 12 }}>{r!.leaders} Free Peoples Leader{r!.leaders > 1 ? 's' : ''}</div>}
+      {(r?.nazgul ?? 0) > 0 && <div style={{ color: '#e6857f', fontSize: 12 }}>{r!.nazgul} Nazgûl</div>}
       {(r?.characters?.length ?? 0) > 0 && <div style={{ color: '#d9c98a', fontSize: 12 }}>Characters: {r!.characters.map(charName).join(', ')}</div>}
     </div>
   );

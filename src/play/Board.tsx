@@ -28,20 +28,21 @@ const FP_SET = new Set<string>(FP_NATIONS);
 const polyPath = (poly: { x: number; y: number }[]) =>
   poly.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + ' Z';
 
-// One army badge per side present in a region, with the regular/elite split and
-// the side's leader figures (FP grey Leaders / Shadow Nazgûl). WotR has no 2D
-// unit art (the pieces are miniatures), so these are informative tokens: side
-// colour, regulars vs elites (gold), and a leader/Nazgûl pip.
-interface ArmyInfo { side: Side; reg: number; elite: number; leaders: number; nazgul: number }
+// One army badge per NATION present in a region (so North / Elves / Dwarves etc.
+// are distinguishable at a glance — the badge is tinted with the Nation's colour),
+// with the regular/elite split and a leader/Nazgûl pip. WotR has no 2D unit art
+// (the pieces are miniatures), so these are informative tokens.
+interface ArmyInfo { side: Side; nation: Nation | null; reg: number; elite: number; leaders: number; nazgul: number }
 function presentArmies(r: GameState['regions'][string]): ArmyInfo[] {
-  let fpReg = 0, fpElite = 0, shReg = 0, shElite = 0;
-  for (const [nation, u] of Object.entries(r.units)) {
-    if (FP_SET.has(nation)) { fpReg += u!.regular; fpElite += u!.elite; }
-    else { shReg += u!.regular; shElite += u!.elite; }
-  }
   const out: ArmyInfo[] = [];
-  if (fpReg + fpElite + r.leaders > 0) out.push({ side: 'fp', reg: fpReg, elite: fpElite, leaders: r.leaders, nazgul: 0 });
-  if (shReg + shElite + r.nazgul > 0) out.push({ side: 'shadow', reg: shReg, elite: shElite, leaders: 0, nazgul: r.nazgul });
+  for (const [nation, u] of Object.entries(r.units)) {
+    if (u!.regular + u!.elite === 0) continue;
+    out.push({ side: FP_SET.has(nation) ? 'fp' : 'shadow', nation: nation as Nation, reg: u!.regular, elite: u!.elite, leaders: 0, nazgul: 0 });
+  }
+  // Region-level Leaders (FP) / Nazgûl (Shadow) attach to that side's first badge,
+  // or get their own badge if that side has no units in the region.
+  if (r.leaders > 0) { const fp = out.find((a) => a.side === 'fp'); if (fp) fp.leaders = r.leaders; else out.push({ side: 'fp', nation: null, reg: 0, elite: 0, leaders: r.leaders, nazgul: 0 }); }
+  if (r.nazgul > 0) { const sh = out.find((a) => a.side === 'shadow'); if (sh) sh.nazgul = r.nazgul; else out.push({ side: 'shadow', nation: null, reg: 0, elite: 0, leaders: 0, nazgul: r.nazgul }); }
   return out;
 }
 
@@ -186,13 +187,16 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
 // plus a corner pip counting Leaders (FP) / Nazgûl (Shadow). Sized to stay legible
 // at fit-to-width zoom without overwhelming the small regions.
 function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number; army: ArmyInfo }) {
-  const { side, reg, elite, leaders, nazgul } = army;
-  const col = side === 'shadow' ? '#b8332b' : '#2c5fb3';
+  const { side, nation, reg, elite, leaders, nazgul } = army;
+  // Tint the badge by the Nation so factions are distinguishable; fall back to a
+  // generic side colour for a leaders-only badge (no units → no nation).
+  const col = (nation && NATION_COLOR[nation]) || (side === 'shadow' ? '#b8332b' : '#2c5fb3');
+  const nationName = nation ? nation.charAt(0).toUpperCase() + nation.slice(1) : (side === 'shadow' ? 'Shadow' : 'Free Peoples');
   const s = Math.min(1, Math.max(0.6, scale));
   const W = 34, H = 20;
   const both = reg > 0 && elite > 0;
   const special = leaders + nazgul;
-  const label = `${side === 'shadow' ? 'Shadow' : 'Free Peoples'}: ${reg} Regular${reg === 1 ? '' : 's'}, ${elite} Elite${elite === 1 ? '' : 's'}` +
+  const label = `${nationName}: ${reg} Regular${reg === 1 ? '' : 's'}, ${elite} Elite${elite === 1 ? '' : 's'}` +
     (leaders ? `, ${leaders} Leader${leaders === 1 ? '' : 's'}` : '') + (nazgul ? `, ${nazgul} Nazgûl` : '');
   return (
     <g transform={`translate(${x},${y}) scale(${s})`}>
