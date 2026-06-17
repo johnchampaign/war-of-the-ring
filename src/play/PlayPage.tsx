@@ -261,7 +261,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           {sources.size > 0 && (
             <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px', flexShrink: 0 }}>
               {isCardSep
-                ? `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there. Landing in a friendly City/Stronghold of a Nation they rouse brings that Nation toward War.`
+                ? (cardSepActs[0]!.companion === 'nazgul'
+                  ? 'Moving the Nazgûl — click a highlighted region to fly them there.'
+                  : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there. Landing in a friendly City/Stronghold of a Nation they rouse brings that Nation toward War.`)
                 : isSeparateMove
                 ? 'Separating a Companion — click a highlighted region to place it there (up to Progress + the Companion’s Level away). Landing in a friendly City/Stronghold of a Nation it rouses brings that Nation toward War.'
                 : isReveal

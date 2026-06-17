@@ -920,6 +920,38 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
   };
 }
 
+/** A card that may MOVE any or all Nazgûl groups (each region's Nazgûl fly together),
+ *  then runs `after` (reveal / Hunt if a Nazgûl ends with the Fellowship). Interactive:
+ *  pick a Nazgûl group (button), board-click its destination, repeat, or stop. A group
+ *  moves at most once (its source and destination are blocked from re-selection). */
+function moveNazgulCard(after: (state: GameState) => void): EventHandler {
+  const sourceRegions = (state: GameState, blocked: Set<string>): RegionId[] =>
+    Object.keys(state.regions).filter((r) => state.regions[r]!.nazgul > 0 && !blocked.has(r));
+  return {
+    canPlay: (state) => Object.values(state.regions).some((r) => r.nazgul > 0),
+    repeat: 12,
+    optionalFromStart: true,                   // "any or ALL" — moving zero is allowed
+    targets(state, _side, applied = []) {
+      const last = applied[applied.length - 1];
+      if (last && last.from && !last.region) {
+        // destination step for the Nazgûl group at last.from
+        return characterDestinations(state, 'shadow', 'nazgul', last.from).map((region) => ({ companion: 'nazgul', from: last.from, region }));
+      }
+      // pick step: Nazgûl groups whose source/destination hasn't been used this card
+      const blocked = new Set<string>([...applied.map((t) => t.from), ...applied.filter((t) => t.region).map((t) => t.region)].filter(Boolean) as string[]);
+      return sourceRegions(state, blocked).map((from) => ({ companion: 'nazgul', from }));
+    },
+    applyTarget(state, _side, t) {
+      if (t.region && t.from) moveCharacter(state, 'shadow', 'nazgul', t.from, t.region);
+      // pick step (no region): records the source group; no mutation
+    },
+    // The effect runs ONCE, after all moves (a Nazgûl already on the Fellowship still
+    // triggers it via the "move none" path → finalize). NOT in apply (extraHunt etc.
+    // are not idempotent).
+    finalize: after,
+  };
+}
+
 /** A card that separates ONE Companion: step 1 pick the Companion, step 2 pick where
  *  it goes (the player's CHOICE, within Progress + Level + the card's bonus). `after`
  *  runs the card's post-placement effect (heal, extra rouse). */
@@ -980,20 +1012,29 @@ function nazgulCanReachFellowship(state: GameState): boolean {
   if (def.settlement === 'Stronghold' && settlementController(state, dest) === 'fp' && !state.regions[dest]!.besieged) return false;
   return state.fellowship.mordor === null && anyNazgul(state) !== null;
 }
-function flyNazgulToFellowship(state: GameState): boolean {
-  const dest = state.fellowship.location;
-  if (state.regions[dest]!.nazgul > 0) return true; // already there
-  const src = anyNazgul(state); if (!src || src === dest) return src === dest;
-  state.regions[src]!.nazgul -= 1; state.regions[dest]!.nazgul += 1;
-  return true;
-}
-register('sh-char-09', { // Nazgul Search — move a Nazgûl to the Fellowship, then reveal it
+// Nazgûl Search — move any/all Nazgûl; if one is then with the Fellowship, reveal it.
+register('sh-char-09', {
+  ...moveNazgulCard((state) => {
+    const loc = state.fellowship.location;
+    if (state.fellowship.hidden && (state.regions[loc]!.nazgul > 0 || state.regions[loc]!.characters.includes('witch-king'))) {
+      state.fellowship.hidden = false;
+      log(state, null, 'event', 'Nazgûl Search reveals the Fellowship');
+    }
+  }),
   canPlay: (state) => state.fellowship.progress >= 1 && state.fellowship.hidden && nazgulCanReachFellowship(state),
-  apply(state) { if (flyNazgulToFellowship(state)) { state.fellowship.hidden = false; log(state, null, 'event', 'Nazgûl Search reveals the Fellowship'); } },
 });
-register('sh-char-08b', { // The Nazgul Strike! — move a Nazgûl to the Fellowship, then roll for the Hunt
+// The Nazgûl Strike! — move any/all Nazgûl; if one is then with the Fellowship, roll
+// for the Hunt. (The "discard an FP table card instead" option remains simplified to
+// the Hunt roll — rules-spec D13.)
+register('sh-char-08b', {
+  ...moveNazgulCard((state) => {
+    const loc = state.fellowship.location;
+    if (state.regions[loc]!.nazgul > 0 || state.regions[loc]!.characters.includes('witch-king')) {
+      log(state, null, 'event', 'The Nazgûl Strike! — Hunt roll');
+      extraHunt(state);
+    }
+  }),
   canPlay: (state) => state.fellowship.progress >= 1 && nazgulCanReachFellowship(state),
-  apply(state) { if (flyNazgulToFellowship(state)) { log(state, null, 'event', 'The Nazgûl Strike! — Hunt roll'); extraHunt(state); } },
 });
 
 // Return to Valinor: each non-besieged Elven Stronghold with Elven units takes a
