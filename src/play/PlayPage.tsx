@@ -207,6 +207,19 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       ↶ Undo{undoCap.canUndo && undoCap.foreknowledge ? ' (reveals info)' : ''}
     </button>
   ) : null;
+  // Status-bar trailing controls: Undo + Lobby. Kept in the bar's flow (not a fixed
+  // overlay) so they never sit on top of / block the status pills.
+  const statusTrailing = (
+    <>
+      {undoButton}
+      {onExit && (
+        <button onClick={onExit} title="Leave to the lobby"
+          style={{ padding: '3px 10px', fontSize: 12, borderRadius: 10, whiteSpace: 'nowrap', cursor: 'pointer', background: '#33302a', color: '#e9e1cc', border: '1px solid #5a4a2a' }}>
+          ← Lobby
+        </button>
+      )}
+    </>
+  );
 
   const panelActionsAll = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove');
   const panelActions = activeDie && g.you
@@ -249,7 +262,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {/* The status bar lives at the top of the right column (may wrap to several
               rows). The Undo button rides along at its right end (after Elven Rings). */}
-          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} trailing={undoButton} />
+          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} trailing={statusTrailing} />
           {/* Dice pool and Politics share one row at the top of the column. */}
           <div style={{ display: 'flex', flexShrink: 0, maxHeight: '32%', borderBottom: '1px solid #2a2418' }}>
             <div style={{ flexShrink: 0, overflow: 'auto' }}>
@@ -341,7 +354,6 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           </div>
         </div>
       )}
-      {onExit &&<button onClick={onExit} style={{ position: 'fixed', top: 6, right: 8, padding: '3px 8px', fontSize: 12 }}>← Lobby</button>}
     </div>
   );
 }
