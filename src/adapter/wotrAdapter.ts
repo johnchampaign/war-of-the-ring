@@ -809,14 +809,17 @@ function recruitTargets(state: GameState, side: Side): WotrAction[] {
     if (sideOfNation(nation) !== side || !isAtWar(state, nation)) continue;
     const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
     const fpLead = side === 'fp' ? (pool.leader ?? 0) : 0;
-    const id = recruitRegions(state, side, nation, 1)[0];
-    if (!id) continue;
-    if (pool.regular >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'regular' });
-    if (pool.elite >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 1 });
-    // 1 Regular + 1 Leader/Nazgûl, and 2 Leaders/Nazgûl. Shadow's "Leader" is a Nazgûl.
     const canLead = side === 'shadow' ? naz > 0 : fpLead >= 1;
-    if (pool.regular >= 1 && canLead) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'leader' });
-    if (side === 'fp' && fpLead >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 0, leader: 1, then: 'leader' });
+    // Offer EVERY eligible settlement of the Nation (not just the first) so you can
+    // choose where to muster — e.g. The Shire vs Bree (Ira Fay #10b).
+    for (const id of recruitRegions(state, side, nation, 4)) {
+      if (out.length >= 24) break;
+      if (pool.regular >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'regular' });
+      if (pool.elite >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 1 });
+      // 1 Regular + 1 Leader/Nazgûl, and 2 Leaders/Nazgûl. Shadow's "Leader" is a Nazgûl.
+      if (pool.regular >= 1 && canLead) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'leader' });
+      if (side === 'fp' && fpLead >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 0, leader: 1, then: 'leader' });
+    }
   }
   // Shadow Nazgûl muster (Sauron Strongholds): up to 2 Nazgûl.
   if (side === 'shadow' && naz > 0) {
