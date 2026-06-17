@@ -48,6 +48,7 @@ export function describeAction(a: WotrAction): string {
         return `${cardName(a.card)}: ${label}`;
       }
       if (a.eye) return `${cardName(a.card)}: turn a die into an Eye (→ Hunt Box)`;
+      if (a.companion && a.region) return `${cardName(a.card)}: send ${charName(a.companion)} to ${rName(a.region)}`;
       if (a.figure) return `${cardName(a.card)}: recruit a${a.nation ? ` ${cap(a.nation)}` : ''} ${a.figure === 'elite' ? 'Elite' : 'Regular'}${a.region ? ` in ${rName(a.region)}` : ''}`;
       if (a.nation) return `${cardName(a.card)}: activate ${cap(a.nation)} (advance 1 step)`;
       const dest = a.companion ? charName(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';

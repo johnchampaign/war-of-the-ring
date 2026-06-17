@@ -105,6 +105,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const declareTargets = useMemo(() => new Set(placeActs.map((a) => a.target)), [placeActs]);
   const isReveal = g.view?.pendingChoice?.kind === 'revealMove';
   const isSeparateMove = g.view?.pendingChoice?.kind === 'separateMove';
+  // Card-driven Companion separation, destination step: eventTarget options carrying
+  // both a companion and a region. Placed on the BOARD (not 60+ buttons).
+  const cardSepActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => a.kind === 'eventTarget' && !!a.region && !!a.companion), [g.legalActions]);
+  const cardSepTargets = useMemo(() => new Set(cardSepActs.map((a) => a.region!)), [cardSepActs]);
+  const isCardSep = cardSepActs.length > 0;
   // Independent characters (Nazgûl/Minion/Companion) are board-movable when a
   // Character (or Will) die is available — detected by any moveCharacter being legal.
   const canMoveChars = useMemo(() => g.legalActions.some((a) => a.kind === 'moveCharacter'), [g.legalActions]);
@@ -115,7 +120,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     return s;
   }, [g.view, canMoveChars, charDieOk, g.you]);
-  const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets, ...charSources]), [armyActs, declareTargets, charSources]);
+  const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets, ...charSources, ...cardSepTargets]), [armyActs, declareTargets, charSources, cardSepTargets]);
   // The region currently "selected" for highlighting (an army source, a char source, or a menu region).
   const activeRegion = selected ?? charPick?.from ?? moveMenu?.region ?? null;
   const charDestinations = useMemo(
@@ -139,6 +144,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   const onRegionClick = useCallback((id: RegionId) => {
     setBlockMsg(null); setMoveMenu(null);
+    // Card-driven separation destination: click a highlighted region to place the Companion.
+    if (cardSepTargets.has(id)) {
+      const a = cardSepActs.find((x) => x.region === id);
+      if (a) { clearMove(); void submit(a); }
+      return;
+    }
     // Placing the Fellowship figure (declare, or move-on-reveal): click a highlighted region.
     if (declareTargets.has(id)) {
       const a = placeActs.find((x) => x.target === id);
@@ -181,10 +192,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (reason) setBlockMsg(reason);
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, submit, beginMove, canMoveChars, charDieOk, g.view, g.you]);
+  }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charDieOk, g.view, g.you]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations }), [sources, activeRegion, destinations]);
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
@@ -222,7 +233,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     </>
   );
 
-  const panelActionsAll = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove');
+  const panelActionsAll = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove'
+    && !(a.kind === 'eventTarget' && !!a.region && !!a.companion)); // card-separation destinations go on the board
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
     : panelActionsAll;
@@ -248,7 +260,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           )}
           {sources.size > 0 && (
             <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px', flexShrink: 0 }}>
-              {isSeparateMove
+              {isCardSep
+                ? `${charName(cardSepActs[0]!.companion!)} separates — click a highlighted region to place them there. Landing in a friendly City/Stronghold of a Nation they rouse brings that Nation toward War.`
+                : isSeparateMove
                 ? 'Separating a Companion — click a highlighted region to place it there (up to Progress + the Companion’s Level away). Landing in a friendly City/Stronghold of a Nation it rouses brings that Nation toward War.'
                 : isReveal
                 ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`

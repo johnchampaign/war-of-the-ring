@@ -2,7 +2,7 @@
 // cards (heal/Corruption, political, recruit, dice). Each cites its card id from
 // assets/event-cards.json. Cards not registered here stay unimplemented (not
 // offered) until added. Effects modify the standard rules per the card text.
-import type { GameState, Side, Nation } from '../types';
+import type { GameState, Side, Nation, RegionId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
@@ -11,8 +11,8 @@ import { applyCasualties, startBattle } from '../combat';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf } from '../data';
-import { separateCompanion, moveFellowship } from '../fellowship';
-import { log } from '../log';
+import { moveFellowship, beginSeparation, placeSeparatedCompanion, separationRange, separationDestinations } from '../fellowship';
+import { log, notify } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 /** Roll min(5, count) dice; count hits on `target`+. */
@@ -888,30 +888,52 @@ const fellowCompanions = (state: GameState): EventTarget[] =>
   state.fellowship.companions.filter((c) => COMPANION_SET.has(c)).map((companion) => ({ companion }));
 const canSeparate = (state: GameState): boolean =>
   state.fellowship.mordor === null && state.fellowship.companions.some((c) => COMPANION_SET.has(c));
-register('fp-char-11', { // I Will Go Alone — separate (+1 region), then heal 1 Corruption
-  canPlay: canSeparate, targets: fellowCompanions,
-  applyTarget(state, _side, t) { separateCompanion(state, t.companion!, { extraMove: 1 }); heal(state, 1); log(state, null, 'event', `I Will Go Alone: ${t.companion} separates, heal 1`); },
-});
-register('fp-char-15', { // Gwaihir the Windlord — separate as if Level 4
-  canPlay: canSeparate, targets: fellowCompanions,
-  applyTarget(state, _side, t) { separateCompanion(state, t.companion!, { levelOverride: 4 }); log(state, null, 'event', `Gwaihir bears ${t.companion} away (Level 4)`); },
-});
-register('fp-char-16', { // We Prove the Swifter — separate, +2 regions
-  canPlay: canSeparate, targets: fellowCompanions,
-  applyTarget(state, _side, t) { separateCompanion(state, t.companion!, { extraMove: 2 }); log(state, null, 'event', `We Prove the Swifter: ${t.companion} separates (+2)`); },
-});
-register('fp-char-17', { // There and Back Again — separate (+1); if Gimli/Legolas reach Dale/Erebor/Woodland Realm, rouse Dwarves & North
-  canPlay: canSeparate, targets: fellowCompanions,
-  applyTarget(state, _side, t) {
-    separateCompanion(state, t.companion!, { extraMove: 1 });
+
+/** A card that separates ONE Companion: step 1 pick the Companion, step 2 pick where
+ *  it goes (the player's CHOICE, within Progress + Level + the card's bonus). `after`
+ *  runs the card's post-placement effect (heal, extra rouse). */
+function separateViaCard(opts: { extraMove?: number; levelOverride?: number; after?: (state: GameState, companion: string, dest: RegionId) => void } = {}): EventHandler {
+  return {
+    canPlay: canSeparate,
+    repeat: 2,    // pick the Companion, then its destination
+    noDone: true, // both steps mandatory — can't stop after picking the Companion
+    targets(state, _side, applied = []) {
+      if (applied.length === 0) return fellowCompanions(state);
+      // Step 2 destinations — computed WITHOUT mutating (the Companion stays in the
+      // Fellowship until the destination is actually chosen, so an empty list just
+      // fizzles instead of stranding a separated-but-unplaced Companion).
+      const c = applied[0]!.companion!;
+      const range = separationRange(state, c, opts);
+      return separationDestinations(state, state.fellowship.location, range).map((region) => ({ companion: c, region }));
+    },
+    applyTarget(state, _side, t) {
+      if (!t.region) return; // step 1: just records the chosen Companion (no mutation)
+      beginSeparation(state, t.companion!);
+      placeSeparatedCompanion(state, t.companion!, t.region);
+      opts.after?.(state, t.companion!, t.region);
+    },
+  };
+}
+// I Will Go Alone — separate a Companion (you choose where; +1 region), then heal 1.
+register('fp-char-11', separateViaCard({ extraMove: 1, after: (s) => heal(s, 1) }));
+// Gwaihir the Windlord — separate a Companion as if Level 4 (you choose where).
+register('fp-char-15', separateViaCard({ levelOverride: 4 }));
+// We Prove the Swifter — separate a Companion +2 regions (you choose where).
+register('fp-char-16', separateViaCard({ extraMove: 2 }));
+// There and Back Again — separate a Companion (+1, you choose where); if Gimli/Legolas
+// is then in Dale/Erebor/Woodland Realm, rouse the Dwarves, Elves & North.
+register('fp-char-17', separateViaCard({
+  extraMove: 1,
+  after: (state) => {
     const trig = ['dale', 'erebor', 'woodland-realm'];
     if (['gimli', 'legolas'].some((c) => trig.includes(charRegion(state, c) ?? ''))) {
       activateNation(state, 'dwarves', { viaCompanion: true }); activateNation(state, 'north', { viaCompanion: true });
       advancePolitical(state, 'dwarves', 1); advancePolitical(state, 'elves', 1); advancePolitical(state, 'north', 1);
       log(state, null, 'event', 'There and Back Again rouses the Dwarves/Elves/North');
+      notify(state, 'There and Back Again rouses the Dwarves, Elves and North to war!');
     }
   },
-});
+}));
 
 // --- Nazgûl converge on the Fellowship. "Move any or all of the Nazgûl" is
 //     auto-resolved to the decisive move — one Nazgûl flown to the Fellowship's

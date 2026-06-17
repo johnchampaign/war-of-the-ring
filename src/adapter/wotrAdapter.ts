@@ -160,7 +160,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const h = getHandler(data.card);
         const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye }));
         // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
-        if ((h?.repeat ?? 1) > 1 && data.applied.length > 0) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
+        if ((h?.repeat ?? 1) > 1 && data.applied.length > 0 && !h?.noDone) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         return opts;
       }
       case 'bonusDraw':
@@ -472,15 +472,17 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Name the played card in the log (playing an Event reveals it — public info).
       log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} plays ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId}`);
       hand.splice(idx, 1);
+      // Run the immediate part FIRST, then check the remaining targets — so the choice
+      // offered matches the post-apply state (an apply may consume the very
+      // reinforcements a later choice would draw from, e.g. A New Power is Rising).
+      h.apply?.(state, actor);
       // Interactive card: pause for the player's target choice; the card is held
       // (out of hand) until the eventTarget resolves.
       const opts = h.targets ? h.targets(state, actor) : null;
       if (opts && opts.length > 0) {
-        h.apply?.(state, actor); // immediate part (if any) runs before the interactive follow-up
         state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId, repeat: h.repeat ?? 1, left: h.repeat ?? 1, applied: [], palantir: palantirWasActive } };
         break;
       }
-      h.apply?.(state, actor);
       const deck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
       if (h.onTable) state.cards[actor].table.push(action.cardId);
       else state.cards[actor].discard[deck].push(action.cardId);

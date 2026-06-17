@@ -28,6 +28,9 @@ export interface EventHandler {
   /** Multi-target cards: the max number of targets to apply (the player may stop
    *  early with a "done" option). Default 1 (single target). */
   repeat?: number;
+  /** Suppress the "done" (stop-early) option for a multi-step card whose steps are
+   *  all mandatory (e.g. separate a Companion → choose its destination). */
+  noDone?: boolean;
   /** Run AFTER the card is fully resolved (discarded, turn passed). Use for an
    *  effect that itself raises a follow-up PendingChoice (e.g. a Fellowship move
    *  that triggers a Hunt) — set last, it survives the eventTarget cleanup. */
