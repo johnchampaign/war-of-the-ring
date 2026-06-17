@@ -169,6 +169,16 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     case 'removeExcess':
       // Shed over-stacked units cheaply: drop a Regular before an Elite.
       return legal.find((a) => a.kind === 'removeExcess' && a.figure === 'regular') ?? legal[0]!;
+    case 'separateMove': {
+      // Land the separated Companion in a friendly City/Stronghold (rouses its
+      // Nation) if one is in range; otherwise the farthest reachable region.
+      // Nearest reachable friendly City/Stronghold whose Nation isn't yet At War
+      // (rousing it is the point); otherwise stay at the Fellowship's region (moves[0]),
+      // matching the old auto-separate — don't scatter the Companion uselessly.
+      const moves = legal.filter((a) => a.kind === 'separateMove') as Extract<WotrAction, { kind: 'separateMove' }>[];
+      const settle = moves.find((a) => { const d = REGIONS[a.target]!; return (d.settlement === 'City' || d.settlement === 'Stronghold') && !!d.nation && state.nations[d.nation as Nation]?.step > 0; });
+      return settle ?? moves[0] ?? legal[0]!;
+    }
     case 'combatCard': {
       // Play the most valuable combat card, or none if nothing helps enough.
       let best: WotrAction = { kind: 'playCombatCard', cardId: null }, bestVal = 1.5;

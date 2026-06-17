@@ -69,9 +69,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const armyActs = useMemo(() => g.legalActions.filter(isSpatial), [g.legalActions]);
   // Board-click placement of the Fellowship figure: declaring it (Fellowship phase) or
   // choosing where it moves when revealed by the Hunt (revealMove choice).
-  const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove'), [g.legalActions]);
+  const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' | 'separateMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove' || a.kind === 'separateMove'), [g.legalActions]);
   const declareTargets = useMemo(() => new Set(placeActs.map((a) => a.target)), [placeActs]);
   const isReveal = g.view?.pendingChoice?.kind === 'revealMove';
+  const isSeparateMove = g.view?.pendingChoice?.kind === 'separateMove';
   // Independent characters (Nazgûl/Minion/Companion) are board-movable when a
   // Character (or Will) die is available — detected by any moveCharacter being legal.
   const canMoveChars = useMemo(() => g.legalActions.some((a) => a.kind === 'moveCharacter'), [g.legalActions]);
@@ -151,13 +152,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, submit, beginMove, canMoveChars, g.view, g.you]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations }), [sources, activeRegion, destinations]);
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
   // Army moves/attacks AND independent-character (Nazgûl/Companion) moves are done on
   // the board; combat/hunt decisions go to the modal. Keep them out of the button list.
-  const panelActions = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter');
+  const panelActions = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove');
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
@@ -180,7 +181,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           )}
           {sources.size > 0 && (
             <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px', flexShrink: 0 }}>
-              {isReveal
+              {isSeparateMove
+                ? 'Separating a Companion — click a highlighted region to place it there (up to Progress + the Companion’s Level away). Landing in a friendly City/Stronghold of a Nation it rouses brings that Nation toward War.'
+                : isReveal
                 ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
                 : declareTargets.size > 0
                   ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`

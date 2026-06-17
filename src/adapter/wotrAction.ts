@@ -28,6 +28,8 @@ export type WotrAction =
   | { kind: 'moveFellowship'; die?: DieFace }   // FP, Character die
   | { kind: 'hideFellowship'; die?: DieFace }   // FP, Character die (Strider: any die)
   | { kind: 'separateCompanion'; companion: string; die?: DieFace }
+  // Board-click destination for the Companion being separated (within Progress+Level).
+  | { kind: 'separateMove'; companion: string; target: RegionId }
   | { kind: 'changeGuide'; companion: string } // Fellowship phase: pick the Guide (FP breaks Level ties)
   | { kind: 'companionMuster'; companion: string; nation: Nation; die?: DieFace } // companion ability: any die advances their Nation
   | { kind: 'sarumanMuster'; mode: 'recruit' | 'upgrade'; die?: DieFace } // Voice of Saruman: recruit in every Isengard Settlement, or upgrade 2 Orthanc Regulars to Elites

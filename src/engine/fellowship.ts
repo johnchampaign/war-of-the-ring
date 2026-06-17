@@ -205,20 +205,60 @@ export function separateCompanion(state: GameState, id: CharacterId,
       && state.nations[def.nation as Nation].step > 0; // activation still useful
   };
   const dest = nearestMatch(fs.location, maxMove, isTarget) ?? fs.location;
-  // remove from Fellowship
+  beginSeparation(state, id);
+  placeSeparatedCompanion(state, id, dest);
+  return true;
+}
+
+/** The Companion's move range when separating: Progress + Level (+ any bonus). */
+export function separationRange(state: GameState, id: CharacterId, opts: { extraMove?: number; levelOverride?: number } = {}): number {
+  return state.fellowship.progress + (opts.levelOverride ?? levelOf(id)) + (opts.extraMove ?? 0);
+}
+
+/** Legal landing regions within `maxMove` of `from`, excluding a not-besieged enemy
+ *  Stronghold. Includes `from` itself (a move of 0). For the board-click destination
+ *  choice when separating a Companion (computed after it's removed from the Box). */
+export function separationDestinations(state: GameState, from: RegionId, maxMove: number): RegionId[] {
+  const landable = (r: RegionId): boolean => {
+    const def = REGIONS[r]!;
+    return !(def.settlement === 'Stronghold' && settlementController(state, r) === 'shadow' && !state.regions[r]!.besieged);
+  };
+  const out: RegionId[] = landable(from) ? [from] : [];
+  const seen = new Set<RegionId>([from]);
+  let layer: RegionId[] = [from], d = 0;
+  while (layer.length && d < maxMove) {
+    d++; const next: RegionId[] = [];
+    for (const r of layer) for (const a of REGIONS[r]!.adjacency) {
+      if (!seen.has(a)) { seen.add(a); next.push(a); if (landable(a)) out.push(a); }
+    }
+    layer = next;
+  }
+  return out;
+}
+
+/** Remove `id` from the Fellowship (reassigning the Guide). The caller then places
+ *  it with placeSeparatedCompanion once the destination is chosen. */
+export function beginSeparation(state: GameState, id: CharacterId): boolean {
+  const fs = state.fellowship;
+  if (fs.mordor !== null || !fs.companions.includes(id)) return false;
   fs.companions.splice(fs.companions.indexOf(id), 1);
   reassignGuide(state);
-  // place on the map
+  return true;
+}
+
+/** Place an already-removed Companion at `dest`, rousing its Nation if it lands in a
+ *  City/Stronghold of one it can activate. */
+export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest: RegionId): void {
+  const fs = state.fellowship;
   state.characters.inPlay[id] = dest;
   state.regions[dest]!.characters.push(id);
-  // activate + advance the destination Nation if it's one this Companion rouses
+  const nations = activatableNations(id);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
     activateNation(state, dn, { viaCompanion: true }); advancePolitical(state, dn, 1);
   }
   pruneFellowshipOnTableCards(state);
   log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);
-  return true;
 }
 
 /** Enter Mordor: only when the figure is at Morannon or Minas Morgul. Places the

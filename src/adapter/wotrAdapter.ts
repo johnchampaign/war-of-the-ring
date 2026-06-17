@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, beginSeparation, placeSeparatedCompanion, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import { log } from '../engine/log';
 import {
@@ -222,6 +222,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         }
         return acts.length ? acts : [{ kind: 'revealMove', target: fs.location }]; // fallback: reveal in place
       }
+      case 'separateMove': {
+        // The FP board-clicks where the separated Companion lands (within range).
+        const data = state.pendingChoice.data as { companion: string; from: RegionId; range: number };
+        return separationDestinations(state, data.from, data.range).map((target) => ({ kind: 'separateMove' as const, companion: data.companion, target }));
+      }
       case 'huntPreventDraw':
         return [{ kind: 'huntPreventDraw', prevent: true }, { kind: 'huntPreventDraw', prevent: false }];
       case 'huntRedraw':
@@ -388,12 +393,29 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!consumePreferred(state, 'fp', hideFaces, action.die)) throw new Error('No usable die');
       hideFellowship(state); passResolutionTurn(state, actor); break;
     }
-    case 'separateCompanion':
+    case 'separateCompanion': {
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP separates Companions');
+      if (state.fellowship.mordor !== null) throw new Error('Companions cannot be separated in Mordor');
+      if (!state.fellowship.companions.includes(action.companion)) throw new Error('Cannot separate that Companion');
+      // Range is fixed at separation time; remove the Companion, then the player
+      // board-clicks the destination (Ira Fay #5) via the separateMove choice.
+      const range = separationRange(state, action.companion);
+      const from = state.fellowship.location;
       if (!consumePreferred(state, 'fp', ['character', 'will'], action.die)) throw new Error('No Character die');
-      if (!separateCompanion(state, action.companion)) throw new Error('Cannot separate that Companion');
+      beginSeparation(state, action.companion);
+      state.pendingChoice = { owner: 'fp', kind: 'separateMove', data: { companion: action.companion, from, range } };
+      break;
+    }
+    case 'separateMove': {
+      requireChoice(state, 'separateMove', 'fp');
+      const data = state.pendingChoice!.data as { companion: string; from: RegionId; range: number };
+      const dests = separationDestinations(state, data.from, data.range);
+      const dest = dests.includes(action.target) ? action.target : data.from;
+      placeSeparatedCompanion(state, data.companion, dest);
+      state.pendingChoice = null;
       passResolutionTurn(state, actor); break;
+    }
     case 'bringUpgrade':
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP upgrades');
