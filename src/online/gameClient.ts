@@ -16,11 +16,22 @@ export interface ViewResult {
   you: 'fp' | 'shadow';
 }
 
+/** Whether an undo is currently available, and whether it would cross a random
+ *  outcome the player has already seen ("foreknowledge"). In a 2-player game a
+ *  foreknowledge undo is disallowed (canUndo:false, with a reason); vs the AI it's
+ *  allowed but flagged so the UI can warn + the engine can log it. */
+export interface UndoStatus { canUndo: boolean; foreknowledge: boolean; reason?: string }
+
 export interface GameClientApi {
   fetch(): Promise<ViewResult>;
   submit(action: WotrAction): Promise<ViewResult>;
   legalActions(): Promise<WotrAction[]>;
   report(body: { message: string; category?: string; severity?: string; clientBuild?: string }): Promise<{ reportId: string }>;
+  // Local-only undo (hotseat / vs AI). Absent on the online client (server-side undo
+  // is a separate, deferred feature). undoStatus is a synchronous read of the local
+  // history; undo() reverts one action and returns the refreshed view.
+  undo?(): Promise<ViewResult>;
+  undoStatus?(): UndoStatus;
   // Online-only (absent on the hotseat client):
   listMessages?(): Promise<ChatMessage[]>;
   postMessage?(body: string): Promise<ChatMessage[]>;

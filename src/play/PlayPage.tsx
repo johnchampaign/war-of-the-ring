@@ -72,6 +72,18 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     try { await g.submit(a); setDie(null); } finally { inFlight.current = false; }
   }, [g]);
 
+  // Undo (local hotseat / vs-AI only — the online client has no undo()). A
+  // foreknowledge undo (one that crosses a dice roll / card draw) is blocked outright
+  // in 2-player and requires an explicit confirm vs the AI.
+  const [undoConfirm, setUndoConfirm] = useState(false);
+  const runUndo = useCallback(async () => {
+    setUndoConfirm(false);
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try { await client.undo?.(); await g.refresh(); setSelected(null); setCharPick(null); setMoveMenu(null); setMoveDraft(null); setBlockMsg(null); setDie(null); }
+    finally { inFlight.current = false; }
+  }, [client, g]);
+
   // Chat is online-only (a remote opponent to talk to); the hotseat client omits
   // the messaging methods, so it's hidden in that mode.
   const chatClient = useMemo(
@@ -176,6 +188,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   // Army moves/attacks AND independent-character (Nazgûl/Companion) moves are done on
   // the board; combat/hunt decisions go to the modal. Keep them out of the button list.
+  // Undo availability (re-read each render; reflects the local client's history).
+  const undoCap = client.undo ? client.undoStatus?.() : undefined;
+  const onUndoClick = () => {
+    const s = client.undoStatus?.();
+    if (!s?.canUndo) return;
+    if (s.foreknowledge) setUndoConfirm(true); else void runUndo();
+  };
+
   const panelActionsAll = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove');
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
@@ -215,6 +235,21 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           )}
         </div>
         <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {undoCap && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: '#1a160f', borderBottom: '1px solid #2a2418', flexShrink: 0 }}>
+              <button onClick={onUndoClick} disabled={!undoCap.canUndo}
+                title={undoCap.reason ?? (undoCap.canUndo ? 'Undo your last action' : 'Nothing to undo')}
+                style={{ padding: '4px 12px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: undoCap.canUndo ? 'pointer' : 'not-allowed',
+                  background: undoCap.canUndo ? (undoCap.foreknowledge ? '#4a3a1a' : '#2c3a2c') : '#231f18',
+                  color: undoCap.canUndo ? (undoCap.foreknowledge ? '#ffe08a' : '#cfe6c0') : '#776',
+                  border: `1px solid ${undoCap.canUndo ? (undoCap.foreknowledge ? '#7a5f24' : '#3a5a3a') : '#3a342a'}` }}>
+                ↶ Undo{undoCap.canUndo && undoCap.foreknowledge ? ' (reveals info)' : ''}
+              </button>
+              {undoCap.foreknowledge && !undoCap.canUndo && (
+                <span style={{ fontSize: 11, color: '#a98' }}>Can’t undo past a roll/draw in a 2-player game.</span>
+              )}
+            </div>
+          )}
           <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn ? setDie : undefined} />
           {/* Politics is reference info — capped + scrolls so it never crowds the actions. */}
           <div style={{ flexShrink: 0, maxHeight: '24%', overflow: 'auto' }}>
@@ -264,6 +299,20 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               </button>
             ))}
             <button onClick={() => setMoveMenu(null)} style={{ marginTop: 6, padding: '5px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {undoConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.6)', display: 'grid', placeItems: 'center', zIndex: 62 }} onClick={() => setUndoConfirm(false)}>
+          <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #7a5f24', maxWidth: 440, boxShadow: '0 8px 40px #000' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#ffe08a', marginBottom: 8 }}>⚠ Foreknowledge undo</div>
+            <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 10px' }}>
+              This undo crosses a <b>dice roll or card draw</b>, so you’ll be re-deciding while already knowing a random outcome you wouldn’t normally have seen. It’s allowed against the AI, but it will be <b>recorded in the game log</b>.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setUndoConfirm(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', color: '#cb9', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => void runUndo()} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 700, background: '#4a3a1a', color: '#ffe08a', border: '1px solid #7a5f24', borderRadius: 6, cursor: 'pointer' }}>Undo anyway</button>
+            </div>
           </div>
         </div>
       )}
