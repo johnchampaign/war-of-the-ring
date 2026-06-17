@@ -57,6 +57,8 @@ export function HuntPopup({ view }: { view: GameState }) {
   const maxSeq = Math.max(...fresh.map((d) => d.seq));
   const dismiss = () => setSeen(maxSeq);
   const roll = fresh.find((d) => d.roll)?.roll;
+  // A drawn tile revealed the Fellowship (and it's now revealed) — call it out loudly.
+  const revealed = fresh.some((d) => d.reveal) && !view.fellowship.hidden;
 
   return (
     <div style={backdrop} onClick={dismiss}>
@@ -73,6 +75,12 @@ export function HuntPopup({ view }: { view: GameState }) {
             <li key={d.seq} style={{ fontSize: 14, padding: '3px 0', borderBottom: '1px solid #2a2418' }}>• {describe(d)}</li>
           ))}
         </ul>
+        {revealed && (
+          <div style={{ marginTop: 10, padding: '8px 10px', background: '#a83232', color: '#fff', borderRadius: 8, fontSize: 13, lineHeight: 1.4 }}>
+            🔴 <b>The Fellowship has been REVEALED!</b><br />
+            It can't move again until you <b>hide it</b> with a Character die. (You'll place it on the board now.)
+          </div>
+        )}
         <button style={btn} onClick={dismiss}>OK</button>
       </div>
     </div>
