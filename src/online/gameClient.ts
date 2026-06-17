@@ -4,6 +4,7 @@
 // opponent. Also exposes the standard-kit messaging (chat) + realtime subscribe
 // factories; the local hotseat client omits them (no remote opponent to push to).
 import { subscribeSupabaseRealtime } from 'digital-boardgame-framework/client/realtime';
+import { submitReportViaHttp } from 'digital-boardgame-framework/client';
 import type { ChatMessage } from 'digital-boardgame-framework/client';
 import type { GameState } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
@@ -26,7 +27,7 @@ export interface GameClientApi {
   fetch(): Promise<ViewResult>;
   submit(action: WotrAction): Promise<ViewResult>;
   legalActions(): Promise<WotrAction[]>;
-  report(body: { message: string; category?: string; severity?: string; clientBuild?: string }): Promise<{ reportId: string }>;
+  report(body: { message: string; category?: string; severity?: 'bug' | 'rules-question' | 'feedback'; clientBuild?: string }): Promise<{ reportId: string }>;
   // Local-only undo (hotseat / vs AI). Absent on the online client (server-side undo
   // is a separate, deferred feature). undoStatus is a synchronous read of the local
   // history; undo() reverts one action and returns the refreshed view.
@@ -62,7 +63,9 @@ export function makeGameClient(gameId: string, token: string): GameClientApi {
     fetch: () => fetch(`${base}${q}`).then((r) => r.json()),
     submit: (action) => post('/submit', { action }),
     legalActions: () => fetch(`${base}/legal${q}`).then((r) => r.json()).then((r) => r.legalActions ?? r),
-    report: (body) => post('/report', body),
+    // Never-silent: resolves only on a server-confirmed reportId; rejects on network
+    // error / non-OK status / unparseable body / missing id (framework helper).
+    report: (body) => submitReportViaHttp(`${base}/report${q}`, body),
     listMessages: () => fetch(`${base}/chat${q}`).then((r) => r.json()),
     postMessage: (body: string) => post('/chat', { message: body }),
     subscribeMoves: realtime ? realtime('moved') : undefined,

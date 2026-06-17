@@ -8,7 +8,7 @@ import { useState } from 'react';
 type Sev = 'bug' | 'rules-question' | 'feedback';
 
 export function ReportButton({ report, clientBuild }: {
-  report: (b: { message: string; severity?: string; category?: string; clientBuild?: string }) => Promise<{ reportId: string }>;
+  report: (b: { message: string; severity?: 'bug' | 'rules-question' | 'feedback'; category?: string; clientBuild?: string }) => Promise<{ reportId: string }>;
   clientBuild?: string;
 }) {
   const [open, setOpen] = useState(false);
