@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useCardArt } from './artCache';
 import type { GameState, Side } from '../engine/types';
 import eventCards from '../../assets/event-cards.json';
+import { CardTypeBadge } from './cardTypeBadge';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
 
@@ -39,12 +40,22 @@ function HandCard({ id, onZoom, onHover }: { id: string; onZoom: () => void; onH
   const art = useCardArt(id === 'hidden' ? null : id);
   const def = CARD.get(id);
   const hov = { onMouseEnter: () => onHover?.(id), onMouseLeave: () => onHover?.(null) };
-  if (art) return <img src={art} alt={def?.name ?? id} title={`${def?.name ?? id} — click to enlarge`} style={img} onClick={onZoom} {...hov} />;
+  if (art) return (
+    // Art card with a small play-type badge overlaid top-left, so the die-type is
+    // readable at a glance even on the image (Ira #3).
+    <div style={{ position: 'relative', flexShrink: 0 }} {...hov}>
+      <img src={art} alt={def?.name ?? id} title={`${def?.name ?? id} — click to enlarge`} style={img} onClick={onZoom} />
+      {id !== 'hidden' && def && <CardTypeBadge deck={def.deck} small style={{ position: 'absolute', top: 2, left: 2, boxShadow: '0 1px 3px #000' }} />}
+    </div>
+  );
   // Text-card placeholder.
   const side = def?.side === 'Shadow' ? '#5a2222' : '#1f3a5a';
   return (
     <div style={{ ...textCard, background: side, cursor: 'pointer' }} onClick={onZoom} title={def?.eventText ?? ''} {...hov}>
-      <div style={{ fontSize: 9, color: '#ccb', textTransform: 'uppercase' }}>{def?.deck ?? '?'} · {def?.initiative ?? '–'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+        <CardTypeBadge deck={def?.deck} small />
+        <span style={{ fontSize: 9, color: '#ccb' }}>init {def?.initiative ?? '–'}</span>
+      </div>
       <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.15 }}>{def?.name ?? id}</div>
     </div>
   );
@@ -60,7 +71,10 @@ function CardZoom({ id, onClose }: { id: string; onClose: () => void }) {
         <img src={art} alt={def?.name ?? id} style={{ maxHeight: '88vh', maxWidth: '88vw', borderRadius: 8, boxShadow: '0 8px 40px #000' }} />
       ) : (
         <div style={zoomText} onClick={(e) => e.stopPropagation()}>
-          <div style={{ fontSize: 11, color: '#ccb', textTransform: 'uppercase' }}>{def?.side} · {def?.deck} · init {def?.initiative}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+            <CardTypeBadge deck={def?.deck} />
+            <span style={{ fontSize: 11, color: '#ccb', textTransform: 'uppercase' }}>{def?.side} · init {def?.initiative}</span>
+          </div>
           <h3 style={{ margin: '4px 0' }}>{def?.name ?? id}</h3>
           {def?.eventText && <p style={{ fontSize: 13 }}><b>Event:</b> {def.eventText}</p>}
           {def?.combat?.title && <p style={{ fontSize: 13 }}><b>Combat — {def.combat.title}:</b> {def.combat.text}</p>}

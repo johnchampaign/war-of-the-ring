@@ -21,6 +21,9 @@ export function StatusBar({ view, you, onHoverChar }: { view: GameState; you: st
         onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
         style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span> · {fs.companions.length} companions</span>
       <span style={pill}>Hunt box {view.hunt.box}</span>
+      <span style={pill} title="Event cards in hand. The opponent's individual cards are hidden, but the count is open information.">
+        🂠 FP {view.cards?.fp?.hand?.length ?? 0} · Shadow {view.cards?.shadow?.hand?.length ?? 0}
+      </span>
       <span style={pill} title="The three Elven Rings. Held by the Free Peoples; when the FP use one it flips to the Shadow (who may then use it once), after which it is spent.">
         Elven Rings:{' '}
         {view.elvenRings.map((r, i) => (

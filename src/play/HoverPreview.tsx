@@ -10,6 +10,7 @@ import eventCards from '../../assets/event-cards.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, Nation } from '../engine/types';
 import { charName, charDef } from './charInfo';
+import { CardTypeBadge } from './cardTypeBadge';
 
 export type Hover = { kind: 'region'; id: string } | { kind: 'card'; id: string } | { kind: 'character'; id: string } | null;
 
@@ -133,7 +134,10 @@ function CardPreview({ id, bottom }: { id: string; bottom?: boolean }) {
   if (id === 'hidden') return <div style={hint}>Hidden card.</div>;
   const text = (
     <div style={{ overflowY: 'auto', minWidth: 0, flex: 1 }}>
-      <div style={{ fontSize: 11, color: '#ccb', textTransform: 'uppercase' }}>{def?.side} · {def?.deck} · init {def?.initiative ?? '–'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+        <CardTypeBadge deck={def?.deck} />
+        <span style={{ fontSize: 11, color: '#ccb', textTransform: 'uppercase' }}>{def?.side} · init {def?.initiative ?? '–'}</span>
+      </div>
       <div style={{ fontSize: 16, fontWeight: 700, margin: '2px 0 6px' }}>{def?.name ?? id}</div>
       {def?.eventText && <p style={{ fontSize: 13, margin: '4px 0', lineHeight: 1.35 }}><b>Event:</b> {def.eventText}</p>}
       {def?.combat?.title && <p style={{ fontSize: 13, margin: '4px 0', lineHeight: 1.35 }}><b>Combat — {def.combat.title}:</b> {def.combat.text}</p>}
