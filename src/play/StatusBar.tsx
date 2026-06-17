@@ -21,6 +21,18 @@ export function StatusBar({ view, you, onHoverChar }: { view: GameState; you: st
         onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
         style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span> · {fs.companions.length} companions</span>
       <span style={pill}>Hunt box {view.hunt.box}</span>
+      <span style={pill} title="The three Elven Rings. Held by the Free Peoples; when the FP use one it flips to the Shadow (who may then use it once), after which it is spent.">
+        Elven Rings:{' '}
+        {view.elvenRings.map((r, i) => (
+          <span key={i} style={{ fontSize: 14, margin: '0 1px', color: r === 'fp' ? '#7fd0ff' : r === 'shadow' ? '#e6857f' : '#6a6458' }}
+            title={r === 'fp' ? 'Free Peoples' : r === 'shadow' ? 'flipped to Shadow' : 'used (spent)'}>
+            {r === 'used' ? '◇' : '◈'}
+          </span>
+        ))}
+        <span style={{ color: '#998', marginLeft: 4 }}>
+          ({view.elvenRings.filter((r) => r === 'fp').length} FP · {view.elvenRings.filter((r) => r === 'shadow').length} SH · {view.elvenRings.filter((r) => r === 'used').length} used)
+        </span>
+      </span>
       {/* Dice are shown in the DiceTray (right column) — not duplicated here. */}
     </div>
   );
