@@ -47,7 +47,7 @@ function charRegion(state: GameState, id: string): string | null {
 function drawCard(state: GameState, side: Side, deck: 'character' | 'strategy'): void {
   const p = state.cards[side]; const top = p.draw[deck].shift();
   if (top) p.hand.push(top);
-  while (p.hand.length > 6) p.discard.strategy.push(p.hand.shift()!);
+  // Over-limit is resolved by the player's discard choice (engine enforceHandLimit).
 }
 /** Region-step distance (BFS), or Infinity. */
 function regionDist(from: string, to: string): number {

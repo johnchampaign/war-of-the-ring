@@ -76,6 +76,8 @@ export type WotrAction =
   | { kind: 'stormcrowLoss'; region: RegionId; nation: Nation; figure: 'regular' | 'elite' }
   // The Breaking of the Fellowship (FP responds): choose which Companion to separate.
   | { kind: 'breakingSep'; companion: string }
+  // Over the 6-card hand limit: choose which Event card to discard (to its deck).
+  | { kind: 'discardCard'; card: string }
   // Palantír of Orthanc bonus draw (Shadow): a deck to draw from, or 'none' to decline.
   | { kind: 'bonusDraw'; deck: 'character' | 'strategy' | 'none' }
   // Gandalf the Grey Guide draw (FP): take the matching-deck card, or decline.

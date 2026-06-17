@@ -35,6 +35,9 @@ const CHOICE_TITLE: Record<string, string> = {
   sorcererDraw: 'The Witch-king’s Sorcery — draw a card?',
   lureChoice: 'Lure of the Ring — the Ring tempts a Companion',
   removeExcess: 'Over the 10-unit stacking limit — remove the excess',
+  stormcrowLoss: 'Stormcrow — choose a unit to eliminate',
+  breakingSep: 'The Breaking of the Fellowship — choose a Companion to separate',
+  discardCard: 'Over the 6-card hand limit — choose a card to discard',
 };
 
 export function DecisionModal({ view, you, actions, onAction, yourTurn }: {

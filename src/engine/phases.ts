@@ -39,7 +39,21 @@ export function drawEventCards(state: GameState, side: Side): void {
     const top = p.draw[deck].shift();
     if (top) p.hand.push(top);
   }
-  while (p.hand.length > 6) p.discard.strategy.push(p.hand.shift()!); // trim oldest
+  // Over the 6-card limit is resolved by the player's CHOICE (enforceHandLimit), not
+  // by silently trimming the oldest.
+}
+
+/** If a player holds more than 6 Event cards, pause for them to discard down to 6
+ *  (their choice; the adapter routes the card to the matching deck's discard). The
+ *  Free Peoples player discards first. */
+function enforceHandLimit(state: GameState): boolean {
+  for (const side of ['fp', 'shadow'] as Side[]) {
+    if (state.cards[side].hand.length > 6) {
+      state.pendingChoice = { owner: side, kind: 'discardCard', data: {} };
+      return true;
+    }
+  }
+  return false;
 }
 
 function runActionRoll(state: GameState): void {
@@ -68,11 +82,12 @@ export function advance(state: GameState): void {
       if (state.pendingChoice) return;
       continue;                                   // combat finished -> resume phases
     }
+    if (enforceHandLimit(state)) return;          // over 6 cards -> pause to discard (choice)
     switch (state.phase) {
       case 'recover':
         runRecover(state);
         state.phase = 'fellowship';
-        return; // await FP fellowship-phase decision
+        continue; // loop top enforces the hand limit (discard choice) before awaiting FP
       case 'fellowship':
         return; // await FP
       case 'huntAllocation':

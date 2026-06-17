@@ -87,6 +87,7 @@ export function describeAction(a: WotrAction): string {
     case 'lureChoice': return a.mode === 'corruption' ? 'Lure: take Corruption' : 'Lure: eliminate the Companion';
     case 'stormcrowLoss': return `Lose ${cap(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
     case 'breakingSep': return `Separate ${charName(a.companion)} from the Fellowship`;
+    case 'discardCard': return `Discard "${cardName(a.card)}"`;
     case 'huntPreventDraw': return a.prevent ? 'Discard Wizard’s Staff — no Hunt tile' : 'Let the Shadow draw';
     case 'huntRedraw': return a.redraw ? 'Discard Mithril Coat — redraw the tile' : 'Keep the drawn tile';
     default: return JSON.stringify(a);
@@ -133,5 +134,5 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'siegeWithdraw', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess']);
+const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'siegeWithdraw', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);

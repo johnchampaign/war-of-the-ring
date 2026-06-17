@@ -186,6 +186,9 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // FP chooses which Companion to separate (The Breaking of the Fellowship).
         return state.fellowship.companions.filter((c) => c !== 'gollum').map((companion) => ({ kind: 'breakingSep', companion }));
       }
+      case 'discardCard':
+        // Over the hand limit: choose which Event card to discard.
+        return [...new Set(state.cards[actor].hand)].map((card) => ({ kind: 'discardCard', card }));
       case 'huntDamage': {
         const fs = state.fellowship;
         const acts: WotrAction[] = [{ kind: 'huntDamage', mode: 'corruption' }];
@@ -520,6 +523,18 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (u && u[action.figure] > 0) { u[action.figure] -= 1; state.reinforcements[action.nation][action.figure] += 1; }
       log(state, null, 'event', `Stormcrow: Free Peoples lose a ${action.nation} ${action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
       state.pendingChoice = null; break; // the turn already passed when the Event resolved
+    }
+    case 'discardCard': {
+      requireChoice(state, 'discardCard', actor); // discard down to the 6-card limit (player's choice)
+      const p = state.cards[actor];
+      const i = p.hand.indexOf(action.card);
+      if (i >= 0) {
+        p.hand.splice(i, 1);
+        const deck = EVENT_BY_ID[action.card]?.deck === 'Character' ? 'character' : 'strategy';
+        p.discard[deck].push(action.card);
+        log(state, actor, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discards ${EVENT_BY_ID[action.card]?.name ?? action.card} (over the 6-card limit)`);
+      }
+      state.pendingChoice = null; break; // advance() re-checks and re-prompts if still over 6
     }
     case 'breakingSep': {
       requireChoice(state, 'breakingSep', actor); // FP separates a chosen Companion to the Fellowship's region
@@ -950,7 +965,7 @@ function drawOne(state: GameState, side: Side, deck: 'character' | 'strategy'): 
   const p = state.cards[side];
   const top = p.draw[deck].shift();
   if (top) p.hand.push(top);
-  while (p.hand.length > 6) p.discard.strategy.push(p.hand.shift()!);
+  // Over-limit is resolved by the player's discard choice (engine enforceHandLimit).
 }
 
 /** Gandalf the Grey's Guide ability: after the FP plays an Event card while Gandalf is
