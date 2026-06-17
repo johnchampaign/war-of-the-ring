@@ -9,6 +9,7 @@ import {
 } from '../engine/phases';
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
+import { log } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
@@ -406,6 +407,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Palantír of Orthanc grants a bonus draw — captured BEFORE this play so the
       // card doesn't trigger off its own play.
       const palantirWasActive = actor === 'shadow' && palantirActive(state);
+      // Name the played card in the log (playing an Event reveals it — public info).
+      log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} plays ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId}`);
       hand.splice(idx, 1);
       // Interactive card: pause for the player's target choice; the card is held
       // (out of hand) until the eventTarget resolves.

@@ -187,10 +187,17 @@ register('fp-str-04', {
   canPlay: (state) => !isAtWar(state, 'dwarves'),
   apply(state) { activateNation(state, 'dwarves'); advancePolitical(state, 'dwarves', 99); },
 });
-// "Fear! Fire! Foes!" — rouse the North directly to At War.
+// "Fear! Fire! Foes!" — rouse the North directly to At War, but ONLY if a Companion
+// is in The Shire or Bree (card text). The "move any/all Companions" clause is done
+// on the board (separated Companions are click-to-move): position a Companion in
+// The Shire/Bree first, then play this to rouse the North.
 register('fp-str-07', {
-  canPlay: (state) => !isAtWar(state, 'north'),
-  apply(state) { activateNation(state, 'north'); advancePolitical(state, 'north', 99); },
+  canPlay: (state) => !isAtWar(state, 'north')
+    && ['the-shire', 'bree'].some((r) => state.regions[r]!.characters.some((c) => COMPANION_SET.has(c))),
+  apply(state) {
+    activateNation(state, 'north'); advancePolitical(state, 'north', 99);
+    log(state, null, 'event', 'Fear! Fire! Foes! — a Companion in the Shire/Bree rouses the North to War');
+  },
 });
 for (const [id, nation] of fpRecruits) {
   register(id, {
