@@ -160,11 +160,14 @@ register('fp-char-10', {
 register('fp-char-12', { apply(state) { heal(state, isGollumGuide(state) ? 2 : 1); } }); // Bilbo's Song
 
 // --- Free Peoples: political ---------------------------------------------
-register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP nation
+register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP Nation OF YOUR CHOICE
   canPlay: (state) => FP_NATIONS.some((n) => state.nations[n].step > 0),
-  apply(state) {
-    const n = FP_NATIONS.find((x) => state.nations[x].step > 0) ?? 'gondor';
+  // The player chooses which Free Peoples Nation (one that can still advance).
+  targets: (state) => FP_NATIONS.filter((n) => state.nations[n].step > 0).map((n) => ({ nation: n })),
+  applyTarget(state, _side, t) {
+    const n = t.nation!;
     activateNation(state, n); advancePolitical(state, n, 1);
+    log(state, null, 'event', `Wisdom of Elrond — ${n.charAt(0).toUpperCase() + n.slice(1)} activated and advanced one step`);
   },
 });
 

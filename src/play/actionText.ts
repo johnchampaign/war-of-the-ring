@@ -47,6 +47,7 @@ export function describeAction(a: WotrAction): string {
         const label = a.mode === 'hide' ? 'hide the Fellowship' : a.mode === 'move' ? 'move the Fellowship (triggers a Hunt)' : 'do neither';
         return `${cardName(a.card)}: ${label}`;
       }
+      if (a.nation) return `${cardName(a.card)}: activate ${cap(a.nation)} (advance 1 step)`;
       const dest = a.companion ? charName(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
       const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';
       return `${cardName(a.card)}: ${verb}${a.from ? `${rName(a.from)} → ` : ''}${dest}`;
