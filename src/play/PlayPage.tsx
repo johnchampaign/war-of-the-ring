@@ -76,6 +76,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // foreknowledge undo (one that crosses a dice roll / card draw) is blocked outright
   // in 2-player and requires an explicit confirm vs the AI.
   const [undoConfirm, setUndoConfirm] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const runUndo = useCallback(async () => {
     setUndoConfirm(false);
     if (inFlight.current) return;
@@ -203,15 +204,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
-      <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} />
       {g.error && <div style={{ background: '#7a1f1f', color: '#fff', padding: 6, fontFamily: 'system-ui', fontSize: 13 }}>⚠ {g.error.message}</div>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Board column sized to the crop's width at full available height, so the
             board renders LARGE and fills it with no letterbox bars; the info panel
-            (flex:1) takes the rest. 1.1464 = crop aspect (1511/1318); the ~55px is
-            the top status bar + padding (the hand/inspector strip moved into the right
-            column, so there is no longer a bottom bar eating the board's height). */}
-        <div style={{ width: 'min(74vw, calc((100vh - 55px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
+            (flex:1) takes the rest. 1.1464 = crop aspect (1511/1318); the ~16px is just
+            padding — the status bar moved into the right column, so the board now spans
+            the full viewport height (and widens to match, per its aspect). */}
+        <div style={{ width: 'min(74vw, calc((100vh - 16px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
           </div>
@@ -236,6 +236,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           )}
         </div>
         <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {/* The status bar lives at the top of the right column (may wrap to several rows). */}
+          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} />
           {undoCap && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: '#1a160f', borderBottom: '1px solid #2a2418', flexShrink: 0 }}>
               <button onClick={onUndoClick} disabled={!undoCap.canUndo}
@@ -265,11 +267,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ flex: '1 1 auto', minHeight: 120, overflow: 'auto' }}>
             <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} />
           </div>
-          {/* Always-visible game log so a unit's fate (moved / merged / removed /
-              killed) is traceable in the moment. Capped so it never crowds actions. */}
-          <div style={{ flexShrink: 0, height: '26%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <LogPanel view={g.view} />
-          </div>
+          {/* The game log moved to a pop-up (opened from the floating Log button). */}
           {chatClient && g.you && (
             <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
               subscribe={client.subscribeMessages} style={{ borderTop: '1px solid #2a2418', maxHeight: '34vh' }} />
@@ -326,6 +324,23 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} />
       <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
       <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
+      {/* Floating Log button (beside Report) — opens the game log as a pop-up. */}
+      <button onClick={() => setLogOpen(true)} title="Open the game log"
+        style={{ position: 'fixed', bottom: 10, right: 110, zIndex: 40, padding: '6px 12px', fontSize: 13, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 18, cursor: 'pointer', boxShadow: '0 2px 8px #0008' }}>
+        📜 Log
+      </button>
+      {logOpen && (
+        <div onClick={() => setLogOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.7)', display: 'grid', placeItems: 'center', zIndex: 71 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', borderRadius: 12, border: '1px solid #5a4a2a', width: 520, maxWidth: '92vw', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px #000' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 10px', borderBottom: '1px solid #2a2418' }}>
+              <button onClick={() => setLogOpen(false)} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
+            </div>
+            <div style={{ height: '60vh', overflowY: 'auto' }}>
+              <LogPanel view={g.view} />
+            </div>
+          </div>
+        </div>
+      )}
       {onExit &&<button onClick={onExit} style={{ position: 'fixed', top: 6, right: 8, padding: '3px 8px', fontSize: 12 }}>← Lobby</button>}
     </div>
   );
