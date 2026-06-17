@@ -69,6 +69,34 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
       }
     }
 
+    // POST /api/report — PUBLIC: a bug / rules-question / feedback report from LOCAL
+    // play (hotseat / vs AI), which has no server-side game to attach to. CORS-open
+    // like gamelog so the dev client can post too. Stored as a normal 'wotr' report
+    // so it lands in the triage queue alongside online reports.
+    if (seg.length === 1 && seg[0] === 'report') {
+      if (method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+      if (method === 'POST') {
+        const body = await safeJson(request);
+        const id = randomId();
+        const sev = String(body?.severity ?? 'bug');
+        await makeStore(env).putReport({
+          reportId: id,
+          gameId: 'local',
+          reporterSide: String(body?.you ?? '?').slice(0, 16),
+          turnNumber: Number(body?.turn) || 0,
+          serverSnapshot: '',
+          reporterView: '',
+          clientLog: [],
+          message: String(body?.message ?? '').slice(0, 2000),
+          severity: ['bug', 'rules-question', 'feedback'].includes(sev) ? sev : 'bug',
+          category: 'wotr',
+          clientBuild: typeof body?.clientBuild === 'string' ? body.clientBuild : undefined,
+          createdAt: new Date().toISOString(),
+        });
+        return json({ ok: true, reportId: id }, 200, CORS);
+      }
+    }
+
     // Report triage — PUBLIC, per the agent-collaboration trust-tier split:
     //  • read returns a PII-stripped SUMMARY only (no server snapshot, reporter
     //    view, client log, or user-agent — those can carry the reporter's hidden

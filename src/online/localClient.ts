@@ -16,6 +16,10 @@ import { applyCombatScenario } from '../devtabs/combatScenario';
 
 const other = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 const sideName = (s: Side): string => (s === 'fp' ? 'Free Peoples' : 'Shadow');
+// Same-origin on the deployed site; the deployed (CORS-open) endpoint from the local
+// dev client, which has no Functions runtime.
+const isLocalDev = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
+const REPORT_ENDPOINT = (isLocalDev ? 'https://war-of-the-ring.pages.dev' : '') + '/api/report';
 const clone = (s: GameState): GameState => JSON.parse(JSON.stringify(s));
 
 // "Randomness fingerprint" of a state: the RNG cursor (advances on any dice/Hunt/
@@ -120,6 +124,21 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat'; aiSid
       opened = true;
       return snapshot();
     },
-    report: async () => ({ reportId: 'local' }),
+    // Local play has no server-side game, so reports go to the public /api/report
+    // endpoint (same-origin on the deployed site; the CORS-open deployed endpoint
+    // from the local dev client, which has no Functions runtime).
+    report: async (body) => {
+      try {
+        const res = await fetch(REPORT_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, you: aiSide ? human : (wotrAdapter.currentActor(state) ?? human), turn: state.turn }),
+        });
+        const j = await res.json().catch(() => ({} as { reportId?: string }));
+        return { reportId: j.reportId ?? 'local' };
+      } catch {
+        return { reportId: 'local' };
+      }
+    },
   };
 }
