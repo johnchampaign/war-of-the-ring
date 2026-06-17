@@ -144,14 +144,13 @@ function CardPreview({ id, bottom }: { id: string; bottom?: boolean }) {
     </div>
   );
   if (bottom) {
-    // Wide inspector: thumbnail (sized to the bar) + the full transcribed text, which
-    // is legible even though the card image itself is small.
-    return (
-      <div style={{ display: 'flex', gap: 12, height: '100%', padding: 8, boxSizing: 'border-box' }}>
-        {art && <img src={art} alt={def?.name ?? id} style={{ height: '100%', width: 'auto', borderRadius: 6, flexShrink: 0 }} />}
-        {text}
-      </div>
-    );
+    // Enlarged area: show just the card image, as large as fits. Only when the art
+    // hasn't been downloaded do we fall back to the transcribed text in its place.
+    return art
+      ? <div style={{ height: '100%', padding: 8, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src={art} alt={def?.name ?? id} style={{ maxHeight: '100%', maxWidth: '100%', borderRadius: 8 }} />
+        </div>
+      : <div style={{ height: '100%', overflowY: 'auto', padding: 8, boxSizing: 'border-box' }}>{text}</div>;
   }
   if (art) return <img src={art} alt={def?.name ?? id} style={{ width: '100%', borderRadius: 8, display: 'block' }} />;
   return <div style={info}>{text}</div>;
@@ -171,15 +170,14 @@ function CharacterPreview({ id, bottom }: { id: string; bottom?: boolean }) {
       {d.abilities?.map((a, i) => <p key={i} style={{ fontSize: 12, margin: '4px 0' }}><b>{a.name}:</b> {a.text}</p>)}
     </div>
   );
-  // Show the actual character card image when art has been downloaded; otherwise the
-  // transcribed text alone (fully legible). In the wide bottom bar, art sits beside text.
+  // Enlarged area: just the character card image when downloaded; otherwise the
+  // transcribed text in its place.
   if (bottom) {
-    return (
-      <div style={{ display: 'flex', gap: 12, height: '100%', padding: 8, boxSizing: 'border-box' }}>
-        {art && <img src={art} alt={d.name} style={{ height: '100%', width: 'auto', borderRadius: 6, flexShrink: 0 }} />}
-        {text}
-      </div>
-    );
+    return art
+      ? <div style={{ height: '100%', padding: 8, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src={art} alt={d.name} style={{ maxHeight: '100%', maxWidth: '100%', borderRadius: 8 }} />
+        </div>
+      : text;
   }
   return art ? <img src={art} alt={d.name} style={{ width: '100%', borderRadius: 8, display: 'block' }} /> : text;
 }

@@ -271,8 +271,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
                   subscribe={client.subscribeMessages} style={{ borderTop: '1px solid #2a2418', maxHeight: '28vh' }} />
               )}
-              {/* Hand + in-play (played) cards. */}
-              <div style={{ flexShrink: 0, height: 116, borderTop: '1px solid #2a2418' }}>
+              {/* Hand (top) + in-play (played) cards (below) — sizes to its content. */}
+              <div style={{ flexShrink: 0, borderTop: '1px solid #2a2418' }}>
                 <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
               </div>
             </div>

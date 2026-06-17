@@ -54,7 +54,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       )}
       {pass && (
         <button disabled={busy} onClick={() => click(pass)}
-          style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 4px' : '0 0 8px', padding: compact ? '4px 10px' : '9px 10px', background: '#4a3a1a', color: '#ffe08a', border: '1px solid #7a5f24', borderRadius: 6, cursor: 'pointer', fontSize: compact ? 12 : 14, fontWeight: 700 }}>
+          style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 3px' : '0 0 8px', padding: compact ? '3px 10px' : '9px 10px', background: '#4a3a1a', color: '#ffe08a', border: '1px solid #7a5f24', borderRadius: 6, cursor: 'pointer', fontSize: compact ? 11 : 14, fontWeight: 700 }}>
           Pass (do nothing this turn)
         </button>
       )}
@@ -93,7 +93,7 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
     else if (ambiguous) setPicking((p) => !p);
     else onClick(action);
   };
-  const bstyle = compact ? { ...btn, margin: '1px 0', padding: '2px 9px', fontSize: 12 } : btn;
+  const bstyle = compact ? { ...btn, margin: '1px 0', padding: '1px 8px', fontSize: 11, lineHeight: 1.2 } : btn;
   return (
     <div>
       <button disabled={disabled} onClick={onMain} {...hov} style={{ ...bstyle, display: 'flex', alignItems: 'center', gap: 8 }}>

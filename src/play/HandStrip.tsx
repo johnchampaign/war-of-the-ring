@@ -20,16 +20,18 @@ export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Si
   // A compact card row (in-play cards, divider, then the hand), with the hint on its
   // own line underneath so it doesn't steal horizontal space.
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#14110b' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', background: '#14110b' }}>
+      {/* Hand on top, played ("in play") cards underneath. */}
       <div style={wrap}>
-        {tabled.length > 0 && <>
-          <span style={label}>In play:</span>
-          {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
-          <span style={{ width: 1, alignSelf: 'stretch', background: '#3a342a', margin: '0 4px' }} />
-        </>}
         <span style={label}>Hand ({hand.length}):</span>
         {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => id !== 'hidden' && setZoom(id)} onHover={onHoverCard} />)}
       </div>
+      {tabled.length > 0 && (
+        <div style={wrap}>
+          <span style={label}>In play:</span>
+          {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
+        </div>
+      )}
       <div style={{ fontSize: 10, color: '#776', padding: '2px 8px 4px', flexShrink: 0 }}>hover to preview · click to enlarge</div>
       {zoom && <CardZoom id={zoom} onClose={() => setZoom(null)} />}
     </div>
