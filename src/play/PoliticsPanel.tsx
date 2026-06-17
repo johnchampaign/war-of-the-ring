@@ -18,12 +18,7 @@ const TRACK_MAX = 3; // display 3 → 2 → 1 → War
 export function PoliticsPanel({ view }: { view: GameState }) {
   return (
     <div style={panel}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>Politics</span>
-        <span style={{ fontSize: 12, color: '#bba' }} title="Victory Points — current / needed for Military victory (FP 4, Shadow 10)">
-          VP <b style={{ color: '#7fb6e6' }}>{view.victoryPoints.fp}</b><span style={{ color: '#778' }}>/4</span> · <b style={{ color: '#e6857f' }}>{view.victoryPoints.shadow}</b><span style={{ color: '#778' }}>/10</span>
-        </span>
-      </div>
+      <div style={{ fontWeight: 600, fontSize: 13 }}>Politics</div>
       <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
         <NationGroup view={view} nations={FP_NATIONS} label="Free Peoples" />
         <NationGroup view={view} nations={SHADOW_NATIONS} label="Shadow" />

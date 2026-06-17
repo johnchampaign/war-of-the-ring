@@ -208,9 +208,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Board column sized to the crop's width at full available height, so the
             board renders LARGE and fills it with no letterbox bars; the info panel
-            (flex:1) takes the rest. 1.1464 = crop aspect (1511/1318); the ~175px is
-            the top bar + bottom bar + padding. */}
-        <div style={{ width: 'min(74vw, calc((100vh - 175px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
+            (flex:1) takes the rest. 1.1464 = crop aspect (1511/1318); the ~55px is
+            the top status bar + padding (the hand/inspector strip moved into the right
+            column, so there is no longer a bottom bar eating the board's height). */}
+        <div style={{ width: 'min(74vw, calc((100vh - 55px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
           </div>
@@ -250,10 +251,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               )}
             </div>
           )}
-          <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn ? setDie : undefined} />
-          {/* Politics is reference info — capped + scrolls so it never crowds the actions. */}
-          <div style={{ flexShrink: 0, maxHeight: '24%', overflow: 'auto' }}>
-            <PoliticsPanel view={g.view} />
+          {/* Dice pool and Politics share one row at the top of the column. */}
+          <div style={{ display: 'flex', flexShrink: 0, maxHeight: '32%', borderBottom: '1px solid #2a2418' }}>
+            <div style={{ flexShrink: 0, overflow: 'auto' }}>
+              <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn ? setDie : undefined} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0, overflow: 'auto', borderLeft: '1px solid #2a2418' }}>
+              <PoliticsPanel view={g.view} />
+            </div>
           </div>
           {/* Actions are the PRIMARY interaction — they get the whole column now (the
               hover inspector moved to the wide bottom bar). */}
@@ -269,16 +274,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
               subscribe={client.subscribeMessages} style={{ borderTop: '1px solid #2a2418', maxHeight: '34vh' }} />
           )}
-        </div>
-      </div>
-      {/* Bottom bar: hand + in-play cards on the left, the hover inspector filling the
-          (previously wasted) wide space on the right. */}
-      <div style={{ display: 'flex', alignItems: 'stretch', borderTop: '1px solid #2a2418', height: 124, flexShrink: 0 }}>
-        <div style={{ flexShrink: 0, maxWidth: '52%', overflowX: 'auto', display: 'flex' }}>
-          <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418' }}>
-          <HoverPreview hover={hover} view={g.view} bottom />
+          {/* Hand + in-play cards on the left, the hover inspector on the right — at the
+              bottom of the right-hand column (was a full-width bottom bar). */}
+          <div style={{ display: 'flex', alignItems: 'stretch', borderTop: '1px solid #2a2418', height: 124, flexShrink: 0 }}>
+            <div style={{ flexShrink: 0, maxWidth: '52%', overflowX: 'auto', display: 'flex' }}>
+              <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418' }}>
+              <HoverPreview hover={hover} view={g.view} bottom />
+            </div>
+          </div>
         </div>
       </div>
       {moveDraft && (
