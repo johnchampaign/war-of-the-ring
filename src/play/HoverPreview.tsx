@@ -159,9 +159,10 @@ function CardPreview({ id, bottom }: { id: string; bottom?: boolean }) {
 
 function CharacterPreview({ id, bottom }: { id: string; bottom?: boolean }) {
   const d = charDef(id);
+  const art = useCardArt(id);
   if (!d) return <div style={hint}>{charName(id)}</div>;
-  return (
-    <div style={{ ...info, ...(bottom ? { padding: 10, overflowY: 'auto', height: '100%', boxSizing: 'border-box' } : {}) }}>
+  const text = (
+    <div style={{ ...info, ...(bottom ? { padding: 10, overflowY: 'auto', flex: 1, minWidth: 0, boxSizing: 'border-box' } : {}) }}>
       <div style={{ fontWeight: 700, fontSize: 15 }}>{d.name}</div>
       {d.title && <div style={{ color: '#b9b29c', fontSize: 12, fontStyle: 'italic' }}>{d.title}</div>}
       <div style={{ color: '#d9c98a', fontSize: 12 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</div>
@@ -170,6 +171,17 @@ function CharacterPreview({ id, bottom }: { id: string; bottom?: boolean }) {
       {d.abilities?.map((a, i) => <p key={i} style={{ fontSize: 12, margin: '4px 0' }}><b>{a.name}:</b> {a.text}</p>)}
     </div>
   );
+  // Show the actual character card image when art has been downloaded; otherwise the
+  // transcribed text alone (fully legible). In the wide bottom bar, art sits beside text.
+  if (bottom) {
+    return (
+      <div style={{ display: 'flex', gap: 12, height: '100%', padding: 8, boxSizing: 'border-box' }}>
+        {art && <img src={art} alt={d.name} style={{ height: '100%', width: 'auto', borderRadius: 6, flexShrink: 0 }} />}
+        {text}
+      </div>
+    );
+  }
+  return art ? <img src={art} alt={d.name} style={{ width: '100%', borderRadius: 8, display: 'block' }} /> : text;
 }
 
 const panel: React.CSSProperties = { borderTop: '1px solid #2a2418', padding: 8, fontFamily: 'system-ui', color: '#e9e1cc', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' };
