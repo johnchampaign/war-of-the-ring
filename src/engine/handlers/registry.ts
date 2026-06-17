@@ -31,6 +31,9 @@ export interface EventHandler {
   /** Suppress the "done" (stop-early) option for a multi-step card whose steps are
    *  all mandatory (e.g. separate a Companion → choose its destination). */
   noDone?: boolean;
+  /** Offer "done" even before the first target is applied (for "move any or ALL …"
+   *  cards where moving zero is a legal choice). */
+  optionalFromStart?: boolean;
   /** Run AFTER the card is fully resolved (discarded, turn passed). Use for an
    *  effect that itself raises a follow-up PendingChoice (e.g. a Fellowship move
    *  that triggers a Hunt) — set last, it survives the eventTarget cleanup. */

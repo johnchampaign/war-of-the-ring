@@ -12,6 +12,7 @@ import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedCompanion, separationRange, separationDestinations } from '../fellowship';
+import { moveCharacter, characterDestinations } from '../charMove';
 import { log, notify } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
@@ -232,23 +233,12 @@ register('fp-str-24', recruitChoiceCard('fp', [{ nation: 'elves', region: 'woodl
 // region-accurate targets.)
 const fpRecruits: Array<[string, Nation]> = [];
 
-// "Book of Mazarbul" — rouse the Dwarves directly to At War.
-register('fp-str-04', {
-  canPlay: (state) => !isAtWar(state, 'dwarves'),
-  apply(state) { activateNation(state, 'dwarves'); advancePolitical(state, 'dwarves', 99); },
-});
-// "Fear! Fire! Foes!" — rouse the North directly to At War, but ONLY if a Companion
-// is in The Shire or Bree (card text). The "move any/all Companions" clause is done
-// on the board (separated Companions are click-to-move): position a Companion in
-// The Shire/Bree first, then play this to rouse the North.
-register('fp-str-07', {
-  canPlay: (state) => !isAtWar(state, 'north')
-    && ['the-shire', 'bree'].some((r) => state.regions[r]!.characters.some((c) => COMPANION_SET.has(c))),
-  apply(state) {
-    activateNation(state, 'north'); advancePolitical(state, 'north', 99);
-    log(state, null, 'event', 'Fear! Fire! Foes! — a Companion in the Shire/Bree rouses the North to War');
-  },
-});
+// "Book of Mazarbul" — move any/all separated Companions; if one is then in Erebor or
+// Ered Luin, rouse the Dwarves to War.
+register('fp-str-04', moveCompanionsCard(['erebor', 'ered-luin'], 'dwarves'));
+// "Fear! Fire! Foes!" — move any/all separated Companions; if one is then in The Shire
+// or Bree, rouse the North to War.
+register('fp-str-07', moveCompanionsCard(['the-shire', 'bree'], 'north'));
 for (const [id, nation] of fpRecruits) {
   register(id, {
     canPlay: (state) => canEventRecruit(state, nation),
@@ -888,6 +878,47 @@ const fellowCompanions = (state: GameState): EventTarget[] =>
   state.fellowship.companions.filter((c) => COMPANION_SET.has(c)).map((companion) => ({ companion }));
 const canSeparate = (state: GameState): boolean =>
   state.fellowship.mordor === null && state.fellowship.companions.some((c) => COMPANION_SET.has(c));
+
+/** A card that may MOVE any or all already-separated Companions, then (if a Companion
+ *  ends in a `trigger` region) rouses `nation` to war. Interactive: repeatedly pick a
+ *  Companion (button) then its destination (board-click), or stop. The rouse is
+ *  checked both before (already-positioned) and after the moves (idempotent via the
+ *  not-At-War guard). */
+function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
+  const seps = (state: GameState): [string, RegionId][] => Object.entries(state.characters.inPlay).filter(([c]) => COMPANION_SET.has(c)) as [string, RegionId][];
+  const canMove = (state: GameState, c: string, from: RegionId): boolean => characterDestinations(state, 'fp', c, from).length > 0;
+  const checkRouse = (state: GameState): void => {
+    if (isAtWar(state, nation)) return;
+    if (trigger.some((r) => (state.regions[r]?.characters ?? []).some((c) => COMPANION_SET.has(c)))) {
+      activateNation(state, nation, { viaCompanion: true }); advancePolitical(state, nation, 99);
+      const nm = nation.charAt(0).toUpperCase() + nation.slice(1);
+      log(state, null, 'event', `A Companion rouses the ${nm} to War`);
+      notify(state, `A Companion in ${trigger.map((r) => REGIONS[r]?.name ?? r).join(' / ')} rouses the ${nm} to war!`);
+    }
+  };
+  return {
+    canPlay: (state) => seps(state).some(([c, from]) => canMove(state, c, from)) || (!isAtWar(state, nation) && trigger.some((r) => (state.regions[r]?.characters ?? []).some((c) => COMPANION_SET.has(c)))),
+    apply: (state) => checkRouse(state),     // rouse from an already-positioned Companion
+    repeat: 12,
+    optionalFromStart: true,                  // "any or ALL" — moving zero is allowed
+    targets(state, _side, applied = []) {
+      const last = applied[applied.length - 1];
+      if (last && last.companion && !last.region) {
+        // destination step for the just-picked Companion
+        const from = state.characters.inPlay[last.companion];
+        return from ? characterDestinations(state, 'fp', last.companion, from).map((region) => ({ companion: last.companion, region })) : [];
+      }
+      // pick step: separated Companions that haven't completed a move and can still move
+      const done = new Set(applied.filter((t) => t.region).map((t) => t.companion));
+      return seps(state).filter(([c, from]) => !done.has(c) && canMove(state, c, from)).map(([c]) => ({ companion: c }));
+    },
+    applyTarget(state, _side, t) {
+      if (t.region) moveCharacter(state, 'fp', t.companion!, state.characters.inPlay[t.companion!]!, t.region);
+      // pick step (no region): records the Companion; no mutation
+    },
+    finalize: (state) => checkRouse(state),  // rouse from a Companion moved into the trigger region
+  };
+}
 
 /** A card that separates ONE Companion: step 1 pick the Companion, step 2 pick where
  *  it goes (the player's CHOICE, within Progress + Level + the card's bonus). `after`

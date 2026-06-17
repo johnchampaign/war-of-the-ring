@@ -160,7 +160,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const h = getHandler(data.card);
         const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye }));
         // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
-        if ((h?.repeat ?? 1) > 1 && data.applied.length > 0 && !h?.noDone) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
+        if ((h?.repeat ?? 1) > 1 && (data.applied.length > 0 || h?.optionalFromStart) && !h?.noDone) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         return opts;
       }
       case 'bonusDraw':
