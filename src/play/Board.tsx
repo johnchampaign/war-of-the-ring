@@ -4,11 +4,65 @@
 // miniatures), so armies render as informative tokens — side colour, regular vs
 // elite split, leader/Nazgûl pip. Without the downloaded map it falls back to
 // nation-coloured polygons; fully playable either way.
-import { memo, useMemo, useRef, useState, useCallback } from 'react';
+import { memo, useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
 import { useBoardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage } from '../data/geometry';
 import { blockedAreas, blockedAreaPath } from '../data/blockedAreas';
+
+// Compute, once the board image is available, a per-mask fill that BLENDS with the
+// surrounding board instead of a harsh black box (Ira #7). For each blocked area we
+// sample the image just OUTSIDE its outline (vertices + edge midpoints, nudged
+// outward from the centroid) and average those pixels — so the unused printed strip
+// is painted over with the colour of the board around it. Blob-sourced images are
+// same-origin, so the canvas isn't tainted and getImageData works.
+const MASK_FALLBACK = 'rgba(8,6,3,0.82)';
+function useMaskBlendColors(boardArt: string | null): string[] | null {
+  const [colors, setColors] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!boardArt || blockedAreas.length === 0) { setColors(null); return; }
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+        const ctx = cv.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0);
+        // Polygon coords are in mapImage space; scale to the image's natural pixels.
+        const sx = img.naturalWidth / mapImage.width, sy = img.naturalHeight / mapImage.height;
+        const sampleAt = (x: number, y: number): [number, number, number] | null => {
+          const px = Math.round(x * sx), py = Math.round(y * sy);
+          if (px < 0 || py < 0 || px >= cv.width || py >= cv.height) return null;
+          const d = ctx.getImageData(px, py, 1, 1).data;
+          return d[3] === 0 ? null : [d[0]!, d[1]!, d[2]!];
+        };
+        const out = blockedAreas.map((a) => {
+          const pts = a.polygon;
+          const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+          const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+          const M = 14; // px to nudge the sample point outward, past the outline
+          const probes: Array<[number, number]> = [];
+          for (let i = 0; i < pts.length; i++) {
+            const v = pts[i]!, n = pts[(i + 1) % pts.length]!;
+            probes.push(v, [(v[0] + n[0]) / 2, (v[1] + n[1]) / 2]); // vertex + edge midpoint
+          }
+          const samples = probes
+            .map(([x, y]) => { const dx = x - cx, dy = y - cy, len = Math.hypot(dx, dy) || 1; return sampleAt(x + (dx / len) * M, y + (dy / len) * M); })
+            .filter((s): s is [number, number, number] => s !== null);
+          if (!samples.length) return MASK_FALLBACK;
+          const a0 = samples.reduce((m, s) => [m[0] + s[0], m[1] + s[1], m[2] + s[2]], [0, 0, 0]);
+          return `rgb(${Math.round(a0[0] / samples.length)},${Math.round(a0[1] / samples.length)},${Math.round(a0[2] / samples.length)})`;
+        });
+        if (!cancelled) setColors(out);
+      } catch { /* tainted / OOM — keep the default masks */ }
+    };
+    img.src = boardArt;
+    return () => { cancelled = true; };
+  }, [boardArt]);
+  return colors;
+}
 
 // Board crop rectangle (map-image pixel space) — see the note at its use site for
 // why this is hardcoded rather than read from blocked-areas.json.
@@ -61,6 +115,8 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   // Let the player switch to the clean polygon map even when the art is downloaded.
   const [polyOnly, setPolyOnly] = useState(false);
   const boardArt = polyOnly ? null : art;
+  // Per-mask fill sampled from the board so the unused printed strips blend in (#7).
+  const maskColors = useMaskBlendColors(boardArt);
 
   const regionEls = useMemo(() => regionIds.map((id) => {
     const poly = regionPolygon(id);
@@ -175,11 +231,12 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           )}
         </g>
       ))}
-      {/* Unused "special areas" printed on the board IMAGE, masked so they read as
-          inert. Only needed over the image — the polygon map has no such art. */}
+      {/* Unused "special areas" printed on the board IMAGE, painted over with a colour
+          sampled from the surrounding board so they blend in rather than reading as
+          black holes (#7). Only over the image — the polygon map has no such art. */}
       {boardArt && blockedAreas.map((a, i) => (
-        <path key={`blocked-${i}`} d={blockedAreaPath(a.polygon)} fill="rgba(8,6,3,0.82)"
-          stroke="#000" strokeWidth={1} style={{ pointerEvents: 'none' }} />
+        <path key={`blocked-${i}`} d={blockedAreaPath(a.polygon)} fill={maskColors?.[i] ?? MASK_FALLBACK}
+          stroke="none" style={{ pointerEvents: 'none' }} />
       ))}
       {/* Fellowship marker (last-known position) */}
       <FellowshipMarker view={view} />
