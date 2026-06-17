@@ -25,7 +25,9 @@ export function checkRingVictory(state: GameState): boolean {
  *  Settlements; FP needs ≥4 VP of captured Shadow Settlements. */
 export function checkMilitaryVictory(state: GameState): boolean {
   if (state.winner) return true;
-  if (state.victoryPoints.shadow >= 10) { win(state, 'shadow', `Military victory (${state.victoryPoints.shadow} VP)`); return true; }
+  // The Free Peoples player checks (and wins) FIRST — rulebook p.44 — so an FP
+  // Military victory takes precedence over a simultaneous Shadow one.
   if (state.victoryPoints.fp >= 4) { win(state, 'fp', `Military victory (${state.victoryPoints.fp} VP)`); return true; }
+  if (state.victoryPoints.shadow >= 10) { win(state, 'shadow', `Military victory (${state.victoryPoints.shadow} VP)`); return true; }
   return false;
 }
