@@ -47,6 +47,8 @@ export function describeAction(a: WotrAction): string {
         const label = a.mode === 'hide' ? 'hide the Fellowship' : a.mode === 'move' ? 'move the Fellowship (triggers a Hunt)' : 'do neither';
         return `${cardName(a.card)}: ${label}`;
       }
+      if (a.eye) return `${cardName(a.card)}: turn a die into an Eye (→ Hunt Box)`;
+      if (a.figure) return `${cardName(a.card)}: recruit a${a.nation ? ` ${cap(a.nation)}` : ''} ${a.figure === 'elite' ? 'Elite' : 'Regular'}${a.region ? ` in ${rName(a.region)}` : ''}`;
       if (a.nation) return `${cardName(a.card)}: activate ${cap(a.nation)} (advance 1 step)`;
       const dest = a.companion ? charName(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
       const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';
@@ -83,6 +85,8 @@ export function describeAction(a: WotrAction): string {
     case 'guideDraw': return a.draw ? 'Gandalf: draw a card' : 'Gandalf: don’t draw';
     case 'sorcererDraw': return a.draw ? 'Sorcerer: draw a card' : 'Sorcerer: don’t draw';
     case 'lureChoice': return a.mode === 'corruption' ? 'Lure: take Corruption' : 'Lure: eliminate the Companion';
+    case 'stormcrowLoss': return `Lose ${cap(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
+    case 'breakingSep': return `Separate ${charName(a.companion)} from the Fellowship`;
     case 'huntPreventDraw': return a.prevent ? 'Discard Wizard’s Staff — no Hunt tile' : 'Let the Shadow draw';
     case 'huntRedraw': return a.redraw ? 'Discard Mithril Coat — redraw the tile' : 'Keep the drawn tile';
     default: return JSON.stringify(a);

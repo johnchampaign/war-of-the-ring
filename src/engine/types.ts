@@ -252,6 +252,10 @@ export interface GameState {
   winReason: string | null;
   /** Structured turn log (public + side-tagged entries). */
   log: LogEntry[];
+  /** Transient informational notices for the UI to pop once (e.g. a Companion
+   *  rousing a Nation). Public; each has an incrementing seq so a client shows it
+   *  exactly once. */
+  notices?: { seq: number; msg: string }[];
 }
 
 export interface LogEntry {

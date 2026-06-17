@@ -8,7 +8,7 @@ import { resolveHunt, resolveMordorStep } from './hunt';
 import { activateNation, advancePolitical } from './politics';
 import { settlementController, armySide } from './armies';
 import { MINION_IDS } from './minions';
-import { log } from './log';
+import { log, notify } from './log';
 
 /** Highest-Level Companion in the Fellowship becomes Guide; Gollum if none. */
 export function reassignGuide(state: GameState): void {
@@ -256,6 +256,8 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
     activateNation(state, dn, { viaCompanion: true }); advancePolitical(state, dn, 1);
+    const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    notify(state, `${COMPANIONS[id]?.name ?? id} rouses the ${nm(dn)} to war — ${nm(dn)} ${state.nations[dn].step === 0 ? 'is now At War' : 'advances on the Political Track'}.`);
   }
   pruneFellowshipOnTableCards(state);
   log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);

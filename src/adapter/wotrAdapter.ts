@@ -158,7 +158,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'eventTarget': {
         const data = state.pendingChoice!.data as { card: string; applied: EventTarget[]; repeat: number };
         const h = getHandler(data.card);
-        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode }));
+        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye }));
         // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
         if ((h?.repeat ?? 1) > 1 && data.applied.length > 0) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         return opts;
@@ -171,6 +171,21 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'sorcererDraw', draw: true }, { kind: 'sorcererDraw', draw: false }];
       case 'lureChoice':
         return [{ kind: 'lureChoice', mode: 'corruption' }, { kind: 'lureChoice', mode: 'eliminate' }];
+      case 'stormcrowLoss': {
+        // FP chooses which unit of the targeted Nation to eliminate (Stormcrow).
+        const data = state.pendingChoice!.data as { nation: Nation };
+        const acts: WotrAction[] = [];
+        for (const id of Object.keys(state.regions)) {
+          const u = state.regions[id]!.units[data.nation];
+          if (u && u.regular > 0) acts.push({ kind: 'stormcrowLoss', region: id, nation: data.nation, figure: 'regular' });
+          if (u && u.elite > 0) acts.push({ kind: 'stormcrowLoss', region: id, nation: data.nation, figure: 'elite' });
+        }
+        return acts;
+      }
+      case 'breakingSep': {
+        // FP chooses which Companion to separate (The Breaking of the Fellowship).
+        return state.fellowship.companions.filter((c) => c !== 'gollum').map((companion) => ({ kind: 'breakingSep', companion }));
+      }
       case 'huntDamage': {
         const fs = state.fellowship;
         const acts: WotrAction[] = [{ kind: 'huntDamage', mode: 'corruption' }];
@@ -476,7 +491,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
-        const target: EventTarget = { from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode };
+        const target: EventTarget = { from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye };
         h.applyTarget(state, actor, target);
         data.applied.push(target);
         data.left -= 1;
@@ -499,6 +514,22 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'lureChoice':
       requireChoice(state, 'lureChoice', actor); resolveLureChoice(state, action.mode); break; // turn already passed
+    case 'stormcrowLoss': {
+      requireChoice(state, 'stormcrowLoss', actor); // FP eliminates one unit of the targeted Nation
+      const u = state.regions[action.region]!.units[action.nation];
+      if (u && u[action.figure] > 0) { u[action.figure] -= 1; state.reinforcements[action.nation][action.figure] += 1; }
+      log(state, null, 'event', `Stormcrow: Free Peoples lose a ${action.nation} ${action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
+      state.pendingChoice = null; break; // the turn already passed when the Event resolved
+    }
+    case 'breakingSep': {
+      requireChoice(state, 'breakingSep', actor); // FP separates a chosen Companion to the Fellowship's region
+      const data = state.pendingChoice!.data as { left: number };
+      const dest = state.fellowship.location;
+      if (beginSeparation(state, action.companion)) placeSeparatedCompanion(state, action.companion, dest);
+      data.left -= 1;
+      if (data.left > 0 && state.fellowship.companions.some((c) => c !== 'gollum')) break; // re-prompt for the next
+      state.pendingChoice = null; break; // the turn already passed when the Event resolved
+    }
     case 'bonusDraw': {
       requireChoice(state, 'bonusDraw', actor); // Palantír of Orthanc bonus draw (or decline)
       if (action.deck !== 'none') drawOne(state, actor, action.deck);

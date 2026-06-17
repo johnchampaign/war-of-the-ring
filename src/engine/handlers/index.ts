@@ -5,13 +5,13 @@
 import type { GameState, Side, Nation } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
-import { register, type EventTarget } from './registry';
+import { register, type EventTarget, type EventHandler } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy } from '../armies';
 import { applyCasualties, startBattle } from '../combat';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf } from '../data';
-import { separateCompanion, reassignGuide, pruneFellowshipOnTableCards, moveFellowship } from '../fellowship';
+import { separateCompanion, moveFellowship } from '../fellowship';
 import { log } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
@@ -101,6 +101,52 @@ const recruitable = (state: GameState, side: Side, region: string): boolean => {
   return settlementController(state, region) !== enemy && armySide(state, region) !== enemy;
 };
 
+type RecruitSlot = { nation: Nation; region: string };
+/** Build a handler for a card that recruits one or more units "(Regular or Elite)"
+ *  in NAMED regions, PROMPTING the player to choose Regular vs Elite for each unit
+ *  (rulebook: the choice is the player's). `apply` runs the immediate part (before the
+ *  choices); `leaders` are auto-placed (no R/E choice); `then` runs after all units
+ *  (card draws etc.). Un-recruitable slots (no reinforcements / no room / enemy-held)
+ *  are skipped. */
+function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
+  apply?: (s: GameState) => void;
+  leaders?: RecruitSlot[];
+  then?: (s: GameState) => void;
+  canPlay?: (s: GameState) => boolean;
+} = {}): EventHandler {
+  const slotOptions = (state: GameState, i: number): EventTarget[] => {
+    const sl = slots[i]!;
+    if (!recruitable(state, side, sl.region)) return [];
+    const pool = state.reinforcements[sl.nation];
+    const room = STACKING_LIMIT - unitCount(state, sl.region);
+    const o: EventTarget[] = [];
+    if (room > 0 && pool.regular > 0) o.push({ nation: sl.nation, region: sl.region, figure: 'regular', slot: i });
+    if (room > 0 && pool.elite > 0) o.push({ nation: sl.nation, region: sl.region, figure: 'elite', slot: i });
+    return o;
+  };
+  return {
+    canPlay: opts.canPlay ?? ((state) => slots.some((_, i) => slotOptions(state, i).length > 0)),
+    apply: opts.apply,
+    repeat: slots.length,
+    targets(state, _side, applied = []) {
+      const done = new Set(applied.map((t) => t.slot));
+      for (let i = 0; i < slots.length; i++) {
+        if (done.has(i)) continue;
+        const o = slotOptions(state, i);
+        if (o.length) return o; // first not-yet-chosen, still-recruitable slot
+      }
+      return [];
+    },
+    applyTarget(state, _side, t) {
+      placeUnits(state, t.nation!, t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0);
+    },
+    finalize(state) {
+      for (const l of opts.leaders ?? []) placeForce(state, l.nation, l.region, { leader: 1 });
+      opts.then?.(state);
+    },
+  };
+}
+
 const heal = (state: GameState, n: number): void => {
   state.fellowship.corruption = Math.max(0, state.fellowship.corruption - n);
 };
@@ -173,13 +219,14 @@ register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP Nation OF 
 
 // --- Free Peoples: recruit (Event recruit, may ignore At War) -------------
 // Fixed-region FP recruit cards (place in a named region, with Leaders / draws).
-register('fp-str-14', { canPlay: (s) => recruitable(s, 'fp', 'minas-tirith'), apply: (s) => placeForce(s, 'gondor', 'minas-tirith', { regular: 1, leader: 1 }) }); // Guards of the Citadel
-register('fp-str-15', { canPlay: (s) => recruitable(s, 'fp', 'lorien'), apply: (s) => { placeForce(s, 'elves', 'lorien', { regular: 1 }); drawCard(s, 'fp', 'strategy'); } }); // Celeborn's Galadhrim
-register('fp-str-17', { canPlay: (s) => recruitable(s, 'fp', 'carrock'), apply: (s) => placeForce(s, 'north', 'carrock', { regular: 1, leader: 1 }) }); // Grimbeorn the Old
-register('fp-str-18', { canPlay: (s) => recruitable(s, 'fp', 'dol-amroth'), apply: (s) => placeForce(s, 'gondor', 'dol-amroth', { regular: 1, leader: 1 }) }); // Imrahil of Dol Amroth
-register('fp-str-19', { canPlay: (s) => recruitable(s, 'fp', 'dale'), apply: (s) => { placeForce(s, 'north', 'dale', { regular: 2 }); drawCard(s, 'fp', 'strategy'); } }); // King Brand's Men
-register('fp-str-22', { canPlay: (s) => recruitable(s, 'fp', 'erebor'), apply: (s) => placeForce(s, 'dwarves', 'erebor', { regular: 1, leader: 1 }) }); // Dáin Ironfoot's Guard
-register('fp-str-24', { canPlay: (s) => recruitable(s, 'fp', 'woodland-realm'), apply: (s) => { placeForce(s, 'elves', 'woodland-realm', { regular: 1 }); drawCard(s, 'fp', 'strategy'); } }); // Thranduil's Archers
+// Each "(Regular or Elite)" card prompts the player to choose the figure per unit.
+register('fp-str-14', recruitChoiceCard('fp', [{ nation: 'gondor', region: 'minas-tirith' }], { leaders: [{ nation: 'gondor', region: 'minas-tirith' }] })); // Guards of the Citadel
+register('fp-str-15', recruitChoiceCard('fp', [{ nation: 'elves', region: 'lorien' }], { then: (s) => drawCard(s, 'fp', 'strategy') })); // Celeborn's Galadhrim
+register('fp-str-17', recruitChoiceCard('fp', [{ nation: 'north', region: 'carrock' }], { leaders: [{ nation: 'north', region: 'carrock' }] })); // Grimbeorn the Old
+register('fp-str-18', recruitChoiceCard('fp', [{ nation: 'gondor', region: 'dol-amroth' }], { leaders: [{ nation: 'gondor', region: 'dol-amroth' }] })); // Imrahil of Dol Amroth
+register('fp-str-19', { canPlay: (s) => recruitable(s, 'fp', 'dale'), apply: (s) => { placeForce(s, 'north', 'dale', { regular: 2 }); drawCard(s, 'fp', 'strategy'); } }); // King Brand's Men (2 Regulars — no choice)
+register('fp-str-22', recruitChoiceCard('fp', [{ nation: 'dwarves', region: 'erebor' }], { leaders: [{ nation: 'dwarves', region: 'erebor' }] })); // Dáin Ironfoot's Guard
+register('fp-str-24', recruitChoiceCard('fp', [{ nation: 'elves', region: 'woodland-realm' }], { then: (s) => drawCard(s, 'fp', 'strategy') })); // Thranduil's Archers
 
 // (Interactive FP recruit cards — Círdan / Riders / Éomer — are registered below with
 // region-accurate targets.)
@@ -223,23 +270,26 @@ register('sh-char-12', { // Morgul Wound: +2 if corruption ≤3 else +1; require
 });
 
 // --- Shadow: dice --------------------------------------------------------
-register('sh-char-18', { // The Lidless Eye: up to 3 unused Shadow dice → Eyes in the Hunt Box
+// The Lidless Eye: change UP TO 3 unused Shadow dice into Eyes (Shadow chooses how
+// many — each step converts one; stop early with "done").
+register('sh-char-18', {
   canPlay: (state) => state.dice.shadow.some((f) => f !== 'eye'),
-  apply(state) {
-    let moved = 0;
-    for (let i = state.dice.shadow.length - 1; i >= 0 && moved < 3; i--) {
-      if (state.dice.shadow[i] !== 'eye') { state.dice.shadow.splice(i, 1); state.hunt.box += 1; moved++; }
+  repeat: 3,
+  targets: (state, _side, applied = []) => (applied.length < 3 && state.dice.shadow.some((f) => f !== 'eye')) ? [{ eye: true }] : [],
+  applyTarget(state) {
+    for (let i = state.dice.shadow.length - 1; i >= 0; i--) {
+      if (state.dice.shadow[i] !== 'eye') { state.dice.shadow.splice(i, 1); state.hunt.box += 1; log(state, null, 'event', 'The Lidless Eye: +1 Eye to the Hunt Box'); break; }
     }
-    log(state, null, 'event', `The Lidless Eye: +${moved} Eyes to the Hunt Box`);
   },
 });
 
 // --- Shadow: recruit -----------------------------------------------------
 // Fixed-region Shadow recruit cards (named regions / counts).
-register('sh-str-16', { // A New Power is Rising: 2 Isengard Regulars in each Dunland + 2 in Orthanc
+// A New Power is Rising: 2 Isengard Regulars in each Dunland (no choice) + 2 in Orthanc (R or E each).
+register('sh-str-16', recruitChoiceCard('shadow', [{ nation: 'isengard', region: 'orthanc' }, { nation: 'isengard', region: 'orthanc' }], {
   canPlay: (s) => recruitable(s, 'shadow', 'orthanc') || recruitable(s, 'shadow', 'north-dunland') || recruitable(s, 'shadow', 'south-dunland'),
-  apply: (s) => { placeForce(s, 'isengard', 'north-dunland', { regular: 2 }); placeForce(s, 'isengard', 'south-dunland', { regular: 2 }); placeForce(s, 'isengard', 'orthanc', { regular: 2 }); },
-});
+  apply: (s) => { placeForce(s, 'isengard', 'north-dunland', { regular: 2 }); placeForce(s, 'isengard', 'south-dunland', { regular: 2 }); },
+}));
 register('sh-str-20', { // Orcs Multiplying Again: 3 Sauron Regulars in Dol Guldur + 3 in Mount Gundabad
   canPlay: (s) => recruitable(s, 'shadow', 'dol-guldur') || recruitable(s, 'shadow', 'mount-gundabad'),
   apply: (s) => { placeForce(s, 'sauron', 'dol-guldur', { regular: 3 }); placeForce(s, 'sauron', 'mount-gundabad', { regular: 3 }); },
@@ -502,34 +552,24 @@ register('sh-str-12', {
 });
 
 // --- Recruit + draw / upgrade cards ------------------------------------------
-// House of the Stewards: recruit a Gondor unit with Boromir + draw 2 Strategy.
+// House of the Stewards: recruit a Gondor unit (R or E) with Boromir + draw 2 Strategy.
 register('fp-char-23', {
-  canPlay: (state) => charRegion(state, 'boromir') !== null,
-  apply(state) {
-    const r = charRegion(state, 'boromir'); if (!r) return;
-    placeUnits(state, 'gondor', r, 1, 0);
-    drawCard(state, 'fp', 'strategy'); drawCard(state, 'fp', 'strategy');
+  canPlay: (state) => charRegion(state, 'boromir') !== null && state.reinforcements.gondor.regular + state.reinforcements.gondor.elite > 0,
+  targets(state) {
+    const r = charRegion(state, 'boromir'); if (!r) return [];
+    const pool = state.reinforcements.gondor; const room = STACKING_LIMIT - unitCount(state, r);
+    const o: EventTarget[] = [];
+    if (room > 0 && pool.regular > 0) o.push({ nation: 'gondor', region: r, figure: 'regular', slot: 0 });
+    if (room > 0 && pool.elite > 0) o.push({ nation: 'gondor', region: r, figure: 'elite', slot: 0 });
+    return o;
   },
+  applyTarget(state, _s, t) { placeUnits(state, 'gondor', t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0); },
+  finalize(state) { drawCard(state, 'fp', 'strategy'); drawCard(state, 'fp', 'strategy'); },
 });
-// Kindred of Glorfindel: recruit an Elven unit in Rivendell + draw 1 Strategy.
-register('fp-str-21', {
-  canPlay: (state) => settlementController(state, 'rivendell') === 'fp'
-    && state.reinforcements.elves.regular + state.reinforcements.elves.elite > 0,
-  apply(state) {
-    if (!recruit(state, 'elves', 'rivendell', 1, 0, { ignoreAtWar: true })) placeUnits(state, 'elves', 'rivendell', 1, 0);
-    drawCard(state, 'fp', 'strategy');
-  },
-});
-// Swords in Eriador: recruit a North unit in the Shire + a Dwarven unit in Ered Luin.
-register('fp-str-20', {
-  canPlay: (state) => state.reinforcements.north.regular + state.reinforcements.north.elite > 0
-    || state.reinforcements.dwarves.regular + state.reinforcements.dwarves.elite > 0,
-  apply(state) {
-    recruit(state, 'north', 'the-shire', 1, 0, { ignoreAtWar: true });
-    recruit(state, 'dwarves', 'ered-luin', 1, 0, { ignoreAtWar: true });
-    drawCard(state, 'fp', 'strategy'); // "Then, draw one Strategy Event card."
-  },
-});
+// Kindred of Glorfindel: recruit an Elven unit (R or E) in Rivendell + draw 1 Strategy.
+register('fp-str-21', recruitChoiceCard('fp', [{ nation: 'elves', region: 'rivendell' }], { then: (s) => drawCard(s, 'fp', 'strategy') }));
+// Swords in Eriador: a North unit (R or E) in the Shire + a Dwarven unit (R or E) in Ered Luin, then draw.
+register('fp-str-20', recruitChoiceCard('fp', [{ nation: 'north', region: 'the-shire' }, { nation: 'dwarves', region: 'ered-luin' }], { then: (s) => drawCard(s, 'fp', 'strategy') }));
 // The Grey Company: in Strider's Army, upgrade one Regular to an Elite.
 register('fp-char-24', {
   canPlay: (state) => {
@@ -598,13 +638,30 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
   });
 }
 // Faramir's Rangers: hit a Shadow Army in Osgiliath / N. or S. Ithilien.
+// Faramir's Rangers: CHOOSE a Shadow Army in Osgiliath/N./S. Ithilien, roll 3 dice
+// (hit on 5+); then, if an FP Army is in Osgiliath, recruit one Gondor unit (R or E).
 register('fp-str-06', {
   canPlay: (state) => ['osgiliath', 'south-ithilien', 'north-ithilien'].some((r) => armySide(state, r) === 'shadow'),
-  apply(state) {
-    const r = ['osgiliath', 'south-ithilien', 'north-ithilien'].find((x) => armySide(state, x) === 'shadow')!;
+  repeat: 2, // the attack target, then the optional Gondor recruit
+  targets(state, _side, applied = []) {
+    if (applied.length === 0) {
+      return ['osgiliath', 'south-ithilien', 'north-ithilien'].filter((r) => armySide(state, r) === 'shadow').map((region) => ({ region }));
+    }
+    // After the strike: the Osgiliath recruit (R or E), if you hold Osgiliath.
+    if (armySide(state, 'osgiliath') === 'fp') {
+      const pool = state.reinforcements.gondor, room = STACKING_LIMIT - unitCount(state, 'osgiliath');
+      const o: EventTarget[] = [];
+      if (room > 0 && pool.regular > 0) o.push({ nation: 'gondor', region: 'osgiliath', figure: 'regular', slot: 1 });
+      if (room > 0 && pool.elite > 0) o.push({ nation: 'gondor', region: 'osgiliath', figure: 'elite', slot: 1 });
+      return o;
+    }
+    return [];
+  },
+  applyTarget(state, _side, t) {
+    if (t.figure) { placeUnits(state, 'gondor', t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0); return; }
     const hits = rollDice(state, 3, 5);
-    if (hits > 0) applyCasualties(state, r, 'shadow', hits, 'regularsFirst');
-    log(state, null, 'event', `Faramir's Rangers: ${hits} hit(s) on ${r}`);
+    if (hits > 0) applyCasualties(state, t.region!, 'shadow', hits, 'regularsFirst');
+    log(state, null, 'event', `Faramir's Rangers: ${hits} hit(s) on ${t.region}`);
   },
 });
 // The Eagles are Coming!: eliminate Nazgûl near an FP Army containing a Companion.
@@ -652,13 +709,10 @@ register('sh-str-06', {
   apply(state) {
     const n = stormcrowNation(state); if (!n) return;
     state.nations[n].step = Math.min(3, state.nations[n].step + 1); // move back one step
-    // FP loses one Army unit of that Nation (Regular preferred).
-    for (const id of Object.keys(state.regions)) {
-      const u = state.regions[id]!.units[n];
-      if (u && u.regular > 0) { u.regular--; break; }
-      if (u && u.elite > 0) { u.elite--; break; }
-    }
-    log(state, null, 'event', `Stormcrow: ${n} set back + a unit lost`);
+    log(state, null, 'event', `Stormcrow: ${n} set back one step on the Political Track`);
+    // The FREE PEOPLES player chooses which unit of that Nation to eliminate.
+    const hasUnit = Object.values(state.regions).some((r) => { const u = r.units[n]; return !!u && (u.regular > 0 || u.elite > 0); });
+    if (hasUnit) state.pendingChoice = { owner: 'fp', kind: 'stormcrowLoss', data: { nation: n } };
   },
 });
 /** An FP Nation, not yet At War, whose region holds the Fellowship or a Companion. */
@@ -776,22 +830,17 @@ register('sh-char-24', { // The Black Captain Commands — recruit two Nazgûl a
   targets: (state) => nazgulArmyActions(state, true),
   applyTarget: (state, _side, t) => applyNazgulArmyAction(state, t),
 });
-register('sh-char-14', { // The Breaking of the Fellowship — separate N Companions to the Fellowship's region
-  canPlay: (state) => !state.fellowship.hidden && state.fellowship.companions.some((c) => COMPANION_SET.has(c)),
+// The Breaking of the Fellowship — the FREE PEOPLES player chooses which N Companions
+// to separate (to the Fellowship's region). Forbidden on the Mordor Track.
+register('sh-char-14', {
+  canPlay: (state) => state.fellowship.mordor === null && !state.fellowship.hidden && state.fellowship.companions.some((c) => COMPANION_SET.has(c)),
   apply(state) {
     const n = drawHuntTileNumber(state);
     if (n === null) { log(state, null, 'event', 'The Breaking of the Fellowship: tile had no effect'); return; }
     if (isGollumGuide(state)) { corrupt(state, 1); log(state, null, 'event', 'The Breaking of the Fellowship: Gollum guides — +1 Corruption'); return; }
-    const fs = state.fellowship;
-    const pick = fs.companions.filter((c) => COMPANION_SET.has(c)).slice(0, n);
-    for (const c of pick) {
-      fs.companions.splice(fs.companions.indexOf(c), 1);
-      state.characters.inPlay[c] = fs.location;
-      state.regions[fs.location]!.characters.push(c);
-    }
-    reassignGuide(state);
-    pruneFellowshipOnTableCards(state);
-    log(state, null, 'event', `The Breaking of the Fellowship separates ${pick.length} Companion(s) at ${fs.location}`);
+    const avail = state.fellowship.companions.filter((c) => COMPANION_SET.has(c)).length;
+    const k = Math.min(n, avail);
+    if (k > 0) state.pendingChoice = { owner: 'fp', kind: 'breakingSep', data: { left: k } };
   },
 });
 
@@ -1008,17 +1057,12 @@ register('fp-str-05', {
   },
 });
 
-// --- The Red Arrow: advance Rohan + recruit a Rohan unit & Leader in Edoras ----
-register('fp-str-09', {
+// --- The Red Arrow: advance Rohan + recruit a Rohan unit (R or E) & Leader in Edoras ----
+register('fp-str-09', recruitChoiceCard('fp', [{ nation: 'rohan', region: 'edoras' }], {
   canPlay: (state) => state.nations.gondor.active,
-  apply(state) {
-    advancePolitical(state, 'rohan', 1);
-    recruit(state, 'rohan', 'edoras', 1, 0, { ignoreAtWar: true });
-    if (state.reinforcements.rohan.leader > 0 && settlementController(state, 'edoras') === 'fp') {
-      state.reinforcements.rohan.leader--; state.regions['edoras']!.leaders++;
-    }
-  },
-});
+  apply: (state) => advancePolitical(state, 'rohan', 1),
+  leaders: [{ nation: 'rohan', region: 'edoras' }],
+}));
 
 // --- Hill-Trolls: replace up to two Sauron Regulars on the board with Elites ---
 register('sh-str-15', {

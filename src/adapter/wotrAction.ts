@@ -71,7 +71,11 @@ export type WotrAction =
   // Nazgûl group), a Minion id, or a separated Companion id.
   | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId; die?: DieFace }
   // Follow-up target choice for an interactive event card (fields per card).
-  | { kind: 'eventTarget'; card: string; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none'; done?: boolean }
+  | { kind: 'eventTarget'; card: string; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; done?: boolean }
+  // Stormcrow (FP responds): choose which unit of the targeted Nation to eliminate.
+  | { kind: 'stormcrowLoss'; region: RegionId; nation: Nation; figure: 'regular' | 'elite' }
+  // The Breaking of the Fellowship (FP responds): choose which Companion to separate.
+  | { kind: 'breakingSep'; companion: string }
   // Palantír of Orthanc bonus draw (Shadow): a deck to draw from, or 'none' to decline.
   | { kind: 'bonusDraw'; deck: 'character' | 'strategy' | 'none' }
   // Gandalf the Grey Guide draw (FP): take the matching-deck card, or decline.
