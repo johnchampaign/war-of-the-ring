@@ -44,16 +44,23 @@ function NationRow({ n, ns }: { n: Nation; ns: GameState['nations'][Nation] }) {
       <span style={{ width: 9, height: 9, borderRadius: 2, background: NATION_COLOR[n], flexShrink: 0,
         border: ns.active ? '1px solid #fff' : '1px solid #665', opacity: ns.active ? 1 : 0.5 }} />
       <span style={{ width: 64, fontSize: 11, color: atWar ? '#ffd23f' : '#ddd' }}>{NATION_LABEL[n]}</span>
+      {/* Left-anchored progress bar toward War: filled cells = steps mobilized, so a
+          nation advancing reads as "more progress", never as a row knocked out of
+          alignment (the old single-moving-dot design). The rightmost cell is War. */}
       <div style={{ display: 'flex', gap: 2 }}>
         {Array.from({ length: TRACK_MAX + 1 }).map((_, i) => {
-          const pos = TRACK_MAX - i; // 3,2,1,0(War)
-          const here = pos === step;
+          const pos = TRACK_MAX - i;       // boxes 3,2,1 then 0 (War) on the right
+          const atWar = pos === 0;
+          const advanced = TRACK_MAX - step; // how far this nation has mobilized
+          // Cumulative left-anchored fill: the start box is always filled, each step
+          // toward War adds one cell; the War cell lights only when fully mobilized.
+          const filled = atWar ? step === 0 : i <= advanced;
           return (
-            <span key={i} title={pos === 0 ? 'At War' : `${pos} step(s)`} style={{
-              width: 12, height: 12, borderRadius: pos === 0 ? 2 : 6, fontSize: 8, lineHeight: '12px', textAlign: 'center',
-              background: here ? (pos === 0 ? '#c0392b' : '#caa84b') : '#332b1e',
-              color: here ? '#fff' : '#776', border: pos === 0 ? '1px solid #e6857f' : '1px solid #443',
-            }}>{pos === 0 ? '⚔' : ''}</span>
+            <span key={i} title={atWar ? 'At War' : `${pos} step${pos === 1 ? '' : 's'} from War`} style={{
+              width: 12, height: 12, borderRadius: atWar ? 2 : 6, fontSize: 8, lineHeight: '12px', textAlign: 'center',
+              background: filled ? (atWar ? '#c0392b' : '#caa84b') : '#332b1e',
+              color: filled ? '#fff' : '#776', border: atWar ? '1px solid #e6857f' : '1px solid #443',
+            }}>{atWar ? '⚔' : ''}</span>
           );
         })}
       </div>
