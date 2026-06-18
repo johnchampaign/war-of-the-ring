@@ -57,7 +57,7 @@ export function describeAction(a: WotrAction): string {
       const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';
       return `${cardName(a.card)}: ${verb}${a.from ? `${rName(a.from)} → ` : ''}${dest}`;
     }
-    case 'moveCharacter': return `Move ${a.char === 'nazgul' ? 'Nazgûl' : charName(a.char)} ${rName(a.from)} → ${rName(a.to)}`;
+    case 'moveCharacter': return `Move ${a.char === 'nazgul' ? `${a.count ?? ''} Nazgûl`.trim() : charName(a.char)} ${rName(a.from)} → ${rName(a.to)}`;
     case 'charMove2': return 'Done moving characters';
     case 'separateMove': return `Place ${charName(a.companion)} in ${rName(a.target)}`;
     case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;

@@ -69,7 +69,8 @@ export type WotrAction =
   | { kind: 'useElvenRing'; from: DieFace; to: DieFace } // change one unused die's face via an Elven Ring
   // Move an independent character via a Character die: 'nazgul' (a region's
   // Nazgûl group), a Minion id, or a separated Companion id.
-  | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId; die?: DieFace }
+  // `count` (Nazgûl only) moves part of a stack; omit to move the whole group.
+  | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId; die?: DieFace; count?: number }
   // Stop the Character-die move chain (RAW: one die may move all eligible characters).
   | { kind: 'charMove2'; done: true }
   // Follow-up target choice for an interactive event card (fields per card).

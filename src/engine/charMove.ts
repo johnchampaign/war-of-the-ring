@@ -17,15 +17,15 @@ import { settlementController, armySide } from './armies';
 const FLY = 99;
 
 /** What has already moved on the current Character die (so each figure moves at
- *  most once). `chars` = named Companions/Minions already moved (by id); `frozen`
- *  = regions whose Nazgûl already moved this die — their group can't move again
- *  (relay guard; also freezes any Nazgûl that were merged into a moved group, a
- *  consequence of the group-granularity model). */
-export interface CharMoveState { chars: string[]; frozen: RegionId[] }
+ *  most once). `chars` = named Companions/Minions already moved (by id);
+ *  `movedNazgul` = per-region count of Nazgûl in that region that have ALREADY
+ *  moved this die (so the unmoved remainder of a stack can still move, but a moved
+ *  Nazgûl can't relay onward). */
+export interface CharMoveState { chars: string[]; movedNazgul: Record<RegionId, number> }
 
-function isExcluded(p: { char: string; from: RegionId }, excl?: CharMoveState): boolean {
-  if (!excl) return false;
-  return p.char === 'nazgul' ? excl.frozen.includes(p.from) : excl.chars.includes(p.char);
+/** Nazgûl in `from` still free to move this die (total minus already-moved). */
+export function availableNazgul(state: GameState, from: RegionId, excl?: CharMoveState): number {
+  return (state.regions[from]?.nazgul ?? 0) - (excl?.movedNazgul[from] ?? 0);
 }
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 const enemyOf = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
@@ -71,7 +71,7 @@ function rangeOf(state: GameState, char: string, from: RegionId): number {
 
 /** Execute a character move. `char` is 'nazgul' (a region's Nazgûl group), a
  *  Minion id, or a separated Companion id. Returns false if illegal. */
-export function moveCharacter(state: GameState, side: Side, char: string, from: RegionId, to: RegionId): boolean {
+export function moveCharacter(state: GameState, side: Side, char: string, from: RegionId, to: RegionId, count?: number): boolean {
   if (from === to || !REGIONS[to]) return false;
   const range = rangeOf(state, char, from);
   if (range <= 0) return false;
@@ -81,7 +81,11 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
 
   if (char === 'nazgul') {
     if (side !== 'shadow' || src.nazgul <= 0) return false;
-    dst.nazgul += src.nazgul; src.nazgul = 0;
+    // RAW: move any number of Nazgûl from the stack (default = all). The caller
+    // caps `count` to the unmoved remainder so a moved Nazgûl can't relay onward.
+    const n = count === undefined ? src.nazgul : Math.min(Math.max(0, Math.floor(count)), src.nazgul);
+    if (n <= 0) return false;
+    dst.nazgul += n; src.nazgul -= n;
     return true;
   }
   // A character figure (Minion or Companion): verify it belongs to this side and
@@ -101,14 +105,15 @@ function movablePieces(state: GameState, side: Side, excl?: CharMoveState): Arra
   const out: Array<{ char: string; from: RegionId }> = [];
   for (const id of Object.keys(state.regions)) {
     const r = state.regions[id]!;
-    if (side === 'shadow' && r.nazgul > 0) out.push({ char: 'nazgul', from: id });
+    if (side === 'shadow' && availableNazgul(state, id, excl) > 0) out.push({ char: 'nazgul', from: id });
     for (const c of r.characters) {
       if (rangeOf(state, c, id) <= 0) continue; // Saruman / level-0
+      if (excl?.chars.includes(c)) continue;    // already moved this die
       const isShadowChar = c === 'witch-king' || c === 'mouth-of-sauron';
       if ((side === 'shadow' && isShadowChar) || (side === 'fp' && COMPANION_SET.has(c))) out.push({ char: c, from: id });
     }
   }
-  return excl ? out.filter((p) => !isExcluded(p, excl)) : out;
+  return out;
 }
 
 /** The actor's movable independent characters sitting in `from` ('nazgul' for a

@@ -19,7 +19,7 @@ import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable,
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
-import { moveCharacter, characterMoveOptions, remainingCharMoves, type CharMoveState } from '../engine/charMove';
+import { moveCharacter, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, type EventTarget } from '../engine/handlers/registry';
@@ -766,17 +766,21 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // move spends the die; later moves continue from a `charMove2` PendingChoice
       // (no extra die) until the player is done or nothing eligible remains.
       const cont = state.pendingChoice?.kind === 'charMove2' && state.pendingChoice.owner === actor;
-      const prev: CharMoveState = cont ? (state.pendingChoice!.data as CharMoveState) : { chars: [], frozen: [] };
+      const prev: CharMoveState = cont ? (state.pendingChoice!.data as CharMoveState) : { chars: [], movedNazgul: {} };
+      // Cap a Nazgûl move to the UNMOVED remainder of the stack (a moved Nazgûl can't
+      // relay onward); a named figure may only move once this die.
+      const avail = action.char === 'nazgul' ? availableNazgul(state, action.from, prev) : 0;
       if (cont) {
-        if (action.char === 'nazgul' ? prev.frozen.includes(action.from) : prev.chars.includes(action.char))
+        if (action.char === 'nazgul' ? avail <= 0 : prev.chars.includes(action.char))
           throw new Error('That figure already moved with this Character die');
       } else if (!consumePreferred(state, actor, ['character', 'will'], action.die)) {
         throw new Error('No Character die');
       }
-      if (!moveCharacter(state, actor, action.char, action.from, action.to)) throw new Error('Illegal character move');
+      const moveCount = action.char === 'nazgul' ? Math.min(action.count ?? avail, avail) : undefined;
+      if (!moveCharacter(state, actor, action.char, action.from, action.to, moveCount)) throw new Error('Illegal character move');
       const moved: CharMoveState = action.char === 'nazgul'
-        ? { chars: prev.chars, frozen: [...prev.frozen, action.from, action.to] }
-        : { chars: [...prev.chars, action.char], frozen: prev.frozen };
+        ? { chars: prev.chars, movedNazgul: { ...prev.movedNazgul, [action.to]: (prev.movedNazgul[action.to] ?? 0) + (moveCount ?? avail) } }
+        : { chars: [...prev.chars, action.char], movedNazgul: prev.movedNazgul };
       // Keep moving the rest of the eligible characters on the same die, or finish.
       if (remainingCharMoves(state, actor, moved)) state.pendingChoice = { owner: actor, kind: 'charMove2', data: moved };
       else { state.pendingChoice = null; passResolutionTurn(state, actor); }

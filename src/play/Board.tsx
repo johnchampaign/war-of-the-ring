@@ -202,7 +202,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
         <g key={e.id} onClick={() => pickRegion(e.id)}
           onMouseEnter={() => onHoverRegion?.(e.id)} onMouseLeave={() => onHoverRegion?.(null)}
           style={{ cursor: onPickRegion ? 'pointer' : 'default' }}>
-          <title>{rName(e.id)}{e.def?.settlement ? ` — ${e.def.settlement}` : ''}</title>
+          <title>{rName(e.id)}{e.def?.settlement ? ` — ${e.def.settlement}${e.def.vp > 0 ? ` (${e.def.vp} VP)` : ''}` : ''}{e.r?.besieged ? ' — UNDER SIEGE' : ''}</title>
           {/* Over the board image the polygons are invisible at rest — used only for
               hover/click hit-testing (pointerEvents:'all' keeps the transparent fill
               clickable). Only the functional move-highlights (selected / destination /
@@ -212,12 +212,20 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
             fillOpacity={boardArt ? (hl.selected === e.id ? 0.3 : hl.destinations?.has(e.id) || hl.sources?.has(e.id) ? 0.18 : 0) : (hl.selected === e.id ? 0.75 : 0.5)}
             stroke={hl.selected === e.id ? '#fff200' : hl.destinations?.has(e.id) ? '#ffd23f' : hl.sources?.has(e.id) ? '#5dff7a' : (boardArt ? 'none' : '#3a3a3a')}
             strokeWidth={hl.selected === e.id || hl.destinations?.has(e.id) ? 4 : hl.sources?.has(e.id) ? 3 : 1.2} />
-          {/* settlement marker */}
-          {e.def?.settlement && (
-            <rect x={e.poly[0]!.x - 5} y={e.poly[0]!.y - 5} width={10} height={10}
-              fill={e.control === 'shadow' ? '#a83232' : e.control === 'fp' ? '#2f4f9e' : '#fff'}
-              stroke="#222" strokeWidth={1} transform={`rotate(45 ${e.poly[0]!.x} ${e.poly[0]!.y})`} />
-          )}
+          {/* settlement marker — control-coloured diamond, the VP value, and a red
+              dashed ring while the Stronghold is under siege (defenders in the box). */}
+          {e.def?.settlement && (() => {
+            const mx = e.poly[0]!.x, my = e.poly[0]!.y;
+            return (
+              <g style={{ pointerEvents: 'none' }}>
+                {e.r?.besieged && <circle cx={mx} cy={my} r={11} fill="none" stroke="#ff5252" strokeWidth={2} strokeDasharray="3 2" />}
+                <rect x={mx - 5} y={my - 5} width={10} height={10}
+                  fill={e.control === 'shadow' ? '#a83232' : e.control === 'fp' ? '#2f4f9e' : '#fff'}
+                  stroke="#222" strokeWidth={1} transform={`rotate(45 ${mx} ${my})`} />
+                {e.def.vp > 0 && <text x={mx + 10} y={my - 5} fontSize={11} fontWeight="bold" fill="#ffe08a" stroke="#000" strokeWidth={0.7} paintOrder="stroke" textAnchor="middle">{e.def.vp}</text>}
+              </g>
+            );
+          })()}
           {/* army badges (one per side present) */}
           {e.armies.map((a, i) => {
             const pt = e.layout && !e.layout.stacked && e.layout.points[i]

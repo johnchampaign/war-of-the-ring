@@ -57,6 +57,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // When a clicked region offers more than one thing to move (e.g. the army AND its
   // Nazgûl), let the player choose which.
   const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined } | { kind: 'char'; char: string }> } | null>(null);
+  // Choosing HOW MANY Nazgûl to move from a stack (RAW: move any number, not the whole group).
+  const [nazPick, setNazPick] = useState<{ from: RegionId; to: RegionId; max: number } | null>(null);
   // Why the last attempted move/merge was refused (shown so it isn't a silent no-op).
   const [blockMsg, setBlockMsg] = useState<string | null>(null);
   const [hover, setHover] = useState<Hover>(null);
@@ -109,7 +111,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // `charMoved` lists what has already moved this die, so those figures drop out.
   const isCharMove2 = g.view?.pendingChoice?.kind === 'charMove2';
   const charMoved = useMemo(
-    () => (isCharMove2 ? (g.view!.pendingChoice!.data as { chars: string[]; frozen: RegionId[] } | undefined) : undefined),
+    () => (isCharMove2 ? (g.view!.pendingChoice!.data as { chars: string[]; movedNazgul: Record<string, number> } | undefined) : undefined),
     [isCharMove2, g.view],
   );
   // Character figures are board-movable when a Character/Will die is free (first move)
@@ -142,7 +144,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     [armyActs, selected, charDestinations],
   );
 
-  const clearMove = () => { setSelected(null); setCharPick(null); setMoveMenu(null); };
+  const clearMove = () => { setSelected(null); setCharPick(null); setMoveMenu(null); setNazPick(null); };
 
   // Begin moving whatever was chosen from a region: an army (select for the picker)
   // or a specific independent character (Nazgûl/Minion/Companion).
@@ -168,7 +170,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // A character move is in progress: click a highlighted destination to move it there.
     if (charPick) {
-      if (charDestinations.has(id)) { void submit({ kind: 'moveCharacter', char: charPick.char, from: charPick.from, to: id }); clearMove(); return; }
+      if (charDestinations.has(id)) {
+        // A Nazgûl stack with more than one unmoved figure: let the player pick how many.
+        if (charPick.char === 'nazgul' && g.view) {
+          const avail = (g.view.regions[charPick.from]?.nazgul ?? 0) - (charMoved?.movedNazgul[charPick.from] ?? 0);
+          if (avail > 1) { setNazPick({ from: charPick.from, to: id, max: avail }); setCharPick(null); return; }
+        }
+        void submit({ kind: 'moveCharacter', char: charPick.char, from: charPick.from, to: id }); clearMove(); return;
+      }
       if (id === charPick.from) { setCharPick(null); return; } // click the piece again to cancel
     }
     // An army move is in progress: click a highlighted destination (army-only set).
@@ -345,6 +354,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           </div>
         </div>
       )}
+      {/* How many Nazgûl to move from a stack (RAW: move any number, not the whole group). */}
+      {nazPick && <NazgulCountPicker pick={nazPick}
+        onConfirm={(count) => { const p = nazPick; clearMove(); void submit({ kind: 'moveCharacter', char: 'nazgul', from: p.from, to: p.to, count }); }}
+        onCancel={() => setNazPick(null)} />}
       {undoConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.6)', display: 'grid', placeItems: 'center', zIndex: 62 }} onClick={() => setUndoConfirm(false)}>
           <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #7a5f24', maxWidth: 440, boxShadow: '0 8px 40px #000' }} onClick={(e) => e.stopPropagation()}>
@@ -382,6 +395,33 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Pick how many Nazgûl move from a stack (RAW: a Character die may move any number,
+// not the whole group). Defaults to all; one tap on −/+ adjusts.
+function NazgulCountPicker({ pick, onConfirm, onCancel }: {
+  pick: { from: RegionId; to: RegionId; max: number }; onConfirm: (count: number) => void; onCancel: () => void;
+}) {
+  const [n, setN] = useState(pick.max);
+  const fromName = REGIONS[pick.from]?.name ?? pick.from, toName = REGIONS[pick.to]?.name ?? pick.to;
+  const btn: React.CSSProperties = { width: 34, height: 34, fontSize: 18, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' };
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.55)', display: 'grid', placeItems: 'center', zIndex: 60 }} onClick={onCancel}>
+      <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 18, borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 260, boxShadow: '0 8px 40px #000' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 4 }}>Move Nazgûl</div>
+        <div style={{ fontSize: 13, color: '#cbbf9a', marginBottom: 12 }}>{fromName} → {toName}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 14 }}>
+          <button style={btn} disabled={n <= 1} onClick={() => setN((v) => Math.max(1, v - 1))}>−</button>
+          <span style={{ fontSize: 24, fontWeight: 700, minWidth: 48, textAlign: 'center' }}>{n} / {pick.max}</span>
+          <button style={btn} disabled={n >= pick.max} onClick={() => setN((v) => Math.min(pick.max, v + 1))}>+</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => onConfirm(n)} style={{ flex: 1, padding: '8px 12px', fontSize: 14, fontWeight: 700, background: '#4a5a3a', color: '#f0e9d8', border: '1px solid #6a7', borderRadius: 6, cursor: 'pointer' }}>Move {n}</button>
+          <button onClick={onCancel} style={{ padding: '8px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+        </div>
+      </div>
     </div>
   );
 }

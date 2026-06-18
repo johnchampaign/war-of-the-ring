@@ -216,10 +216,12 @@ die already showing an Eye.
   moving another not-yet-moved figure (or "done"), repeating until every figure has
   moved or the player stops (`CharMoveState` tracks what moved this die so nothing
   moves twice; the AI resolves the chain figure-by-figure, `chooseCharMove`). The
-  UI continues the same board-click flow for each figure. *Residual:* the engine's
-  group-granularity — a region's Nazgûl move as a **group**, not figure by figure
-  (so the relay-guard also freezes any Nazgûl merged into a just-moved group); this
-  is a separate, minor simplification, not the "one piece per die" cap (now removed).
+  UI continues the same board-click flow for each figure. **Nazgûl move per-figure
+  too:** `moveCharacter` takes an optional `count`, so you can move *part* of a
+  stack (the UI prompts "how many?" when a stack has >1 unmoved Nazgûl); the
+  relay-guard tracks already-moved Nazgûl **per region** (`movedNazgul`), so the
+  unmoved remainder of a split stack stays movable while a moved Nazgûl can't relay
+  onward. No residual — character movement is now fully RAW.
 - **Character card** fields (p.25): Level, activatable Nation, Guide ability,
   out-of-Fellowship ability, Leadership, action-die bonus symbol. Gandalf,
   Aragorn, Merry, Pippin can activate **any** FP nation (p.34).
