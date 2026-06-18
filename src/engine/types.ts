@@ -184,6 +184,12 @@ export interface PendingCombat {
   /** Hits scored this round (attacker's hits land on the defender, vice versa). */
   atkHits: number;
   defHits: number;
+  /** The dice faces rolled THIS round (for the battle popup; target = to-hit). */
+  atkRoll?: { dice: number[]; rerolls: number[]; target: number };
+  defRoll?: { dice: number[]; rerolls: number[]; target: number };
+  /** Unit counts at battle start, to report each side's losses when it ends. */
+  atkUnits0?: number;
+  defUnits0?: number;
   /** True for a siege assault (attacking a besieged Stronghold): round-capped, the
    *  attacker hits on 6 every round, and the defender cannot retreat. */
   siege?: boolean;
@@ -256,6 +262,14 @@ export interface GameState {
    *  rousing a Nation). Public; each has an incrementing seq so a client shows it
    *  exactly once. */
   notices?: { seq: number; msg: string }[];
+  /** The most recent finished battle, for the battle-outcome popup (public). seq
+   *  marks a new battle so the popup shows each once. */
+  lastBattle?: {
+    seq: number; from: RegionId; to: RegionId; attacker: Side; rounds: number;
+    atkLosses: number; defLosses: number; captured: boolean; siege: boolean; outcome: string;
+    atkRoll?: { dice: number[]; rerolls: number[]; target: number };
+    defRoll?: { dice: number[]; rerolls: number[]; target: number };
+  };
 }
 
 export interface LogEntry {

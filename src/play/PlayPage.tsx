@@ -15,6 +15,7 @@ import { DecisionModal } from './DecisionModal';
 import { MovePicker } from './MovePicker';
 import { DiceTray } from './DiceTray';
 import { HuntPopup } from './HuntPopup';
+import { BattlePopup } from './BattlePopup';
 import { NoticePopup } from './NoticePopup';
 import { TurnSummary } from './TurnSummary';
 import { LogPanel } from './LogPanel';
@@ -411,6 +412,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       )}
       <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn} />
       <HuntPopup view={g.view} />
+      <BattlePopup view={g.view} />
       <NoticePopup view={g.view} />
       <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} />
       <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />

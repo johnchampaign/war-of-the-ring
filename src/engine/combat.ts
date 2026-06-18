@@ -59,8 +59,11 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
 
 /** Hits for one side's roll, applying that side's combat-card mods and the
  *  enemy's penalty mods. */
+/** A combat roll's faces, for the battle popup: the main dice, any leadership
+ *  re-rolls, and the to-hit target so the UI can colour the hits. */
+export interface CombatRoll { dice: number[]; rerolls: number[]; target: number }
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
-  baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false): number {
+  baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll): number {
   // Captain of the West: +1 Combat Strength (die) if such a Companion is in this FP Army.
   const captain = side === 'fp' && !enemyMods.enemyCaptainCancel && state.regions[ownRegion]!.characters.some((c) => CAPTAINS.has(c)) ? 1 : 0;
   let count = Math.min(5, unitCount(state, ownRegion) + captain);
@@ -77,10 +80,11 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   }
   const lead = Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0) - (enemyMods.enemyLeadershipPenalty ?? 0));
   const allowReroll = !enemyMods.negateEnemyReroll;
+  if (roll) { roll.dice = []; roll.rerolls = []; roll.target = target; }
   let hits = withRng(state, (rng) => {
     let h = 0, failed = 0;
-    for (let i = 0; i < count; i++) { const d = rng.rollDie(6); if (d === 6 || (d !== 1 && d >= target)) h++; else failed++; }
-    if (allowReroll) for (let i = 0; i < Math.min(lead, failed); i++) { const d = rng.rollDie(6); if (d === 6 || (d !== 1 && d >= target)) { h++; failed--; } }
+    for (let i = 0; i < count; i++) { const d = rng.rollDie(6); roll?.dice.push(d); if (d === 6 || (d !== 1 && d >= target)) h++; else failed++; }
+    if (allowReroll) for (let i = 0; i < Math.min(lead, failed); i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= target)) { h++; failed--; } }
     for (let i = 0; i < (ownMods.extraAttackDice ?? 0); i++) { const d = rng.rollDie(6); if (d >= 5) h++; } // extra attack hits on 5+
     // Mighty Attack: turn up to N still-missed dice into hits.
     h += Math.min(ownMods.guaranteedHits ?? 0, failed);
@@ -245,6 +249,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
     fortified: dReg.settlement === 'City' || dReg.settlement === 'Fortification' || dReg.settlement === 'Stronghold',
     step: 'attackerCard', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0,
     defDicePenalty: opts.defenderDicePenalty,
+    atkUnits0: unitCount(state, from), defUnits0: unitCount(state, to),
   };
   if (opts.siegeRounds) {
     // Grond / The Fighting Uruk-hai force a multi-round assault on a besieged Stronghold.
@@ -258,6 +263,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   const rg = fullRearguard(state, from, attacker, opts.rearguard);
   const rgHasFigure = Object.values(rg.units).some((u) => u.regular + u.elite > 0) || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
   if (rgHasFigure) pc.rearguard = stashRearguard(state, from, rg);
+  pc.atkUnits0 = unitCount(state, from); // attacking force after the rearguard is held aside
   state.pendingCombat = pc;
   log(state, null, 'combat', `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`);
 }
@@ -307,11 +313,23 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
 
 function finishCombat(state: GameState, advance: boolean): void {
   const pc = state.pendingCombat!;
+  // Snapshot losses BEFORE advancing (which moves the attacker into pc.to). The
+  // rearguard is still stashed here, so pc.from holds only the attacking survivors.
+  const atkSurv = unitCount(state, pc.from), defSurv = unitCount(state, pc.to);
+  const captured = advance && defSurv === 0;
+  const outcome = captured ? `${pc.attacker === 'fp' ? 'Free Peoples' : 'Shadow'} take ${REGIONS[pc.to]!.name ?? pc.to}`
+    : pc.siege ? `The siege of ${REGIONS[pc.to]!.name ?? pc.to} holds` : `The attack on ${REGIONS[pc.to]!.name ?? pc.to} is repulsed`;
   if (advance && unitCount(state, pc.from) > 0) { advanceInto(state, pc.attacker, pc.from, pc.to); state.regions[pc.to]!.besieged = false; }
   if (pc.siege && unitCount(state, pc.from) === 0) state.regions[pc.to]!.besieged = false; // siege lifted: attacker gone
   log(state, null, 'combat', `battle at ${pc.to} ended (atk ${unitCount(state, pc.from)} / def ${unitCount(state, pc.to)})`);
   // The rearguard rejoins its origin region (it never advances into the battle).
   if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
+  // Record the outcome for the battle popup (each battle shown once via seq).
+  state.lastBattle = {
+    seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
+    atkLosses: Math.max(0, (pc.atkUnits0 ?? atkSurv) - atkSurv), defLosses: Math.max(0, (pc.defUnits0 ?? defSurv) - defSurv),
+    captured, siege: !!pc.siege, outcome, atkRoll: pc.atkRoll, defRoll: pc.defRoll,
+  };
   // Resume Action Resolution: opponent of attacker acts if able (else attacker).
   const opp = other(pc.attacker);
   state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;
@@ -369,12 +387,15 @@ export function combatStep(state: GameState): void {
         // Stronghold gives the attacker a 6-to-hit: the first round of a field
         // battle, and EVERY round of a siege assault.
         const atkTarget = pc.fortified && (pc.siege || pc.round === 0) ? 6 : 5;
-        const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, pc.whiteRiderForfeit);
+        const aRoll: CombatRoll = { dice: [], rerolls: [], target: atkTarget };
+        const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, pc.whiteRiderForfeit, aRoll);
         // Help Unlooked For: cap the defender's dice (min 1) via the existing maxDiceEnemy mod.
         const defEnemyMods = pc.defDicePenalty
           ? { ...aMods, maxDiceEnemy: Math.max(1, Math.min(5, unitCount(state, pc.to)) - pc.defDicePenalty) }
           : aMods;
-        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit);
+        const dRoll: CombatRoll = { dice: [], rerolls: [], target: 5 };
+        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit, dRoll);
+        pc.atkRoll = aRoll; pc.defRoll = dRoll;
         // Hit cancellation: Shield-wall, plus Heroic Death's sacrifice-a-Leader.
         const dCancel = (dMods.cancelHits ?? 0) + (dMods.sacrificeLeaderToCancelHit ?? 0);
         const aCancel = (aMods.cancelHits ?? 0) + (aMods.sacrificeLeaderToCancelHit ?? 0);
