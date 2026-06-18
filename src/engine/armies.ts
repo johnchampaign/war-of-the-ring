@@ -10,8 +10,15 @@ export const STACKING_LIMIT = 10;
 
 /** Total Army units (regular + elite, all nations) in a region. */
 export function unitCount(state: GameState, id: RegionId): number {
+  return forceUnitCount(state.regions[id]!);
+}
+
+/** A combatant's figures — a region and a siege box share this shape. The siege
+ *  model (RAW) keeps the boxed defenders in `region.siegeBox`, a Force. */
+export type Force = { units: Partial<Record<Nation, ArmyUnits>>; leaders: number; nazgul: number; characters: string[] };
+export function forceUnitCount(f: Force): number {
   let n = 0;
-  for (const u of Object.values(state.regions[id]!.units)) n += u.regular + u.elite;
+  for (const u of Object.values(f.units)) n += u!.regular + u!.elite;
   return n;
 }
 
@@ -30,9 +37,12 @@ export const combatStrength = (state: GameState, id: RegionId): number => Math.m
 
 /** Leadership = Leaders/Nazgûl + Character leadership ratings present, capped 5. */
 export function leadership(state: GameState, id: RegionId, side: Side): number {
-  const r = state.regions[id]!;
-  let l = side === 'fp' ? r.leaders : r.nazgul;
-  for (const cid of r.characters) {
+  return forceLeadership(state, state.regions[id]!, side);
+}
+/** Leadership of a Force (region or siege box) for `side`. */
+export function forceLeadership(state: GameState, f: Force, side: Side): number {
+  let l = side === 'fp' ? f.leaders : f.nazgul;
+  for (const cid of f.characters) {
     const d = characterDef(cid);
     if (d && sideOfNation((d.nation && d.nation !== 'any' ? d.nation : (side === 'fp' ? 'gondor' : 'sauron')) as Nation) === side) {
       l += d.leadership;
@@ -40,7 +50,7 @@ export function leadership(state: GameState, id: RegionId, side: Side): number {
   }
   // Saruman's "Servants of the White Hand": each Isengard Elite is also a Leader.
   if (side === 'shadow' && state.characters.entered.includes('saruman') && !state.characters.eliminated.includes('saruman')) {
-    l += r.units.isengard?.elite ?? 0;
+    l += f.units.isengard?.elite ?? 0;
   }
   return Math.min(5, l);
 }
@@ -149,13 +159,9 @@ export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, 
       ? `Enemy units there, and ${cap1(blockedNation)} is not At War — you can neither attack nor move into that region until ${cap1(blockedNation)} reaches War.`
       : 'Enemy units there — attack the region instead of moving into it.';
   }
-  // A besieged Stronghold's garrison is a HARD cap of 5 (rulebook p.31-32) — no
-  // "remove excess" relief there. The normal 10-unit stacking limit is NOT a
-  // refusal: the move is allowed and the excess is removed afterward (p.26), so
-  // it isn't checked here.
-  if (state.regions[to]!.besieged && unitCount(state, from) + unitCount(state, to) > SIEGE_LIMIT) {
-    return `A besieged Stronghold's garrison holds at most ${SIEGE_LIMIT} units.`;
-  }
+  // (RAW siege model: a besieged region's open field holds the BESIEGER under the
+  // normal 10-unit limit — joining them is a normal move/merge. The boxed garrison
+  // is sealed in its 5-cap siege box and can't be reinforced by movement.)
   // Non-belligerent nations cannot cross another nation's border (rulebook p.27).
   const dn = REGIONS[to]!.nation;
   for (const nation of Object.keys(state.regions[from]!.units) as Nation[]) {
@@ -204,9 +210,8 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   // Only the moving Nations matter for the not-At-War border rule.
   const dn = REGIONS[to]!.nation;
   for (const n of Object.keys(sel.units ?? {}) as Nation[]) if (!isAtWar(state, n) && dn && dn !== n) return false;
-  // Besieged garrison is a hard cap of 5; the normal 10 limit is enforced by
-  // removing the excess after the move (see removeExcessUnits), not by refusing.
-  if (dst.besieged && unitCount(state, to) + movingUnits > SIEGE_LIMIT) return false;
+  // (RAW siege model: a besieged region's open field is the besieger under the
+  // normal 10-unit limit; the boxed garrison can't be reinforced by movement.)
   // FP Leaders can never be in a region with no combat units: if the origin keeps
   // Leaders it must keep ≥1 unit (so a full vacate forces all FP Leaders to follow).
   const remainingUnits = unitCount(state, from) - movingUnits;

@@ -32,7 +32,10 @@ const pick = (ctrl, state, actor, legal, rng) =>
 // a drop means a unit vanished (the reported "moved and the troop disappeared" bug).
 const armyUnitTotal = (s) => {
   let n = 0;
-  for (const r of Object.values(s.regions)) for (const u of Object.values(r.units)) n += u.regular + u.elite;
+  for (const r of Object.values(s.regions)) {
+    for (const u of Object.values(r.units)) n += u.regular + u.elite;
+    if (r.siegeBox) for (const u of Object.values(r.siegeBox.units)) n += u.regular + u.elite; // boxed garrison still on the board
+  }
   for (const p of Object.values(s.reinforcements)) n += (p.regular ?? 0) + (p.elite ?? 0);
   return n;
 };

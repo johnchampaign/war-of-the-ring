@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf } from './data';
 import { withRng } from './rng';
-import { unitCount, leadership, captureIfEnemySettlement, armySide, freeForMovement, settlementController, enforceSiegeCap, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, hasCombatEffect, EMPTY_MODS, type CombatMods } from './combatCards';
@@ -63,14 +63,17 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
  *  re-rolls, and the to-hit target so the UI can colour the hits. */
 export interface CombatRoll { dice: number[]; rerolls: number[]; target: number }
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
-  baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll): number {
+  baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll, force?: Force): number {
+  // `force` (a siege box) overrides where this side's figures are read from — used
+  // for the boxed DEFENDER in a siege assault (they're in to.siegeBox, not the region).
+  const own: Force = force ?? state.regions[ownRegion]!;
   // Captain of the West: +1 Combat Strength (die) if such a Companion is in this FP Army.
-  const captain = side === 'fp' && !enemyMods.enemyCaptainCancel && state.regions[ownRegion]!.characters.some((c) => CAPTAINS.has(c)) ? 1 : 0;
-  let count = Math.min(5, unitCount(state, ownRegion) + captain);
+  const captain = side === 'fp' && !enemyMods.enemyCaptainCancel && own.characters.some((c) => CAPTAINS.has(c)) ? 1 : 0;
+  let count = Math.min(5, forceUnitCount(own) + captain);
   if (enemyMods.maxDiceEnemy != null) count = Math.min(count, enemyMods.maxDiceEnemy);
   const target = clamp(2, 6, baseTarget - (ownMods.rollBonus ?? 0) + (enemyMods.enemyRollPenalty ?? 0));
   // Forfeiting a Companion's Leadership (Mighty Attack) costs re-roll dice.
-  let leadVal = Math.min(5, leadership(state, ownRegion, side));
+  let leadVal = Math.min(5, forceLeadership(state, own, side));
   // Gandalf the White "The White Rider": when the FP chose (at battle start) to forfeit
   // his Leadership, all Nazgûl Leadership (incl. the Witch-king) is negated this battle.
   if (whiteRiderForfeit) {
@@ -91,7 +94,7 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     return h;
   });
   if ((ownMods.bonusHitsIfAny ?? 0) > 0 && hits > 0) hits += ownMods.bonusHitsIfAny!;
-  if ((ownMods.bonusHitsIfOutnumber ?? 0) > 0 && unitCount(state, ownRegion) >= 2 * Math.max(1, unitCount(state, enemyRegion))) hits += ownMods.bonusHitsIfOutnumber!;
+  if ((ownMods.bonusHitsIfOutnumber ?? 0) > 0 && forceUnitCount(own) >= 2 * Math.max(1, unitCount(state, enemyRegion))) hits += ownMods.bonusHitsIfOutnumber!;
   return hits;
 }
 
@@ -140,9 +143,14 @@ function applyCombatEliminations(state: GameState, enemy: RegionId, mods: Combat
 /** A casualty plan changes the outcome only when both Regulars and Elites are
  *  present — only then do we prompt; otherwise removal is auto. */
 function meaningfulCasualty(state: GameState, id: RegionId, hits: number): boolean {
+  return meaningfulForceCasualty(state.regions[id]!, hits);
+}
+/** A casualty choice is meaningful only when the Force has both Regulars AND Elites
+ *  to choose between (else the loss is forced). Works on a region or a siege box. */
+function meaningfulForceCasualty(f: Force, hits: number): boolean {
   if (hits <= 0) return false;
   let reg = 0, el = 0;
-  for (const u of Object.values(state.regions[id]!.units)) { reg += u.regular; el += u.elite; }
+  for (const u of Object.values(f.units)) { reg += u!.regular; el += u!.elite; }
   return reg > 0 && el > 0;
 }
 
@@ -150,21 +158,24 @@ function meaningfulCasualty(state: GameState, id: RegionId, hits: number): boole
  *  downgrading Elites; elitesFirst downgrades Elites first (preserving unit
  *  count). Shadow casualties recycle to reinforcements; FP casualties are gone. */
 export function applyCasualties(state: GameState, id: RegionId, side: Side, hits: number, plan: 'regularsFirst' | 'elitesFirst'): void {
-  const r = state.regions[id]!;
+  applyForceCasualties(state, state.regions[id]!, side, hits, plan);
+}
+/** Apply casualties to a Force (a region or a siege box). */
+function applyForceCasualties(state: GameState, f: Force, side: Side, hits: number, plan: 'regularsFirst' | 'elitesFirst'): void {
   for (let h = 0; h < hits; h++) {
-    const nations = nationsWithUnits(state, id);
+    const nations = (Object.keys(f.units) as Nation[]).filter((n) => (f.units[n]!.regular + f.units[n]!.elite) > 0);
     if (!nations.length) break;
     if (plan === 'regularsFirst') {
-      const wr = nations.find((n) => r.units[n]!.regular > 0);
-      if (wr) { r.units[wr]!.regular -= 1; if (side === 'shadow') state.reinforcements[wr].regular += 1; }
-      else { const n = nations[0]!; r.units[n]!.elite -= 1; r.units[n]!.regular += 1; if (side === 'shadow') state.reinforcements[n].elite += 1; }
+      const wr = nations.find((n) => f.units[n]!.regular > 0);
+      if (wr) { f.units[wr]!.regular -= 1; if (side === 'shadow') state.reinforcements[wr].regular += 1; }
+      else { const n = nations[0]!; f.units[n]!.elite -= 1; f.units[n]!.regular += 1; if (side === 'shadow') state.reinforcements[n].elite += 1; }
     } else {
-      const we = nations.find((n) => r.units[n]!.elite > 0);
-      if (we) { r.units[we]!.elite -= 1; r.units[we]!.regular += 1; if (side === 'shadow') state.reinforcements[we].elite += 1; }
-      else { const n = nations[0]!; r.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
+      const we = nations.find((n) => f.units[n]!.elite > 0);
+      if (we) { f.units[we]!.elite -= 1; f.units[we]!.regular += 1; if (side === 'shadow') state.reinforcements[we].elite += 1; }
+      else { const n = nations[0]!; f.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
     }
   }
-  if (unitCount(state, id) === 0) { r.leaders = 0; r.nazgul = 0; r.characters = []; }
+  if (forceUnitCount(f) === 0) { f.leaders = 0; f.nazgul = 0; f.characters = []; }
 }
 
 // --- Attack split: the rearguard (rulebook p.28) -----------------------------
@@ -235,34 +246,64 @@ function restoreRearguard(state: GameState, region: RegionId, stash: NonNullable
   r.leaders += stash.leaders; r.nazgul += stash.nazgul; r.characters.push(...stash.characters);
 }
 
+/** The DEFENDER's figures during a battle: the siege box when the defender is
+ *  boxed (RAW siege assault — besieger occupies the region, defenders in the box),
+ *  otherwise the region itself. */
+function defForce(state: GameState, pc: PendingCombat): Force {
+  const box = state.regions[pc.to]!.siegeBox;
+  return pc.boxed === pc.defender && box ? box : state.regions[pc.to]!;
+}
+/** Cap a region's siege box at the 5-unit garrison limit (excess recycled). */
+function capSiegeBox(state: GameState, id: RegionId): void {
+  const box = state.regions[id]!.siegeBox; if (!box) return;
+  let excess = forceUnitCount(box) - 5;
+  if (excess <= 0) return;
+  for (const kind of ['regular', 'elite'] as const) {
+    for (const n of Object.keys(box.units) as Nation[]) {
+      const u = box.units[n]; if (!u) continue;
+      while (excess > 0 && u[kind] > 0) { u[kind] -= 1; state.reinforcements[n][kind] += 1; excess -= 1; }
+    }
+    if (excess <= 0) break;
+  }
+}
+
 /** Begin a battle: political reactions, then set up the sub-machine. The driver
  *  (combatStep, run from advance) takes it from here. */
 export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId,
   opts: { siegeRounds?: number; fpCardLock?: boolean; defenderDicePenalty?: number; rearguard?: MoveSelection } = {}): void {
-  for (const n of nationsWithUnits(state, to)) onArmyAttacked(state, n, to);
   const dReg = REGIONS[to]!;
   const defender = other(attacker);
   const isStronghold = dReg.settlement === 'Stronghold';
-  const alreadyBesieged = isStronghold && state.regions[to]!.besieged;
+  const box = state.regions[to]!.siegeBox;
+  // ASSAULT: the besieger occupies the besieged region (from===to) and attacks the
+  // boxed defenders. RELIEF (from≠to into a besieged region) is a normal field
+  // battle vs the besieger in the open — not an assault.
+  const assault = from === to && !!box && state.regions[to]!.besieged;
+  // Political reaction lands on the army actually attacked (the box, in an assault).
+  for (const n of nationsWithUnits(state, to)) if (!assault) onArmyAttacked(state, n, to);
+  if (assault) for (const n of Object.keys(box!.units) as Nation[]) if ((box!.units[n]!.regular + box!.units[n]!.elite) > 0) onArmyAttacked(state, n, to);
   const pc: PendingCombat = {
     attacker, defender, from, to, round: 0,
     fortified: dReg.settlement === 'City' || dReg.settlement === 'Fortification' || dReg.settlement === 'Stronghold',
     step: 'attackerCard', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0,
     defDicePenalty: opts.defenderDicePenalty,
-    atkUnits0: unitCount(state, from), defUnits0: unitCount(state, to),
+    atkUnits0: unitCount(state, from), defUnits0: assault ? forceUnitCount(box!) : unitCount(state, to),
   };
-  if (opts.siegeRounds) {
+  if (assault) {
+    pc.siege = true; pc.siegeRoundsLeft = opts.siegeRounds ?? 1; pc.boxed = defender; pc.fpCardLock = !!opts.fpCardLock;
+  } else if (opts.siegeRounds) {
     // Grond / The Fighting Uruk-hai force a multi-round assault on a besieged Stronghold.
     pc.siege = true; pc.siegeRoundsLeft = opts.siegeRounds; pc.fpCardLock = !!opts.fpCardLock;
-  } else if (alreadyBesieged) {
-    pc.siege = true; pc.siegeRoundsLeft = 1; // a normal siege assault is one round
   } else if (isStronghold && settlementController(state, to) === defender) {
     pc.step = 'siegeWithdraw'; // the defender may withdraw into the siege instead of a field battle
   }
-  // Split off the rearguard (explicit + forced not-At-War units) before the battle.
-  const rg = fullRearguard(state, from, attacker, opts.rearguard);
-  const rgHasFigure = Object.values(rg.units).some((u) => u.regular + u.elite > 0) || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
-  if (rgHasFigure) pc.rearguard = stashRearguard(state, from, rg);
+  // Split off the rearguard (explicit + forced not-At-War units) before the battle —
+  // never for an assault (from===to; the besieger assaults with its whole force).
+  if (!assault) {
+    const rg = fullRearguard(state, from, attacker, opts.rearguard);
+    const rgHasFigure = Object.values(rg.units).some((u) => u.regular + u.elite > 0) || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
+    if (rgHasFigure) pc.rearguard = stashRearguard(state, from, rg);
+  }
   pc.atkUnits0 = unitCount(state, from); // attacking force after the rearguard is held aside
   state.pendingCombat = pc;
   log(state, null, 'combat', `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`);
@@ -311,26 +352,44 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
   captureIfEnemySettlement(state, to, attacker);
 }
 
+/** Move the boxed garrison back into the region's open field (siege lifted). */
+function liftSiege(state: GameState, id: RegionId): void {
+  const r = state.regions[id]!, box = r.siegeBox; if (!box) return;
+  r.units = box.units; r.leaders = box.leaders; r.nazgul = box.nazgul; r.characters = box.characters;
+  delete r.siegeBox; r.besieged = false;
+}
+
 function finishCombat(state: GameState, advance: boolean): void {
   const pc = state.pendingCombat!;
-  // Snapshot losses BEFORE advancing (which moves the attacker into pc.to). The
-  // rearguard is still stashed here, so pc.from holds only the attacking survivors.
-  const atkSurv = unitCount(state, pc.from), defSurv = unitCount(state, pc.to);
-  const captured = advance && defSurv === 0;
-  const outcome = captured ? `${pc.attacker === 'fp' ? 'Free Peoples' : 'Shadow'} take ${REGIONS[pc.to]!.name ?? pc.to}`
-    : pc.siege ? `The siege of ${REGIONS[pc.to]!.name ?? pc.to} holds` : `The attack on ${REGIONS[pc.to]!.name ?? pc.to} is repulsed`;
-  if (advance && unitCount(state, pc.from) > 0) { advanceInto(state, pc.attacker, pc.from, pc.to); state.regions[pc.to]!.besieged = false; }
-  if (pc.siege && unitCount(state, pc.from) === 0) state.regions[pc.to]!.besieged = false; // siege lifted: attacker gone
-  log(state, null, 'combat', `battle at ${pc.to} ended (atk ${unitCount(state, pc.from)} / def ${unitCount(state, pc.to)})`);
-  // The rearguard rejoins its origin region (it never advances into the battle).
+  const r = state.regions[pc.to]!, box = r.siegeBox;
+  const assault = pc.boxed === pc.defender && !!box; // besieger (in the region) storms the box
+  // Losses snapshot BEFORE any move. Besieger is in pc.from; boxed defenders in the box.
+  const atkSurv = unitCount(state, pc.from);
+  const defSurv = assault ? forceUnitCount(box!) : unitCount(state, pc.to);
+  const name = REGIONS[pc.to]!.name ?? pc.to;
+  const side = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
+  let captured = false, outcome: string;
+  if (assault) {
+    if (advance && defSurv === 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
+      captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker);
+      outcome = `${side(pc.attacker)} storm ${name}`;
+    } else if (atkSurv === 0) { liftSiege(state, pc.to); outcome = `The assault on ${name} is thrown back — siege lifted`; }
+    else outcome = `The siege of ${name} holds`;
+  } else if (box && advance && defSurv === 0) { // RELIEF: the besieger (defender here) is wiped → garrison reoccupies
+    liftSiege(state, pc.to); outcome = `The siege of ${name} is lifted`;
+  } else { // normal field battle
+    captured = advance && defSurv === 0;
+    outcome = captured ? `${side(pc.attacker)} take ${name}` : pc.siege ? `The siege of ${name} holds` : `The attack on ${name} is repulsed`;
+    if (advance && atkSurv > 0) { advanceInto(state, pc.attacker, pc.from, pc.to); r.besieged = false; }
+    if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
+  }
+  log(state, null, 'combat', `battle at ${pc.to} ended — ${outcome}`);
   if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
-  // Record the outcome for the battle popup (each battle shown once via seq).
   state.lastBattle = {
     seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
     atkLosses: Math.max(0, (pc.atkUnits0 ?? atkSurv) - atkSurv), defLosses: Math.max(0, (pc.defUnits0 ?? defSurv) - defSurv),
     captured, siege: !!pc.siege, outcome, atkRoll: pc.atkRoll, defRoll: pc.defRoll,
   };
-  // Resume Action Resolution: opponent of attacker acts if able (else attacker).
   const opp = other(pc.attacker);
   state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;
   state.pendingCombat = null;
@@ -391,16 +450,16 @@ export function combatStep(state: GameState): void {
         const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, pc.whiteRiderForfeit, aRoll);
         // Help Unlooked For: cap the defender's dice (min 1) via the existing maxDiceEnemy mod.
         const defEnemyMods = pc.defDicePenalty
-          ? { ...aMods, maxDiceEnemy: Math.max(1, Math.min(5, unitCount(state, pc.to)) - pc.defDicePenalty) }
+          ? { ...aMods, maxDiceEnemy: Math.max(1, Math.min(5, forceUnitCount(defForce(state, pc))) - pc.defDicePenalty) }
           : aMods;
         const dRoll: CombatRoll = { dice: [], rerolls: [], target: 5 };
-        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit, dRoll);
+        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit, dRoll, pc.boxed === pc.defender ? state.regions[pc.to]!.siegeBox : undefined);
         pc.atkRoll = aRoll; pc.defRoll = dRoll;
         // Hit cancellation: Shield-wall, plus Heroic Death's sacrifice-a-Leader.
         const dCancel = (dMods.cancelHits ?? 0) + (dMods.sacrificeLeaderToCancelHit ?? 0);
         const aCancel = (aMods.cancelHits ?? 0) + (aMods.sacrificeLeaderToCancelHit ?? 0);
         if ((aMods.sacrificeLeaderToCancelHit ?? 0) > 0 && defHits > 0) state.regions[pc.from]!.leaders = Math.max(0, state.regions[pc.from]!.leaders - 1);
-        if ((dMods.sacrificeLeaderToCancelHit ?? 0) > 0 && atkHits > 0) state.regions[pc.to]!.leaders = Math.max(0, state.regions[pc.to]!.leaders - 1);
+        if ((dMods.sacrificeLeaderToCancelHit ?? 0) > 0 && atkHits > 0) { const df = defForce(state, pc); df.leaders = Math.max(0, df.leaders - 1); }
         let atk = Math.max(0, atkHits - dCancel);
         let def = Math.max(0, defHits - aCancel);
         // Mûmakil's later effect: +hits if you outscored the enemy (snapshot the
@@ -428,11 +487,12 @@ export function combatStep(state: GameState): void {
       }
       case 'defenderCasualties': {
         if (pc.atkHits > 0) {
-          if (meaningfulCasualty(state, pc.to, pc.atkHits)) {
-            state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: pc.atkHits, next: pc.siege ? 'siegeAdvance' : 'continueDecision' } };
+          const boxedDef = pc.boxed === pc.defender;
+          if (meaningfulForceCasualty(defForce(state, pc), pc.atkHits)) {
+            state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: pc.atkHits, next: pc.siege ? 'siegeAdvance' : 'continueDecision', boxed: boxedDef } };
             return;
           }
-          applyCasualties(state, pc.to, pc.defender, pc.atkHits, 'regularsFirst');
+          applyForceCasualties(state, defForce(state, pc), pc.defender, pc.atkHits, 'regularsFirst');
         }
         pc.step = pc.siege ? 'siegeAdvance' : 'continueDecision'; continue;
       }
@@ -444,7 +504,7 @@ export function combatStep(state: GameState): void {
       case 'siegeAdvance': {
         // A siege round resolved: capture if the garrison is gone, else count down
         // the assault's rounds (the attacker can't be made to continue past them).
-        if (unitCount(state, pc.to) === 0) { finishCombat(state, true); return; }
+        if (forceUnitCount(defForce(state, pc)) === 0) { finishCombat(state, true); return; }
         pc.siegeRoundsLeft = (pc.siegeRoundsLeft ?? 1) - 1;
         if (pc.siegeRoundsLeft > 0 && unitCount(state, pc.from) > 0) { pc.round += 1; pc.step = 'attackerCard'; continue; }
         finishCombat(state, false); return; // the siege holds; attacker remains besieging
@@ -464,8 +524,9 @@ export function combatStep(state: GameState): void {
 
 // --- resolvers for the combat PendingChoices (called from the adapter) ----
 export function resolveCasualties(state: GameState, plan: 'regularsFirst' | 'elitesFirst'): void {
-  const d = state.pendingChoice!.data as { region: RegionId; side: Side; hits: number; next: PendingCombat['step'] };
-  applyCasualties(state, d.region, d.side, d.hits, plan);
+  const d = state.pendingChoice!.data as { region: RegionId; side: Side; hits: number; next: PendingCombat['step']; boxed?: boolean };
+  const box = state.regions[d.region]!.siegeBox;
+  applyForceCasualties(state, d.boxed && box ? box : state.regions[d.region]!, d.side, d.hits, plan);
   state.pendingCombat!.step = d.next;
   state.pendingChoice = null;
 }
@@ -475,10 +536,25 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
   const pc = state.pendingCombat!;
   state.pendingChoice = null;
   if (withdraw) {
-    state.regions[pc.to]!.besieged = true;
-    enforceSiegeCap(state, pc.to); // a besieged Stronghold holds at most 5 units (rulebook p.31)
-    log(state, null, 'combat', `${pc.defender} withdraws into the siege at ${pc.to}`);
-    finishCombat(state, false); // siege established; the assault itself is a later action
+    const r = state.regions[pc.to]!;
+    // RAW: the defenders withdraw into the siege box; the BESIEGER advances out of
+    // `from` into the region's open field (it now occupies the besieged region).
+    r.siegeBox = { units: r.units, leaders: r.leaders, nazgul: r.nazgul, characters: r.characters };
+    r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = [];
+    capSiegeBox(state, pc.to); // a besieged Stronghold's garrison is at most 5 (rulebook p.31)
+    moveStack(state, pc.from, pc.to); // besieger occupies the open field (no capture — garrison holds the Settlement)
+    r.besieged = true;
+    log(state, null, 'combat', `${pc.defender} withdraws into the siege at ${pc.to}; ${pc.attacker} besieges`);
+    // The rearguard rejoins `from`; record the siege as established; resume the turn.
+    if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
+    state.lastBattle = {
+      seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: 0,
+      atkLosses: 0, defLosses: Math.max(0, (pc.defUnits0 ?? 0) - forceUnitCount(r.siegeBox)), captured: false, siege: true,
+      outcome: `${pc.defender === 'fp' ? 'Free Peoples' : 'Shadow'} withdraw into the siege at ${REGIONS[pc.to]!.name ?? pc.to}`,
+    };
+    const opp = other(pc.attacker);
+    state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;
+    state.pendingCombat = null;
     return;
   }
   pc.step = 'attackerCard'; // fight in the open
@@ -633,6 +709,10 @@ export function attackTargets(state: GameState, side: Side): Array<[RegionId, Re
     if (armySide(state, from) !== side || !hasAtWarUnit(state, from, side)) continue;
     // Every adjacent enemy army is a target (an army may face several); no cap.
     for (const to of REGIONS[from]!.adjacency) if (armySide(state, to) === enemy && !(side === 'shadow' && shadowBarredFromRegion(state, to))) out.push([from, to]);
+    // ASSAULT: if we occupy a besieged Stronghold's open field, we may storm its box
+    // (unless a card bars the Shadow from the region — same gate as a normal attack).
+    const box = state.regions[from]!.siegeBox;
+    if (box && forceUnitCount(box) > 0 && !(side === 'shadow' && shadowBarredFromRegion(state, from))) out.push([from, from]);
   }
   return out;
 }

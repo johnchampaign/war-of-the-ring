@@ -48,7 +48,7 @@ export interface RegionState {
   /** RAW siege model: when besieged, the DEFENDERS withdraw into the Stronghold's
    *  siege box (here) and the BESIEGER occupies the region's open field (`units`).
    *  Absent when not under siege. The garrison still controls the Settlement. */
-  siegeBox?: { units: Partial<Record<Nation, ArmyUnits>>; leaders: number; characters: CharacterId[] };
+  siegeBox?: { units: Partial<Record<Nation, ArmyUnits>>; leaders: number; nazgul: number; characters: CharacterId[] };
 }
 
 // --- Nation political state ---------------------------------------------
@@ -194,6 +194,10 @@ export interface PendingCombat {
   /** Unit counts at battle start, to report each side's losses when it ends. */
   atkUnits0?: number;
   defUnits0?: number;
+  /** RAW siege assault: the besieger occupies the region (`from`===`to`) and the
+   *  DEFENDER's figures are in `to.siegeBox`. Set to the defender's side so combat
+   *  reads/writes the boxed defender from the siege box instead of the region. */
+  boxed?: Side;
   /** True for a siege assault (attacking a besieged Stronghold): round-capped, the
    *  attacker hits on 6 every round, and the defender cannot retreat. */
   siege?: boolean;
