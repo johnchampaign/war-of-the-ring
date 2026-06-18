@@ -27,13 +27,19 @@ export function HuntPopup({ view }: { view: GameState }) {
           ⊙ The Hunt for the Ring
         </div>
         {roll && <RollLine roll={roll} />}
-        <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, margin: '8px 0 2px' }}>
-          {fresh.length === 1 ? 'Tile drawn' : `${fresh.length} tiles drawn`}
+        <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, margin: '10px 0 2px' }}>
+          {fresh.length === 1 ? 'Tile drawn from the bag' : `${fresh.length} tiles drawn from the bag`}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4, margin: '4px 0' }}>
+        {fresh.length === 1 && roll && !roll.mordor && (
+          <div style={{ fontSize: 10.5, color: '#776e58', marginBottom: 2 }}>
+            a successful Hunt draws exactly one tile — your {roll.successes} success{roll.successes === 1 ? '' : 'es'} only decided that you drew
+          </div>
+        )}
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4, margin: '6px 0' }}>
           {fresh.map((d) => <HuntTileFace key={d.seq} draw={d} />)}
         </div>
-        {/* The impact on the track — the whole point of the Hunt. */}
+        {/* The impact on the track — the downstream OUTCOME of the tile above. */}
+        <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, margin: '8px 0 0' }}>Result</div>
         <CorruptionLine current={view.fellowship.corruption} />
         {revealed && (
           <div style={{ marginTop: 10, padding: '8px 10px', background: '#a83232', color: '#fff', borderRadius: 8, fontSize: 13, lineHeight: 1.4 }}>
