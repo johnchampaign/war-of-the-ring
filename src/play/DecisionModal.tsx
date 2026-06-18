@@ -6,7 +6,7 @@
 // owns the choice; the opponent sees a passive "resolving battle…" note.
 import { useState } from 'react';
 import { describeAction, isDecisionAction } from './actionText';
-import { RollLine, CorruptionLine, describeDraw } from './huntView';
+import { RollLine, CorruptionLine, describeDraw, HuntTileFace } from './huntView';
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt } from './artCache';
 import type { GameState, Side } from '../engine/types';
@@ -177,9 +177,17 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
         </div>
       )}
       {last && (
-        <div style={{ fontSize: 13, color: '#e9b', margin: '8px 0 0' }}>
-          {fieldRoll ? 'A success draws one Hunt tile — you drew ' : 'Tile drawn: '}<b>{describeDraw(last)}</b>.
-          {numericTile && <span style={{ color: '#998' }}> The damage is the <b>tile's value</b>, not the number of successes.</span>}
+        <div style={{ margin: '8px 0 0' }}>
+          <div style={{ fontSize: 13, color: '#e9b', marginBottom: 4 }}>
+            {fieldRoll ? 'A success draws one Hunt tile — you drew:' : 'Tile drawn:'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <HuntTileFace draw={last} />
+            <div style={{ fontSize: 12, color: '#998', alignSelf: 'center' }}>
+              {describeDraw(last)}.
+              {numericTile && <> The damage is the <b>tile's value</b>, not the number of successes.</>}
+            </div>
+          </div>
         </div>
       )}
       <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 0' }}>

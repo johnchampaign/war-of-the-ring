@@ -101,7 +101,7 @@ export interface HuntState {
   /** Recent Hunt-tile draws (newest last, capped), for the UI's informational popup.
    *  `seq` increments per draw so the UI can show every not-yet-seen tile (even 0/
    *  blank ones). Public info — drawn tiles are open in WotR. */
-  draws?: { seq: number; value: number | string; damage: number; reveal: boolean; onMordor: boolean;
+  draws?: { seq: number; value: number | string; damage: number; reveal: boolean; stop?: boolean; onMordor: boolean;
     /** The Hunt roll that produced this draw, for the informational popup (public). */
     roll?: HuntRoll }[];
 }

@@ -7,7 +7,7 @@
 // until no choice is pending.
 import { useState } from 'react';
 import type { GameState } from '../engine/types';
-import { RollLine, CorruptionLine, describeDraw } from './huntView';
+import { RollLine, CorruptionLine, HuntTileFace } from './huntView';
 
 export function HuntPopup({ view }: { view: GameState }) {
   const draws = view.hunt.draws ?? [];
@@ -30,11 +30,9 @@ export function HuntPopup({ view }: { view: GameState }) {
         <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, margin: '8px 0 2px' }}>
           {fresh.length === 1 ? 'Tile drawn' : `${fresh.length} tiles drawn`}
         </div>
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, textAlign: 'left' }}>
-          {fresh.map((d) => (
-            <li key={d.seq} style={{ fontSize: 14, padding: '3px 0', borderBottom: '1px solid #2a2418' }}>• {describeDraw(d)}</li>
-          ))}
-        </ul>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4, margin: '4px 0' }}>
+          {fresh.map((d) => <HuntTileFace key={d.seq} draw={d} />)}
+        </div>
         {/* The impact on the track — the whole point of the Hunt. */}
         <CorruptionLine current={view.fellowship.corruption} />
         {revealed && (

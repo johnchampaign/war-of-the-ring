@@ -100,7 +100,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): 
   // capped; seq marks a new draw. Public — drawn tiles are open info.
   const prev = state.hunt.draws ?? [];
   const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
-  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, onMordor: fs.mordor !== null, roll: state.hunt.lastRoll }].slice(-16);
+  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, stop: !!tile.stop, onMordor: fs.mordor !== null, roll: state.hunt.lastRoll }].slice(-16);
 
   if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) beginReveal(state); return; }
   if (damage === 0) { if (reveal) beginReveal(state); return; }

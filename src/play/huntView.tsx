@@ -14,6 +14,32 @@ export function describeDraw(d: Draw): string {
   return base + (d.reveal ? ' · Reveal' : '') + (d.onMordor ? ' · Mordor' : '');
 }
 
+// The drawn Hunt tile, rendered as an actual TILE face (not prose): the big value
+// in the centre (a number, 👁 Eye, or 🎲 die), red border for damage / green for a
+// Free-Peoples heal / neutral for a blank, a Reveal pip and a STOP banner when the
+// tile carries them, and a one-line effect caption beneath.
+export function HuntTileFace({ draw, size = 52 }: { draw: Draw; size?: number }) {
+  const v = draw.value;
+  const num = typeof v === 'number';
+  const heal = num && (v as number) < 0;
+  const blank = num && v === 0;
+  const center = num ? `${v}` : v === 'eye' ? '👁' : v === 'die' ? '🎲' : String(v);
+  const border = heal ? '#3f7a4a' : blank ? '#4a4332' : '#9c3a3a';
+  const ink = heal ? '#9cd6a6' : blank ? '#b9b09a' : '#f0d27a';
+  const caption = heal ? `heal ${-(v as number)}` : blank ? 'no damage'
+    : v === 'eye' ? `${draw.damage} damage` : v === 'die' ? `rolled ${draw.damage}` : `${draw.damage} damage`;
+  return (
+    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3, margin: '0 4px' }}>
+      <div style={{ position: 'relative', width: size, height: size, borderRadius: 9, background: '#15110b', border: `2px solid ${border}`, display: 'grid', placeItems: 'center', boxShadow: '0 2px 6px #0007' }}>
+        <span style={{ fontSize: num ? 24 : 22, fontWeight: 800, color: ink }}>{center}</span>
+        {draw.reveal && <span title="Reveals the Fellowship" style={{ position: 'absolute', top: -7, right: -7, fontSize: 14 }}>🔴</span>}
+        {draw.stop && <span title="Stops the Fellowship" style={{ position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)', fontSize: 9, fontWeight: 700, background: '#a83232', color: '#fff', borderRadius: 5, padding: '1px 5px', letterSpacing: 0.5 }}>STOP</span>}
+      </div>
+      <span style={{ fontSize: 11, color: heal ? '#9cd6a6' : '#cbbf9a' }}>{caption}</span>
+    </div>
+  );
+}
+
 // A die face as a small pip box; a hit (≥6 after the box bonus, never a 1) is gold.
 export function Die({ n, bonus, faded }: { n: number; bonus: number; faded?: boolean }) {
   const hit = n !== 1 && n + bonus >= 6;
