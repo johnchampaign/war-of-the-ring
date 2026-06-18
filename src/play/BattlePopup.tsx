@@ -69,6 +69,8 @@ export function BattlePopup({ view }: { view: GameState }) {
   );
 }
 
-const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.6)', display: 'grid', placeItems: 'center', zIndex: 55 };
+// Above the turn-summary (z 56) so the player's OWN battle result is acknowledged
+// FIRST, before the opponent's "while you waited" recap is revealed underneath.
+const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.6)', display: 'grid', placeItems: 'center', zIndex: 58 };
 const card: React.CSSProperties = { background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: '16px 22px', borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 320, maxWidth: 460, boxShadow: '0 8px 40px #000' };
 const btn: React.CSSProperties = { marginTop: 12, padding: '7px 22px', background: '#3a3326', color: '#f0e9d8', border: '1px solid #6a5', borderRadius: 6, cursor: 'pointer', fontSize: 14, display: 'block', marginLeft: 'auto', marginRight: 'auto' };

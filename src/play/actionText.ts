@@ -63,7 +63,7 @@ export function describeAction(a: WotrAction): string {
     case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;
     case 'armyMove2': return a.done ? 'No second army move' : `Also move army ${rName(a.from!)} → ${rName(a.to!)}`;
     case 'removeExcess': return `Remove a ${cap(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'}`;
-    case 'attack': return `Attack ${rName(a.to)} (from ${rName(a.from)})`;
+    case 'attack': return a.from === a.to ? `⚔ Assault the siege at ${rName(a.to)}` : `Attack ${rName(a.to)} (from ${rName(a.from)})`;
     case 'skipDie': return `Discard a ${a.face} die`;
     case 'pass': return 'Pass';
     case 'playCombatCard': return a.cardId ? `Combat card: ${cardName(a.cardId)}` : 'No combat card';

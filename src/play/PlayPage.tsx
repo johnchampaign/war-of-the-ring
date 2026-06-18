@@ -122,7 +122,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   );
 
   const armyActs = useMemo(() => {
-    const acts = g.legalActions.filter(isSpatial);
+    // A siege ASSAULT is an attack from===to; it has no board "destination" to click,
+    // so it's a panel button (below) rather than a confusing click-the-region-twice.
+    const acts = g.legalActions.filter(isSpatial).filter((a) => !(a.kind === 'attack' && a.from === a.to));
     return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
   }, [g.legalActions, activeDie, g.view, g.you]);
   // Board-click placement of the Fellowship figure: declaring it (Fellowship phase) or
@@ -290,7 +292,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     </>
   );
 
-  const panelActionsAll = g.legalActions.filter((a) => !isSpatial(a) && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove'
+  const panelActionsAll = g.legalActions.filter((a) => (!isSpatial(a) || (a.kind === 'attack' && a.from === a.to)) // siege assaults are panel buttons
+    && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove'
     && !(a.kind === 'eventTarget' && !!a.region && !!a.companion)); // card-separation destinations go on the board
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
