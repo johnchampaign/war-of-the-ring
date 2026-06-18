@@ -211,8 +211,9 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   // Leaders it must keep ≥1 unit (so a full vacate forces all FP Leaders to follow).
   const remainingUnits = unitCount(state, from) - movingUnits;
   if (side === 'fp' && remainingUnits === 0 && src.leaders - movingLeaders > 0) return false;
-  // A Character-die move that splits must take ≥1 Leader/Character with the movers.
-  if (viaCharacterDie && movingLeaders === 0 && chars.length === 0) return false;
+  // A Character-die move that splits must take ≥1 Leader/Nazgûl/Character with the
+  // movers (a Nazgûl is the Shadow's Leader — same rule as the whole-army move).
+  if (viaCharacterDie && movingLeaders === 0 && movingNazgul === 0 && chars.length === 0) return false;
   // Apply.
   for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
     const have = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
