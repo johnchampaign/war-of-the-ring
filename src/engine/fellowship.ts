@@ -169,6 +169,18 @@ function activatableNations(id: CharacterId): Nation[] {
   return [n as Nation];
 }
 
+/** Would placing `companion` at `region` rouse a Free Peoples nation toward War?
+ *  True when `region` is a City/Stronghold of a nation the Companion can activate
+ *  that isn't already At War. Used to highlight the rousing destinations on the
+ *  map when a Companion separates (so it isn't a hidden consequence). */
+export function separationActivates(state: GameState, companion: CharacterId, region: RegionId): boolean {
+  const dn = REGIONS[region]?.nation as Nation | null;
+  if (!dn || !activatableNations(companion).includes(dn)) return false;
+  const st = REGIONS[region]?.settlement;
+  if (st !== 'City' && st !== 'Stronghold') return false;
+  return (state.nations[dn]?.step ?? 0) > 0; // not yet At War — the rouse still matters
+}
+
 /** BFS for the nearest region within `maxMove` steps satisfying `pred`. */
 function nearestMatch(from: RegionId, maxMove: number, pred: (id: RegionId) => boolean): RegionId | null {
   if (pred(from)) return from;

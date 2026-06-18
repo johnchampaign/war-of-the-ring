@@ -26,6 +26,7 @@ import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction, dieOptions } from './actionText';
 import { moveBlockReason } from '../engine/armies';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
+import { separationActivates } from '../engine/fellowship';
 import { REGIONS } from '../engine/data';
 import { charName } from './charInfo';
 
@@ -155,6 +156,20 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     return s;
   }, [g.view, canMoveChars, charMoveOk, charMoved, g.you]);
   const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets, ...charSources, ...cardSepTargets]), [armyActs, declareTargets, charSources, cardSepTargets]);
+  // The Companion currently being separated (Character-die or card), if any.
+  const sepCompanion = useMemo(() => {
+    if (isSeparateMove) return (g.view?.pendingChoice?.data as { companion?: string } | undefined)?.companion ?? null;
+    if (isCardSep) { const c = cardSepActs[0]?.companion; return c && c !== 'nazgul' ? c : null; }
+    return null;
+  }, [isSeparateMove, isCardSep, cardSepActs, g.view]);
+  // Among the separation destinations, the ones that ROUSE a Free Peoples nation
+  // (a City/Stronghold of one this Companion activates, not yet At War) — marked ★.
+  const activateTargets = useMemo(() => {
+    const set = new Set<RegionId>();
+    if (!g.view || !sepCompanion) return set;
+    for (const r of (isCardSep ? cardSepTargets : declareTargets)) if (separationActivates(g.view, sepCompanion, r)) set.add(r);
+    return set;
+  }, [g.view, sepCompanion, isCardSep, cardSepTargets, declareTargets]);
   // The region currently "selected" for highlighting (an army source, a char source, or a menu region).
   const activeRegion = selected ?? charPick?.from ?? moveMenu?.region ?? null;
   const charDestinations = useMemo(
@@ -235,7 +250,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     clearMove();
   }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
-  const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations }), [sources, activeRegion, destinations]);
+  const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
@@ -304,9 +319,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               {isCardSep
                 ? (cardSepActs[0]!.companion === 'nazgul'
                   ? 'Moving the Nazgûl — click a highlighted region to fly them there.'
-                  : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there. Landing in a friendly City/Stronghold of a Nation they rouse brings that Nation toward War.`)
+                  : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`)
                 : isSeparateMove
-                ? 'Separating a Companion — click a highlighted region to place it there (up to Progress + the Companion’s Level away). Landing in a friendly City/Stronghold of a Nation it rouses brings that Nation toward War.'
+                ? `Separating a Companion — click a highlighted region to place it there (up to Progress + the Companion’s Level away).${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ' Landing in a friendly City/Stronghold of a Nation it rouses brings that Nation toward War.'}`
                 : isReveal
                 ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
                 : declareTargets.size > 0
