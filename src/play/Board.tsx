@@ -81,6 +81,24 @@ import mapData from '../../assets/map.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
 import { HuntIndicator } from './HuntIndicator';
+import { charName } from './charInfo';
+
+// Characters render as small labelled discs near the region anchor so they're
+// findable (a minion or a separated Companion is easy to lose among army badges).
+// Minions are Shadow-dark with a red rim; the Witch-king is called out with an Eye.
+const MINION_SET = new Set(['witch-king', 'saruman', 'mouth-of-sauron']);
+function charToken(id: string): { label: string; fill: string; rim: string; ink: string; title: string } {
+  const name = charName(id);
+  const minion = MINION_SET.has(id);
+  const label = id === 'witch-king' ? '👁' : id === 'nazgul' ? 'N' : name.replace(/^the /i, '').charAt(0).toUpperCase();
+  return {
+    label,
+    fill: minion ? '#2a1430' : '#243a5e',
+    rim: minion ? '#d4453a' : '#cdbb87',
+    ink: '#fff',
+    title: name,
+  };
+}
 
 const NATION_COLOR: Record<string, string> = {
   dwarves: '#7a5230', elves: '#5fbf6a', gondor: '#2f4f9e', north: '#7fb6e6',
@@ -273,10 +291,24 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
               </g>
             );
           })}
-          {/* separated companions / minions / Witch-king present in the region */}
+          {/* separated companions / minions / Witch-king present in the region —
+              one labelled disc each, fanned above the region anchor so they're
+              findable rather than a single anonymous dot hidden under army badges */}
           {e.r && e.r.characters.length > 0 && (() => {
-            const c = clampToCrop({ x: (e.layout?.anchor.x ?? e.poly[0]!.x) - 16, y: (e.layout?.anchor.y ?? e.poly[0]!.y) - 16 });
-            return <circle cx={c.x} cy={c.y} r={6} fill="#2a1d3a" stroke="#fff" strokeWidth={1} />;
+            const ax = e.layout?.anchor.x ?? e.poly[0]!.x;
+            const ay = e.layout?.anchor.y ?? e.poly[0]!.y;
+            const n = e.r.characters.length;
+            return e.r.characters.map((id, i) => {
+              const t = charToken(id);
+              const c = clampToCrop({ x: ax + (i - (n - 1) / 2) * 15, y: ay - 18 });
+              return (
+                <g key={id}>
+                  <title>{t.title}</title>
+                  <circle cx={c.x} cy={c.y} r={7} fill={t.fill} stroke={t.rim} strokeWidth={1.5} />
+                  <text x={c.x} y={c.y + 3} fontSize={9} fontWeight="bold" fill={t.ink} textAnchor="middle">{t.label}</text>
+                </g>
+              );
+            });
           })()}
         </g>
       ))}
