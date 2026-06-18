@@ -14,7 +14,7 @@ import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf } from '../engine/data';
-import { unitCount } from '../engine/armies';
+import { unitCount, STACKING_LIMIT } from '../engine/armies';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 
 const HEAL_EVENTS = new Set(['fp-char-09', 'fp-char-10', 'fp-char-12', 'fp-char-13']);
@@ -215,6 +215,11 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   if (settlementCtrl(state, to) === enemy && !armyHere(state, to, enemy)) s += REGIONS[to]!.vp * 30 + 25; // capture
   if (armyHere(state, to, actor)) s += 10;                                                                // concentrate
   if (target) { s += -(dist(to, target) - dist(from, target)) * 12; if (to === target) s += 30; }         // march
+  // Never march units into a stack that's already full: anything over the 10-unit
+  // limit is removed (lost to reinforcements). Penalise per lost unit so the AI
+  // would rather not move than over-stack and bleed its own army (player report).
+  const over = Math.max(0, unitCount(state, to) + unitCount(state, from) - STACKING_LIMIT);
+  if (over > 0) s -= 30 + over * 25;
   return s;
 }
 
