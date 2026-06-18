@@ -862,15 +862,36 @@ function applyNazgulArmyAction(state: GameState, t: EventTarget): void {
   else { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `Nazgûl-led Army moves ${t.from} → ${t.to}`); }
 }
 
-register('sh-char-23', { // The Ringwraiths Are Abroad — move up to two Nazgûl Armies, or attack with one
-  repeat: 2,
-  canPlay: (state) => nazgulArmyActions(state, true).length > 0,
-  targets: (state, _side, applied = []) => {
-    if (applied.some((a) => a.mode === 'attack')) return [];
-    const moved = new Set(applied.filter((a) => a.mode === 'move').map((a) => a.from!));
-    return nazgulArmyActions(state, applied.length === 0, moved); // attack only as the first/sole action
+register('sh-char-23', { // The Ringwraiths Are Abroad
+  // RAW: "Move any or all of the Nazgûl" (each FLIES anywhere) — THEN you may move two
+  // Armies each containing a Nazgûl, or attack with one. Was missing the fly-move part
+  // (player report: couldn't fly a Nazgûl to the Fords of Isen).
+  repeat: 24,
+  optionalFromStart: true, // "any or ALL" + the army clause is optional
+  canPlay: (state) => Object.values(state.regions).some((r) => r.nazgul > 0) || nazgulArmyActions(state, true).length > 0,
+  targets(state, _side, applied = []) {
+    const last = applied[applied.length - 1];
+    // Destination step of a Nazgûl figure-move (fly anywhere it can land).
+    if (last && last.companion === 'nazgul' && last.from && !last.region) {
+      return characterDestinations(state, 'shadow', 'nazgul', last.from).map((region) => ({ companion: 'nazgul', from: last.from, region }));
+    }
+    const armyActs = applied.filter((a) => a.mode === 'move' || a.mode === 'attack');
+    if (armyActs.some((a) => a.mode === 'attack') || armyActs.length >= 2) return []; // army clause spent (1 attack, or 2 moves)
+    const out: EventTarget[] = [];
+    if (armyActs.length === 0) {
+      // Phase 1 still open: pick a Nazgûl group to fly (exclude groups already moved this card).
+      const blocked = new Set([...applied.filter((a) => a.companion === 'nazgul').flatMap((a) => [a.from, a.region])].filter(Boolean) as string[]);
+      for (const from of Object.keys(state.regions)) if (state.regions[from]!.nazgul > 0 && !blocked.has(from)) out.push({ companion: 'nazgul', from });
+    }
+    // Phase 2: move a Nazgûl-led Army (≤2, different armies) or attack with one (first action only).
+    const movedFrom = new Set(armyActs.map((a) => a.from!));
+    out.push(...nazgulArmyActions(state, armyActs.length === 0, movedFrom));
+    return out;
   },
-  applyTarget: (state, _side, t) => applyNazgulArmyAction(state, t),
+  applyTarget(state, _side, t) {
+    if (t.companion === 'nazgul') { if (t.region && t.from) moveCharacter(state, 'shadow', 'nazgul', t.from, t.region); return; }
+    applyNazgulArmyAction(state, t);
+  },
 });
 
 register('sh-char-24', { // The Black Captain Commands — recruit two Nazgûl at the Witch-king, then move/attack a Nazgûl Army

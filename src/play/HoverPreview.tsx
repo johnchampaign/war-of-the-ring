@@ -121,6 +121,21 @@ function RegionPreview({ id, view, bottom }: { id: string; view: GameState; bott
       {(r?.leaders ?? 0) > 0 && <div style={{ color: '#cfd8e6', fontSize: 12 }}>{r!.leaders} Free Peoples Leader{r!.leaders > 1 ? 's' : ''}</div>}
       {(r?.nazgul ?? 0) > 0 && <div style={{ color: '#e6857f', fontSize: 12 }}>{r!.nazgul} Nazgûl</div>}
       {(r?.characters?.length ?? 0) > 0 && <div style={{ color: '#d9c98a', fontSize: 12 }}>Characters: {r!.characters.map(charName).join(', ')}</div>}
+      {/* Boxed garrison of a besieged Stronghold (the open figures above are the besieger). */}
+      {r?.siegeBox && (() => {
+        const box = r!.siegeBox!;
+        return (
+          <div style={{ marginTop: 4, borderTop: '1px solid #3a342a', paddingTop: 3 }}>
+            <div style={{ color: '#caa84b', fontSize: 11, fontVariant: 'small-caps', letterSpacing: 0.5 }}>⚔ In the siege box (garrison)</div>
+            {Object.entries(box.units ?? {}).filter(([, u]) => (u?.regular ?? 0) + (u?.elite ?? 0) > 0).map(([n, u]) => (
+              <div key={n} style={{ color: NATION_COLOR[n as Nation] ?? '#ccc', fontSize: 12, fontWeight: 600 }}>{cap(n)}: {u!.regular}R / {u!.elite}E</div>
+            ))}
+            {(box.leaders ?? 0) > 0 && <div style={{ color: '#cfd8e6', fontSize: 12 }}>{box.leaders} Free Peoples Leader{box.leaders > 1 ? 's' : ''}</div>}
+            {(box.nazgul ?? 0) > 0 && <div style={{ color: '#e6857f', fontSize: 12 }}>{box.nazgul} Nazgûl</div>}
+            {(box.characters?.length ?? 0) > 0 && <div style={{ color: '#d9c98a', fontSize: 12 }}>Characters: {box.characters.map(charName).join(', ')}</div>}
+          </div>
+        );
+      })()}
     </div>
   );
   return bottom

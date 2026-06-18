@@ -139,7 +139,10 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
     const armies = r ? presentArmies(r) : [];
     const layout = armies.length ? layoutTokensInPolygon(poly, armies.length, { tokenRadius: 22 }) : null;
     const control = r?.control;
-    return { id, poly, fill, def, armies, layout, control, r };
+    // Boxed garrison of a besieged Stronghold (RAW siege: defenders in the box, the
+    // besieger occupies the region's open field above).
+    const boxed = r?.siegeBox ? presentArmies(r.siegeBox as unknown as GameState['regions'][string]) : [];
+    return { id, poly, fill, def, armies, layout, control, r, boxed };
   }), [view]);
 
   // --- Zoom / pan (the whole map is detailed; let the player get close to read it).
@@ -258,6 +261,17 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
               : { x: (e.layout?.anchor.x ?? e.poly[0]!.x), y: (e.layout?.anchor.y ?? e.poly[0]!.y) + i * 22 };
             const pt = clampToCrop(raw);
             return <ArmyBadge key={a.side} x={pt.x} y={pt.y} scale={e.layout?.scale ?? 1} army={a} />;
+          })}
+          {/* Boxed garrison of a besieged Stronghold — small badges by the settlement
+              marker (inside the red siege ring), distinct from the besieger above. */}
+          {e.boxed.map((a, i) => {
+            const c = clampToCrop({ x: e.poly[0]!.x + (i - (e.boxed.length - 1) / 2) * 16, y: e.poly[0]!.y + 16 });
+            return (
+              <g key={`box-${a.side}-${i}`} style={{ pointerEvents: 'none' }}>
+                <rect x={c.x - 11} y={c.y - 8} width={22} height={16} rx={3} fill="none" stroke="#caa84b" strokeWidth={1} strokeDasharray="2 1.5" />
+                <ArmyBadge x={c.x} y={c.y} scale={(e.layout?.scale ?? 1) * 0.62} army={a} />
+              </g>
+            );
           })}
           {/* separated companions / minions / Witch-king present in the region */}
           {e.r && e.r.characters.length > 0 && (() => {
