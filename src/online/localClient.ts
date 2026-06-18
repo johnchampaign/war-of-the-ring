@@ -131,6 +131,8 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat'; aiSid
     // Never-silent report via the framework helper (resolves only on a confirmed
     // reportId; throws on any failure). Local play has no server game, so it posts to
     // the public /api/report endpoint with the seat/turn for context.
-    report: (body) => submitReportViaHttp(REPORT_ENDPOINT, { ...body, you: aiSide ? human : (wotrAdapter.currentActor(state) ?? human), turn: state.turn }),
+    // Attach the game log so a LOCAL report is triage-driven (no opponent to
+    // protect in solo/AI/hotseat play — the reporter already sees the whole game).
+    report: (body) => submitReportViaHttp(REPORT_ENDPOINT, { ...body, you: aiSide ? human : (wotrAdapter.currentActor(state) ?? human), turn: state.turn, log: (state.log ?? []).slice(-2000) }),
   };
 }

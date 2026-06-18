@@ -86,7 +86,7 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
           turnNumber: Number(body?.turn) || 0,
           serverSnapshot: '',
           reporterView: '',
-          clientLog: [],
+          clientLog: Array.isArray(body?.log) ? body.log.slice(-3000) : [], // local game log, for triage
           message: String(body?.message ?? '').slice(0, 2000),
           severity: ['bug', 'rules-question', 'feedback'].includes(sev) ? sev : 'bug',
           category: 'wotr',
@@ -196,8 +196,11 @@ function summarizeReport(r: BugReportRow, full = false) {
     category: r.category, clientBuild: r.clientBuild,
     createdAt: r.createdAt, resolution: r.resolution,
   };
-  // The move log is public finished-game data for game-log uploads only.
-  return full && r.category === 'wotr-gamelog' ? { ...base, clientLog: r.clientLog } : base;
+  // The move log is exposed (with ?full=1) for game-log uploads AND for LOCAL bug
+  // reports (gameId 'local' = solo/AI/hotseat — no opponent's hidden state to leak),
+  // so local reports are triage-driven. Online bug reports keep it token-gated.
+  const localBug = r.category === 'wotr' && r.gameId === 'local';
+  return full && (r.category === 'wotr-gamelog' || localBug) ? { ...base, clientLog: r.clientLog } : base;
 }
 
 async function safeJson(request: Request): Promise<any> {
