@@ -67,6 +67,16 @@ function useMaskBlendColors(boardArt: string | null): string[] | null {
 // Board crop rectangle (map-image pixel space) — see the note at its use site for
 // why this is hardcoded rather than read from blocked-areas.json.
 const BOARD_CROP = { x: 240, y: 2, w: 1511, h: 1318 };
+// Keep a token/marker anchor inside the visible crop. A few regions' polygons run
+// off the right edge into the printed (non-map) strip — e.g. Gorgoroth extends to
+// x=1920 — so their pole-of-inaccessibility anchor lands off-screen and the army
+// tokens vanish (player report). Clamping pulls only those back into view; anchors
+// already inside are untouched (pad < a normal region's inset from the edge).
+const TOKEN_PAD = 26;
+const clampToCrop = (p: { x: number; y: number }): { x: number; y: number } => ({
+  x: Math.min(Math.max(p.x, BOARD_CROP.x + TOKEN_PAD), BOARD_CROP.x + BOARD_CROP.w - TOKEN_PAD),
+  y: Math.min(Math.max(p.y, BOARD_CROP.y + TOKEN_PAD), BOARD_CROP.y + BOARD_CROP.h - TOKEN_PAD),
+});
 import mapData from '../../assets/map.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
@@ -231,15 +241,17 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           })()}
           {/* army badges (one per side present) */}
           {e.armies.map((a, i) => {
-            const pt = e.layout && !e.layout.stacked && e.layout.points[i]
+            const raw = e.layout && !e.layout.stacked && e.layout.points[i]
               ? e.layout.points[i]
               : { x: (e.layout?.anchor.x ?? e.poly[0]!.x), y: (e.layout?.anchor.y ?? e.poly[0]!.y) + i * 22 };
+            const pt = clampToCrop(raw);
             return <ArmyBadge key={a.side} x={pt.x} y={pt.y} scale={e.layout?.scale ?? 1} army={a} />;
           })}
           {/* separated companions / minions / Witch-king present in the region */}
-          {e.r && e.r.characters.length > 0 && (
-            <circle cx={(e.layout?.anchor.x ?? e.poly[0]!.x) - 16} cy={(e.layout?.anchor.y ?? e.poly[0]!.y) - 16} r={6} fill="#2a1d3a" stroke="#fff" strokeWidth={1} />
-          )}
+          {e.r && e.r.characters.length > 0 && (() => {
+            const c = clampToCrop({ x: (e.layout?.anchor.x ?? e.poly[0]!.x) - 16, y: (e.layout?.anchor.y ?? e.poly[0]!.y) - 16 });
+            return <circle cx={c.x} cy={c.y} r={6} fill="#2a1d3a" stroke="#fff" strokeWidth={1} />;
+          })()}
         </g>
       ))}
       {/* Unused "special areas" printed on the board IMAGE, painted over with a colour
@@ -291,7 +303,7 @@ function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number;
 function FellowshipMarker({ view }: { view: GameState }) {
   const poly = regionPolygon(view.fellowship.location);
   if (!poly) return null;
-  const anchor = layoutTokensInPolygon(poly, 1, { tokenRadius: 9 }).anchor;
+  const anchor = clampToCrop(layoutTokensInPolygon(poly, 1, { tokenRadius: 9 }).anchor);
   const x = anchor.x - 12, y = anchor.y - 12;
   return (
     <g>
