@@ -70,6 +70,7 @@ const BOARD_CROP = { x: 240, y: 2, w: 1511, h: 1318 };
 import mapData from '../../assets/map.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
+import { HuntIndicator } from './HuntIndicator';
 
 const NATION_COLOR: Record<string, string> = {
   dwarves: '#7a5230', elves: '#5fbf6a', gondor: '#2f4f9e', north: '#7fb6e6',
@@ -177,6 +178,8 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    {/* Always-visible Hunt status (top-right) — click for the full modifier breakdown. */}
+    <HuntIndicator view={view} />
     {/* Snap back to the default cropped view (also recovers from zoom/pan). */}
     <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 5, display: 'flex', gap: 6 }}>
       <button onClick={resetView} title="Reset view to the board crop"

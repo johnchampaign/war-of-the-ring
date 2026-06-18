@@ -63,17 +63,24 @@ function returnTileToPool(state: GameState, ref: TileRef): void {
   else { const i = h.specialsDrawn.lastIndexOf(ref.spec); if (i >= 0) h.specialsDrawn.splice(i, 1); h.specialsInPool.push(ref.spec); }
 }
 
-/** Extra failed-die re-rolls available to the Shadow this Hunt (rules-spec §10):
- *  +1 each for a Shadow-controlled Stronghold, a Shadow Army, and a Nazgûl in the
- *  Ring-bearers' region. */
-function huntRerolls(state: GameState): number {
+/** Which Hunt re-roll modifiers apply in the Ring-bearers' region (rules-spec §10):
+ *  one re-roll of a failed Hunt die for EACH of a Shadow-controlled Stronghold, a
+ *  Shadow Army, and a Nazgûl/Witch-king there. Exported so the UI's Hunt info
+ *  dialog can list them (shown concretely only while the Fellowship is revealed —
+ *  its location is hidden otherwise). */
+export function huntRerollSources(state: GameState): { stronghold: boolean; army: boolean; nazgul: boolean } {
   const loc = state.fellowship.location;
   const r = state.regions[loc]!;
-  let rr = 0;
-  if (REGIONS[loc]!.settlement === 'Stronghold' && settlementController(state, loc) === 'shadow') rr++;
-  if (armySide(state, loc) === 'shadow') rr++;
-  if (r.nazgul > 0 || r.characters.includes('witch-king')) rr++;
-  return rr;
+  return {
+    stronghold: REGIONS[loc]!.settlement === 'Stronghold' && settlementController(state, loc) === 'shadow',
+    army: armySide(state, loc) === 'shadow',
+    nazgul: r.nazgul > 0 || r.characters.includes('witch-king'),
+  };
+}
+/** Extra failed-die re-rolls available to the Shadow this Hunt. */
+function huntRerolls(state: GameState): number {
+  const s = huntRerollSources(state);
+  return (s.stronghold ? 1 : 0) + (s.army ? 1 : 0) + (s.nazgul ? 1 : 0);
 }
 
 /** Apply a drawn tile. Damage>0 with Companions present sets a PendingChoice;
