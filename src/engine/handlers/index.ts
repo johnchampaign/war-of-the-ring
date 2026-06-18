@@ -182,10 +182,13 @@ const canEventRecruit = (state: GameState, nation: Nation, n = 1): boolean =>
 register('fp-char-09', { // Athelas
   apply(state) {
     const guideIsStrider = state.fellowship.guide === 'strider';
-    const healed = withRng(state, (rng) => {
-      let h = 0; for (let i = 0; i < 3; i++) { const d = rng.rollDie(6); if (d >= (guideIsStrider ? 3 : 5)) h++; } return h;
-    });
-    heal(state, healed); log(state, null, 'event', `Athelas heals ${healed}`);
+    const need = guideIsStrider ? 3 : 5;
+    const dice = withRng(state, (rng) => [rng.rollDie(6), rng.rollDie(6), rng.rollDie(6)]);
+    const healed = dice.filter((d) => d >= need).length;
+    heal(state, healed);
+    // Surface the roll (the report: "Athelas should show the rolls in a popup").
+    notify(state, `Athelas — rolled [${dice.join(', ')}], healing on ${need}+${guideIsStrider ? ' (Strider guides)' : ''}: healed ${healed} Corruption (now ${state.fellowship.corruption}/12).`);
+    log(state, null, 'event', `Athelas heals ${healed} [${dice.join(',')}]`);
   },
 });
 // There Is Another Way: heal 1; then, if Gollum is the Guide, the Fellowship MAY
@@ -304,36 +307,48 @@ const regionsWithShadowArmy = (s: GameState): EventTarget[] =>
   Object.keys(s.regions).filter((id) => armySide(s, id) === 'shadow' && unitCount(s, id) > 0 && recruitable(s, 'shadow', id)).map((region) => ({ region }));
 const ROHAN_REGIONS = Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'rohan');
 
+/** A "recruit one <Nation> unit (Regular OR Elite) [+ Leader] in one of these
+ *  regions" card: the player picks the region AND the figure. Most such cards read
+ *  "Regular or Elite" — we were silently giving a Regular and skipping the choice
+ *  (player report on Riders of Théoden). The Leader (when present) is always added. */
+function placeChoiceCard(nation: Nation, regions: (s: GameState) => string[], opts: { leader?: boolean } = {}): EventHandler {
+  const pool = (s: GameState) => s.reinforcements[nation] as { regular: number; elite: number };
+  return {
+    canPlay: (s) => regions(s).length > 0 && (pool(s).regular > 0 || pool(s).elite > 0),
+    targets: (s) => {
+      const out: EventTarget[] = [];
+      for (const region of regions(s)) {
+        if (pool(s).regular > 0) out.push({ region, figure: 'regular', nation });
+        if (pool(s).elite > 0) out.push({ region, figure: 'elite', nation });
+      }
+      return out;
+    },
+    applyTarget: (s, _side, t) => {
+      if (!t.region || !t.figure) return;
+      placeForce(s, nation, t.region, { regular: t.figure === 'regular' ? 1 : 0, elite: t.figure === 'elite' ? 1 : 0, leader: opts.leader ? 1 : 0 });
+    },
+  };
+}
+const ridersRegions = (s: GameState): string[] => {
+  const set = new Set<string>();
+  if (recruitable(s, 'fp', 'edoras')) set.add('edoras');
+  for (const r of ROHAN_REGIONS) if (s.regions[r]!.characters.some((c) => COMPANION_SET.has(c)) && recruitable(s, 'fp', r)) set.add(r);
+  return [...set];
+};
+
 register('fp-str-13', { // Círdan's Ships: 2 Elven in a coastal region with an FP Army
   canPlay: (s) => s.reinforcements.elves.regular + s.reinforcements.elves.elite > 0 && COASTAL.some((r) => armySide(s, r) === 'fp'),
   targets: (s) => COASTAL.filter((r) => armySide(s, r) === 'fp').map((region) => ({ region })),
   applyTarget: (s, _side, t) => placeForce(s, 'elves', t.region!, { regular: 2 }),
 });
-register('fp-str-16', { // Riders of Théoden: 1 Rohan + Leader in Edoras or a Rohan region with a Companion
-  canPlay: (s) => recruitable(s, 'fp', 'edoras') || ROHAN_REGIONS.some((r) => s.regions[r]!.characters.some((c) => COMPANION_SET.has(c))),
-  targets: (s) => {
-    const set = new Set<string>();
-    if (recruitable(s, 'fp', 'edoras')) set.add('edoras');
-    for (const r of ROHAN_REGIONS) if (s.regions[r]!.characters.some((c) => COMPANION_SET.has(c)) && recruitable(s, 'fp', r)) set.add(r);
-    return [...set].map((region) => ({ region }));
-  },
-  applyTarget: (s, _side, t) => placeForce(s, 'rohan', t.region!, { regular: 1, leader: 1 }),
-});
-register('fp-str-23', { // Éomer: 1 Rohan + Leader in a free Rohan region with a Settlement
-  canPlay: (s) => ROHAN_REGIONS.some((r) => REGIONS[r]!.settlement && recruitable(s, 'fp', r)),
-  targets: (s) => ROHAN_REGIONS.filter((r) => REGIONS[r]!.settlement && recruitable(s, 'fp', r)).map((region) => ({ region })),
-  applyTarget: (s, _side, t) => placeForce(s, 'rohan', t.region!, { regular: 1, leader: 1 }),
-});
-register('sh-str-13', { // Half-orcs and Goblin-men: 1 Isengard in a region with a Shadow Army
-  canPlay: (s) => s.reinforcements.isengard.regular + s.reinforcements.isengard.elite > 0 && regionsWithShadowArmy(s).length > 0,
-  targets: regionsWithShadowArmy,
-  applyTarget: (s, _side, t) => placeForce(s, 'isengard', t.region!, { regular: 1 }),
-});
-register('sh-str-14', { // Olog-hai: 1 Sauron in a region with a Shadow Army
-  canPlay: (s) => s.reinforcements.sauron.regular + s.reinforcements.sauron.elite > 0 && regionsWithShadowArmy(s).length > 0,
-  targets: regionsWithShadowArmy,
-  applyTarget: (s, _side, t) => placeForce(s, 'sauron', t.region!, { regular: 1 }),
-});
+// Riders of Théoden / Éomer: 1 Rohan unit (Regular OR Elite) + a Rohan Leader.
+register('fp-str-16', placeChoiceCard('rohan', ridersRegions, { leader: true }));
+register('fp-str-23', placeChoiceCard('rohan', (s) => ROHAN_REGIONS.filter((r) => REGIONS[r]!.settlement && recruitable(s, 'fp', r)), { leader: true }));
+// Half-orcs and Goblin-men / Olog-hai: 1 Isengard / Sauron unit (Regular OR Elite)
+// in a region with a Shadow Army.
+const shadowArmyRegionIds = (s: GameState): string[] => regionsWithShadowArmy(s).map((t) => t.region!);
+register('sh-str-13', placeChoiceCard('isengard', shadowArmyRegionIds));
+register('sh-str-14', placeChoiceCard('sauron', shadowArmyRegionIds));
 // Rage of the Dunlendings: recruit 2 Isengard Regulars in a free region adjacent to a
 // Dunland, then OPTIONALLY move up to 4 Isengard units there from N/S Dunland (RAW).
 const RAGE_SOURCES = ['north-dunland', 'south-dunland'];
