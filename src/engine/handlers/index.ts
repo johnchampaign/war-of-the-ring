@@ -468,16 +468,63 @@ function aragornRohanRegion(state: GameState): string | null {
   for (const id of ROHAN) if (state.regions[id]!.characters.some((c) => c === 'aragorn' || c === 'strider')) return id;
   return null;
 }
+/** Move the Shadow army (units + Nazgûl + Minions) out of `from` into `to`,
+ *  leaving any Free Peoples figures behind (Dead Men retreat). */
+function retreatShadowStack(state: GameState, from: RegionId, to: RegionId): void {
+  const src = state.regions[from]!, dst = state.regions[to]!;
+  for (const n of SHADOW_NATIONS) {
+    const u = src.units[n]; if (!u || (u.regular + u.elite) === 0) continue;
+    const d = dst.units[n] ?? { regular: 0, elite: 0 }; d.regular += u.regular; d.elite += u.elite; dst.units[n] = d; delete src.units[n];
+  }
+  dst.nazgul += src.nazgul; src.nazgul = 0;
+  const minions = src.characters.filter((c) => !COMPANION_SET.has(c));
+  src.characters = src.characters.filter((c) => COMPANION_SET.has(c));
+  dst.characters.push(...minions);
+  for (const c of minions) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
+}
+/** Destroy the Shadow army at `region` — units recycle to reinforcements, Nazgûl
+ *  return to the Sauron pool, Minions are eliminated (Dead Men's "if it cannot
+ *  retreat, it is destroyed, along with any Nazgûl and Minions"). */
+function destroyShadowStack(state: GameState, region: RegionId): void {
+  const r = state.regions[region]!;
+  for (const n of SHADOW_NATIONS) {
+    const u = r.units[n]; if (!u) continue;
+    state.reinforcements[n].regular += u.regular; state.reinforcements[n].elite += u.elite; delete r.units[n];
+  }
+  if (r.nazgul > 0) { state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + r.nazgul; r.nazgul = 0; }
+  for (const c of r.characters.filter((c) => !COMPANION_SET.has(c))) { state.characters.eliminated.push(c); delete state.characters.inPlay[c]; }
+  r.characters = r.characters.filter((c) => COMPANION_SET.has(c));
+}
 register('fp-char-22', {
   canPlay: (state) => aragornRohanRegion(state) !== null,
   targets: () => ['erech', 'lamedon', 'pelargir'].map((region) => ({ region })),
   applyTarget(state, _side, t) {
-    const from = aragornRohanRegion(state); if (!from) return;
-    const moving = state.regions[from]!.characters.filter((c) => COMPANION_SET.has(c));
-    state.regions[from]!.characters = state.regions[from]!.characters.filter((c) => !COMPANION_SET.has(c));
-    state.regions[t.region!]!.characters.push(...moving);
-    for (const c of moving) if (state.characters.inPlay[c]) state.characters.inPlay[c] = t.region!;
-    log(state, null, 'event', `Dead Men of Dunharrow: ${from} → ${t.region}`);
+    const from = aragornRohanRegion(state); if (!from || !t.region) return;
+    const region = t.region, src = state.regions[from]!, dst = state.regions[region]!;
+    // 1. Move Strider/Aragorn + any Companions in the same region.
+    const moving = src.characters.filter((c) => COMPANION_SET.has(c));
+    src.characters = src.characters.filter((c) => !COMPANION_SET.has(c));
+    dst.characters.push(...moving);
+    for (const c of moving) if (state.characters.inPlay[c]) state.characters.inPlay[c] = region;
+    log(state, null, 'event', `Dead Men of Dunharrow: ${from} → ${region}`);
+    // 2. A Shadow Army there takes a die's worth of hits, then must retreat —
+    //    destroyed (with its Nazgûl/Minions) if it cannot.
+    if (armySide(state, region) === 'shadow') {
+      const hits = withRng(state, (rng) => rng.rollDie(6));
+      applyCasualties(state, region, 'shadow', hits, 'regularsFirst');
+      log(state, null, 'event', `Dead Men: the Shadow Army at ${region} takes ${hits} hit${hits === 1 ? '' : 's'}`);
+      const dest = REGIONS[region]!.adjacency.find((a) => freeForMovement(state, a, 'shadow'));
+      if (unitCount(state, region) > 0 && dest) { retreatShadowStack(state, region, dest); log(state, null, 'event', `Dead Men: the Shadow Army retreats ${region} → ${dest}`); }
+      else { destroyShadowStack(state, region); log(state, null, 'event', `Dead Men: the Shadow Army at ${region} is destroyed`); }
+    }
+    // 3. Recruit up to three Gondor Regular units there, taking control if necessary.
+    captureIfEnemySettlement(state, region, 'fp');
+    const n = Math.min(3, state.reinforcements.gondor.regular, Math.max(0, STACKING_LIMIT - unitCount(state, region)));
+    if (n > 0) {
+      const u = dst.units.gondor ?? { regular: 0, elite: 0 }; u.regular += n; dst.units.gondor = u;
+      state.reinforcements.gondor.regular -= n;
+      log(state, null, 'event', `Dead Men: recruit ${n} Gondor Regular${n === 1 ? '' : 's'} in ${region}`);
+    }
   },
 });
 // Paths of the Woses: move an FP Army from a Rohan region directly to Minas Tirith.
