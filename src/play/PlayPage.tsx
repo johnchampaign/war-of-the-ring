@@ -1,7 +1,7 @@
 // Top-level play screen: drives the game through the framework useGame hook over
 // a GameClientApi (local hotseat or online HTTP). Renders the redacted view; it
 // never owns rules and never drives the opponent.
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGame, ChatPanel } from 'digital-boardgame-framework/client';
 import type { GameClientApi } from '../online/gameClient';
 import type { GameState, RegionId, Side, DieFace } from '../engine/types';
@@ -20,6 +20,8 @@ import { TurnSummary } from './TurnSummary';
 import { LogPanel } from './LogPanel';
 import { GameOverUpload } from './GameOverUpload';
 import { ReportButton } from './ReportButton';
+import { ReportResponseModal } from './ReportResponseModal';
+import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction, dieOptions } from './actionText';
 import { moveBlockReason } from '../engine/armies';
@@ -61,6 +63,26 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [nazPick, setNazPick] = useState<{ from: RegionId; to: RegionId; max: number } | null>(null);
   // Why the last attempted move/merge was refused (shown so it isn't a silent no-op).
   const [blockMsg, setBlockMsg] = useState<string | null>(null);
+  // Replies to this device's resolved problem reports, fetched once on load.
+  // Each unseen one pops a modal; dismissing marks it seen so it won't recur.
+  const [responseQueue, setResponseQueue] = useState<{ reportId: string; message: string; response: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rid = getReporterId();
+        if (!rid) return;
+        const res = await fetch(`/api/my-responses?reporterId=${encodeURIComponent(rid)}`);
+        if (!res.ok || cancelled) return;
+        const body = await res.json() as { ok?: boolean; responses?: { reportId: string; message: string; response: string }[] };
+        if (!body.ok || !Array.isArray(body.responses)) return;
+        const seen = getSeenResponses();
+        const unseen = body.responses.filter((r) => r.response && !seen.has(r.reportId));
+        if (unseen.length && !cancelled) setResponseQueue(unseen);
+      } catch { /* offline / dev with no API — just skip */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [hover, setHover] = useState<Hover>(null);
   const onHoverRegion = useCallback((id: RegionId | null) => setHover(id ? { kind: 'region', id } : null), []);
   const onHoverCard = useCallback((id: string | null) => setHover(id ? { kind: 'card', id } : null), []);
@@ -378,6 +400,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} />
       <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
       <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
+      {responseQueue.length > 0 && (
+        <ReportResponseModal notice={responseQueue[0]!}
+          onDismiss={() => { markResponseSeen(responseQueue[0]!.reportId); setResponseQueue((q) => q.slice(1)); }} />
+      )}
       {/* Floating Log button (beside Report) — opens the game log as a pop-up. */}
       <button onClick={() => setLogOpen(true)} title="Open the game log"
         style={{ position: 'fixed', bottom: 10, right: 110, zIndex: 40, padding: '6px 12px', fontSize: 13, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 18, cursor: 'pointer', boxShadow: '0 2px 8px #0008' }}>

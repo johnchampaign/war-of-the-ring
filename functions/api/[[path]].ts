@@ -126,6 +126,27 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
       await server.resolveReport(seg[1]!, String(body?.note ?? body?.resolution ?? '').slice(0, 2000));
       return json({ ok: true });
     }
+    // GET /api/my-responses?reporterId=<id> — PUBLIC: a reporter polls for the
+    // resolution notes on the reports THEY filed (tied by the <!-- reporter:ID -->
+    // marker the client embeds in each message). Returns only RESOLVED reports —
+    // the note + their original text, marker stripped — and no PII (never the
+    // server snapshot, reporter view, or client log, which can carry hidden state).
+    if (seg.length === 1 && seg[0] === 'my-responses' && method === 'GET') {
+      const rid = (url.searchParams.get('reporterId') ?? '').trim();
+      if (!/^[a-zA-Z0-9-]{4,64}$/.test(rid)) return json({ ok: false, error: 'bad-reporterId' }, 400, CORS);
+      const marker = `<!-- reporter:${rid} -->`;
+      const reports = await server.listReports({ category: 'wotr' });
+      const responses = reports
+        .filter((r) => r.resolution && typeof r.message === 'string' && r.message.includes(marker))
+        .map((r) => ({
+          reportId: r.reportId,
+          message: r.message.replace(/\n*<!-- reporter:[a-zA-Z0-9-]{4,64} -->/g, '').trim().slice(0, 500),
+          response: (r.resolution!.note ?? '').trim(),
+          at: r.resolution!.at,
+        }))
+        .filter((r) => r.response.length > 0);
+      return json({ ok: true, responses }, 200, CORS);
+    }
 
     // /api/games/:id[...]
     if (seg.length >= 2 && seg[0] === 'games') {
