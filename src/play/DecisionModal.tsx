@@ -42,8 +42,12 @@ const CHOICE_TITLE: Record<string, string> = {
   discardCard: 'Over the 6-card hand limit — choose a card to discard',
 };
 
-export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
+export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: {
   view: GameState; you: Side; actions: WotrAction[]; onAction: (a: WotrAction) => void; yourTurn: boolean;
+  // When set, an Undo control is shown INSIDE the modal — the modal's backdrop
+  // otherwise covers the status-bar Undo button, so a decision (e.g. Gandalf's
+  // "draw a card?") would trap the player with no way to back out.
+  undo?: { foreknowledge: boolean; onUndo: () => void };
 }) {
   const [busy, setBusy] = useState(false);
   const [hoverCard, setHoverCard] = useState<string | null>(null);
@@ -79,6 +83,17 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
           </>
         ) : (
           <div style={{ color: '#cc9', marginTop: 12 }}>Waiting for {sideName(pc ? (choice?.owner ?? pc.attacker) : you)} to decide…</div>
+        )}
+        {undo && (
+          <div style={{ marginTop: 12, borderTop: '1px solid #3a342a', paddingTop: 8, textAlign: 'right' }}>
+            <button onClick={undo.onUndo} disabled={busy}
+              title={undo.foreknowledge ? 'Undo back past this — you will have seen a random outcome (recorded)' : 'Undo your last action'}
+              style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                background: undo.foreknowledge ? '#4a3a1a' : '#2c3a2c', color: undo.foreknowledge ? '#ffe08a' : '#cfe6c0',
+                border: `1px solid ${undo.foreknowledge ? '#7a5f24' : '#3a5a3a'}` }}>
+              ↶ Undo{undo.foreknowledge ? ' (reveals info)' : ''}
+            </button>
+          </div>
         )}
       </div>
     </div>

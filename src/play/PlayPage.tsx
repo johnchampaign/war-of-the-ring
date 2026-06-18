@@ -410,7 +410,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           </div>
         </div>
       )}
-      <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn} />
+      <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn}
+        undo={undoCap?.canUndo ? { foreknowledge: !!undoCap.foreknowledge, onUndo: onUndoClick } : undefined} />
       <HuntPopup view={g.view} />
       <BattlePopup view={g.view} />
       <NoticePopup view={g.view} />
