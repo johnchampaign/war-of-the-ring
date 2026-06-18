@@ -11,7 +11,7 @@
 //  - Shadow: allocate the Hunt hard, mobilize nations to War, muster and press
 //    attacks on Free Peoples Cities/Strongholds for Military-victory VP.
 import type { GameState, Side, RegionId, Nation } from '../engine/types';
-import type { WotrAction } from '../adapter/wotrAction';
+import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf } from '../engine/data';
 import { unitCount } from '../engine/armies';
@@ -64,7 +64,42 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     const s = score(state, actor, a, target) + rng.next() * 0.5; // tiny noise for tie-breaks
     if (s > bestScore) { bestScore = s; best = a; }
   }
-  return best;
+  return maybeSplitGarrison(state, actor, best); // leave a garrison if the move vacates a threatened Settlement
+}
+
+/** Split a chosen whole-army move so it leaves a one-unit garrison behind when the
+ *  origin is a VP Settlement we control with an enemy army adjacent — otherwise
+ *  vacating it hands the enemy a free capture. Conservative: only plain moveArmy
+ *  (never weakens an attack), only when the stack can spare a unit, and the split
+ *  is always legal where the whole move was (it moves a strict subset to the same
+ *  region). Leaders/Nazgûl/Characters advance with the army; a Regular (else an
+ *  Elite) holds. */
+function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): WotrAction {
+  if (action.kind !== 'moveArmy' || action.move) return action;
+  const from = action.from, def = REGIONS[from];
+  if (!def?.settlement || def.vp <= 0 || settlementCtrl(state, from) !== actor) return action;
+  const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
+  if (!def.adjacency.some((adj) => armyHere(state, adj, enemy))) return action; // not threatened
+  const r = state.regions[from];
+  if (unitCount(state, from) < 2) return action;                                // need ≥2: leave 1, move ≥1
+  const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
+  const garN = nations.find((n) => r.units[n]!.regular > 0) ?? nations.find((n) => r.units[n]!.elite > 0);
+  if (!garN) return action;
+  const useReg = r.units[garN]!.regular > 0;
+  const units: NonNullable<MoveSel['units']> = {};
+  for (const n of nations) {
+    const reg = r.units[n]!.regular - (n === garN && useReg ? 1 : 0);
+    const eli = r.units[n]!.elite - (n === garN && !useReg ? 1 : 0);
+    const u: { regular?: number; elite?: number } = {};
+    if (reg > 0) u.regular = reg;
+    if (eli > 0) u.elite = eli;
+    if (u.regular || u.elite) units[n] = u;
+  }
+  const move: MoveSel = { units };
+  if (r.leaders) move.leaders = r.leaders;
+  if (r.nazgul) move.nazgul = r.nazgul;
+  if (r.characters.length) move.characters = [...r.characters];
+  return { kind: 'moveArmy', from, to: action.to, move };
 }
 
 const FP = new Set(['dwarves', 'elves', 'gondor', 'north', 'rohan']);
