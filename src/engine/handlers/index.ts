@@ -405,7 +405,7 @@ function shadowsGatherMoves(state: GameState): Array<{ from: string; to: string 
   const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
   for (const from of shadowRegions) {
     for (const to of shadowRegions) {
-      if (out.length >= 12) return out;
+      if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       if (from === to || state.regions[to]!.besieged) continue;
       if (regionDist(from, to) <= 3 && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
     }
@@ -427,7 +427,7 @@ function shadowLengthensMoves(state: GameState, applied: EventTarget[] = []): Ev
   for (const from of shadowRegions) {
     if (movedTo.has(from)) continue;
     for (const to of shadowRegions) {
-      if (out.length >= 12) return out;
+      if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       if (from === to || state.regions[to]!.besieged) continue;
       if (regionDist(from, to) <= 2 && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
     }
@@ -448,7 +448,7 @@ function shadowMovingMoves(state: GameState, applied: EventTarget[] = []): Event
   for (const from of Object.keys(state.regions)) {
     if (armySide(state, from) !== 'shadow' || movedTo.has(from)) continue;
     for (const to of REGIONS[from]!.adjacency) {
-      if (out.length >= 16) return out;
+      if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       if (freeForMovement(state, to, 'shadow') && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
     }
   }
@@ -492,7 +492,7 @@ function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {
   for (const from of Object.keys(state.regions)) {
     if (armySide(state, from) !== 'fp' || !state.regions[from]!.characters.some((c) => COMPANION_SET.has(c))) continue;
     for (const to of Object.keys(state.regions)) {
-      if (out.length >= 12) return out;
+      if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       const d = regionDist(from, to);
       if (d >= 1 && d <= 2 && freeForMovement(state, to, 'fp') && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
     }
@@ -1162,16 +1162,21 @@ register('fp-str-09', recruitChoiceCard('fp', [{ nation: 'rohan', region: 'edora
 register('sh-str-15', {
   canPlay: (state) => isAtWar(state, 'sauron') && state.reinforcements.sauron.elite > 0
     && Object.values(state.regions).some((r) => (r.units.sauron?.regular ?? 0) > 0),
-  apply(state) {
-    let done = 0;
-    for (const id of Object.keys(state.regions)) {
-      const u = state.regions[id]!.units.sauron;
-      while (done < 2 && u && u.regular > 0 && state.reinforcements.sauron.elite > 0) {
-        u.regular--; u.elite++; state.reinforcements.sauron.regular++; state.reinforcements.sauron.elite--; done++;
-      }
-      if (done >= 2) break;
-    }
-    log(state, null, 'event', `Hill-Trolls: upgraded ${done} Sauron Regular(s) to Elite`);
+  // "Replace up to two Sauron Regulars with Elites" — the player chooses WHICH
+  // Regulars (board-click a region with one), not an arbitrary first-found pair.
+  repeat: 2, optionalFromStart: true,
+  targets(state) {
+    if (state.reinforcements.sauron.elite <= 0) return [];
+    return Object.keys(state.regions)
+      .filter((id) => (state.regions[id]!.units.sauron?.regular ?? 0) > 0)
+      .map((region) => ({ region, figure: 'elite' as const }));
+  },
+  applyTarget(state, _side, t) {
+    if (!t.region) return;
+    const u = state.regions[t.region]!.units.sauron;
+    if (!u || u.regular <= 0 || state.reinforcements.sauron.elite <= 0) return;
+    u.regular--; u.elite++; state.reinforcements.sauron.regular++; state.reinforcements.sauron.elite--;
+    log(state, null, 'event', `Hill-Trolls: upgraded a Sauron Regular to Elite in ${t.region}`);
   },
 });
 
