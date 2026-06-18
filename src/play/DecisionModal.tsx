@@ -6,6 +6,7 @@
 // owns the choice; the opponent sees a passive "resolving battle…" note.
 import { useState } from 'react';
 import { describeAction, isDecisionAction } from './actionText';
+import { RollLine, CorruptionLine, describeDraw } from './huntView';
 import { useCardArt } from './artCache';
 import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
@@ -61,7 +62,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
       <div style={modal}>
         {pc && <CombatHeader pc={pc} />}
         {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>{CHOICE_TITLE[choice.kind] ?? choice.kind}</div>}
-        {choice?.kind === 'huntDamage' && <HuntDetail data={(choice as any).data} />}
+        {choice?.kind === 'huntDamage' && <HuntDetail view={view} data={(choice as any).data} />}
         {choice?.kind === 'huntRedraw' && <TileDetail tile={(choice as any).data?.tile} />}
         {choice?.kind === 'removeExcess' && <RemoveExcessDetail view={view} data={(choice as any).data} />}
 
@@ -143,12 +144,27 @@ function RemoveExcessDetail({ view, data }: { view: GameState; data?: { region?:
   );
 }
 
-function HuntDetail({ data }: { data?: { damage?: number; reveal?: boolean } }) {
+// The FULL Hunt context behind the damage decision: the dice rolled (box bonus,
+// hits, re-rolls, successes), the tile just drawn, and where Corruption lands if
+// absorbed — so the choice isn't made blind to what produced it.
+function HuntDetail({ view, data }: { view: GameState; data?: { damage?: number; reveal?: boolean } }) {
   if (!data) return null;
+  const draws = view.hunt.draws ?? [];
+  const last = draws.length ? draws[draws.length - 1] : undefined;
+  const roll = last?.roll ?? view.hunt.lastRoll ?? undefined;
   return (
-    <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 2px' }}>
-      Hunt damage: <b>{data.damage ?? '?'}</b>{data.reveal ? ' · the Fellowship will be revealed' : ''}.
-      Choose how the Ring-bearers absorb it.
+    <div style={{ margin: '4px 0 2px' }}>
+      {roll && <RollLine roll={roll} />}
+      {last && (
+        <div style={{ fontSize: 13, color: '#e9b', margin: '6px 0 0' }}>
+          Tile drawn: <b>{describeDraw(last)}</b>
+        </div>
+      )}
+      <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 0' }}>
+        Hunt damage: <b>{data.damage ?? '?'}</b>{data.reveal ? ' · the Fellowship will be revealed' : ''}.
+        Choose how the Ring-bearers absorb it.
+      </div>
+      <CorruptionLine current={view.fellowship.corruption} add={data.damage} />
     </div>
   );
 }
