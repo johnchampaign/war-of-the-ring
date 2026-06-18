@@ -9,7 +9,7 @@ import type { GameState, Nation, RegionId, Side } from '../types';
 /** A chosen target for an interactive event card (fields used per card). `mode`
  *  distinguishes a card-granted Army move from an attack (and the Fellowship
  *  hide/move/decline choice on "There Is Another Way"). */
-export interface EventTarget { from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean }
+export interface EventTarget { from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean }
 
 export interface EventHandler {
   /** "Play on the table" — the card persists (its id goes to cards[side].table)

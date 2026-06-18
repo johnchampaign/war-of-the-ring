@@ -6,8 +6,9 @@ import type { GameState, Side, Nation, RegionId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy } from '../armies';
+import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount } from '../armies';
 import { applyCasualties, startBattle } from '../combat';
+import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf } from '../data';
@@ -852,8 +853,12 @@ function nazgulArmyActions(state: GameState, allowAttack: boolean, exclude: Set<
     if (exclude.has(from)) continue;
     for (const to of REGIONS[from]!.adjacency) {
       if (canMoveArmy(state, from, to, 'shadow')) out.push({ from, to, mode: 'move' });
-      else if (allowAttack && armySide(state, to) === 'fp') out.push({ from, to, mode: 'attack' });
+      else if (allowAttack && armySide(state, to) === 'fp' && !shadowBarredFromRegion(state, to)) out.push({ from, to, mode: 'attack' });
     }
+    // ASSAULT: this Nazgûl-led Army occupies a besieged Stronghold's open field and
+    // may storm the boxed garrison (attack from===to), same gate as a normal attack.
+    const box = state.regions[from]!.siegeBox;
+    if (allowAttack && box && forceUnitCount(box) > 0 && !shadowBarredFromRegion(state, from)) out.push({ from, to: from, mode: 'attack' });
   }
   return out;
 }
@@ -894,17 +899,57 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
   },
 });
 
-register('sh-char-24', { // The Black Captain Commands — recruit two Nazgûl at the Witch-king, then move/attack a Nazgûl Army
-  canPlay: (state) => inPlay(state, 'witch-king') || nazgulArmyActions(state, true).length > 0,
-  apply(state) {
+/** Move / attack / ASSAULT EventTargets for the single Army containing the Witch-king. */
+function wkArmyActions(state: GameState, wk: RegionId): EventTarget[] {
+  const out: EventTarget[] = [];
+  if (armySide(state, wk) !== 'shadow') return out; // WK must be with a Shadow Army
+  for (const to of REGIONS[wk]!.adjacency) {
+    if (canMoveArmy(state, wk, to, 'shadow')) out.push({ from: wk, to, mode: 'move' });
+    else if (armySide(state, to) === 'fp' && !shadowBarredFromRegion(state, to)) out.push({ from: wk, to, mode: 'attack' });
+  }
+  const box = state.regions[wk]!.siegeBox; // assault a Stronghold the WK's Army is besieging
+  if (box && forceUnitCount(box) > 0 && !shadowBarredFromRegion(state, wk)) out.push({ from: wk, to: wk, mode: 'attack' });
+  return out;
+}
+
+register('sh-char-24', { // The Black Captain Commands
+  // RAW: EITHER recruit two Nazgûl in the Witch-king's region OR move any/all of the
+  // Nazgûl (each flies). THEN move OR attack with the Army containing the Witch-king
+  // (one action — includes ASSAULTING a Stronghold that Army is besieging). Was:
+  // auto-recruited and offered only adjacent moves/attacks — no fly, no assault.
+  repeat: 24,
+  optionalFromStart: true, // the recruit/fly clause and the army clause are both optional
+  canPlay: (state) => inPlay(state, 'witch-king'),
+  targets(state, _side, applied = []) {
     const wk = charRegion(state, 'witch-king');
-    if (wk) {
-      const k = Math.min(2, state.reinforcements.sauron.nazgul ?? 0);
-      if (k > 0) { state.regions[wk]!.nazgul += k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) - k; log(state, null, 'event', `The Black Captain Commands: ${k} Nazgûl muster at ${wk}`); }
+    const last = applied[applied.length - 1];
+    // Destination step of a Nazgûl figure-fly.
+    if (last && last.companion === 'nazgul' && last.from && !last.region) {
+      return characterDestinations(state, 'shadow', 'nazgul', last.from).map((region) => ({ companion: 'nazgul', from: last.from, region }));
     }
+    const recruited = applied.some((a) => a.mode === 'recruit');
+    const flies = applied.filter((a) => a.companion === 'nazgul');
+    const armyActs = applied.filter((a) => a.mode === 'move' || a.mode === 'attack');
+    const out: EventTarget[] = [];
+    // Phase 1 — recruit XOR fly — only before any army action and before recruiting.
+    if (armyActs.length === 0 && !recruited) {
+      if (flies.length === 0 && wk && (state.reinforcements.sauron.nazgul ?? 0) > 0) out.push({ mode: 'recruit', region: wk });
+      const blocked = new Set(flies.flatMap((a) => [a.from, a.region]).filter(Boolean) as string[]);
+      for (const id of Object.keys(state.regions)) if (state.regions[id]!.nazgul > 0 && !blocked.has(id)) out.push({ companion: 'nazgul', from: id });
+    }
+    // Phase 2 — ONE move/attack with the Army containing the Witch-king.
+    if (armyActs.length === 0 && wk) out.push(...wkArmyActions(state, wk));
+    return out;
   },
-  targets: (state) => nazgulArmyActions(state, true),
-  applyTarget: (state, _side, t) => applyNazgulArmyAction(state, t),
+  applyTarget(state, _side, t) {
+    if (t.mode === 'recruit' && t.region) {
+      const k = Math.min(2, state.reinforcements.sauron.nazgul ?? 0);
+      if (k > 0) { state.regions[t.region]!.nazgul += k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) - k; log(state, null, 'event', `The Black Captain Commands: ${k} Nazgûl muster at ${t.region}`); }
+      return;
+    }
+    if (t.companion === 'nazgul') { if (t.region && t.from) moveCharacter(state, 'shadow', 'nazgul', t.from, t.region); return; }
+    applyNazgulArmyAction(state, t);
+  },
 });
 // The Breaking of the Fellowship — the FREE PEOPLES player chooses which N Companions
 // to separate (to the Fellowship's region). Forbidden on the Mordor Track.
