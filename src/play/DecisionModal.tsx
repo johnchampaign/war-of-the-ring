@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { describeAction, isDecisionAction } from './actionText';
 import { RollLine, CorruptionLine, describeDraw } from './huntView';
+import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt } from './artCache';
 import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
@@ -46,6 +47,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
 }) {
   const [busy, setBusy] = useState(false);
   const [hoverCard, setHoverCard] = useState<string | null>(null);
+  const [huntInfo, setHuntInfo] = useState(false);
   const pc = view.pendingCombat;
   const choice = view.pendingChoice;
   const decisions = actions.filter(isDecisionAction);
@@ -62,7 +64,8 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
       <div style={modal}>
         {pc && <CombatHeader pc={pc} />}
         {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>{CHOICE_TITLE[choice.kind] ?? choice.kind}</div>}
-        {choice?.kind === 'huntDamage' && <HuntDetail view={view} data={(choice as any).data} />}
+        {choice?.kind === 'huntDamage' && <HuntDetail view={view} data={(choice as any).data} onExplain={() => setHuntInfo(true)} />}
+        {huntInfo && <HuntInfoModal view={view} onClose={() => setHuntInfo(false)} />}
         {choice?.kind === 'huntRedraw' && <TileDetail tile={(choice as any).data?.tile} />}
         {choice?.kind === 'removeExcess' && <RemoveExcessDetail view={view} data={(choice as any).data} />}
 
@@ -144,27 +147,48 @@ function RemoveExcessDetail({ view, data }: { view: GameState; data?: { region?:
   );
 }
 
-// The FULL Hunt context behind the damage decision: the dice rolled (box bonus,
-// hits, re-rolls, successes), the tile just drawn, and where Corruption lands if
-// absorbed — so the choice isn't made blind to what produced it.
-function HuntDetail({ view, data }: { view: GameState; data?: { damage?: number; reveal?: boolean } }) {
+// The FULL Hunt context behind the damage decision, EXPLAINED step by step (not
+// just numbers): where the dice came from, how many hit, what that drew, and why
+// the damage is the tile's value (not the success count) — so the choice isn't
+// made blind to what produced it. A link opens the full "how the Hunt works"
+// dialog with every modifier.
+function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damage?: number; reveal?: boolean }; onExplain: () => void }) {
   if (!data) return null;
   const draws = view.hunt.draws ?? [];
   const last = draws.length ? draws[draws.length - 1] : undefined;
   const roll = last?.roll ?? view.hunt.lastRoll ?? undefined;
+  const numericTile = last && typeof last.value === 'number' && last.value > 0;
+  const fieldRoll = roll && !roll.mordor;
   return (
     <div style={{ margin: '4px 0 2px' }}>
+      {fieldRoll && (
+        <div style={{ fontSize: 13, color: '#cbbf9a', marginBottom: 6 }}>
+          The Shadow rolled <b>{roll!.level}</b> Hunt {roll!.level === 1 ? 'die' : 'dice'} — one per die in the Hunt&nbsp;Box
+          {roll!.bonus ? <>, each <b>+{roll!.bonus}</b> from Free&nbsp;Peoples dice in the box</> : null}. A die hits on <b>6+</b>.
+        </div>
+      )}
       {roll && <RollLine roll={roll} />}
+      {fieldRoll && (
+        <div style={{ fontSize: 12, color: '#998', margin: '6px 0 0' }}>
+          Modifiers: {roll!.bonus ? `+${roll!.bonus} box bonus` : 'no box bonus'};{' '}
+          {roll!.rerolls.length
+            ? `${roll!.rerolls.length} re-roll${roll!.rerolls.length === 1 ? '' : 's'} (a Shadow Stronghold / Army / Nazgûl with the Ring-bearers)`
+            : 'no re-rolls'}.
+        </div>
+      )}
       {last && (
-        <div style={{ fontSize: 13, color: '#e9b', margin: '6px 0 0' }}>
-          Tile drawn: <b>{describeDraw(last)}</b>
+        <div style={{ fontSize: 13, color: '#e9b', margin: '8px 0 0' }}>
+          {fieldRoll ? 'A success draws one Hunt tile — you drew ' : 'Tile drawn: '}<b>{describeDraw(last)}</b>.
+          {numericTile && <span style={{ color: '#998' }}> The damage is the <b>tile's value</b>, not the number of successes.</span>}
         </div>
       )}
       <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 0' }}>
-        Hunt damage: <b>{data.damage ?? '?'}</b>{data.reveal ? ' · the Fellowship will be revealed' : ''}.
-        Choose how the Ring-bearers absorb it.
+        Hunt damage <b>{data.damage ?? '?'}</b>{data.reveal ? ' · the Fellowship will be revealed' : ''}. Choose how the Ring-bearers absorb it.
       </div>
       <CorruptionLine current={view.fellowship.corruption} add={data.damage} />
+      <button onClick={onExplain} style={{ marginTop: 6, fontSize: 12, background: 'none', border: 'none', color: '#9bb0c8', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+        ⓘ How the Hunt works
+      </button>
     </div>
   );
 }

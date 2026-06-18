@@ -30,11 +30,11 @@ export function Die({ n, bonus, faded }: { n: number; bonus: number; faded?: boo
 /** The Hunt roll: dice count + box bonus, the faces (hits gold), re-rolls, successes. */
 export function RollLine({ roll }: { roll: HuntRoll }) {
   if (roll.mordor) {
-    return <div style={huntLineStyle}>Mordor Track — tile drawn automatically ({roll.level} Hunt die{roll.level === 1 ? '' : 'ce'} of pressure)</div>;
+    return <div style={huntLineStyle}>Mordor Track — tile drawn automatically ({roll.level} Hunt {roll.level === 1 ? 'die' : 'dice'} of pressure)</div>;
   }
   return (
     <div style={huntLineStyle}>
-      <div>{roll.level} Hunt die{roll.level === 1 ? '' : 'ce'}{roll.bonus ? ` · +${roll.bonus} box bonus` : ''} <span style={{ color: '#887' }}>(hits on 6+)</span></div>
+      <div>{roll.level} Hunt {roll.level === 1 ? 'die' : 'dice'}{roll.bonus ? ` · +${roll.bonus} box bonus` : ''} <span style={{ color: '#887' }}>(hits on 6+)</span></div>
       <div style={{ margin: '4px 0' }}>
         {roll.dice.map((n, i) => <Die key={i} n={n} bonus={roll.bonus} />)}
         {roll.rerolls.length > 0 && <span style={{ color: '#888', margin: '0 4px' }}>re-roll</span>}
