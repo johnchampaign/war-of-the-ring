@@ -259,11 +259,26 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     case 'eventTarget': return chooseEventTarget(state, legal);
     case 'musterSecond': // place the second figure of a two-figure muster (fuller build)
       return legal.find((a) => a.kind === 'recruitSecond' && !a.done) ?? legal[0]!;
-    case 'armyMove2': // second army move on one die: the heuristic keeps one-army moves (AI strength TODO)
-      return legal.find((a) => a.kind === 'armyMove2' && a.done) ?? legal[0]!;
+    case 'armyMove2': return chooseArmyMove2(state, legal);
     case 'charMove2': return chooseCharMove(state, legal);
     default: return legal[0]!;
   }
+}
+
+/** Use the Army die's optional SECOND move (rulebook p.27) when a different army
+ *  can make real progress — march toward the campaign target, capture, or
+ *  concentrate. Scored exactly like a first move; only taken when it beats the
+ *  flat base value (i.e. it does something), else stop. */
+function chooseArmyMove2(state: GameState, legal: WotrAction[]): WotrAction {
+  const owner: Side = state.pendingChoice!.owner;
+  const done = legal.find((a) => a.kind === 'armyMove2' && a.done) ?? legal[0]!;
+  const moves = legal.filter((a): a is Extract<WotrAction, { kind: 'armyMove2' }> => a.kind === 'armyMove2' && !a.done && !!a.from && !!a.to);
+  if (!moves.length) return done;
+  const target = campaignTarget(state, owner);
+  const base = owner === 'shadow' ? 16 : 8; // armyMoveScore's flat base — only move if we beat it
+  let best: WotrAction | null = null, bestS = base;
+  for (const m of moves) { const s = armyMoveScore(state, owner, m.from!, m.to!, target); if (s > bestS) { bestS = s; best = m; } }
+  return best ?? done;
 }
 
 /** Resolve the Character-die move chain (RAW: one die moves all eligible
