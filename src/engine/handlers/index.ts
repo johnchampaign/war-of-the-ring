@@ -307,17 +307,23 @@ const regionsWithShadowArmy = (s: GameState): EventTarget[] =>
   Object.keys(s.regions).filter((id) => armySide(s, id) === 'shadow' && unitCount(s, id) > 0 && recruitable(s, 'shadow', id)).map((region) => ({ region }));
 const ROHAN_REGIONS = Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'rohan');
 
-/** A "recruit one <Nation> unit (Regular OR Elite) [+ Leader] in one of these
- *  regions" card: the player picks the region AND the figure. Most such cards read
- *  "Regular or Elite" — we were silently giving a Regular and skipping the choice
- *  (player report on Riders of Théoden). The Leader (when present) is always added. */
-function placeChoiceCard(nation: Nation, regions: (s: GameState) => string[], opts: { leader?: boolean } = {}): EventHandler {
+/** A "recruit N <Nation> unit(s) (Regular OR Elite) [+ Leader] in one of these
+ *  regions" card: the player picks the region AND each figure's type. Covers
+ *  "Regular or Elite" cards we were silently resolving to Regular (Riders of
+ *  Théoden, Éomer, Half-orcs, Olog-hai) and the 2-unit Círdan's Ships. For N>1 the
+ *  region is locked after the first pick (all units land together). The Leader
+ *  (count-1 cards) is added with the first unit. */
+function placeChoiceCard(nation: Nation, regions: (s: GameState) => string[], opts: { leader?: boolean; count?: number } = {}): EventHandler {
+  const count = opts.count ?? 1;
   const pool = (s: GameState) => s.reinforcements[nation] as { regular: number; elite: number };
   return {
     canPlay: (s) => regions(s).length > 0 && (pool(s).regular > 0 || pool(s).elite > 0),
-    targets: (s) => {
+    repeat: count,
+    noDone: count > 1, // "recruit two" is mandatory (up to what's available)
+    targets: (s, _side, applied = []) => {
+      const locked = applied.find((a) => a.region)?.region; // all units of this card go to one region
       const out: EventTarget[] = [];
-      for (const region of regions(s)) {
+      for (const region of (locked ? [locked] : regions(s))) {
         if (pool(s).regular > 0) out.push({ region, figure: 'regular', nation });
         if (pool(s).elite > 0) out.push({ region, figure: 'elite', nation });
       }
@@ -336,11 +342,8 @@ const ridersRegions = (s: GameState): string[] => {
   return [...set];
 };
 
-register('fp-str-13', { // Círdan's Ships: 2 Elven in a coastal region with an FP Army
-  canPlay: (s) => s.reinforcements.elves.regular + s.reinforcements.elves.elite > 0 && COASTAL.some((r) => armySide(s, r) === 'fp'),
-  targets: (s) => COASTAL.filter((r) => armySide(s, r) === 'fp').map((region) => ({ region })),
-  applyTarget: (s, _side, t) => placeForce(s, 'elves', t.region!, { regular: 2 }),
-});
+// Círdan's Ships: TWO Elven units (each Regular OR Elite) in a coastal FP-Army region.
+register('fp-str-13', placeChoiceCard('elves', (s) => COASTAL.filter((r) => armySide(s, r) === 'fp'), { count: 2 }));
 // Riders of Théoden / Éomer: 1 Rohan unit (Regular OR Elite) + a Rohan Leader.
 register('fp-str-16', placeChoiceCard('rohan', ridersRegions, { leader: true }));
 register('fp-str-23', placeChoiceCard('rohan', (s) => ROHAN_REGIONS.filter((r) => REGIONS[r]!.settlement && recruitable(s, 'fp', r)), { leader: true }));
