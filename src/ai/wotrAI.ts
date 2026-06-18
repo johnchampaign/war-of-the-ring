@@ -133,7 +133,12 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'bringMinion': return 55; // +1 die and a strong leader — high tempo
     case 'recruitUnit': return actor === 'shadow' ? 38 : 20; // build the war stacks
     case 'moveArmy': return armyMoveScore(state, actor, a.from, a.to, target);
+    case 'moveCharacter': return moveCharacterScore(state, actor, a); // reposition Nazgûl/Companions
     case 'diplomaticAction': return 32;                                // mobilize toward At War
+    case 'companionMuster': // a Companion advances its Nation toward War (any die) — mobilization
+      return state.nations[a.nation].step > 0 ? 28 : 6;                // worth it only while the Nation isn't yet At War
+    case 'sarumanMuster': return a.mode === 'recruit' ? 45 : 30;       // Voice of Saruman: a big Isengard build / Elite upgrade
+    case 'useElvenRing': return elvenRingScore(state, actor, a);       // change a die's face (conservatively)
     case 'playEvent':
       if (actor === 'fp' && HEAL_EVENTS.has(a.cardId)) return fs.corruption >= 6 ? 95 : 25;
       if (actor === 'shadow' && CORRUPT_EVENTS.has(a.cardId)) return 70;
@@ -154,6 +159,34 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   if (armyHere(state, to, actor)) s += 10;                                                                // concentrate
   if (target) { s += -(dist(to, target) - dist(from, target)) * 12; if (to === target) s += 30; }         // march
   return s;
+}
+
+/** Whether to spend an Elven Ring (a scarce, side-shifting resource). Deliberately
+ *  conservative: the FP only converts toward a Character die it LACKS — and only
+ *  when keeping the Fellowship moving is worth handing the Ring to the Shadow (on
+ *  the Mordor Track, where standing still costs +1 Corruption/turn, or when
+ *  revealed and needing to hide). The Shadow only burns its Ring (gone for good)
+ *  for an Eye when the Hunt is decisive (Fellowship in Mordor). Otherwise: don't. */
+function elvenRingScore(state: GameState, actor: Side, a: Extract<WotrAction, { kind: 'useElvenRing' }>): number {
+  const fs = state.fellowship;
+  if (actor === 'fp') {
+    if (a.to !== 'character') return -5;                              // FP only converts toward a Character die
+    const faces = state.dice.fp;
+    if (faces.includes('character') || faces.includes('will')) return -5; // already have one — don't pass a Ring to Shadow for free
+    if (fs.mordor !== null) return 90;                                // Mordor Track: MUST keep moving
+    if (!fs.hidden) return 55;                                        // revealed: convert so we can hide
+    return -5;
+  }
+  return (a.to === 'eye' && fs.mordor !== null) ? 35 : -5;            // Shadow: an Eye only when the Hunt is decisive
+}
+
+/** Initiating an independent-character move with a Character die. The big win is
+ *  the Shadow pouncing a Nazgûl onto a REVEALED Fellowship (Hunt pressure); other
+ *  repositioning is modest so it doesn't crowd out higher-value Character-die uses. */
+function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction, { kind: 'moveCharacter' }>): number {
+  const fs = state.fellowship;
+  if (actor === 'shadow' && a.char === 'nazgul') return (!fs.hidden && a.to === fs.location) ? 42 : 6;
+  return 4; // separated Companions / Minions: situational
 }
 
 function combatCardValue(m: CombatMods | null): number {
@@ -261,6 +294,18 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'recruitSecond' && !a.done) ?? legal[0]!;
     case 'armyMove2': return chooseArmyMove2(state, legal);
     case 'charMove2': return chooseCharMove(state, legal);
+    case 'stormcrowLoss': // forced army loss: shed a Regular before an Elite
+      return legal.find((a) => a.kind === 'stormcrowLoss' && a.figure === 'regular') ?? legal[0]!;
+    case 'breakingSep': { // forced separation: keep the Guide, give up the lowest-Level Companion
+      const seps = legal.filter((a): a is Extract<WotrAction, { kind: 'breakingSep' }> => a.kind === 'breakingSep');
+      const pool = seps.filter((a) => a.companion !== state.fellowship.guide);
+      const choose = (pool.length ? pool : seps);
+      return choose.reduce((best, a) => (levelOf(a.companion) < levelOf(best.companion) ? a : best), choose[0]!) ?? legal[0]!;
+    }
+    case 'discardCard': { // over hand-limit: drop a card that isn't one of our key heal/corruption events
+      const keep = (id: string) => HEAL_EVENTS.has(id) || CORRUPT_EVENTS.has(id);
+      return legal.find((a) => a.kind === 'discardCard' && !keep(a.card)) ?? legal[0]!;
+    }
     default: return legal[0]!;
   }
 }
