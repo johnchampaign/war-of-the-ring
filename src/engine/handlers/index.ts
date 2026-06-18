@@ -968,13 +968,19 @@ register('sh-char-14', {
 // --- Grond / The Fighting Uruk-hai: a 3-round siege assault on a besieged FP
 //     Stronghold (siege mechanic in combat.ts). The besieging army must be adjacent
 //     to the besieged Stronghold and contain the required figure/unit. -----------
+// Strongholds the Shadow is currently BESIEGING (siege model: the besieger occupies
+// the Stronghold region, the FP garrison sits in its siegeBox), filtered by a
+// per-region predicate (an Isengard unit, the Witch-king, …). The assault is an
+// attack from===to, since the besieger is in-region — NOT adjacent (that was the
+// pre-siege-rewrite model, which left Grond / Fighting Uruk-hai unplayable).
 function siegeAssaultTargets(state: GameState, qualifies: (from: string) => boolean): EventTarget[] {
   const out: EventTarget[] = [];
-  for (const to of Object.keys(state.regions)) {
-    const def = REGIONS[to]!;
-    if (def.settlement !== 'Stronghold' || !state.regions[to]!.besieged) continue;
-    if (settlementController(state, to) !== 'fp') continue;
-    for (const from of def.adjacency) if (armySide(state, from) === 'shadow' && qualifies(from)) out.push({ from, to });
+  for (const id of Object.keys(state.regions)) {
+    const def = REGIONS[id]!;
+    const r = state.regions[id]!;
+    if (def.settlement !== 'Stronghold' || !r.besieged) continue;
+    if (settlementController(state, id) !== 'fp') continue; // garrison (in the box) still holds it
+    if (armySide(state, id) === 'shadow' && qualifies(id)) out.push({ from: id, to: id });
   }
   return out;
 }
@@ -1236,18 +1242,20 @@ register('sh-str-21', {
   applyTarget(state, _side, t) { placeUnits(state, 'southrons', t.region!, 5, 0); log(state, null, 'event', `Hordes From the East muster in ${t.region}`); },
 });
 
-// Help Unlooked For: an FP Army relieves a besieged Stronghold — attack the Shadow
-// besieger; that Army rolls one die less per FP unit in the besieged Stronghold (min 1).
-function besiegedFpStrongholdNear(state: GameState, region: string): string | null {
-  for (const adj of REGIONS[region]!.adjacency)
-    if (REGIONS[adj]!.settlement === 'Stronghold' && state.regions[adj]!.besieged && settlementController(state, adj) === 'fp') return adj;
-  return null;
+// Help Unlooked For: an FP Army relieves a besieged Stronghold — a relief attack
+// INTO the Stronghold the Shadow is besieging (siege model: the besieger occupies
+// the Stronghold region; the FP garrison sits in its siegeBox). The Shadow rolls one
+// die less per FP unit in the box (min 1). (Pre-siege-rewrite this looked for the
+// besieger ADJACENT to the Stronghold and counted the region's units as the garrison.)
+function besiegedFpStronghold(state: GameState, id: string): boolean {
+  return REGIONS[id]!.settlement === 'Stronghold' && state.regions[id]!.besieged
+    && settlementController(state, id) === 'fp' && armySide(state, id) === 'shadow';
 }
 function helpUnlookedForTargets(state: GameState): EventTarget[] {
   const out: EventTarget[] = [];
-  for (const to of Object.keys(state.regions)) {
-    if (armySide(state, to) !== 'shadow' || !besiegedFpStrongholdNear(state, to)) continue;
-    for (const from of REGIONS[to]!.adjacency) if (armySide(state, from) === 'fp') out.push({ from, to, mode: 'attack' });
+  for (const sh of Object.keys(state.regions)) {
+    if (!besiegedFpStronghold(state, sh)) continue;
+    for (const from of REGIONS[sh]!.adjacency) if (armySide(state, from) === 'fp') out.push({ from, to: sh, mode: 'attack' });
   }
   return out;
 }
@@ -1255,8 +1263,8 @@ register('fp-str-10', {
   canPlay: (state) => helpUnlookedForTargets(state).length > 0,
   targets: helpUnlookedForTargets,
   applyTarget(state, _side, t) {
-    const sh = besiegedFpStrongholdNear(state, t.to!);
-    const garrison = sh ? unitCount(state, sh) : 0;
+    const box = state.regions[t.to!]!.siegeBox; // the boxed FP garrison
+    const garrison = box ? forceUnitCount(box) : 0;
     startBattle(state, 'fp', t.from!, t.to!, { defenderDicePenalty: garrison });
     log(state, null, 'event', `Help Unlooked For: relief attack ${t.from} → ${t.to} (Shadow −${garrison} dice)`);
   },
