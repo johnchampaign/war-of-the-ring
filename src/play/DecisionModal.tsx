@@ -64,7 +64,8 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn }: {
       <div style={modal}>
         {pc && <CombatHeader pc={pc} />}
         {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>{CHOICE_TITLE[choice.kind] ?? choice.kind}</div>}
-        {choice?.kind === 'huntDamage' && <HuntDetail view={view} data={(choice as any).data} onExplain={() => setHuntInfo(true)} />}
+        {choice?.kind === 'huntDamage' && <HuntDetail view={view} data={(choice as any).data} onExplain={() => setHuntInfo(true)}
+          modes={decisions.filter((a) => a.kind === 'huntDamage').map((a) => (a as Extract<WotrAction, { kind: 'huntDamage' }>).mode)} />}
         {huntInfo && <HuntInfoModal view={view} onClose={() => setHuntInfo(false)} />}
         {choice?.kind === 'huntRedraw' && <TileDetail tile={(choice as any).data?.tile} />}
         {choice?.kind === 'removeExcess' && <RemoveExcessDetail view={view} data={(choice as any).data} />}
@@ -152,7 +153,7 @@ function RemoveExcessDetail({ view, data }: { view: GameState; data?: { region?:
 // the damage is the tile's value (not the success count) — so the choice isn't
 // made blind to what produced it. A link opens the full "how the Hunt works"
 // dialog with every modifier.
-function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damage?: number; reveal?: boolean }; onExplain: () => void }) {
+function HuntDetail({ view, data, modes, onExplain }: { view: GameState; data?: { damage?: number; reveal?: boolean }; modes: string[]; onExplain: () => void }) {
   if (!data) return null;
   const draws = view.hunt.draws ?? [];
   const last = draws.length ? draws[draws.length - 1] : undefined;
@@ -191,8 +192,14 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
         </div>
       )}
       <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 0' }}>
-        Hunt damage <b>{data.damage ?? '?'}</b>{data.reveal ? ' · the Fellowship will be revealed' : ''}. Choose how the Ring-bearers absorb it.
+        Hunt damage <b>{data.damage ?? '?'}</b>. Choose how the Ring-bearers absorb it.
       </div>
+      {data.reveal && (
+        <div style={{ margin: '6px 0 0', padding: '7px 9px', background: '#5a1f1f', border: '1px solid #a83232', borderRadius: 8, fontSize: 12.5, lineHeight: 1.45 }}>
+          🔴 This tile <b>reveals the Fellowship</b> — that happens <b>no matter which option you pick</b>.
+          {modes.includes('reduceReveal') && <> So <b>“Reveal the Fellowship (−1 damage)”</b> costs you nothing extra here (you're revealed either way) and saves 1 Corruption.</>}
+        </div>
+      )}
       <CorruptionLine current={view.fellowship.corruption} add={data.damage} />
       <button onClick={onExplain} style={{ marginTop: 6, fontSize: 12, background: 'none', border: 'none', color: '#9bb0c8', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
         ⓘ How the Hunt works
