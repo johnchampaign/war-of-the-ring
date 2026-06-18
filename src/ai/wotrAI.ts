@@ -64,7 +64,7 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     const s = score(state, actor, a, target) + rng.next() * 0.5; // tiny noise for tie-breaks
     if (s > bestScore) { bestScore = s; best = a; }
   }
-  return maybeSplitGarrison(state, actor, best); // leave a garrison if the move vacates a threatened Settlement
+  return maybeAttackRearguard(state, actor, maybeSplitGarrison(state, actor, best)); // hold a threatened origin
 }
 
 /** Split a chosen whole-army move so it leaves a one-unit garrison behind when the
@@ -100,6 +100,28 @@ function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): 
   if (r.nazgul) move.nazgul = r.nazgul;
   if (r.characters.length) move.characters = [...r.characters];
   return { kind: 'moveArmy', from, to: action.to, move };
+}
+
+/** Leave a one-unit rearguard on an attack so a decisive win (which forces the
+ *  attackers to advance, vacating the origin) doesn't strand a VP Settlement we
+ *  control with a DIFFERENT enemy army next to it. Safe only when the rearguard
+ *  comes out of the 5-dice surplus: ≥6 attackers (so ≥5 still attack — full dice)
+ *  AND an overwhelming margin (≥ defender + 3), so it never weakens a close fight.
+ *  Restricted to all-At-War stacks — the engine already force-holds non-belligerent
+ *  units as a rearguard, so there's nothing to add (and no double-counting). */
+function maybeAttackRearguard(state: GameState, actor: Side, action: WotrAction): WotrAction {
+  if (action.kind !== 'attack' || action.rearguard) return action;
+  const from = action.from, to = action.to, def = REGIONS[from];
+  if (!def?.settlement || def.vp <= 0 || settlementCtrl(state, from) !== actor) return action;
+  const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
+  if (!def.adjacency.some((adj) => adj !== to && armyHere(state, adj, enemy))) return action; // origin not threatened
+  const r = state.regions[from];
+  const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
+  if (!nations.every((n) => state.nations[n].step === 0)) return action;                       // all attackers At War
+  if (unitCount(state, from) < 6 || unitCount(state, from) < unitCount(state, to) + 3) return action; // surplus + margin
+  const garN = nations.find((n) => r.units[n]!.regular > 0) ?? nations[0]!;
+  const rearguard: MoveSel = { units: { [garN]: r.units[garN]!.regular > 0 ? { regular: 1 } : { elite: 1 } } };
+  return { kind: 'attack', from, to, rearguard };
 }
 
 const FP = new Set(['dwarves', 'elves', 'gondor', 'north', 'rohan']);
