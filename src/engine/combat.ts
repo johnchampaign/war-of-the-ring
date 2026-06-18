@@ -15,7 +15,12 @@ import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, hasCombatEffect, EMPTY_MODS, type CombatMods } from './combatCards';
 import { log } from './log';
 
-const MAX_ROUNDS = 5;
+// Safety backstop only — a real field battle terminates when the attacker ceases
+// or one side is wiped (always, since every round removes units). Set well above
+// any legitimate battle's length (grinding a full 10-unit stack takes ~6 rounds at
+// ~1.7 hits/round, more with leadership re-rolls) so the cap never cuts a genuine
+// fight short; it exists purely to guarantee the sub-machine can't loop forever.
+const MAX_ROUNDS = 15;
 const clamp = (lo: number, hi: number, v: number): number => Math.max(lo, Math.min(hi, v));
 const other = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 
