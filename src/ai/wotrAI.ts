@@ -261,8 +261,28 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'recruitSecond' && !a.done) ?? legal[0]!;
     case 'armyMove2': // second army move on one die: the heuristic keeps one-army moves (AI strength TODO)
       return legal.find((a) => a.kind === 'armyMove2' && a.done) ?? legal[0]!;
+    case 'charMove2': return chooseCharMove(state, legal);
     default: return legal[0]!;
   }
+}
+
+/** Resolve the Character-die move chain (RAW: one die moves all eligible
+ *  characters). Move figures one at a time while it clearly helps — Nazgûl onto a
+ *  revealed Fellowship, anyone drifting toward the campaign target — else stop. */
+function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
+  const owner: Side = state.pendingChoice!.owner;
+  const moves = legal.filter((a): a is Extract<WotrAction, { kind: 'moveCharacter' }> => a.kind === 'moveCharacter');
+  const target = campaignTarget(state, owner);
+  const fs = state.fellowship;
+  const scoreMove = (a: Extract<WotrAction, { kind: 'moveCharacter' }>): number => {
+    let s = 0;
+    if (owner === 'shadow' && a.char === 'nazgul' && !fs.hidden && a.to === fs.location) s += 30; // press a revealed Fellowship
+    if (target) s += -(dist(a.to, target) - dist(a.from, target)) * 4;                            // drift toward the target
+    return s;
+  };
+  let best: WotrAction | null = null, bestS = 0; // only move when strictly positive; otherwise stop
+  for (const m of moves) { const s = scoreMove(m); if (s > bestS) { bestS = s; best = m; } }
+  return best ?? legal.find((a) => a.kind === 'charMove2' && a.done) ?? legal[0]!;
 }
 
 /** Pick an interactive event-card target: prefer an attack/move toward the campaign

@@ -19,7 +19,7 @@ import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable,
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
-import { moveCharacter, characterMoveOptions } from '../engine/charMove';
+import { moveCharacter, characterMoveOptions, remainingCharMoves, type CharMoveState } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, type EventTarget } from '../engine/handlers/registry';
@@ -226,6 +226,14 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
           if (from === data.src || from === data.dest) continue; // a different army
           acts.push({ kind: 'armyMove2', from, to });
         }
+        return acts;
+      }
+      case 'charMove2': {
+        // Continue the Character-die move: any not-yet-moved eligible figure (board
+        // submits arbitrary moveCharacter — validated in dispatch), or stop.
+        const moved = state.pendingChoice!.data as CharMoveState;
+        const acts: WotrAction[] = [{ kind: 'charMove2', done: true }];
+        for (const m of characterMoveOptions(state, actor, 18, moved)) acts.push({ kind: 'moveCharacter', ...m });
         return acts;
       }
       case 'revealMove': {
@@ -754,8 +762,29 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'retreatTo', actor); resolveRetreatTo(state, action.region); break;
     case 'moveCharacter': {
       requirePhase(state, 'actionResolution');
-      if (!consumePreferred(state, actor, ['character', 'will'], action.die)) throw new Error('No Character die');
+      // RAW: one Character die moves ALL eligible characters, each once. The first
+      // move spends the die; later moves continue from a `charMove2` PendingChoice
+      // (no extra die) until the player is done or nothing eligible remains.
+      const cont = state.pendingChoice?.kind === 'charMove2' && state.pendingChoice.owner === actor;
+      const prev: CharMoveState = cont ? (state.pendingChoice!.data as CharMoveState) : { chars: [], frozen: [] };
+      if (cont) {
+        if (action.char === 'nazgul' ? prev.frozen.includes(action.from) : prev.chars.includes(action.char))
+          throw new Error('That figure already moved with this Character die');
+      } else if (!consumePreferred(state, actor, ['character', 'will'], action.die)) {
+        throw new Error('No Character die');
+      }
       if (!moveCharacter(state, actor, action.char, action.from, action.to)) throw new Error('Illegal character move');
+      const moved: CharMoveState = action.char === 'nazgul'
+        ? { chars: prev.chars, frozen: [...prev.frozen, action.from, action.to] }
+        : { chars: [...prev.chars, action.char], frozen: prev.frozen };
+      // Keep moving the rest of the eligible characters on the same die, or finish.
+      if (remainingCharMoves(state, actor, moved)) state.pendingChoice = { owner: actor, kind: 'charMove2', data: moved };
+      else { state.pendingChoice = null; passResolutionTurn(state, actor); }
+      break;
+    }
+    case 'charMove2': { // the player declines to move any more characters with this die
+      requireChoice(state, 'charMove2', actor);
+      state.pendingChoice = null;
       passResolutionTurn(state, actor); break;
     }
     case 'huntDamage':

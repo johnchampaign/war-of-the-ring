@@ -210,10 +210,16 @@ die already showing an Eye.
 - **Implemented** (`charMove.ts`, `moveCharacter` action): a Character die moves
   independent characters — SH moves a Nazgûl group / Witch-king (fly) / Mouth
   (≤3); FP moves a separated Companion (≤ Level). Landing rule (no enemy
-  Stronghold unless besieged) enforced. **Deviation:** one die moves ONE
-  piece/Nazgûl-group to one destination (the rulebook lets one die move ALL
-  eligible characters, each to its own region) — keeps the action space tractable
-  and avoids stripping army leadership wholesale.
+  Stronghold unless besieged) enforced. **RAW (closed):** one Character die moves
+  **ALL** of a side's eligible characters, each once, to its own destination — the
+  first `moveCharacter` spends the die, then a `charMove2` PendingChoice offers
+  moving another not-yet-moved figure (or "done"), repeating until every figure has
+  moved or the player stops (`CharMoveState` tracks what moved this die so nothing
+  moves twice; the AI resolves the chain figure-by-figure, `chooseCharMove`). The
+  UI continues the same board-click flow for each figure. *Residual:* the engine's
+  group-granularity — a region's Nazgûl move as a **group**, not figure by figure
+  (so the relay-guard also freezes any Nazgûl merged into a just-moved group); this
+  is a separate, minor simplification, not the "one piece per die" cap (now removed).
 - **Character card** fields (p.25): Level, activatable Nation, Guide ability,
   out-of-Fellowship ability, Leadership, action-die bonus symbol. Gandalf,
   Aragorn, Merry, Pippin can activate **any** FP nation (p.34).

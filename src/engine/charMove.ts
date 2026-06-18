@@ -3,15 +3,30 @@
 // separated Companions. Nazgûl and the Witch-king fly anywhere; the Mouth of
 // Sauron moves ≤3; Saruman never leaves Orthanc; Companions move ≤ their Level.
 //
-// DEVIATION: the rulebook lets ONE Character die move ALL of a side's eligible
-// characters (each to its own destination). We model one die as moving ONE
-// piece/Nazgûl-group to one destination — controllable and avoids the "move all"
-// action-space blowup. Documented in docs/rules-spec.md §5.
+// RAW: one Character die moves ALL of a side's eligible characters, each once, to
+// its own destination. Modelled as a sequence — the first `moveCharacter` spends
+// the die, then a `charMove2` PendingChoice offers moving another not-yet-moved
+// figure (or done). `CharMoveState` tracks what has already moved this die so each
+// figure moves at most once (relay guard). The one residual simplification is the
+// engine's group-granularity (a region's Nazgûl move as a group, not figure by
+// figure); see docs/rules-spec.md §5.
 import type { GameState, RegionId, Side } from './types';
 import { REGIONS, levelOf } from './data';
 import { settlementController, armySide } from './armies';
 
 const FLY = 99;
+
+/** What has already moved on the current Character die (so each figure moves at
+ *  most once). `chars` = named Companions/Minions already moved (by id); `frozen`
+ *  = regions whose Nazgûl already moved this die — their group can't move again
+ *  (relay guard; also freezes any Nazgûl that were merged into a moved group, a
+ *  consequence of the group-granularity model). */
+export interface CharMoveState { chars: string[]; frozen: RegionId[] }
+
+function isExcluded(p: { char: string; from: RegionId }, excl?: CharMoveState): boolean {
+  if (!excl) return false;
+  return p.char === 'nazgul' ? excl.frozen.includes(p.from) : excl.chars.includes(p.char);
+}
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 const enemyOf = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 
@@ -82,7 +97,7 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
 
 /** The actor's independent characters and where each sits: 'nazgul' groups (by
  *  region) plus Minion / Companion figures. */
-function movablePieces(state: GameState, side: Side): Array<{ char: string; from: RegionId }> {
+function movablePieces(state: GameState, side: Side, excl?: CharMoveState): Array<{ char: string; from: RegionId }> {
   const out: Array<{ char: string; from: RegionId }> = [];
   for (const id of Object.keys(state.regions)) {
     const r = state.regions[id]!;
@@ -93,14 +108,20 @@ function movablePieces(state: GameState, side: Side): Array<{ char: string; from
       if ((side === 'shadow' && isShadowChar) || (side === 'fp' && COMPANION_SET.has(c))) out.push({ char: c, from: id });
     }
   }
-  return out;
+  return excl ? out.filter((p) => !isExcluded(p, excl)) : out;
 }
 
 /** The actor's movable independent characters sitting in `from` ('nazgul' for a
  *  Nazgûl group, plus any Minion/Companion figures that can still move). For the
  *  board UI's click-to-move. */
-export function movableCharsAt(state: GameState, side: Side, from: RegionId): string[] {
-  return movablePieces(state, side).filter((p) => p.from === from).map((p) => p.char);
+export function movableCharsAt(state: GameState, side: Side, from: RegionId, excl?: CharMoveState): string[] {
+  return movablePieces(state, side, excl).filter((p) => p.from === from).map((p) => p.char);
+}
+
+/** Any eligible character still has a legal move (used to decide whether to keep
+ *  prompting the Character-die move chain or end the turn). */
+export function remainingCharMoves(state: GameState, side: Side, excl?: CharMoveState): boolean {
+  return movablePieces(state, side, excl).some((p) => characterDestinations(state, side, p.char, p.from).length > 0);
 }
 
 /** Every legal destination region for `char` moving from `from` — the full set
@@ -120,8 +141,8 @@ export function characterDestinations(state: GameState, side: Side, char: string
 /** Representative legal character moves for the Character die (a subset, like the
  *  army enumerator): each movable piece toward a small set of useful targets —
  *  the Fellowship's region (Nazgûl hunt there) and the actor's army regions. */
-export function characterMoveOptions(state: GameState, side: Side, cap = 18): Array<{ char: string; from: RegionId; to: RegionId }> {
-  const pieces = movablePieces(state, side);
+export function characterMoveOptions(state: GameState, side: Side, cap = 18, excl?: CharMoveState): Array<{ char: string; from: RegionId; to: RegionId }> {
+  const pieces = movablePieces(state, side, excl);
   if (!pieces.length) return [];
   // Restricted target set for FAR-RANGING pieces (Nazgûl/Witch-king/Minion) — toward
   // the Fellowship or a friendly Army — keeps that (large) action space bounded.

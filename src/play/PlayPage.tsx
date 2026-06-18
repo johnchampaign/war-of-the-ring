@@ -105,6 +105,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const declareTargets = useMemo(() => new Set(placeActs.map((a) => a.target)), [placeActs]);
   const isReveal = g.view?.pendingChoice?.kind === 'revealMove';
   const isSeparateMove = g.view?.pendingChoice?.kind === 'separateMove';
+  // Continuing a Character-die move (RAW: one die moves all eligible characters).
+  // `charMoved` lists what has already moved this die, so those figures drop out.
+  const isCharMove2 = g.view?.pendingChoice?.kind === 'charMove2';
+  const charMoved = useMemo(
+    () => (isCharMove2 ? (g.view!.pendingChoice!.data as { chars: string[]; frozen: RegionId[] } | undefined) : undefined),
+    [isCharMove2, g.view],
+  );
+  // Character figures are board-movable when a Character/Will die is free (first move)
+  // OR we're mid-chain continuing the same die.
+  const charMoveOk = charDieOk || isCharMove2;
   // Card-driven Companion separation, destination step: eventTarget options carrying
   // both a companion and a region. Placed on the BOARD (not 60+ buttons).
   const cardSepActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => a.kind === 'eventTarget' && !!a.region && !!a.companion), [g.legalActions]);
@@ -115,11 +125,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const canMoveChars = useMemo(() => g.legalActions.some((a) => a.kind === 'moveCharacter'), [g.legalActions]);
   const charSources = useMemo(() => {
     const s = new Set<RegionId>();
-    if (g.view && canMoveChars && charDieOk && g.you) for (const id of Object.keys(g.view.regions)) {
-      if (movableCharsAt(g.view, g.you as Side, id).length) s.add(id);
+    if (g.view && canMoveChars && charMoveOk && g.you) for (const id of Object.keys(g.view.regions)) {
+      if (movableCharsAt(g.view, g.you as Side, id, charMoved).length) s.add(id);
     }
     return s;
-  }, [g.view, canMoveChars, charDieOk, g.you]);
+  }, [g.view, canMoveChars, charMoveOk, charMoved, g.you]);
   const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets, ...charSources, ...cardSepTargets]), [armyActs, declareTargets, charSources, cardSepTargets]);
   // The region currently "selected" for highlighting (an army source, a char source, or a menu region).
   const activeRegion = selected ?? charPick?.from ?? moveMenu?.region ?? null;
@@ -174,7 +184,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // Clicking a region that has something to move: army, character(s), or both.
     const armyHere = armyActs.some((a) => a.from === id);
-    const charsHere = (g.view && canMoveChars && charDieOk && g.you) ? movableCharsAt(g.view, g.you as Side, id) : [];
+    const charsHere = (g.view && canMoveChars && charMoveOk && g.you) ? movableCharsAt(g.view, g.you as Side, id, charMoved) : [];
     const opts: Array<{ kind: 'army' } | { kind: 'char'; char: string }> = [
       ...(armyHere ? [{ kind: 'army' as const }] : []),
       ...charsHere.map((c) => ({ kind: 'char' as const, char: c })),
@@ -192,10 +202,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (reason) setBlockMsg(reason);
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charDieOk, g.view, g.you]);
+  }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations }), [sources, activeRegion, destinations]);
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
