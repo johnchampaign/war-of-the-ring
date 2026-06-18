@@ -45,6 +45,10 @@ export interface RegionState {
   control: Side | null;
   /** True when a Stronghold here is under siege (defenders in the siege box). */
   besieged: boolean;
+  /** RAW siege model: when besieged, the DEFENDERS withdraw into the Stronghold's
+   *  siege box (here) and the BESIEGER occupies the region's open field (`units`).
+   *  Absent when not under siege. The garrison still controls the Settlement. */
+  siegeBox?: { units: Partial<Record<Nation, ArmyUnits>>; leaders: number; characters: CharacterId[] };
 }
 
 // --- Nation political state ---------------------------------------------
