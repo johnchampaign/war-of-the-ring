@@ -18,6 +18,7 @@ export function describeAction(a: WotrAction): string {
     case 'skipFellowshipPhase': return 'Skip the Fellowship phase';
     case 'declareFellowship': return `Declare Fellowship (toward ${rName(a.target)})`;
     case 'enterMordor': return 'Enter Mordor';
+    case 'revealMove': return `Move the revealed Fellowship to ${rName(a.target)}`;
     case 'allocateHunt': return `Allocate ${a.dice} Hunt ${a.dice === 1 ? 'die' : 'dice'}`;
     case 'moveFellowship': return 'Move the Fellowship';
     case 'hideFellowship': return 'Hide the Fellowship';

@@ -294,6 +294,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   const panelActionsAll = g.legalActions.filter((a) => (!isSpatial(a) || (a.kind === 'attack' && a.from === a.to)) // siege assaults are panel buttons
     && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove'
+    // Fellowship-figure placement (declare / revealed-move) is done by clicking the
+    // board (banner + highlighted regions), NOT a panel button — and revealMove has
+    // no readable label, so it would otherwise show as raw JSON in the action list.
+    && a.kind !== 'revealMove' && a.kind !== 'declareFellowship'
     && !(a.kind === 'eventTarget' && !!a.region && !!a.companion)); // card-separation destinations go on the board
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
