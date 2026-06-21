@@ -55,7 +55,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const activeDie = die && (g.view?.dice[me] ?? []).includes(die) ? die : null;
   const charDieOk = !activeDie || activeDie === 'character' || activeDie === 'will';
   const [selected, setSelected] = useState<RegionId | null>(null);
-  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' } | null>(null);
+  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' | 'armyMove2' } | null>(null);
   // Board-driven independent-character (Nazgûl / Minion / Companion) move in progress.
   const [charPick, setCharPick] = useState<{ from: RegionId; char: string } | null>(null);
   // When a clicked region offers more than one thing to move (e.g. the army AND its
@@ -305,6 +305,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
     : panelActionsAll;
+  // The optional SECOND army move (Army die) is offered as panel buttons; route it
+  // through the split picker too, so a second move can also be partial (not all-or-nothing).
+  const onPanelAction = useCallback((a: WotrAction) => {
+    if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2' }); return; }
+    void submit(a);
+  }, [submit]);
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
@@ -362,7 +368,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             <div style={{ flex: '0 0 44%', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               {/* Action buttons (compact — half height). */}
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
-                <ActionPanel actions={panelActions} onAction={submit} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} compact />
+                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} compact />
               </div>
               {chatClient && g.you && (
                 <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
