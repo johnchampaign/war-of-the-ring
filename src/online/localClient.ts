@@ -133,6 +133,22 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat'; aiSid
     // the public /api/report endpoint with the seat/turn for context.
     // Attach the game log so a LOCAL report is triage-driven (no opponent to
     // protect in solo/AI/hotseat play — the reporter already sees the whole game).
-    report: (body) => submitReportViaHttp(REPORT_ENDPOINT, { ...body, you: aiSide ? human : (wotrAdapter.currentActor(state) ?? human), turn: state.turn, log: (state.log ?? []).slice(-2000) }),
+    report: (body) => {
+      // Attach a STATE SNAPSHOT for triage: the reporter's redacted view + the legal
+      // actions available right now. Makes "option X isn't offered" bugs diagnosable
+      // without a repro — we can see whether X was in legalActions and why. It's the
+      // reporter's OWN view (no hidden opponent info beyond what they already see).
+      const seat = aiSide ? human : (wotrAdapter.currentActor(state) ?? human);
+      const cur = wotrAdapter.currentActor(state);
+      let stateSnap = '';
+      try {
+        stateSnap = JSON.stringify({
+          seat, currentActor: cur,
+          legalActions: cur ? wotrAdapter.legalActions(state, cur) : [],
+          view: wotrAdapter.viewFor(state, seat),
+        }).slice(0, 200000);
+      } catch { /* never let snapshotting block a report */ }
+      return submitReportViaHttp(REPORT_ENDPOINT, { ...body, you: seat, turn: state.turn, log: (state.log ?? []).slice(-2000), snapshot: stateSnap });
+    },
   };
 }
