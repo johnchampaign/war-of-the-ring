@@ -903,7 +903,7 @@ function recruitRegions(state: GameState, side: Side, nation: Nation, cap = 4): 
   const out: string[] = [];
   for (const id of Object.keys(state.regions)) {
     const def = REGIONS[id]!;
-    if (def.nation !== nation || !def.settlement) continue;
+    if (def.nation !== nation || !def.settlement || def.settlement === 'Fortification') continue; // City/Town/Stronghold only (p.26)
     if (settlementController(state, id) !== side || armySide(state, id) === opp(side)) continue;
     if (state.regions[id]!.besieged) continue; // can't muster into a besieged Stronghold (p.26)
     if (unitCount(state, id) >= STACKING_LIMIT) continue;
@@ -951,15 +951,19 @@ function recruitTargets(state: GameState, side: Side): WotrAction[] {
 function recruitSecondTargets(state: GameState, side: Side, figure: 'regular' | 'leader', first: string): WotrAction[] {
   const out: WotrAction[] = [{ kind: 'recruitSecond', done: true }];
   if (figure === 'leader' && side === 'shadow') {
-    for (const r of Object.keys(state.regions)) if (r !== first && canRecruitNazgul(state, r)) { out.push({ kind: 'recruitSecond', nation: 'sauron', region: r, figure }); break; }
+    // EVERY eligible Sauron Stronghold (other than the first), not just one.
+    for (const r of Object.keys(state.regions)) if (r !== first && canRecruitNazgul(state, r)) out.push({ kind: 'recruitSecond', nation: 'sauron', region: r, figure });
     return out;
   }
   for (const nation of Object.keys(state.nations) as Nation[]) {
     if (sideOfNation(nation) !== side || !isAtWar(state, nation)) continue;
     const pool = state.reinforcements[nation] as { regular: number; leader?: number };
     if (figure === 'regular' ? pool.regular < 1 : (pool.leader ?? 0) < 1) continue;
-    for (const r of recruitRegions(state, side, nation, 3)) if (r !== first) { out.push({ kind: 'recruitSecond', nation, region: r, figure }); break; }
-    if (out.length >= 8) break;
+    // Offer EVERY eligible Settlement of the Nation (other than the first), so the
+    // second figure has the same placement freedom as the first (report: the 2nd
+    // recruit was limited to one spot per Nation).
+    for (const r of recruitRegions(state, side, nation, 6)) if (r !== first) out.push({ kind: 'recruitSecond', nation, region: r, figure });
+    if (out.length >= 24) break;
   }
   return out;
 }

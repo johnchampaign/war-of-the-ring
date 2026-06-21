@@ -835,7 +835,7 @@ register('fp-str-03', { // The Power of Tom Bombadil — advance North; bar Shad
 register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see politics.ts (advanceableNations) */ } });
 register('sh-char-21', { onTable: true, apply() { /* The Palantír of Orthanc — bonus draw, see wotrAdapter playEvent */ } });
 register('sh-char-15', { onTable: true, apply() { /* Worn with Sorrow and Toil — see hunt.ts (companion casualty) */ } });
-register('sh-char-22', { onTable: true, apply() { /* Wormtongue — see politics.ts (activateNation) */ } });
+register('sh-char-22', { onTable: true, canPlay: (state) => inPlay(state, 'saruman'), apply() { /* Wormtongue — play if Saruman is in play; see politics.ts (activateNation) */ } });
 register('sh-char-16', { onTable: true, apply() { /* Flocks of Crebain — +1 Hunt dice, see hunt.ts resolveHunt */ } });
 register('sh-char-17', { onTable: true, apply() { /* Balrog of Moria — extra Hunt tile on a Moria declaration, see wotrAdapter declareFellowship */ } });
 
