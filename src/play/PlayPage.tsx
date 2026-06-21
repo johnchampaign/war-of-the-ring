@@ -306,11 +306,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
     : panelActionsAll;
   // The optional SECOND army move (Army die) is offered as panel buttons; route it
-  // through the split picker too, so a second move can also be partial (not all-or-nothing).
-  const onPanelAction = useCallback((a: WotrAction) => {
+  // through the split picker too, so a second move can also be partial. NB: plain
+  // function (NOT useCallback) — this is below the `if (!g.view) return` guard, so a
+  // hook here would violate the Rules of Hooks (crashes the page on the first render).
+  const onPanelAction = (a: WotrAction) => {
     if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2' }); return; }
     void submit(a);
-  }, [submit]);
+  };
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
