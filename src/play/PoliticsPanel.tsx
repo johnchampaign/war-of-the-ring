@@ -18,7 +18,9 @@ const TRACK_MAX = 3; // display 3 → 2 → 1 → War
 export function PoliticsPanel({ view }: { view: GameState }) {
   return (
     <div style={panel}>
-      <div style={{ fontWeight: 600, fontSize: 13 }}>Politics</div>
+      <div style={{ fontWeight: 600, fontSize: 13 }}>
+        Politics <span style={{ fontSize: 9.5, fontWeight: 400, color: '#887' }}>· pool left to recruit: <b style={{ color: '#cbbf9a' }}>R</b>egular <b style={{ color: '#cbbf9a' }}>E</b>lite <b style={{ color: '#cbbf9a' }}>L</b>eader/<b style={{ color: '#cbbf9a' }}>N</b>azgûl</span>
+      </div>
       <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
         <NationGroup view={view} nations={FP_NATIONS} label="Free Peoples" />
         <NationGroup view={view} nations={SHADOW_NATIONS} label="Shadow" />
@@ -31,12 +33,30 @@ function NationGroup({ view, nations, label }: { view: GameState; nations: Natio
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-      {nations.map((n) => <NationRow key={n} n={n} ns={view.nations[n]} />)}
+      {nations.map((n) => <NationRow key={n} n={n} ns={view.nations[n]} reinf={view.reinforcements[n]} />)}
     </div>
   );
 }
 
-function NationRow({ n, ns }: { n: Nation; ns: GameState['nations'][Nation] }) {
+// The reinforcement pool still available to recruit for a Nation. A 0 reads dim-red
+// so a depleted pool (the usual reason "I can't recruit here" — every figure is
+// already on the board) is obvious at a glance. Sauron shows Nazgûl; others a Leader.
+function ReinfPips({ r }: { r: GameState['reinforcements'][Nation] }) {
+  const cell = (label: string, val: number, title: string) => (
+    <span title={title} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, fontSize: 10, color: val === 0 ? '#9a5a5a' : '#cdbf95' }}>
+      <span style={{ fontSize: 7.5, color: '#7a7158', fontWeight: 700 }}>{label}</span>{val}
+    </span>
+  );
+  return (
+    <span style={{ display: 'inline-flex', gap: 5, marginLeft: 'auto', paddingLeft: 4 }}>
+      {cell('R', r.regular, 'Regular units left in the reinforcement pool')}
+      {cell('E', r.elite, 'Elite units left in the reinforcement pool')}
+      {r.nazgul != null ? cell('N', r.nazgul, 'Nazgûl available to recruit') : cell('L', r.leader, 'Leaders left in the reinforcement pool')}
+    </span>
+  );
+}
+
+function NationRow({ n, ns, reinf }: { n: Nation; ns: GameState['nations'][Nation]; reinf: GameState['reinforcements'][Nation] }) {
   const step = Math.min(ns.step, TRACK_MAX);
   const atWar = ns.step === 0;
   return (
@@ -65,6 +85,7 @@ function NationRow({ n, ns }: { n: Nation; ns: GameState['nations'][Nation] }) {
         })}
       </div>
       {!ns.active && <span style={{ fontSize: 9, color: '#887' }}>passive</span>}
+      <ReinfPips r={reinf} />
     </div>
   );
 }
