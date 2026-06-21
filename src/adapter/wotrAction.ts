@@ -29,6 +29,7 @@ export type WotrAction =
   | { kind: 'hideFellowship'; die?: DieFace }   // FP, Character die (Strider: any die)
   | { kind: 'separateCompanion'; companion: string; die?: DieFace }
   // Board-click destination for the Companion being separated (within Progress+Level).
+  | { kind: 'placeGandalf'; region: RegionId } // choose where Gandalf the White enters
   // Separating a group: `companion` (no target) ADDS that Companion to the group;
   // `target` (no companion) PLACES the whole group at that region.
   | { kind: 'separateMove'; companion?: string; target?: RegionId }

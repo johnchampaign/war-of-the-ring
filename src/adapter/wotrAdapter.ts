@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import { log } from '../engine/log';
 import {
@@ -257,6 +257,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         for (const c of state.fellowship.companions) if (c !== 'gollum' && !grp.has(c)) acts.push({ kind: 'separateMove', companion: c });
         return acts;
       }
+      case 'placeGandalf': {
+        const { regions } = state.pendingChoice.data as { regions: RegionId[] };
+        return regions.map((region) => ({ kind: 'placeGandalf' as const, region }));
+      }
       case 'huntPreventDraw':
         return [{ kind: 'huntPreventDraw', prevent: true }, { kind: 'huntPreventDraw', prevent: false }];
       case 'huntRedraw':
@@ -462,12 +466,27 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       state.pendingChoice = null;
       passResolutionTurn(state, actor); break;
     }
-    case 'bringUpgrade':
+    case 'bringUpgrade': {
       requirePhase(state, 'actionResolution');
       if (actor !== 'fp') throw new Error('Only FP upgrades');
       if (!consumeDie(state, 'fp', 'will')) throw new Error('No Will of the West die');
+      // Gandalf the White: if Grey isn't on the map, the player CHOOSES Fangorn or an
+      // unconquered Elven Stronghold (card text). Replace-in-place / single option auto-resolves.
+      if (action.which === 'gandalf-white') {
+        const cands = gandalfWhiteCandidates(state);
+        if (cands.length > 1) { state.pendingChoice = { owner: 'fp', kind: 'placeGandalf', data: { regions: cands } }; break; }
+      }
       if (!bringUpgrade(state, action.which)) throw new Error('Cannot bring that upgrade');
       passResolutionTurn(state, actor); break;
+    }
+    case 'placeGandalf': {
+      requireChoice(state, 'placeGandalf', 'fp');
+      const { regions } = state.pendingChoice!.data as { regions: RegionId[] };
+      const dest = regions.includes(action.region) ? action.region : regions[0]!;
+      state.pendingChoice = null;
+      if (!bringUpgrade(state, 'gandalf-white', dest)) throw new Error('Cannot place Gandalf the White');
+      passResolutionTurn(state, actor); break;
+    }
     case 'drawEvent':
       requirePhase(state, 'actionResolution');
       if (!consumePreferred(state, actor, ['event', 'will'], action.die)) throw new Error('No Event die');

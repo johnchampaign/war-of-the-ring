@@ -325,13 +325,16 @@ export function canBringAragorn(state: GameState): boolean {
   return !!r && ARAGORN_CITIES.includes(r) && settlementController(state, r) !== 'shadow';
 }
 
-function gandalfWhiteRegion(state: GameState): RegionId | null {
+/** Where Gandalf the White may enter: if Gandalf the Grey is on the map he is
+ *  replaced in place (single option); otherwise the player CHOOSES Fangorn or an
+ *  unconquered Elven Stronghold (card text). */
+export function gandalfWhiteCandidates(state: GameState): RegionId[] {
   const grey = findCharacterRegion(state, 'gandalf-grey');
-  if (grey) return grey; // replace him in place
-  for (const r of GANDALF_WHITE_REGIONS) {
-    if (REGIONS[r] && settlementController(state, r) !== 'shadow' && armySide(state, r) !== 'shadow') return r;
-  }
-  return null;
+  if (grey) return [grey]; // replace him in place — no choice
+  return GANDALF_WHITE_REGIONS.filter((r) => REGIONS[r] && settlementController(state, r) !== 'shadow' && armySide(state, r) !== 'shadow');
+}
+function gandalfWhiteRegion(state: GameState): RegionId | null {
+  return gandalfWhiteCandidates(state)[0] ?? null;
 }
 
 export function canBringGandalfWhite(state: GameState): boolean {
@@ -342,7 +345,7 @@ export function canBringGandalfWhite(state: GameState): boolean {
 }
 
 /** Bring an upgrade into play via a Will-of-the-West die. */
-export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white'): boolean {
+export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white', dest?: RegionId): boolean {
   if (which === 'aragorn') {
     if (!canBringAragorn(state)) return false;
     const r = findCharacterRegion(state, 'strider')!;
@@ -353,11 +356,11 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
   } else {
     if (!canBringGandalfWhite(state)) return false;
     const grey = findCharacterRegion(state, 'gandalf-grey');
-    const dest = gandalfWhiteRegion(state)!;
+    const target = (dest && gandalfWhiteCandidates(state).includes(dest)) ? dest : gandalfWhiteRegion(state)!;
     if (grey) { const a = state.regions[grey]!.characters; a.splice(a.indexOf('gandalf-grey'), 1); }
-    state.regions[dest]!.characters.push('gandalf-white');
+    state.regions[target]!.characters.push('gandalf-white');
     state.characters.entered.push('gandalf-white');
-    log(state, null, 'muster', `Gandalf the White enters at ${dest} (+1 FP die next turn)`);
+    log(state, null, 'muster', `Gandalf the White enters at ${target} (+1 FP die next turn)`);
   }
   return true;
 }

@@ -30,6 +30,7 @@ export function describeAction(a: WotrAction): string {
       ? 'Voice of Saruman: upgrade 2 Orthanc Regulars to Elites'
       : 'Voice of Saruman: recruit Isengard in every Settlement';
     case 'bringUpgrade': return a.which === 'aragorn' ? 'Crown Aragorn (Will of the West)' : 'Summon Gandalf the White';
+    case 'placeGandalf': return `Place Gandalf the White in ${rName(a.region)}`;
     case 'drawEvent': return `Draw a ${a.deck} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
     case 'diplomaticAction': return `Diplomacy: advance ${cap(a.nation)}`;
