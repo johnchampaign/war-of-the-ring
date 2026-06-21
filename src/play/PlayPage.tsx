@@ -130,7 +130,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Board-click placement of the Fellowship figure: declaring it (Fellowship phase) or
   // choosing where it moves when revealed by the Hunt (revealMove choice).
   const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' | 'separateMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove' || a.kind === 'separateMove'), [g.legalActions]);
-  const declareTargets = useMemo(() => new Set(placeActs.map((a) => a.target)), [placeActs]);
+  const declareTargets = useMemo(() => new Set(placeActs.map((a) => a.target).filter((t): t is RegionId => !!t)), [placeActs]);
   const isReveal = g.view?.pendingChoice?.kind === 'revealMove';
   const isSeparateMove = g.view?.pendingChoice?.kind === 'separateMove';
   // Continuing a Character-die move (RAW: one die moves all eligible characters).
@@ -161,7 +161,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets, ...charSources, ...cardSepTargets]), [armyActs, declareTargets, charSources, cardSepTargets]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
-    if (isSeparateMove) return (g.view?.pendingChoice?.data as { companion?: string } | undefined)?.companion ?? null;
+    if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
     if (isCardSep) { const c = cardSepActs[0]?.companion; return c && c !== 'nazgul' ? c : null; }
     return null;
   }, [isSeparateMove, isCardSep, cardSepActs, g.view]);
@@ -293,7 +293,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   );
 
   const panelActionsAll = g.legalActions.filter((a) => (!isSpatial(a) || (a.kind === 'attack' && a.from === a.to)) // siege assaults are panel buttons
-    && !isDecisionAction(a) && a.kind !== 'moveCharacter' && a.kind !== 'separateMove'
+    && !isDecisionAction(a) && a.kind !== 'moveCharacter'
+    // separateMove PLACEMENT (has a target) is a board click; the "also separate X"
+    // group-add option (companion, no target) is a panel button.
+    && !(a.kind === 'separateMove' && !!a.target)
     // Fellowship-figure placement (declare / revealed-move) is done by clicking the
     // board (banner + highlighted regions), NOT a panel button — and revealMove has
     // no readable label, so it would otherwise show as raw JSON in the action list.
@@ -329,7 +332,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   ? 'Moving the Nazgûl — click a highlighted region to fly them there.'
                   : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`)
                 : isSeparateMove
-                ? `Separating a Companion — click a highlighted region to place it there (up to Progress + the Companion’s Level away).${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ' Landing in a friendly City/Stronghold of a Nation it rouses brings that Nation toward War.'}`
+                ? `Separating Companions — click a highlighted region to place the group there (up to Progress + the highest Level in the group). You can first add more Companions to travel together using the buttons on the right.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`
                 : isReveal
                 ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
                 : declareTargets.size > 0

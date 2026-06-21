@@ -62,7 +62,8 @@ export function describeAction(a: WotrAction): string {
     }
     case 'moveCharacter': return `Move ${a.char === 'nazgul' ? `${a.count ?? ''} Nazgûl`.trim() : charName(a.char)} ${rName(a.from)} → ${rName(a.to)}`;
     case 'charMove2': return 'Done moving characters';
-    case 'separateMove': return `Place ${charName(a.companion)} in ${rName(a.target)}`;
+    case 'separateMove':
+      return a.companion ? `Also separate ${charName(a.companion)} (travel with the group)` : `Place the group in ${rName(a.target!)}`;
     case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;
     case 'armyMove2': return a.done ? 'No second army move' : `Also move army ${rName(a.from!)} → ${rName(a.to!)}`;
     case 'removeExcess': return `Remove a ${cap(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'}`;

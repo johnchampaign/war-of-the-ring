@@ -275,6 +275,25 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
   log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);
 }
 
+/** Place a GROUP of already-removed Companions (separated together with one Character
+ *  die — RAW p.39) at `dest`. They travel as one group; if they land in a City/
+ *  Stronghold of a Nation that ANY of them can activate, that Nation is roused ONCE
+ *  (not once per Companion). The group's move range (Progress + highest Level) is
+ *  enforced by the caller. */
+export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: RegionId): void {
+  const fs = state.fellowship;
+  for (const id of ids) { state.characters.inPlay[id] = dest; state.regions[dest]!.characters.push(id); }
+  const dn = REGIONS[dest]!.nation as Nation | null;
+  if (dn && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')
+    && ids.some((id) => activatableNations(id).includes(dn))) {
+    activateNation(state, dn, { viaCompanion: true }); advancePolitical(state, dn, 1);
+    const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    notify(state, `The Companions rouse the ${nm(dn)} to war — ${nm(dn)} ${state.nations[dn].step === 0 ? 'is now At War' : 'advances on the Political Track'}.`);
+  }
+  pruneFellowshipOnTableCards(state);
+  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} separated to ${dest}; guide now ${fs.guide}`);
+}
+
 /** Enter Mordor: only when the figure is at Morannon or Minas Morgul. Places the
  *  Ring-bearers on Mordor step 0. */
 export function enterMordor(state: GameState): boolean {

@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, beginSeparation, placeSeparatedCompanion, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import { log } from '../engine/log';
 import {
@@ -249,9 +249,13 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return acts.length ? acts : [{ kind: 'revealMove', target: fs.location }]; // fallback: reveal in place
       }
       case 'separateMove': {
-        // The FP board-clicks where the separated Companion lands (within range).
-        const data = state.pendingChoice.data as { companion: string; from: RegionId; range: number };
-        return separationDestinations(state, data.from, data.range).map((target) => ({ kind: 'separateMove' as const, companion: data.companion, target }));
+        // The FP board-clicks where the separated GROUP lands (within range), and may
+        // first add more Companions to travel together (RAW p.39).
+        const data = state.pendingChoice.data as { companions: string[]; from: RegionId; range: number };
+        const acts: WotrAction[] = separationDestinations(state, data.from, data.range).map((target) => ({ kind: 'separateMove' as const, target }));
+        const grp = new Set(data.companions);
+        for (const c of state.fellowship.companions) if (c !== 'gollum' && !grp.has(c)) acts.push({ kind: 'separateMove', companion: c });
+        return acts;
       }
       case 'huntPreventDraw':
         return [{ kind: 'huntPreventDraw', prevent: true }, { kind: 'huntPreventDraw', prevent: false }];
@@ -434,15 +438,27 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const from = state.fellowship.location;
       if (!consumePreferred(state, 'fp', ['character', 'will'], action.die)) throw new Error('No Character die');
       beginSeparation(state, action.companion);
-      state.pendingChoice = { owner: 'fp', kind: 'separateMove', data: { companion: action.companion, from, range } };
+      // One Character die may separate one OR MORE Companions together (RAW p.39):
+      // the player can add more in the separateMove step before choosing a destination.
+      state.pendingChoice = { owner: 'fp', kind: 'separateMove', data: { companions: [action.companion], from, range } };
       break;
     }
     case 'separateMove': {
       requireChoice(state, 'separateMove', 'fp');
-      const data = state.pendingChoice!.data as { companion: string; from: RegionId; range: number };
+      const data = state.pendingChoice!.data as { companions: string[]; from: RegionId; range: number };
+      // Add another Companion to the travelling group (range grows to Progress + the
+      // highest Level in the group).
+      if (action.companion && action.target == null) {
+        if (!state.fellowship.companions.includes(action.companion)) throw new Error('Cannot separate that Companion');
+        beginSeparation(state, action.companion);
+        const companions = [...data.companions, action.companion];
+        const range = Math.max(data.range, separationRange(state, action.companion));
+        state.pendingChoice = { owner: 'fp', kind: 'separateMove', data: { companions, from: data.from, range } };
+        break;
+      }
       const dests = separationDestinations(state, data.from, data.range);
-      const dest = dests.includes(action.target) ? action.target : data.from;
-      placeSeparatedCompanion(state, data.companion, dest);
+      const dest = dests.includes(action.target!) ? action.target! : data.from;
+      placeSeparatedGroup(state, data.companions, dest);
       state.pendingChoice = null;
       passResolutionTurn(state, actor); break;
     }

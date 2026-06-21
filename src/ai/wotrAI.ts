@@ -270,8 +270,10 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // Nearest reachable friendly City/Stronghold whose Nation isn't yet At War
       // (rousing it is the point); otherwise stay at the Fellowship's region (moves[0]),
       // matching the old auto-separate — don't scatter the Companion uselessly.
-      const moves = legal.filter((a) => a.kind === 'separateMove') as Extract<WotrAction, { kind: 'separateMove' }>[];
-      const settle = moves.find((a) => { const d = REGIONS[a.target]!; return (d.settlement === 'City' || d.settlement === 'Stronghold') && !!d.nation && state.nations[d.nation as Nation]?.step > 0; });
+      // Only consider PLACEMENT moves (those with a target); the AI places the
+      // separated Companion immediately rather than building a travelling group.
+      const moves = legal.filter((a) => a.kind === 'separateMove' && a.target != null) as Extract<WotrAction, { kind: 'separateMove' }>[];
+      const settle = moves.find((a) => { const d = REGIONS[a.target!]!; return (d.settlement === 'City' || d.settlement === 'Stronghold') && !!d.nation && state.nations[d.nation as Nation]?.step > 0; });
       return settle ?? moves[0] ?? legal[0]!;
     }
     case 'combatCard': {
