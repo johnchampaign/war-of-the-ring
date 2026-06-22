@@ -124,14 +124,17 @@ export function pathTo(from: RegionId, to: RegionId): RegionId[] {
 export function moveFellowship(state: GameState): void {
   const fs = state.fellowship;
   if (!fs.hidden) return;
+  // Log the MOVE before resolving the Hunt it triggers, so the log reads in causal
+  // order ("Fellowship moved" then "Hunt roll …") rather than the reverse (report 6q0s).
   if (fs.mordor !== null) {
+    log(state, null, 'fellowship', `Fellowship moved (Mordor step ${fs.mordor})`);
     resolveMordorStep(state); // adds the FP die to the Hunt Box internally
   } else {
     fs.progress += 1;
+    log(state, null, 'fellowship', `Fellowship moved (progress ${fs.progress})`);
     resolveHunt(state);       // ditto
   }
   state.flags.fellowshipDeclaredOrMovedThisTurn = true;
-  log(state, null, 'fellowship', `Fellowship moved (progress ${fs.progress}, mordor ${fs.mordor ?? '-'})`);
 }
 
 /** Hide a Revealed Fellowship (Character die). Does not move; die not added to
