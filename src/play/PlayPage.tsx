@@ -105,6 +105,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [undoConfirm, setUndoConfirm] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [logsUploaded, setLogsUploaded] = useState(false); // shared by the Upload button + end-game prompt
+  // "Peek the board": temporarily hide a blocking choice modal (combat/hunt decision,
+  // move picker) so you can study the board, then click again to return to the choice.
+  // (mirrors the Star Wars Rebellion feature.) Reset whenever the prompt changes/clears
+  // so a leftover peek can never hide the next prompt.
+  const [peekBoard, setPeekBoard] = useState(false);
+  const promptSig = (g.view?.pendingChoice?.kind ?? '') + (moveDraft ? '|md' : '');
+  useEffect(() => { setPeekBoard(false); }, [promptSig]);
   const runUndo = useCallback(async () => {
     setUndoConfirm(false);
     if (inFlight.current) return;
@@ -391,8 +398,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         </div>
       </div>
       {moveDraft && (
-        <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view}
-          onConfirm={(a) => { setMoveDraft(null); void submit(a); }} onCancel={() => setMoveDraft(null)} />
+        <div style={{ display: peekBoard ? 'none' : 'contents' }}>
+          <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view}
+            onConfirm={(a) => { setMoveDraft(null); void submit(a); }} onCancel={() => setMoveDraft(null)} />
+        </div>
       )}
       {/* A region offered more than one thing to move (e.g. the army AND its Nazgûl). */}
       {moveMenu && (
@@ -429,8 +438,21 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           </div>
         </div>
       )}
-      <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn}
-        undo={undoCap?.canUndo ? { foreknowledge: !!undoCap.foreknowledge, onUndo: onUndoClick } : undefined} />
+      <div style={{ display: peekBoard ? 'none' : 'contents' }}>
+        <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn}
+          undo={undoCap?.canUndo ? { foreknowledge: !!undoCap.foreknowledge, onUndo: onUndoClick } : undefined} />
+      </div>
+      {/* Floating "Peek board" toggle (top-left) — shown whenever a blocking choice
+          modal (move picker / combat-hunt decision) covers the board; lives outside
+          the hidden wrappers so it stays clickable while peeking. */}
+      {(!!moveDraft || g.legalActions.some(isDecisionAction)) && (
+        <button onClick={() => setPeekBoard((p) => !p)}
+          title="Temporarily hide this prompt to study the board, then click again to go back and choose"
+          style={{ position: 'fixed', top: 10, left: 10, zIndex: 90, padding: '6px 12px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', boxShadow: '0 4px 16px #000a',
+            background: peekBoard ? '#caa84b' : '#2a2418', color: peekBoard ? '#1a1408' : '#f0e9d8', border: `2px solid ${peekBoard ? '#e6c869' : '#5a4a2a'}` }}>
+          {peekBoard ? '↩ Back to choice' : '👁 Peek board'}
+        </button>
+      )}
       <HuntPopup view={g.view} />
       <BattlePopup view={g.view} />
       <NoticePopup view={g.view} />
