@@ -514,6 +514,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const palantirWasActive = actor === 'shadow' && palantirActive(state);
       // Name the played card in the log (playing an Event reveals it — public info).
       log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} plays ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId}`);
+      state.log[state.log.length - 1]!.card = action.cardId; // make it hoverable in the log
       hand.splice(idx, 1);
       // Run the immediate part FIRST, then check the remaining targets — so the choice
       // offered matches the post-apply state (an apply may consume the very

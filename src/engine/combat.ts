@@ -696,6 +696,7 @@ export function resolvePlayCombatCard(state: GameState, cardId: string | null): 
     }
     if (pc.step === 'attackerCard') pc.attackerCard = cardId; else pc.defenderCard = cardId;
     log(state, owner, 'combat', `${owner} plays combat card ${EVENT_BY_ID[cardId]?.combat?.title ?? cardId}`);
+    state.log[state.log.length - 1]!.card = cardId; // hoverable in the log
   }
   pc.step = pc.step === 'attackerCard' ? 'defenderCard' : 'beginRound';
   state.pendingChoice = null;

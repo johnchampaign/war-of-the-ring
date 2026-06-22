@@ -452,7 +452,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               <button onClick={() => setLogOpen(false)} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
             </div>
             <div style={{ height: '60vh', overflowY: 'auto' }}>
-              <LogPanel view={g.view} />
+              <LogPanel view={g.view} onHoverCard={onHoverCard} />
             </div>
           </div>
         </div>

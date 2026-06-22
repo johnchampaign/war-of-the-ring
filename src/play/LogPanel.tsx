@@ -12,7 +12,7 @@ const KIND_COLOR: Record<string, string> = {
   fellowship: '#e6b85a', event: '#9fb6e6', politics: '#cbb', roll: '#8aa', victory: '#ffd23f',
 };
 
-export function LogPanel({ view }: { view: GameState }) {
+export function LogPanel({ view, onHoverCard }: { view: GameState; onHoverCard?: (id: string | null) => void }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const log = view.log ?? [];
   // Keep the newest entry in view as the log grows.
@@ -31,7 +31,12 @@ export function LogPanel({ view }: { view: GameState }) {
               <span style={{ flexShrink: 0, color: '#665', width: 22, textAlign: 'right' }}>T{e.turn}</span>
               <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 52 }}>{e.kind}</span>
               {e.die && <span title="action die spent" style={{ flexShrink: 0, background: (FACE[e.die] ?? { bg: '#555' }).bg, color: '#fff', borderRadius: 3, padding: '0 4px', fontSize: 8, fontWeight: 700, alignSelf: 'center' }}>{(FACE[e.die] ?? { label: e.die }).label}</span>}
-              <span style={{ color: '#ddd' }}>{e.msg}</span>
+              {/* A card-play entry: hover to read the card's text (report: "tell me what the AI's card does"). */}
+              {e.card && onHoverCard
+                ? <span style={{ color: '#cfe0ff', textDecoration: 'underline dotted', textUnderlineOffset: 2, cursor: 'help' }}
+                    title="Hover to read this card"
+                    onMouseEnter={() => onHoverCard(e.card!)} onMouseLeave={() => onHoverCard(null)}>{e.msg}</span>
+                : <span style={{ color: '#ddd' }}>{e.msg}</span>}
             </div>
           ))}
       </div>

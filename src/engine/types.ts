@@ -289,4 +289,7 @@ export interface LogEntry {
   /** The action die spent on this action, when one was (set by the adapter dispatch
    *  for the UI; absent for free/phase log entries). */
   die?: DieFace;
+  /** The event/combat card this entry refers to (id), so the UI can show its text on
+   *  hover — e.g. "Shadow plays Return to Valinor". Public info (card plays are open). */
+  card?: string;
 }
