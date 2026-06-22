@@ -225,8 +225,9 @@ function HuntDetail({ view, data, modes, onExplain }: { view: GameState; data?: 
 }
 
 function DecisionButton({ action, disabled, onClick, onHover }: { action: WotrAction; disabled: boolean; onClick: () => void; onHover?: (id: string | null) => void }) {
-  // Combat-card choices get the card thumbnail (the combat box is on the event card).
-  const cardId = action.kind === 'playCombatCard' ? action.cardId : null;
+  // Card-referencing choices (play a Combat card, or pick a card to discard) get the
+  // card thumbnail + hover preview so you can read what you're choosing.
+  const cardId = action.kind === 'playCombatCard' ? action.cardId : action.kind === 'discardCard' ? action.card : null;
   const art = useCardArt(cardId);
   const hov = cardId && onHover ? { onMouseEnter: () => onHover(cardId), onMouseLeave: () => onHover(null) } : {};
   return (
