@@ -19,7 +19,7 @@ import { BattlePopup } from './BattlePopup';
 import { NoticePopup } from './NoticePopup';
 import { TurnSummary } from './TurnSummary';
 import { LogPanel } from './LogPanel';
-import { GameOverUpload } from './GameOverUpload';
+import { GameOverUpload, UploadLogButton } from './GameOverUpload';
 import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
@@ -104,6 +104,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // in 2-player and requires an explicit confirm vs the AI.
   const [undoConfirm, setUndoConfirm] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [logsUploaded, setLogsUploaded] = useState(false); // shared by the Upload button + end-game prompt
   const runUndo = useCallback(async () => {
     setUndoConfirm(false);
     if (inFlight.current) return;
@@ -434,7 +435,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <BattlePopup view={g.view} />
       <NoticePopup view={g.view} />
       <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} />
-      <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
+      <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
+        uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} />
+      <UploadLogButton view={g.view} you={g.you as Side | null} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
+        uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} />
       <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
       {responseQueue.length > 0 && (
         <ReportResponseModal notice={responseQueue[0]!}

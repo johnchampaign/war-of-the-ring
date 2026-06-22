@@ -1,7 +1,11 @@
-// When a game finishes, offer to upload its log to help tune the AI. The log is
-// the public turn log (moves + outcomes) — no personal data. Posts to the
-// /api/gamelog endpoint, which stores it as a 'wotr-gamelog' report. From the dev
-// client (different origin) it posts to the deployed endpoint (CORS-open there).
+// Uploading a game's log to help tune the AI. The log is the public turn log (moves
+// + outcomes) — no personal data. Posts to /api/gamelog, stored as a 'wotr-gamelog'
+// report. Two entry points share one uploader:
+//   • UploadLogButton — a floating button (beside Log/Report), available ANY time so
+//     a game that never reaches a natural end can still be uploaded mid-game. This is
+//     why uploads were ~never happening: testers rarely play to a clean game-over.
+//   • GameOverUpload — the end-of-game prompt, which now SKIPS the offer if the log
+//     was already uploaded (via the button) this game.
 import { useState } from 'react';
 import type { GameState, Side } from '../engine/types';
 
@@ -10,24 +14,60 @@ import type { GameState, Side } from '../engine/types';
 const isLocalDev = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
 const ENDPOINT = (isLocalDev ? 'https://war-of-the-ring.pages.dev' : '') + '/api/gamelog';
 
-export function GameOverUpload({ view, you, gameOver, clientBuild }: {
-  view: GameState; you: Side | null; gameOver: boolean; clientBuild?: string;
+/** POST the current game log to the AI-tuning endpoint. Works mid-game or at the end.
+ *  Returns true on success. */
+export async function uploadGameLog(view: GameState, you: Side | null, clientBuild?: string): Promise<boolean> {
+  try {
+    const winner = view.winner === 'fp' ? 'Free Peoples' : view.winner === 'shadow' ? 'Shadow' : null;
+    const message = winner
+      ? `GAME COMPLETE — ${winner} wins (${view.winReason ?? '?'}). Uploaded for AI tuning. (turns: ${view.turn})`
+      : `GAME IN PROGRESS — uploaded for AI tuning (turn ${view.turn}, ${view.phase}).`;
+    const res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ you, turns: view.turn, message, log: view.log ?? [], clientBuild }),
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+/** Floating "Upload log" button — beside the Log/Report buttons; usable any time. */
+export function UploadLogButton({ view, you, clientBuild, uploaded, onUploaded, style }: {
+  view: GameState; you: Side | null; clientBuild?: string; uploaded: boolean; onUploaded: () => void; style?: React.CSSProperties;
+}) {
+  const [stage, setStage] = useState<'idle' | 'uploading' | 'error'>('idle');
+  const done = uploaded; // shared with the end-game prompt so each game uploads once
+  const click = async () => {
+    if (done || stage === 'uploading') return;
+    setStage('uploading');
+    const ok = await uploadGameLog(view, you, clientBuild);
+    if (ok) { onUploaded(); setStage('idle'); } else setStage('error');
+  };
+  const label = stage === 'uploading' ? '⏳ Uploading…' : done ? '✓ Log sent' : stage === 'error' ? '⚠ Retry upload' : '⬆ Upload log';
+  return (
+    <button onClick={click} disabled={done || stage === 'uploading'}
+      title={done ? 'This game’s log has been uploaded — thank you!' : 'Upload this game’s log to help tune the AI (no personal data)'}
+      style={{ position: 'fixed', bottom: 10, right: 200, zIndex: 40, padding: '6px 12px', fontSize: 13, borderRadius: 18, boxShadow: '0 2px 8px #0008',
+        background: done ? '#26331f' : '#3a3326', color: done ? '#9cc77a' : '#f0e9d8', border: `1px solid ${done ? '#3f5a32' : '#5a4a2a'}`,
+        cursor: done ? 'default' : 'pointer', ...style }}>
+      {label}
+    </button>
+  );
+}
+
+export function GameOverUpload({ view, you, gameOver, clientBuild, uploaded, onUploaded }: {
+  view: GameState; you: Side | null; gameOver: boolean; clientBuild?: string; uploaded: boolean; onUploaded: () => void;
 }) {
   const [stage, setStage] = useState<'offer' | 'uploading' | 'done' | 'error' | 'dismissed'>('offer');
   if (!gameOver || !view.winner || stage === 'dismissed') return null;
 
   const winnerName = view.winner === 'fp' ? 'Free Peoples' : 'Shadow';
+  // If the log was already uploaded this game (via the button), don't re-prompt.
+  const alreadyDone = uploaded || stage === 'done';
   const upload = async () => {
     setStage('uploading');
-    try {
-      const message = `GAME COMPLETE — ${winnerName} wins (${view.winReason ?? '?'}). Uploaded for AI tuning. (turns: ${view.turn})`;
-      const res = await fetch(ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ you, turns: view.turn, message, log: view.log ?? [], clientBuild }),
-      });
-      setStage(res.ok ? 'done' : 'error');
-    } catch { setStage('error'); }
+    const ok = await uploadGameLog(view, you, clientBuild);
+    if (ok) { onUploaded(); setStage('done'); } else setStage('error');
   };
 
   return (
@@ -38,7 +78,7 @@ export function GameOverUpload({ view, you, gameOver, clientBuild }: {
         </div>
         <div style={{ fontSize: 14, color: '#cbb', marginBottom: 14 }}>{view.winReason}</div>
 
-        {stage === 'done' ? (
+        {alreadyDone ? (
           <div style={{ color: '#9cc77a', fontSize: 14 }}>Thanks — log uploaded. It helps tune the AI.</div>
         ) : stage === 'error' ? (
           <div style={{ color: '#e9a', fontSize: 13 }}>Couldn't upload (offline, or the server isn't reachable). No worries — the game's still over.</div>
@@ -53,7 +93,7 @@ export function GameOverUpload({ view, you, gameOver, clientBuild }: {
             </div>
           </>
         )}
-        {(stage === 'done' || stage === 'error') && (
+        {(alreadyDone || stage === 'error') && (
           <button onClick={() => setStage('dismissed')} style={{ ...ghost, marginTop: 12 }}>Close</button>
         )}
       </div>
