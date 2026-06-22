@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
+import { startBattle, attackError, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
@@ -155,6 +155,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
           : [{ kind: 'combatRetreat', retreat: false }];
       case 'retreatTo':
         return retreatDestinations(state).map((region) => ({ kind: 'retreatTo', region }));
+      case 'preCombatRetreat':
+        return preCombatRetreatDestinations(state).map((region) => ({ kind: 'preCombatRetreat', region }));
       case 'eventTarget': {
         const data = state.pendingChoice!.data as { card: string; applied: EventTarget[]; repeat: number };
         const h = getHandler(data.card);
@@ -796,6 +798,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'retreatTo':
       requireChoice(state, 'retreatTo', actor); resolveRetreatTo(state, action.region); break;
+    case 'preCombatRetreat':
+      requireChoice(state, 'preCombatRetreat', actor); resolvePreCombatRetreat(state, action.region); break;
     case 'moveCharacter': {
       requirePhase(state, 'actionResolution');
       // RAW: one Character die moves ALL eligible characters, each once. The first

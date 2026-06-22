@@ -364,6 +364,11 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const friendly = legal.find((a) => a.kind === 'retreatTo' && settlementCtrl(state, a.region) === me);
       return friendly ?? legal[0]!;
     }
+    case 'preCombatRetreat': { // Scouts: retreat toward a friendly Settlement if possible
+      const me: Side = state.pendingChoice!.owner;
+      const friendly = legal.find((a) => a.kind === 'preCombatRetreat' && settlementCtrl(state, a.region) === me);
+      return friendly ?? legal[0]!;
+    }
     case 'whiteRider': // only offered when there's Nazgûl Leadership to negate → forfeit
       return legal.find((a) => a.kind === 'whiteRider' && a.forfeit) ?? legal[0]!;
     case 'balrog': // extra Hunt pressure now is worth it

@@ -25,6 +25,7 @@ const CHOICE_TITLE: Record<string, string> = {
   combatContinue: 'Continue the attack?',
   combatRetreat: 'Retreat or stand?',
   retreatTo: 'Retreat — choose a destination',
+  preCombatRetreat: 'Retreat before combat — choose a destination',
   huntDamage: 'The Hunt strikes!',
   huntPreventDraw: 'Prevent the Hunt tile draw? (you won’t see it)',
   huntRedraw: 'Redraw the Hunt tile?',

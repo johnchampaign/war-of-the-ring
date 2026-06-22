@@ -318,18 +318,27 @@ function retreatRegion(state: GameState, pc: PendingCombat): RegionId | null {
  *  A retreat empties the owner's region; a pre-attack damages the enemy. Fully
  *  automatic (auto-picked retreat + auto casualties), like the sub-machine's
  *  other non-choice steps. */
-function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods, dMods: CombatMods): void {
+function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods, dMods: CombatMods): boolean {
   const effects: Array<{ side: Side; ini: number; mods: CombatMods }> = [];
   if (pc.attackerCard && (aMods.retreatBeforeCombat || aMods.preCombatAttackDice)) effects.push({ side: pc.attacker, ini: cardInitiative(pc.attackerCard), mods: aMods });
   if (pc.defenderCard && (dMods.retreatBeforeCombat || dMods.preCombatAttackDice)) effects.push({ side: pc.defender, ini: cardInitiative(pc.defenderCard), mods: dMods });
-  if (!effects.length) return;
+  if (!effects.length) return false;
   effects.sort((x, y) => x.ini - y.ini || (x.side === pc.defender ? -1 : 1)); // lower first; tie -> defender
   for (const ef of effects) {
     const own = ef.side === pc.attacker ? pc.from : pc.to;
     const enemy = ef.side === pc.attacker ? pc.to : pc.from;
     if (unitCount(state, own) === 0) continue; // owner already left/wiped by an earlier pre-effect
     if (ef.mods.retreatBeforeCombat) {
-      const dest = freeAdjacentFor(state, own, ef.side);
+      const dests = freeAdjacentRegions(state, own, ef.side);
+      // Let the owner CHOOSE the destination when there's more than one (rulebook:
+      // retreat is the retreating player's choice). Only the simple single-effect case
+      // is interactive; a rare retreat+pre-attack combo keeps the auto-pick.
+      if (dests.length > 1 && effects.length === 1) {
+        pc.preCombatRetreatFrom = own;
+        state.pendingChoice = { owner: ef.side, kind: 'preCombatRetreat' };
+        return true; // pause; resolvePreCombatRetreat resumes
+      }
+      const dest = dests[0] ?? null;
       if (dest) { moveStack(state, own, dest); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
     } else if (ef.mods.preCombatAttackDice) {
       if (unitCount(state, enemy) === 0) continue;
@@ -338,6 +347,29 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       if (hits > 0) { applyCasualties(state, enemy, armySide(state, enemy)!, hits, 'regularsFirst'); log(state, null, 'combat', `pre-combat attack scores ${hits} at ${enemy}`); }
     }
   }
+  return false;
+}
+
+/** Free regions the pre-combat retreater (Scouts) may withdraw to. */
+export const preCombatRetreatDestinations = (state: GameState): RegionId[] => {
+  const pc = state.pendingCombat;
+  if (!pc?.preCombatRetreatFrom) return [];
+  const side = armySide(state, pc.preCombatRetreatFrom);
+  return side ? freeAdjacentRegions(state, pc.preCombatRetreatFrom, side) : [];
+};
+
+/** Resolve the chosen pre-combat retreat destination. Moves the whole Army there;
+ *  combatStep's top-of-loop empty-region check then ends the battle (no combat). */
+export function resolvePreCombatRetreat(state: GameState, region: RegionId): void {
+  const pc = state.pendingCombat!;
+  state.pendingChoice = null;
+  const from = pc.preCombatRetreatFrom;
+  delete pc.preCombatRetreatFrom;
+  if (!from) return;
+  const side = armySide(state, from);
+  const dests = freeAdjacentRegions(state, from, side!);
+  const dest = dests.includes(region) ? region : dests[0];
+  if (dest) { moveStack(state, from, dest); log(state, null, 'combat', `${side} retreats ${from}→${dest} before combat`); }
 }
 
 /** Move the whole army at `from` into `to` (defender gone), capturing. */
@@ -441,7 +473,7 @@ export function combatStep(state: GameState): void {
         // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
         // resolve in initiative order before the normal roll; either can end the
         // battle (a retreat empties a region, a pre-attack can wipe one).
-        resolvePreCombat(state, pc, aMods, dMods);
+        if (resolvePreCombat(state, pc, aMods, dMods)) return; // paused: owner is choosing the pre-combat retreat destination
         if (unitCount(state, pc.from) === 0 || unitCount(state, pc.to) === 0) { finishCombat(state, true); return; }
         // Stronghold gives the attacker a 6-to-hit: the first round of a field
         // battle, and EVERY round of a siege assault.

@@ -65,6 +65,7 @@ export type WotrAction =
   | { kind: 'combatContinue'; cont: boolean }  // attacker: continue or cease
   | { kind: 'combatRetreat'; retreat: boolean } // defender: retreat or stand
   | { kind: 'retreatTo'; region: RegionId }     // defender: chosen retreat destination
+  | { kind: 'preCombatRetreat'; region: RegionId } // Scouts: chosen pre-combat retreat destination
   | { kind: 'siegeWithdraw'; withdraw: boolean } // defender: withdraw into the siege or fight
   | { kind: 'whiteRider'; forfeit: boolean } // FP: forfeit Gandalf the White's Leadership to negate Nazgûl Leadership
   | { kind: 'balrog'; use: boolean } // Shadow: discard Balrog of Moria to draw an extra Hunt tile

@@ -198,6 +198,9 @@ export interface PendingCombat {
    *  DEFENDER's figures are in `to.siegeBox`. Set to the defender's side so combat
    *  reads/writes the boxed defender from the siege box instead of the region. */
   boxed?: Side;
+  /** Set while a pre-combat retreat (Scouts) is paused for the owner to CHOOSE the
+   *  destination — the region the retreating Army is leaving. */
+  preCombatRetreatFrom?: RegionId;
   /** True for a siege assault (attacking a besieged Stronghold): round-capped, the
    *  attacker hits on 6 every round, and the defender cannot retreat. */
   siege?: boolean;
