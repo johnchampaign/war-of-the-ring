@@ -573,17 +573,17 @@ register('fp-str-12', {
 
 // --- Recruit / muster cards in named or chosen regions -----------------------
 // Pits of Mordor: recruit 2 Sauron Regulars in each of three Sauron Strongholds.
+// Pits of Mordor: 2 Sauron Regulars in each of three DIFFERENT Sauron Strongholds —
+// the player CHOOSES which three (there are 6), rather than the first three found.
+const pitsStrongholds = (state: GameState): string[] => Object.keys(state.regions).filter((id) => {
+  const def = REGIONS[id]!;
+  return def.nation === 'sauron' && def.settlement === 'Stronghold' && settlementController(state, id) === 'shadow' && unitCount(state, id) < STACKING_LIMIT;
+});
 register('sh-str-24', {
-  canPlay: (state) => isAtWar(state, 'sauron'),
-  apply(state) {
-    let done = 0;
-    for (const id of Object.keys(state.regions)) {
-      if (done >= 3) break;
-      const def = REGIONS[id]!;
-      if (def.nation === 'sauron' && def.settlement === 'Stronghold' && settlementController(state, id) === 'shadow'
-        && unitCount(state, id) < STACKING_LIMIT && recruit(state, 'sauron', id, 2, 0, { ignoreAtWar: true })) done++;
-    }
-  },
+  repeat: 3,
+  canPlay: (state) => isAtWar(state, 'sauron') && (state.reinforcements.sauron as { regular: number }).regular > 0 && pitsStrongholds(state).length > 0,
+  targets: (state, _side, applied = []) => { const used = new Set(applied.map((a) => a.region)); return pitsStrongholds(state).filter((r) => !used.has(r)).map((region) => ({ region })); },
+  applyTarget: (state, _side, t) => { recruit(state, 'sauron', t.region!, 2, 0, { ignoreAtWar: true }); },
 });
 // Musterings of Long-planned War: 5 Southrons in Gorgoroth + 5 Sauron in Nurn.
 register('sh-str-23', {
@@ -627,18 +627,20 @@ register('fp-str-21', recruitChoiceCard('fp', [{ nation: 'elves', region: 'riven
 // Swords in Eriador: a North unit (R or E) in the Shire + a Dwarven unit (R or E) in Ered Luin, then draw.
 register('fp-str-20', recruitChoiceCard('fp', [{ nation: 'north', region: 'the-shire' }, { nation: 'dwarves', region: 'ered-luin' }], { then: (s) => drawCard(s, 'fp', 'strategy') }));
 // The Grey Company: in Strider's Army, upgrade one Regular to an Elite.
+// The Grey Company: in Strider/Aragorn's Army, upgrade one Regular to an Elite of the
+// SAME Nation — the player CHOOSES which Nation (his Army can hold several).
+const greyCompanyRegion = (state: GameState): string | null => charRegion(state, 'strider') ?? charRegion(state, 'aragorn');
+const greyCompanyNations = (state: GameState, r: string): Nation[] =>
+  (Object.entries(state.regions[r]!.units) as [string, { regular: number; elite: number }][])
+    .filter(([n, u]) => isFpNation(n) && u.regular > 0 && state.reinforcements[n as Nation].elite > 0)
+    .map(([n]) => n as Nation);
 register('fp-char-24', {
-  canPlay: (state) => {
-    const r = charRegion(state, 'strider'); if (!r) return false;
-    return Object.entries(state.regions[r]!.units).some(([n, u]) => isFpNation(n) && u!.regular > 0 && state.reinforcements[n as Nation].elite > 0);
-  },
-  apply(state) {
-    const r = charRegion(state, 'strider'); if (!r) return;
-    for (const [n, u] of Object.entries(state.regions[r]!.units)) {
-      if (isFpNation(n) && u!.regular > 0 && state.reinforcements[n as Nation].elite > 0) {
-        u!.regular--; u!.elite++; state.reinforcements[n as Nation].regular++; state.reinforcements[n as Nation].elite--; break;
-      }
-    }
+  canPlay: (state) => { const r = greyCompanyRegion(state); return !!r && greyCompanyNations(state, r).length > 0; },
+  targets: (state) => { const r = greyCompanyRegion(state); return r ? greyCompanyNations(state, r).map((nation) => ({ nation, region: r, figure: 'elite' as const })) : []; },
+  applyTarget(state, _side, t) {
+    const u = state.regions[t.region!]!.units[t.nation!]!;
+    u.regular--; u.elite++;
+    state.reinforcements[t.nation!].regular++; state.reinforcements[t.nation!].elite--;
   },
 });
 
