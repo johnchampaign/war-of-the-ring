@@ -13,12 +13,19 @@ export function HuntPopup({ view }: { view: GameState }) {
   const draws = view.hunt.draws ?? [];
   const [seen, setSeen] = useState(0);
   const fresh = draws.filter((d) => d.seq > seen);
-  if (fresh.length === 0 || view.pendingChoice) return null;
+  // Suppress only while a hunt-RESOLUTION choice is open (the DecisionModal shows
+  // that with its own Hunt context). For other pending choices — notably the
+  // reveal-and-move prompt that a catch triggers — still show the result, so the
+  // player sees the dice and the tile that caught them before placing the figure.
+  const HUNT_RESOLUTION_CHOICES = new Set(['huntDamage', 'huntPreventDraw', 'huntRedraw', 'crebain']);
+  if (fresh.length === 0 || (view.pendingChoice && HUNT_RESOLUTION_CHOICES.has(view.pendingChoice.kind))) return null;
   const maxSeq = Math.max(...fresh.map((d) => d.seq));
   const dismiss = () => setSeen(maxSeq);
   const roll = fresh.find((d) => d.roll)?.roll;
-  // A drawn tile revealed the Fellowship (and it's now revealed) — call it out loudly.
-  const revealed = fresh.some((d) => d.reveal) && !view.fellowship.hidden;
+  // A drawn tile revealed the Fellowship — call it out loudly. The reveal is shown
+  // either once it's flipped, or while the reveal-and-move prompt is still pending
+  // (a catch with Progress defers the flip until the figure is placed).
+  const revealed = fresh.some((d) => d.reveal) && (!view.fellowship.hidden || view.pendingChoice?.kind === 'revealMove');
 
   return (
     <div style={backdrop} onClick={dismiss}>
