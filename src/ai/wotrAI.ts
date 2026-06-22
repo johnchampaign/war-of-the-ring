@@ -48,11 +48,20 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
   if (state.phase === 'fellowship') {
     const enter = legal.find((a) => a.kind === 'enterMordor');
     if (enter) return enter;
-    // Declare when advanced, choosing the reachable target closest to Mordor (Morannon)
-    // — i.e. the declaration that pushes the Fellowship furthest toward the goal.
+    // Declare when advanced. Normally push toward Mordor (the target closest to
+    // Morannon). BUT when Corruption is climbing, declaring in an unconquered FP
+    // City/Stronghold HEALS 1 Corruption (rulebook p.39) — the FP's main way to
+    // survive the Hunt race. Prefer such a heal-spot (closest to Morannon, so we heal
+    // AND keep the most ground). Analysis: the FP AI was losing the corruption race
+    // even vs a random Shadow because it never healed — it just rushed to Mordor.
     const declares = legal.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' }> => a.kind === 'declareFellowship');
+    const closestToMordor = (cands: typeof declares) => cands.reduce((best, a) => (dist(a.target, 'morannon') < dist(best.target, 'morannon') ? a : best), cands[0]!);
     if (declares.length && state.fellowship.progress >= 2) {
-      return declares.reduce((best, a) => (dist(a.target, 'morannon') < dist(best.target, 'morannon') ? a : best), declares[0]!);
+      if (state.fellowship.corruption >= 4) {
+        const heals = declares.filter((a) => isHealSettlement(state, a.target));
+        if (heals.length) return closestToMordor(heals);
+      }
+      return closestToMordor(declares);
     }
     return legal.find((a) => a.kind === 'skipFellowshipPhase') ?? legal[0]!;
   }
@@ -130,6 +139,13 @@ const settlementCtrl = (state: GameState, id: RegionId): Side | null => {
   if (!def.settlement) return null;
   return state.regions[id]!.control ?? (def.nation ? (FP.has(def.nation) ? 'fp' : 'shadow') : null);
 };
+// A region where declaring the Fellowship HEALS 1 Corruption: an unconquered FP
+// City or Stronghold (rulebook p.39).
+const isHealSettlement = (state: GameState, id: RegionId): boolean => {
+  const def = REGIONS[id]!;
+  return (def.settlement === 'City' || def.settlement === 'Stronghold')
+    && !!def.nation && FP.has(def.nation) && settlementCtrl(state, id) !== 'shadow';
+};
 const armyHere = (state: GameState, id: RegionId, side: Side): boolean => {
   const r = state.regions[id]!;
   return (Object.keys(r.units) as Nation[]).some((n) => FP.has(n) === (side === 'fp') && (r.units[n]!.regular + r.units[n]!.elite) > 0);
@@ -175,7 +191,12 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'moveFellowship':
       // On the Mordor Track, NOT moving costs +1 Corruption/turn — push every turn.
       if (fs.mordor !== null) return fs.corruption >= 11 ? 40 : 95;
-      return fs.corruption >= 11 ? 8 : 65;                            // pre-Mordor: push, ease at the brink
+      // Pre-Mordor each move triggers a Hunt. Push the ring hard while Corruption is
+      // low; as it climbs, ease off (spend the turn on pressure elsewhere) and rely on
+      // declare-to-heal (below) to bring Corruption back down so the push can resume.
+      // This adaptive push/heal/pivot rhythm — rather than rushing into every Hunt —
+      // is what lets the FP survive the Hunt race.
+      return Math.max(8, 72 - fs.corruption * 9);
     case 'hideFellowship': return 85;                                  // must hide to keep moving
     case 'separateCompanion': {                                        // rouse a passive nation
       const passiveFp = (['dwarves', 'gondor', 'north', 'rohan'] as Nation[]).some((n) => state.nations[n].step > 0 && !state.nations[n].active);
