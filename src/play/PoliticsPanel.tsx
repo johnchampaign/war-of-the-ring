@@ -63,7 +63,7 @@ function NationRow({ n, ns, reinf }: { n: Nation; ns: GameState['nations'][Natio
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '2px 0' }}>
       <span style={{ width: 9, height: 9, borderRadius: 2, background: NATION_COLOR[n], flexShrink: 0,
         border: ns.active ? '1px solid #fff' : '1px solid #665', opacity: ns.active ? 1 : 0.5 }} />
-      <span style={{ width: 64, fontSize: 11, color: atWar ? '#ffd23f' : '#ddd' }}>{NATION_LABEL[n]}</span>
+      <span style={{ width: 52, fontSize: 11, color: atWar ? '#ffd23f' : '#ddd', overflow: 'hidden', textOverflow: 'ellipsis' }}>{NATION_LABEL[n]}</span>
       {/* Left-anchored progress bar toward War: filled cells = steps mobilized, so a
           nation advancing reads as "more progress", never as a row knocked out of
           alignment (the old single-moving-dot design). The rightmost cell is War. */}
@@ -90,4 +90,4 @@ function NationRow({ n, ns, reinf }: { n: Nation; ns: GameState['nations'][Natio
   );
 }
 
-const panel: React.CSSProperties = { padding: '8px 10px', background: '#1a160f', borderBottom: '1px solid #2a2418', fontFamily: 'system-ui', color: '#eee' };
+const panel: React.CSSProperties = { padding: '8px 6px', background: '#1a160f', borderBottom: '1px solid #2a2418', fontFamily: 'system-ui', color: '#eee' };

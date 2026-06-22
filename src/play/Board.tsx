@@ -344,10 +344,18 @@ function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number;
   return (
     <g transform={`translate(${x},${y}) scale(${s})`}>
       <title>{label}</title>
-      <rect x={-W / 2} y={-H / 2} width={W} height={H} rx={5} fill={elite > 0 && reg === 0 ? '#e8c14a' : col} stroke="#fff" strokeWidth={1.2} />
-      {both && <rect x={0} y={-H / 2} width={W / 2} height={H} rx={5} fill="#e8c14a" stroke="#fff" strokeWidth={1.2} />}
+      {/* Whole badge is the NATION colour (report: gold Elites all looked like Isengard).
+          Regulars = white number; Elites = dark number on a small cream "medal" so an
+          Elite stack still reads as ITS nation, just marked as the stronger unit. */}
+      <rect x={-W / 2} y={-H / 2} width={W} height={H} rx={5} fill={col} stroke="#fff" strokeWidth={1.2} />
+      {both && <line x1={0} y1={-H / 2 + 2} x2={0} y2={H / 2 - 2} stroke="#fff" strokeWidth={0.8} opacity={0.6} />}
       {reg > 0 && <text x={both ? -W / 4 : 0} y={4.5} fontSize={13} fontWeight="bold" fill="#fff" textAnchor="middle">{reg}</text>}
-      {elite > 0 && <text x={both ? W / 4 : 0} y={4.5} fontSize={13} fontWeight="bold" fill="#3a2a00" textAnchor="middle">{elite}</text>}
+      {elite > 0 && (
+        <g>
+          <rect x={(both ? W / 4 : 0) - 7} y={-7} width={14} height={14} rx={3} fill="#f0e6cf" stroke="#2a2418" strokeWidth={0.9} />
+          <text x={both ? W / 4 : 0} y={4.5} fontSize={12} fontWeight="bold" fill="#2a2418" textAnchor="middle">{elite}</text>
+        </g>
+      )}
       {special > 0 && (
         <g>
           <circle cx={W / 2 - 1} cy={-H / 2 + 1} r={6.5} fill={nazgul > 0 ? '#141414' : '#f4e7c0'} stroke="#fff" strokeWidth={1} />

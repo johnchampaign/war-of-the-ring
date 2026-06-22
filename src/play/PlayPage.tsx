@@ -363,12 +363,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           {/* The status bar lives at the top of the right column (may wrap to several
               rows). The Undo button rides along at its right end (after Elven Rings). */}
           <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} trailing={statusTrailing} />
-          {/* Dice pool and Politics share one row at the top of the column. */}
-          <div style={{ display: 'flex', flexShrink: 0, maxHeight: '32%', borderBottom: '1px solid #2a2418' }}>
-            <div style={{ flexShrink: 0, overflow: 'auto' }}>
+          {/* Dice pool and Politics share one row when there's width; when the column
+              is narrow they WRAP (Politics drops below the dice, each full-width) so the
+              Politics reinforcement pips can't run off the right edge (report 6q0s). */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', flexShrink: 0, maxHeight: '42%', overflowY: 'auto', borderBottom: '1px solid #2a2418' }}>
+            <div style={{ flex: '1 1 200px', minWidth: 0, overflow: 'auto' }}>
               <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn ? setDie : undefined} />
             </div>
-            <div style={{ flex: 1, minWidth: 0, overflow: 'auto', borderLeft: '1px solid #2a2418' }}>
+            <div style={{ flex: '1 1 270px', minWidth: 0, overflow: 'auto', borderLeft: '1px solid #2a2418' }}>
               <PoliticsPanel view={g.view} />
             </div>
           </div>
