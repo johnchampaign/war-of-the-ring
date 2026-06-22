@@ -13,7 +13,7 @@ import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, EVENT_BY_ID
 import { fellowshipDieSkipsHuntBox, wornWithSorrowActive } from './persistent';
 import { withRng } from './rng';
 import { settlementController, armySide } from './armies';
-import { log } from './log';
+import { log, notify } from './log';
 
 /** Begin revealing the Fellowship (rulebook p.39): if it has Progress to spend, pause
  *  for the FP to choose where the figure moves (the `revealMove` choice — the move,
@@ -218,6 +218,14 @@ export function challengeOfTheKing(state: GameState): boolean {
       returnTileToPool(state, r.ref);
     }
   }
+  // Report the outcome so the player can see what was drawn (player request: show the
+  // tiles + result, not just a silent log line).
+  const face = (v: number | 'eye' | 'die') => (typeof v === 'number' ? String(v) : v === 'eye' ? '👁 Eye' : '🎲 die');
+  const drew = refs.map((r) => face(r.tile.value)).join(', ');
+  const removed = allEyes ? 0 : refs.filter((r) => r.tile.value === 'eye').length;
+  notify(state, allEyes
+    ? `Challenge of the King — drew ${drew}: all three are Eyes, so Aragorn/Strider is eliminated.`
+    : `Challenge of the King — drew ${drew}${removed ? `: ${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt` : ': no Eyes drawn, nothing removed'}.`);
   return allEyes;
 }
 

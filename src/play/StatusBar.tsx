@@ -56,7 +56,9 @@ export function StatusBar({ view, you, onHoverChar, trailing }: { view: GameStat
         onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
         style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span></span>
       <FellowshipRoster guide={fs.guide} companions={fs.companions} onHoverChar={onHoverChar} />
-      <span style={pill}>Hunt box {view.hunt.box}</span>
+      <span style={pill} title="Shadow dice in the Hunt Box (allocated + Eyes). FP dice added this turn (from moving the Fellowship) each add +1 to every Hunt die.">
+        Hunt box {view.hunt.box}{view.hunt.fpDiceInBox ? ` · +${view.hunt.fpDiceInBox} FP` : ''}
+      </span>
       <span style={pill} title="Event cards in hand. The opponent's individual cards are hidden, but the count is open information.">
         🂠 FP {view.cards?.fp?.hand?.length ?? 0} · Shadow {view.cards?.shadow?.hand?.length ?? 0}
       </span>
