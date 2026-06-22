@@ -180,6 +180,7 @@ function CharacterPreview({ id, bottom }: { id: string; bottom?: boolean }) {
       <div style={{ fontWeight: 700, fontSize: 15 }}>{d.name}</div>
       {d.title && <div style={{ color: '#b9b29c', fontSize: 12, fontStyle: 'italic' }}>{d.title}</div>}
       <div style={{ color: '#d9c98a', fontSize: 12 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</div>
+      {d.nation && <div style={{ color: '#9cc77a', fontSize: 12 }}>Activates: {d.nation === 'any' ? 'any Nation' : cap(d.nation)} <span style={{ color: '#887' }}>(when separated to its City/Stronghold)</span></div>}
       {d.guide && <p style={{ fontSize: 12, margin: '4px 0' }}><b>Guide:</b> {d.guide}</p>}
       {d.becomesGuide && <p style={{ fontSize: 12, margin: '4px 0' }}><b>Becomes Guide:</b> {d.becomesGuide}</p>}
       {d.abilities?.map((a, i) => <p key={i} style={{ fontSize: 12, margin: '4px 0' }}><b>{a.name}:</b> {a.text}</p>)}
