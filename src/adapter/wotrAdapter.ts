@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, MORDOR_INTERIOR } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import { log } from '../engine/log';
 import {
@@ -244,6 +244,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const fs = state.fellowship;
         const acts: WotrAction[] = [];
         for (const r of regionsWithin(fs.location, fs.progress)) {
+          if (MORDOR_INTERIOR.includes(r)) continue; // the figure never stands inside Mordor (report 681l)
           const def = REGIONS[r]!;
           if ((def.settlement === 'City' || def.settlement === 'Stronghold') && settlementController(state, r) === 'fp') continue;
           acts.push({ kind: 'revealMove', target: r });
@@ -278,7 +279,12 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       // forced march toward Mordor). The hidden Fellowship sneaks through anywhere,
       // including Shadow-Stronghold regions (Moria, Mordor), so no region is excluded.
       if (fs.hidden && fs.mordor === null && fs.progress > 0) {
-        for (const r of regionsWithin(fs.location, fs.progress)) acts.push({ kind: 'declareFellowship', target: r });
+        // The figure can be declared up to a Mordor entrance (Morannon / Minas Morgul)
+        // but never into Mordor's interior — that strands it off the Mordor Track (report 681l).
+        for (const r of regionsWithin(fs.location, fs.progress)) {
+          if (MORDOR_INTERIOR.includes(r)) continue;
+          acts.push({ kind: 'declareFellowship', target: r });
+        }
       }
       if (fs.mordor === null && MORDOR_ENTRANCES.includes(fs.location)) {
         acts.push({ kind: 'enterMordor' });

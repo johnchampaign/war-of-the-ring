@@ -89,6 +89,14 @@ export function resolveLureChoice(state: GameState, mode: 'corruption' | 'elimin
 
 export const MORDOR_ENTRANCES: RegionId[] = ['morannon', 'minas-morgul'];
 
+/** The dark interior of Mordor, reachable on the map only past the Morannon /
+ *  Minas Morgul entrances. The Ring-bearers' figure NEVER stands here: the
+ *  journey through Mordor is abstracted onto the Mordor Track, entered at an
+ *  entrance (rules-spec §11). The Fellowship therefore cannot be declared into
+ *  these regions — doing so used to strand the figure in Mordor with no way onto
+ *  the Track and no path to the Crack of Doom (report 681l). */
+export const MORDOR_INTERIOR: RegionId[] = ['gorgoroth', 'barad-dur', 'nurn'];
+
 /** BFS shortest-path next-hops from `from` to `to` over region adjacency
  *  (impassable borders are already excluded from adjacency). Returns the ordered
  *  list of regions to step through (excluding `from`, including `to`), or [] if
@@ -151,6 +159,7 @@ export function hideFellowship(state: GameState): void {
 export function declareFellowship(state: GameState, target: RegionId): void {
   const fs = state.fellowship;
   if (!fs.hidden || fs.mordor !== null) return;
+  if (MORDOR_INTERIOR.includes(target)) return; // never strand the figure inside Mordor (report 681l)
   const path = pathTo(fs.location, target);
   const steps = Math.min(fs.progress, path.length);
   if (steps > 0) fs.location = path[steps - 1]!;
