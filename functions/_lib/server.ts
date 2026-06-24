@@ -59,6 +59,7 @@ export function makeServer(env: Env): WotrServer {
     adapter: wotrAdapter,
     codec: jsonCodec<GameState>(),
     store: new SupabaseStore(supabase(env)),
+    playBeacon: { appId: 'war-of-the-ring' }, // best-effort 'online' play beacon on createGame
     notifier: new NoopNotifier(),
     broadcaster: new SupabaseBroadcaster({
       supabaseUrl: env.SUPABASE_URL,
@@ -83,6 +84,7 @@ export function makeCronServer(env: Env): WotrServer {
     adapter: wotrAdapter,
     codec: jsonCodec<GameState>(),
     store: new SupabaseStore(supabase(env)),
+    playBeacon: { appId: 'war-of-the-ring' }, // best-effort 'online' play beacon on createGame
     notifier,
     broadcaster: new NoopBroadcaster(),
     gameUrl: gameUrlFor(env),

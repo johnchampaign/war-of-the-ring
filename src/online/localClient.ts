@@ -4,7 +4,7 @@
 //   • vs AI    — the human plays one side; the heuristic AI (src/ai) auto-plays the
 //                other. The human only ever sees their own redacted view and only
 //                acts on their own turn; the AI's moves are applied between turns.
-import { Rng } from 'digital-boardgame-framework';
+import { Rng, recordPlay } from 'digital-boardgame-framework';
 import { submitReportViaHttp } from 'digital-boardgame-framework/client';
 import { createGame } from '../engine/setup';
 import { wotrAdapter, startGame } from '../adapter/wotrAdapter';
@@ -37,6 +37,8 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat'; aiSid
   if (opts.scenario === 'combat') state = applyCombatScenario(state);
   const aiSide = opts.aiSide ?? null;          // the side the AI plays (null = hotseat)
   const human: Side = aiSide ? other(aiSide) : 'fp';
+  // Best-effort play-count beacon, once when a local game starts (never throws/blocks).
+  if (opts.scenario !== 'combat') recordPlay('war-of-the-ring', aiSide ? 'ai' : 'hotseat');
   const aiRng = new Rng(seed * 1000 + 7);      // independent tie-break RNG for the AI
 
   // Let the AI take every turn that is its own until control returns to the human

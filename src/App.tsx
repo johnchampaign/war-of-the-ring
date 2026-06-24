@@ -50,6 +50,14 @@ export function App() {
 function Lobby({ onStart }: { onStart: (aiSide?: 'fp' | 'shadow') => void }) {
   const [invites, setInvites] = useState<Record<'fp' | 'shadow', string> | null>(null);
   const [creating, setCreating] = useState(false);
+  // Best-effort play counter from the games hub (never blocks the lobby).
+  const [plays, setPlays] = useState<number | null>(null);
+  useEffect(() => {
+    fetch('https://games-hub-5vo.pages.dev/stats?game=war-of-the-ring')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && typeof d.count === 'number') setPlays(d.count); })
+      .catch(() => {});
+  }, []);
   const createOnline = async () => {
     setCreating(true);
     try { const r = await createOnlineGame(); setInvites(r.invites); }
@@ -61,6 +69,7 @@ function Lobby({ onStart }: { onStart: (aiSide?: 'fp' | 'shadow') => void }) {
       <div style={{ textAlign: 'center', maxWidth: 460 }}>
         <h1 style={{ fontVariant: 'small-caps', letterSpacing: 1 }}>War of the Ring</h1>
         <p style={{ color: '#a99' }}>Unofficial digital port · 2-player (Free Peoples vs Shadow)</p>
+        {plays != null && <p style={{ color: '#776', fontSize: 12, marginTop: -6 }}>{plays.toLocaleString()} games played</p>}
         <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Play vs the AI:</div>
         <button onClick={() => onStart('shadow')} style={{ ...primary, background: '#2f4f9e' }}>Play Free Peoples (vs AI Shadow)</button>
         <button onClick={() => onStart('fp')} style={{ ...primary, background: '#a83232' }}>Play Shadow (vs AI Free Peoples)</button>
