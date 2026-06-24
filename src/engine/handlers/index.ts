@@ -12,7 +12,7 @@ import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf } from '../data';
-import { moveFellowship, beginSeparation, placeSeparatedCompanion, separationRange, separationDestinations } from '../fellowship';
+import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations } from '../fellowship';
 import { moveCharacter, characterDestinations } from '../charMove';
 import { log, notify } from '../log';
 
@@ -1097,25 +1097,39 @@ function moveNazgulCard(after: (state: GameState) => void): EventHandler {
 /** A card that separates ONE Companion: step 1 pick the Companion, step 2 pick where
  *  it goes (the player's CHOICE, within Progress + Level + the card's bonus). `after`
  *  runs the card's post-placement effect (heal, extra rouse). */
-function separateViaCard(opts: { extraMove?: number; levelOverride?: number; after?: (state: GameState, companion: string, dest: RegionId) => void } = {}): EventHandler {
+function separateViaCard(opts: { extraMove?: number; levelOverride?: number; after?: (state: GameState, companions: string[], dest: RegionId) => void } = {}): EventHandler {
+  // RAW: these cards separate "one Companion OR one group of Companions". The player
+  // picks one or more Companions (each a companion-only target → a panel button), then
+  // a destination (a companion+region target → a board click) that places the whole
+  // group together. Nothing mutates until the destination is chosen (no stranded
+  // separated-but-unplaced Companions); placement happens in finalize from `applied`.
+  const chosenOf = (applied: EventTarget[]) => [...new Set(applied.filter((a) => a.companion).map((a) => a.companion!))];
   return {
     canPlay: canSeparate,
-    repeat: 2,    // pick the Companion, then its destination
-    noDone: true, // both steps mandatory — can't stop after picking the Companion
+    repeat: 24,   // pick any number of Companions, then a destination
+    noDone: true, // can't stop without placing — the destination ends it
     targets(state, _side, applied = []) {
-      if (applied.length === 0) return fellowCompanions(state);
-      // Step 2 destinations — computed WITHOUT mutating (the Companion stays in the
-      // Fellowship until the destination is actually chosen, so an empty list just
-      // fizzles instead of stranding a separated-but-unplaced Companion).
-      const c = applied[0]!.companion!;
-      const range = separationRange(state, c, opts);
-      return separationDestinations(state, state.fellowship.location, range).map((region) => ({ companion: c, region }));
+      if (applied.some((a) => a.region)) return []; // destination chosen → done
+      const chosen = chosenOf(applied);
+      const inGroup = new Set(chosen);
+      // Add more Companions to the travelling group (panel buttons).
+      const out: EventTarget[] = fellowCompanions(state).filter((t) => !inGroup.has(t.companion!));
+      // Once ≥1 is chosen, offer destinations (range = Progress + the highest Level in
+      // the group + the card's bonus). Tagged with chosen[0] so it's a board-click target.
+      if (chosen.length > 0) {
+        const range = Math.max(...chosen.map((c) => separationRange(state, c, opts)));
+        for (const region of separationDestinations(state, state.fellowship.location, range)) out.push({ companion: chosen[0], region });
+      }
+      return out;
     },
-    applyTarget(state, _side, t) {
-      if (!t.region) return; // step 1: just records the chosen Companion (no mutation)
-      beginSeparation(state, t.companion!);
-      placeSeparatedCompanion(state, t.companion!, t.region);
-      opts.after?.(state, t.companion!, t.region);
+    applyTarget() { /* no mutation per step; the group is placed in finalize from `applied` */ },
+    finalize(state, _side, applied) {
+      const region = applied.find((a) => a.region)?.region;
+      const companions = chosenOf(applied);
+      if (!region || companions.length === 0) return; // fizzle (no destination reachable)
+      for (const c of companions) beginSeparation(state, c);
+      placeSeparatedGroup(state, companions, region);
+      opts.after?.(state, companions, region);
     },
   };
 }

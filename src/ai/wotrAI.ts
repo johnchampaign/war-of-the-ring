@@ -448,6 +448,7 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     if (a.mode === 'hide') return 50;
     if (a.mode === 'none') return 5;
     if (a.mode === 'move' && !a.to && !a.region) return 25;
+    if (a.companion && a.region) return 110 - (target ? dist(a.region, target) : 0); // place the (group of) Companion(s) — do this rather than piling the whole Fellowship in
     if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
     if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;
     if (a.to) return 30 - (target ? dist(a.to, target) : 0);          // move toward the target
