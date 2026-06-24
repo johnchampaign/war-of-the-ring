@@ -63,7 +63,10 @@ function NationRow({ n, ns, reinf }: { n: Nation; ns: GameState['nations'][Natio
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '2px 0' }}>
       <span style={{ width: 9, height: 9, borderRadius: 2, background: NATION_COLOR[n], flexShrink: 0,
         border: ns.active ? '1px solid #fff' : '1px solid #665', opacity: ns.active ? 1 : 0.5 }} />
-      <span style={{ width: 52, fontSize: 11, color: atWar ? '#ffd23f' : '#ddd', overflow: 'hidden', textOverflow: 'ellipsis' }}>{NATION_LABEL[n]}</span>
+      {/* flexShrink:0 keeps every label exactly 52px wide. Without it, rows that carry a
+          "passive" tag flex-shrink the label ~3px narrower than active rows (e.g. Elves),
+          so the progress tracks start at different x and the rows look misaligned. */}
+      <span style={{ width: 52, flexShrink: 0, fontSize: 11, color: atWar ? '#ffd23f' : '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{NATION_LABEL[n]}</span>
       {/* Left-anchored progress bar toward War: filled cells = steps mobilized, so a
           nation advancing reads as "more progress", never as a row knocked out of
           alignment (the old single-moving-dot design). The rightmost cell is War. */}

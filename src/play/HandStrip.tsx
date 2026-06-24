@@ -63,8 +63,9 @@ function HandCard({ id, onZoom, onHover }: { id: string; onZoom: () => void; onH
   );
 }
 
-// Click-to-enlarge: full card art (or full text) over a dimmed backdrop.
-function CardZoom({ id, onClose }: { id: string; onClose: () => void }) {
+// Click-to-enlarge: full card art (or full text) over a dimmed backdrop. Exported so
+// the opponent's-turn recap can pop the same enlarged view from a logged card play.
+export function CardZoom({ id, onClose }: { id: string; onClose: () => void }) {
   const art = useCardArt(id);
   const def = CARD.get(id);
   return (
@@ -78,8 +79,12 @@ function CardZoom({ id, onClose }: { id: string; onClose: () => void }) {
             <span style={{ fontSize: 11, color: '#ccb', textTransform: 'uppercase' }}>{def?.side} · init {def?.initiative}</span>
           </div>
           <h3 style={{ margin: '4px 0' }}>{def?.name ?? id}</h3>
+          {/* Preconditions (the "Play if…" requirement) so the card's legality is readable
+              even without the art — amber italic, distinct from the effect text. */}
+          {def?.precondition && <p style={{ fontSize: 12, ...zoomReq }}>{def.precondition}</p>}
           {def?.eventText && <p style={{ fontSize: 13 }}><b>Event:</b> {def.eventText}</p>}
-          {def?.combat?.title && <p style={{ fontSize: 13 }}><b>Combat — {def.combat.title}:</b> {def.combat.text}</p>}
+          {def?.combat?.title && <p style={{ fontSize: 13 }}><b>Combat — {def.combat.title}:</b>{' '}
+            {def.combat.precondition && <span style={zoomReq}>[{def.combat.precondition}] </span>}{def.combat.text}</p>}
         </div>
       )}
     </div>
@@ -91,4 +96,5 @@ const label: React.CSSProperties = { fontSize: 11, color: '#998', alignSelf: 'ce
 const img: React.CSSProperties = { height: 76, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', cursor: 'pointer' };
 const zoomBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.8)', display: 'grid', placeItems: 'center', zIndex: 60, cursor: 'zoom-out' };
 const zoomText: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 10, maxWidth: 440, cursor: 'default' };
+const zoomReq: React.CSSProperties = { color: '#d8b48c', fontStyle: 'italic' };
 const textCard: React.CSSProperties = { width: 58, height: 76, flexShrink: 0, borderRadius: 4, padding: 4, color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443', fontSize: 9 };

@@ -247,8 +247,14 @@ function CardBlurb({ id }: { id: string | null }) {
       {def ? (
         <>
           <div style={{ fontWeight: 700, fontSize: 13 }}>{def.name} <span style={{ color: '#aa9', fontWeight: 400 }}>· {def.side} · init {def.initiative ?? '–'}</span></div>
-          {def.combat?.title && <div style={{ fontSize: 12, margin: '3px 0' }}><b>Combat — {def.combat.title}:</b> {def.combat.text}</div>}
-          {def.eventText && <div style={{ fontSize: 12, color: '#c9c2ad', margin: '3px 0' }}><b>Event:</b> {def.eventText}</div>}
+          {def.combat?.title && <div style={{ fontSize: 12, margin: '3px 0' }}>
+            <b>Combat — {def.combat.title}:</b>{' '}
+            {def.combat.precondition && <span style={req}>[{def.combat.precondition}] </span>}{def.combat.text}
+          </div>}
+          {(def.precondition || def.eventText) && <div style={{ fontSize: 12, color: '#c9c2ad', margin: '3px 0' }}>
+            <b>Event:</b>{' '}
+            {def.precondition && <span style={req}>[{def.precondition}] </span>}{def.eventText}
+          </div>}
         </>
       ) : (
         <span style={{ color: '#776', fontStyle: 'italic' }}>Hover a card to read its effect.</span>
@@ -266,3 +272,6 @@ const dbtn: React.CSSProperties = { background: '#7a1f1f', color: '#fff', border
 // Reserve enough height for a typical combat card so the modal barely changes size on
 // hover (the top-anchor already keeps the buttons fixed even if it does grow).
 const blurb: React.CSSProperties = { marginTop: 10, padding: '8px 10px', background: '#1a160f', border: '1px solid #3a342a', borderRadius: 6, minHeight: 96, color: '#e9e1cc' };
+// "Play if…" requirement — amber italic so the precondition reads as a condition to
+// check, distinct from the effect text (so you can judge a card before discarding it).
+const req: React.CSSProperties = { color: '#d8b48c', fontStyle: 'italic' };

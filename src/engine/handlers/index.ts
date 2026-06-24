@@ -252,6 +252,9 @@ for (const [id, nation] of fpRecruits) {
 
 // --- Shadow: Corruption --------------------------------------------------
 register('sh-char-08', { // Candles of Corpses: +1 corruption per die 4+ (6 if Gollum guides)
+  // Precondition (shared with Orc Patrol / Isildur's Bane / Foul Thing, sh-char-05/06/07):
+  // "Play if the Fellowship is not in a region containing a Free Peoples Settlement."
+  canPlay: (state) => { const loc = state.fellowship.location; return !(REGIONS[loc]!.settlement && settlementController(state, loc) === 'fp'); },
   apply(state) {
     const t = isGollumGuide(state) ? 6 : 4;
     const c = withRng(state, (rng) => { let n = 0; for (let i = 0; i < 3; i++) if (rng.rollDie(6) >= t) n++; return n; });
