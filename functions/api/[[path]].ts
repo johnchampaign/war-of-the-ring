@@ -159,7 +159,21 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
       if (sub === 'legal' && method === 'GET') return json({ legalActions: await server.legalActions(gameId, token) });
       if (sub === 'submit' && method === 'POST') {
         const body = await safeJson(request);
+        // Ranked: attribute this seat from the move's identity (idempotent,
+        // race-free — turns are sequential). Best-effort; never blocks the move.
+        if (typeof body?.identityToken === 'string' && body.identityToken) {
+          try { await server.claimSeat(gameId, token, body.identityToken); } catch { /* optional */ }
+        }
         return json(await server.submit(gameId, token, body?.action));
+      }
+      // POST /api/games/:id/claim — attach a hub identity to this seat on join.
+      if (sub === 'claim' && method === 'POST') {
+        const body = await safeJson(request);
+        if (typeof body?.identityToken !== 'string' || !body.identityToken) {
+          return json({ error: 'identityToken required' }, 422);
+        }
+        const v = await server.claimSeat(gameId, token, body.identityToken);
+        return json({ ok: true, playerId: v.playerId });
       }
       if (sub === 'report' && method === 'POST') {
         const body = await safeJson(request);

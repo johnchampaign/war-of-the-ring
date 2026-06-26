@@ -6,7 +6,7 @@
 // engine's own module-scoped import — never in the snapshot.
 import {
   GameServer, SupabaseStore, NoopNotifier, ResendNotifier,
-  SupabaseBroadcaster, NoopBroadcaster,
+  SupabaseBroadcaster, NoopBroadcaster, verifyIdentityToken, type Jwks,
 } from 'digital-boardgame-framework/server';
 import { jsonCodec } from 'digital-boardgame-framework';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -21,6 +21,19 @@ export interface Env {
   RESEND_FROM?: string;
   PUBLIC_BASE_URL?: string;
   CRON_SECRET?: string;
+  /** Shared secret matching the hub's RATINGS_INGEST_KEY (enables ranked play). */
+  RATINGS_INGEST_KEY?: string;
+}
+
+const HUB = 'https://games-hub-5vo.pages.dev';
+let _jwks: Jwks | undefined;
+let _jwksAt = 0;
+async function getJwks(): Promise<Jwks> {
+  if (!_jwks || Date.now() - _jwksAt > 3_600_000) {
+    _jwks = (await (await fetch(`${HUB}/id/jwks`)).json()) as Jwks;
+    _jwksAt = Date.now();
+  }
+  return _jwks;
 }
 
 type WotrServer = GameServer<GameState, WotrAction, 'fp' | 'shadow'>;
@@ -66,6 +79,11 @@ export function makeServer(env: Env): WotrServer {
       serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
     }),
     gameUrl: gameUrlFor(env),
+    // Ranked play: verify hub identity tokens (claimSeat) + auto-report results.
+    verifyIdentity: async (t) => verifyIdentityToken(t, await getJwks()),
+    ...(env.RATINGS_INGEST_KEY
+      ? { ratings: { game: 'war-of-the-ring', ingestKey: env.RATINGS_INGEST_KEY } }
+      : {}),
   });
 }
 

@@ -459,6 +459,17 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <BattlePopup view={g.view} />
       <NoticePopup view={g.view} />
       <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} />
+      {g.gameOver && g.ranked && (
+        <p style={{ margin: '8px 12px', fontSize: 14, color: g.ranked.recorded ? '#6c6' : '#caa' }}>
+          {g.ranked.recorded
+            ? '✓ Recorded to the leaderboard.'
+            : g.ranked.reason === 'one-player'
+              ? 'Not ranked — both seats were the same player (you need two different people/identities).'
+              : g.ranked.reason === 'no-identities'
+                ? 'Not ranked — no identities were attached to the seats.'
+                : "Not ranked — couldn't reach the leaderboard."}
+        </p>
+      )}
       <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
         uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} />
       <UploadLogButton view={g.view} you={g.you as Side | null} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}

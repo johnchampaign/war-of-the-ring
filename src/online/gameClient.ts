@@ -47,7 +47,9 @@ export interface GameClientApi {
 const SB_URL = import.meta.env.VITE_SUPABASE_URL;
 const SB_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export function makeGameClient(gameId: string, token: string): GameClientApi {
+export function makeGameClient(
+  gameId: string, token: string, getIdentityToken?: () => string | undefined,
+): GameClientApi {
   const base = `/api/games/${encodeURIComponent(gameId)}`;
   const q = `?as=${encodeURIComponent(token)}`;
   const post = (path: string, body: unknown) =>
@@ -61,7 +63,7 @@ export function makeGameClient(gameId: string, token: string): GameClientApi {
 
   return {
     fetch: () => fetch(`${base}${q}`).then((r) => r.json()),
-    submit: (action) => post('/submit', { action }),
+    submit: (action) => post('/submit', { action, identityToken: getIdentityToken?.() }),
     legalActions: () => fetch(`${base}/legal${q}`).then((r) => r.json()).then((r) => r.legalActions ?? r),
     // Never-silent: resolves only on a server-confirmed reportId; rejects on network
     // error / non-OK status / unparseable body / missing id (framework helper).
@@ -71,6 +73,16 @@ export function makeGameClient(gameId: string, token: string): GameClientApi {
     subscribeMoves: realtime ? realtime('moved') : undefined,
     subscribeMessages: realtime ? realtime('message') : undefined,
   };
+}
+
+/** Attach the player's hub identity to their seat (ranked). Best-effort. */
+export async function claimSeat(gameId: string, token: string, identityToken: string): Promise<void> {
+  try {
+    await fetch(`/api/games/${encodeURIComponent(gameId)}/claim?as=${encodeURIComponent(token)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identityToken }),
+    });
+  } catch { /* ranked attribution is optional */ }
 }
 
 /** Create a new online game; returns the gameId and both seats' invite URLs. */

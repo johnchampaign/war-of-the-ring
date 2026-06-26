@@ -1,12 +1,13 @@
 // App shell: lobby + routing. Hotseat (local in-browser engine) or online (HTTP
 // to /api). #audit -> the dev polygon-audit overlay.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useIdentity, SignInBar } from 'digital-boardgame-framework/client';
 import { PlayPage } from './play/PlayPage';
 import { PolygonAudit } from './devtabs/PolygonAudit';
 import { ContentAudit } from './devtabs/ContentAudit';
 import { BlockedAreasEditor } from './devtabs/BlockedAreasEditor';
 import { makeLocalClient } from './online/localClient';
-import { makeGameClient, createOnlineGame, readOnlineInvite } from './online/gameClient';
+import { makeGameClient, createOnlineGame, readOnlineInvite, claimSeat } from './online/gameClient';
 import { LoadArtPanel } from './play/LoadArtPanel';
 
 type Mode =
@@ -31,18 +32,42 @@ export function App() {
       : invite ? { kind: 'online', gameId: invite.gameId, token: invite.token }
         : { kind: 'lobby' });
 
+  // Ranked identity (anon or signed-in). Kept in a ref so each move carries it
+  // to the server (per-move attribution — robust + race-free).
+  const { identity } = useIdentity();
+  const idTokRef = useRef<string | undefined>(undefined);
+  idTokRef.current = identity?.token;
+
   const client = useMemo(() => {
     if (mode.kind === 'local') return makeLocalClient(mode.seed, { scenario: mode.scenario, aiSide: mode.aiSide });
-    if (mode.kind === 'online') return makeGameClient(mode.gameId, mode.token);
+    if (mode.kind === 'online') return makeGameClient(mode.gameId, mode.token, () => idTokRef.current);
     return null;
   }, [mode]);
+
+  // Bind this client's identity to its seat on join (per-move attribution above
+  // is the primary path; this covers a game where you never get a turn).
+  useEffect(() => {
+    if (mode.kind === 'online' && identity?.token) {
+      void claimSeat(mode.gameId, mode.token, identity.token);
+    }
+  }, [mode, identity?.token]);
 
   // Dev routes — checked after the hooks above so hook order stays stable.
   if (hash === '#audit') return <PolygonAudit />;
   if (hash === '#content') return <ContentAudit />;
   if (hash === '#blocked') return <BlockedAreasEditor />;
 
-  if (client) return <PlayPage client={client} onExit={mode.kind === 'local' ? () => setMode({ kind: 'lobby' }) : undefined} />;
+  if (client) {
+    const page = <PlayPage client={client} onExit={mode.kind === 'local' ? () => setMode({ kind: 'lobby' }) : undefined} />;
+    return mode.kind === 'online' ? (
+      <>
+        <div style={{ padding: '0 12px' }}>
+          <SignInBar leaderboardHref="https://games-hub-5vo.pages.dev/leaderboard?game=war-of-the-ring" />
+        </div>
+        {page}
+      </>
+    ) : page;
+  }
   const startLocal = (aiSide?: 'fp' | 'shadow') => setMode({ kind: 'local', seed: Math.floor(Math.random() * 1e9), aiSide });
   return <Lobby onStart={startLocal} />;
 }
