@@ -645,6 +645,7 @@ register('fp-char-24', {
     u.regular--; u.elite++;
     state.reinforcements[t.nation!].regular++; state.reinforcements[t.nation!].elite--;
   },
+  finalize(state) { drawCard(state, 'fp', 'strategy'); drawCard(state, 'fp', 'strategy'); }, // "Then, draw two Strategy Event cards."
 });
 
 // --- Action-die manipulation --------------------------------------------------
