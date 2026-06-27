@@ -11,7 +11,7 @@ import { applyCasualties, startBattle } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
-import { REGIONS, levelOf } from '../data';
+import { REGIONS, levelOf, characterSide } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations } from '../fellowship';
 import { moveCharacter, characterDestinations } from '../charMove';
 import { log, notify } from '../log';
@@ -68,8 +68,12 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
     const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
   }
-  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...src.characters);
-  src.units = {}; src.leaders = 0; src.nazgul = 0; src.characters = [];
+  // Only this side's Characters move with its Army; an enemy Character sharing the
+  // region stays behind.
+  const movingChars = src.characters.filter((c) => characterSide(c) === side);
+  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
+  src.units = {}; src.leaders = 0; src.nazgul = 0;
+  src.characters = src.characters.filter((c) => characterSide(c) !== side);
   captureIfEnemySettlement(state, to, side);
 }
 /** Force-place units into a region (a card that recruits in a NAMED region,

@@ -1,7 +1,7 @@
 // Armies: composition queries, mustering (recruit), and movement with settlement
 // capture (rules-spec §1, §6). Combat is in combat.ts.
 import type { GameState, Nation, RegionId, Side, ArmyUnits } from './types';
-import { REGIONS, sideOfNation, characterDef } from './data';
+import { REGIONS, sideOfNation, characterDef, characterSide } from './data';
 import { isAtWar, onSettlementCaptured, activateNation } from './politics';
 import { shadowBarredFromRegion } from './persistent';
 import { log } from './log';
@@ -206,7 +206,7 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   if (movingUnits < 1) return false;
   const movingLeaders = sel.leaders ?? 0, movingNazgul = sel.nazgul ?? 0, chars = sel.characters ?? [];
   if (movingLeaders < 0 || movingLeaders > src.leaders || movingNazgul < 0 || movingNazgul > src.nazgul) return false;
-  for (const c of chars) if (!src.characters.includes(c)) return false;
+  for (const c of chars) if (!src.characters.includes(c) || characterSide(c) !== side) return false;
   // Only the moving Nations matter for the not-At-War border rule.
   const dn = REGIONS[to]!.nation;
   for (const n of Object.keys(sel.units ?? {}) as Nation[]) if (!isAtWar(state, n) && dn && dn !== n) return false;
@@ -244,8 +244,12 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
     const d = dst.units[nation] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; dst.units[nation] = d;
   }
-  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...src.characters);
-  src.units = {}; src.leaders = 0; src.nazgul = 0; src.characters = [];
+  // Only THIS side's Characters move with its Army; an enemy Character sharing the
+  // region (e.g. a stranded Companion under a Shadow Army) stays put.
+  const movingChars = src.characters.filter((c) => characterSide(c) === side);
+  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
+  src.units = {}; src.leaders = 0; src.nazgul = 0;
+  src.characters = src.characters.filter((c) => characterSide(c) !== side);
   // Capture an undefended enemy Settlement.
   captureIfEnemySettlement(state, to, side);
   // Entering a Nation's region activates that Nation (rules p.34) — covers regions

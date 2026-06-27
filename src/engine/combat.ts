@@ -7,7 +7,7 @@
 // (a card's initiative only matters when both sides' effects collide — see D5)
 // and a few intricate per-effect cards (e.g. Mûmakil's two timings).
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
-import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf } from './data';
+import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide } from './data';
 import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
@@ -339,7 +339,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
         return true; // pause; resolvePreCombatRetreat resumes
       }
       const dest = dests[0] ?? null;
-      if (dest) { moveStack(state, own, dest); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
+      if (dest) { moveStack(state, own, dest, ef.side); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
     } else if (ef.mods.preCombatAttackDice) {
       if (unitCount(state, enemy) === 0) continue;
       const dice = ef.mods.preCombatAttackDice;
@@ -369,7 +369,7 @@ export function resolvePreCombatRetreat(state: GameState, region: RegionId): voi
   const side = armySide(state, from);
   const dests = freeAdjacentRegions(state, from, side!);
   const dest = dests.includes(region) ? region : dests[0];
-  if (dest) { moveStack(state, from, dest); log(state, null, 'combat', `${side} retreats ${from}→${dest} before combat`); }
+  if (dest) { moveStack(state, from, dest, side!); log(state, null, 'combat', `${side} retreats ${from}→${dest} before combat`); }
 }
 
 /** Move the whole army at `from` into `to` (defender gone), capturing. */
@@ -379,8 +379,11 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
     const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
   }
-  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...src.characters);
-  src.units = {}; src.leaders = 0; src.nazgul = 0; src.characters = [];
+  // Only the attacker's own Characters advance; an enemy Character in `from` stays.
+  const movingChars = src.characters.filter((c) => characterSide(c) === attacker);
+  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
+  src.units = {}; src.leaders = 0; src.nazgul = 0;
+  src.characters = src.characters.filter((c) => characterSide(c) !== attacker);
   captureIfEnemySettlement(state, to, attacker);
 }
 
@@ -574,7 +577,7 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
     r.siegeBox = { units: r.units, leaders: r.leaders, nazgul: r.nazgul, characters: r.characters };
     r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = [];
     capSiegeBox(state, pc.to); // a besieged Stronghold's garrison is at most 5 (rulebook p.31)
-    moveStack(state, pc.from, pc.to); // besieger occupies the open field (no capture — garrison holds the Settlement)
+    moveStack(state, pc.from, pc.to, pc.attacker); // besieger occupies the open field (no capture — garrison holds the Settlement)
     r.besieged = true;
     log(state, null, 'combat', `${pc.defender} withdraws into the siege at ${pc.to}; ${pc.attacker} besieges`);
     // The rearguard rejoins `from`; record the siege as established; resume the turn.
@@ -601,7 +604,7 @@ export function resolveRetreat(state: GameState, retreat: boolean): void {
   state.pendingChoice = null;
   if (retreat) {
     const dests = freeAdjacentRegions(state, pc.to, pc.defender);
-    if (dests.length === 1) { moveStack(state, pc.to, dests[0]!); finishCombat(state, true); return; }
+    if (dests.length === 1) { moveStack(state, pc.to, dests[0]!, pc.defender); finishCombat(state, true); return; }
     if (dests.length > 1) { state.pendingChoice = { owner: pc.defender, kind: 'retreatTo' }; return; } // defender picks where
     // none available -> stand
   }
@@ -615,7 +618,7 @@ export function resolveRetreatTo(state: GameState, region: RegionId): void {
   state.pendingChoice = null;
   const dests = freeAdjacentRegions(state, pc.to, pc.defender);
   const dest = dests.includes(region) ? region : dests[0];
-  if (dest) { moveStack(state, pc.to, dest); finishCombat(state, true); return; }
+  if (dest) { moveStack(state, pc.to, dest, pc.defender); finishCombat(state, true); return; }
   pc.round += 1; pc.step = 'attackerCard'; // shouldn't happen; stand as a fallback
 }
 
@@ -624,14 +627,18 @@ export const retreatDestinations = (state: GameState): RegionId[] => {
   const pc = state.pendingCombat;
   return pc ? freeAdjacentRegions(state, pc.to, pc.defender) : [];
 };
-function moveStack(state: GameState, from: RegionId, to: RegionId): void {
+function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
   for (const n of Object.keys(src.units) as Nation[]) {
     const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
   }
-  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...src.characters);
-  src.units = {}; src.leaders = 0; src.nazgul = 0; src.characters = [];
+  // Only the moving side's Characters travel; an enemy Character stranded in the
+  // region stays behind (it never belonged to this Army).
+  const movingChars = src.characters.filter((c) => characterSide(c) === side);
+  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
+  src.units = {}; src.leaders = 0; src.nazgul = 0;
+  src.characters = src.characters.filter((c) => characterSide(c) !== side);
 }
 
 export const canRetreat = (state: GameState): boolean => retreatRegion(state, state.pendingCombat!) !== null;

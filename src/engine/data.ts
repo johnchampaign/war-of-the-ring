@@ -63,6 +63,14 @@ export const STARTING_COMPANIONS: string[] = Object.entries(COMPANIONS)
 export function characterDef(id: string): CharacterDef | undefined {
   return COMPANIONS[id] ?? UPGRADES[id] ?? MINIONS[id] ?? (id === 'gollum' ? GOLLUM : undefined);
 }
+/** Which side a Character figure belongs to: Minions (Witch-king, Mouth of Sauron,
+ *  Saruman) are Shadow; Companions, their upgrades, and Gollum are Free Peoples.
+ *  Used so an Army move only carries its OWN side's Characters out of a region that
+ *  also holds enemy figures (e.g. a stranded Companion sharing a region with a
+ *  Shadow Army). */
+export function characterSide(id: string): Side {
+  return MINIONS[id] ? 'shadow' : 'fp';
+}
 /** Numeric level for movement/hunt math ('inf' Nazgûl => a large number). */
 export function levelOf(id: string): number {
   const d = characterDef(id);
