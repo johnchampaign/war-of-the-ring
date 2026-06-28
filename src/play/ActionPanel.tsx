@@ -42,6 +42,18 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   const sel = selectedDie ?? null;
   const faceLabel = sel ? (FACE[sel]?.label ?? sel) : null;
 
+  // A board-placement choice (e.g. the Fellowship was revealed by the Hunt and must be
+  // moved) blocks every die action until it's resolved on the MAP. When that's pending,
+  // the panel must point the player at the board, NOT say "pick another die or Pass"
+  // (they can do neither). Maps the pending kind to a plain-language instruction.
+  const pendingHint: Record<string, string> = {
+    revealMove: 'The Fellowship was revealed — place it first by clicking a highlighted region on the map.',
+    separateMove: 'Finish separating the Companions first — click a highlighted region on the map.',
+    declareFellowship: 'Declare the Fellowship first — click a highlighted region on the map.',
+    charMove2: 'Finish the character move on the map first.',
+  };
+  const boardPending = view.pendingChoice ? pendingHint[view.pendingChoice.kind] : undefined;
+
   // Combat/hunt decisions are handled by the DecisionModal; this list is the
   // ordinary action menu (the caller filters those out before passing actions).
   return (
@@ -68,7 +80,9 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       {rest.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
         options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} />)}
       {rest.length === 0 && boardActions === 0 && (
-        <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>
+        boardPending
+          ? <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', fontSize: 13 }}>⚑ {boardPending}</div>
+          : <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>
       )}
     </div>
   );
