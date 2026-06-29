@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { UpdateBanner } from 'digital-boardgame-framework/client';
+import { UpdateBanner, SplashScreen } from 'digital-boardgame-framework/client';
 import { App } from './App';
 
 // This app never registers a service worker. But a leftover SW from a PRIOR app
@@ -22,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
     {/* "A new version is available — Reload" when a fresh build is deployed.
         Polls /version.json (written by the versionStamp plugin) vs this bundle. */}
     <UpdateBanner currentBuild={__DBF_BUILD_ID__} />
+    <SplashScreen title="War of the Ring" appId="war-of-the-ring" />
     <App />
   </StrictMode>,
 );
