@@ -69,6 +69,7 @@ const gameUrlFor = (env: Env) => (gameId: string, token: string) =>
  *  the cron's job, to avoid emailing on every request. */
 export function makeServer(env: Env): WotrServer {
   return new GameServer<GameState, WotrAction, 'fp' | 'shadow'>({
+    snapshotHistory: 20,   // cap per-game snapshot history (framework >=0.32)
     adapter: wotrAdapter,
     codec: jsonCodec<GameState>(),
     store: new SupabaseStore(supabase(env)),
