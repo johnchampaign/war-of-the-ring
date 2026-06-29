@@ -553,11 +553,31 @@ register('fp-char-22', {
     }
   },
 });
-// Paths of the Woses: move an FP Army from a Rohan region directly to Minas Tirith.
+// Paths of the Woses: a Rohan FP Army marches secretly to Minas Tirith — BUT "If the
+// Shadow player controls or is besieging Minas Tirith, move the Army to a region
+// adjacent to Minas Tirith instead. The destination region must be free for the
+// purposes of army movement" (no enemy Army present, and within the stacking limit).
+const wosesDestinations = (state: GameState): string[] => {
+  const shadowHoldsMT = settlementController(state, 'minas-tirith') === 'shadow' || !!state.regions['minas-tirith']!.besieged;
+  const dests = shadowHoldsMT ? (REGIONS['minas-tirith']!.adjacency as string[]) : ['minas-tirith'];
+  return dests.filter((to) => freeForMovement(state, to, 'fp'));
+};
+const wosesMoves = (state: GameState): Array<{ from: string; to: string }> => {
+  const out: Array<{ from: string; to: string }> = [];
+  const dests = wosesDestinations(state);
+  for (const from of ROHAN) {
+    if (armySide(state, from) !== 'fp') continue;
+    const fromCount = unitCount(state, from);
+    for (const to of dests) {
+      if (to !== from && fromCount + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+    }
+  }
+  return out;
+};
 register('fp-str-11', {
-  canPlay: (state) => isAtWar(state, 'rohan') && ROHAN.some((r) => armySide(state, r) === 'fp'),
-  targets: (state) => ROHAN.filter((r) => armySide(state, r) === 'fp').map((from) => ({ from, to: 'minas-tirith' })),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, 'minas-tirith', 'fp'); log(state, null, 'event', `Paths of the Woses: ${t.from} → Minas Tirith`); },
+  canPlay: (state) => isAtWar(state, 'rohan') && wosesMoves(state).length > 0,
+  targets: (state) => wosesMoves(state),
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp'); log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}`); },
 });
 // Through a Day and a Night: move an FP Army containing a Companion up to 2 regions.
 function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {

@@ -515,8 +515,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const playFaces: DieFace[] = playDeck === 'Character'
         ? ['character', 'event', 'will']
         : ['army', 'armyMuster', 'muster', 'event', 'will'];
+      let playedWithFace: DieFace | null = null;
       if (freePlay) state.flags.fpFreeCharEventThisTurn = false;
-      else if (!consumePreferred(state, actor, playFaces, action.die)) throw new Error('No usable die to play this card');
+      else if (!(playedWithFace = consumePreferred(state, actor, playFaces, action.die))) throw new Error('No usable die to play this card');
+      // Gandalf the Grey's Guide draw triggers ONLY when an Event die paid for the
+      // card ("After you use an Event Action die result to play an Event card…"). A
+      // Will of the West used as an Event result counts; the card's own type die
+      // (Character / Army / Muster) and free plays do not.
+      const guideDrawsNow = playedWithFace === 'event' || playedWithFace === 'will';
       // Palantír of Orthanc grants a bonus draw — captured BEFORE this play so the
       // card doesn't trigger off its own play.
       const palantirWasActive = actor === 'shadow' && palantirActive(state);
@@ -532,19 +538,19 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // (out of hand) until the eventTarget resolves.
       const opts = h.targets ? h.targets(state, actor) : null;
       if (opts && opts.length > 0) {
-        state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId, repeat: h.repeat ?? 1, left: h.repeat ?? 1, applied: [], palantir: palantirWasActive } };
+        state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId, repeat: h.repeat ?? 1, left: h.repeat ?? 1, applied: [], palantir: palantirWasActive, guideDraw: guideDrawsNow } };
         break;
       }
       const deck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
       if (h.onTable) state.cards[actor].table.push(action.cardId);
       else state.cards[actor].discard[deck].push(action.cardId);
       if (palantirWasActive) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
-      guideEventDraw(state, actor, deck); // Gandalf the Grey's Guide ability
+      if (guideDrawsNow) guideEventDraw(state, actor, deck); // Gandalf the Grey's Guide ability
       passResolutionTurn(state, actor); break;
     }
     case 'eventTarget': {
       requireChoice(state, 'eventTarget', actor);
-      const data = state.pendingChoice!.data as { card: string; left: number; applied: EventTarget[]; palantir?: boolean };
+      const data = state.pendingChoice!.data as { card: string; left: number; applied: EventTarget[]; palantir?: boolean; guideDraw?: boolean };
       const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
@@ -560,7 +566,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
       state.cards[actor].discard[deck].push(data.card);
       if (data.palantir) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
-      if (!state.pendingCombat) guideEventDraw(state, actor, deck); // Gandalf the Grey's Guide ability
+      if (data.guideDraw && !state.pendingCombat) guideEventDraw(state, actor, deck); // Gandalf the Grey's Guide ability
       // A card that started a battle (Grond / Uruk-hai) hands off to the combat
       // driver, which resumes the turn itself — don't pass it here.
       if (!state.pendingCombat) passResolutionTurn(state, actor);
@@ -906,14 +912,16 @@ function requireChoice(state: GameState, kind: string, actor: Side): void {
   if (state.pendingChoice.owner !== actor) throw new Error('Not your choice');
 }
 
-function consumeOneOf(state: GameState, side: Side, faces: DieFace[]): boolean {
-  for (const f of faces) if (consumeDie(state, side, f)) return true;
-  return false;
+/** Spend the first available die among `faces`; returns the face spent, or null. */
+function consumeOneOf(state: GameState, side: Side, faces: DieFace[]): DieFace | null {
+  for (const f of faces) if (consumeDie(state, side, f)) return f;
+  return null;
 }
 /** Spend the player's explicitly-chosen die (the die-picker) when it's one of the
- *  usable faces and available; otherwise auto-pick (specific die first). */
-function consumePreferred(state: GameState, side: Side, faces: DieFace[], preferred?: DieFace): boolean {
-  if (preferred && faces.includes(preferred) && consumeDie(state, side, preferred)) return true;
+ *  usable faces and available; otherwise auto-pick (specific die first). Returns the
+ *  face actually spent (truthy), or null if no die was available (falsy). */
+function consumePreferred(state: GameState, side: Side, faces: DieFace[], preferred?: DieFace): DieFace | null {
+  if (preferred && faces.includes(preferred) && consumeDie(state, side, preferred)) return preferred;
   return consumeOneOf(state, side, faces);
 }
 
