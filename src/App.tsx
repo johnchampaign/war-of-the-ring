@@ -89,15 +89,33 @@ function Lobby({ onStart }: { onStart: (aiSide?: 'fp' | 'shadow') => void }) {
     catch (e) { alert('Online create failed (needs the deployed server): ' + (e as Error).message); }
     finally { setCreating(false); }
   };
+  // Create a ranked online game vs the server-driven AI: the human takes
+  // `humanSide`, the AI takes the other side, then navigate the human to their
+  // seat (the server drives the AI's turns + auto-rates the result).
+  const createVsAi = async (humanSide: 'fp' | 'shadow') => {
+    setCreating(true);
+    try {
+      const aiSide = humanSide === 'fp' ? 'shadow' : 'fp';
+      const r = await createOnlineGame({ ai: { [aiSide]: 'standard' } });
+      window.location.href = r.invites[humanSide]; // go to the human's seat
+    } catch (e) {
+      alert('Online vs-AI create failed (needs the deployed server): ' + (e as Error).message);
+      setCreating(false);
+    }
+  };
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#0c0a07', color: '#e9e1cc', fontFamily: 'system-ui' }}>
       <div style={{ textAlign: 'center', maxWidth: 460 }}>
         <h1 style={{ fontVariant: 'small-caps', letterSpacing: 1 }}>War of the Ring</h1>
         <p style={{ color: '#a99' }}>Unofficial digital port · 2-player (Free Peoples vs Shadow)</p>
         {plays != null && <p style={{ color: '#776', fontSize: 12, marginTop: -6 }}>{plays.toLocaleString()} games played</p>}
-        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Play vs the AI:</div>
-        <button onClick={() => onStart('shadow')} style={{ ...primary, background: '#2f4f9e' }}>Play Free Peoples (vs AI Shadow)</button>
-        <button onClick={() => onStart('fp')} style={{ ...primary, background: '#a83232' }}>Play Shadow (vs AI Free Peoples)</button>
+        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Ranked online — vs the leaderboard AI:</div>
+        <button onClick={() => createVsAi('fp')} disabled={creating} style={{ ...primary, background: '#2f4f9e' }}>{creating ? 'Creating…' : 'Play Free Peoples (vs AI Shadow) — ranked'}</button>
+        <button onClick={() => createVsAi('shadow')} disabled={creating} style={{ ...primary, background: '#a83232' }}>{creating ? 'Creating…' : 'Play Shadow (vs AI Free Peoples) — ranked'}</button>
+        <div style={{ fontSize: 11, color: '#776', textAlign: 'left', margin: '2px 4px 0' }}>Sign in first so your result counts on the leaderboard.</div>
+        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Play vs the AI (local, unranked):</div>
+        <button onClick={() => onStart('shadow')} style={secondary}>Free Peoples (vs AI Shadow)</button>
+        <button onClick={() => onStart('fp')} style={secondary}>Shadow (vs AI Free Peoples)</button>
         <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Two players, one screen:</div>
         <button onClick={() => onStart()} style={secondary}>New hotseat game (2 humans)</button>
         <button onClick={createOnline} disabled={creating} style={secondary}>{creating ? 'Creating…' : 'New online game'}</button>

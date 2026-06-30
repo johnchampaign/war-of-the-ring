@@ -35,10 +35,15 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
       const body = await safeJson(request);
       const seed = randomSeed();
       const initialState = startGame(createGame({ seed }));
+      // Optional AI seat(s): body.ai maps a side -> difficulty key (e.g.
+      // { shadow: 'standard' }). Only known sides + difficulties are honoured;
+      // the server drives those seats and auto-rates them as ai:war-of-the-ring:<key>.
+      const ai = sanitizeAi(body?.ai);
       const result = await server.createGame({
         initialState,
         players: ['fp', 'shadow'],
         emails: body?.emails,
+        ...(ai ? { ai } : {}),
       });
       return json(result, 201);
     }
@@ -222,6 +227,20 @@ function summarizeReport(r: BugReportRow, full = false) {
   return full && (r.category === 'wotr-gamelog' || localBug)
     ? { ...base, clientLog: r.clientLog, ...(localBug && r.reporterView ? { snapshot: r.reporterView } : {}) }
     : base;
+}
+
+// Validate the create-game `ai` map: only 'fp'/'shadow' seats and the 'standard'
+// difficulty are allowed. Returns undefined when there's no valid AI seat, so a
+// human-vs-human game is created (the default).
+const AI_DIFFICULTIES = new Set(['standard']);
+function sanitizeAi(raw: unknown): Partial<Record<'fp' | 'shadow', string>> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Partial<Record<'fp' | 'shadow', string>> = {};
+  for (const side of ['fp', 'shadow'] as const) {
+    const diff = (raw as Record<string, unknown>)[side];
+    if (typeof diff === 'string' && AI_DIFFICULTIES.has(diff)) out[side] = diff;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 async function safeJson(request: Request): Promise<any> {

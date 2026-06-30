@@ -11,6 +11,7 @@ import {
 import { jsonCodec } from 'digital-boardgame-framework';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { wotrAdapter } from '../../src/adapter/wotrAdapter';
+import { wotrControllers } from '../../src/ai/wotrControllers';
 import type { GameState } from '../../src/engine/types';
 import type { WotrAction } from '../../src/adapter/wotrAction';
 
@@ -73,6 +74,7 @@ export function makeServer(env: Env): WotrServer {
     adapter: wotrAdapter,
     codec: jsonCodec<GameState>(),
     store: new SupabaseStore(supabase(env)),
+    aiControllers: wotrControllers, // server-driven AI seats (rated)
     playBeacon: { appId: 'war-of-the-ring' }, // best-effort 'online' play beacon on createGame
     notifier: new NoopNotifier(),
     broadcaster: new SupabaseBroadcaster({

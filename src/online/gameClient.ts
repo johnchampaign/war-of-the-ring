@@ -85,10 +85,16 @@ export async function claimSeat(gameId: string, token: string, identityToken: st
   } catch { /* ranked attribution is optional */ }
 }
 
-/** Create a new online game; returns the gameId and both seats' invite URLs. */
-export async function createOnlineGame(): Promise<{ gameId: string; invites: Record<'fp' | 'shadow', string> }> {
-  return fetch('/api/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-    .then((r) => r.json());
+/** Create a new online game; returns the gameId and both seats' invite URLs.
+ *  Pass `ai` to seat the server-driven leaderboard AI on a side, e.g.
+ *  `{ shadow: 'standard' }` for a human Free Peoples vs the AI Shadow. */
+export async function createOnlineGame(
+  opts: { ai?: Partial<Record<'fp' | 'shadow', string>> } = {},
+): Promise<{ gameId: string; invites: Record<'fp' | 'shadow', string> }> {
+  return fetch('/api/games', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts.ai ? { ai: opts.ai } : {}),
+  }).then((r) => r.json());
 }
 
 /** Parse a seat invite from the URL (?g=<gameId>&t=<token>, or an ?as= invite). */
