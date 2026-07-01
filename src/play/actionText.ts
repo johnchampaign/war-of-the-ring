@@ -4,6 +4,7 @@
 // Refresh can't hot-update them ("incompatible export") and forces full reloads.
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState, Side, DieFace } from '../engine/types';
+import { characterSide } from '../engine/data';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { charName } from './charInfo';
@@ -135,7 +136,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
     case 'playEvent': return pick(cardDeck(a.cardId) === 'Character' ? ['character', 'event', 'will'] : ['army', 'armyMuster', 'muster', 'event', 'will']);
     case 'moveArmy': case 'attack': {
       const r = view.regions[a.from];
-      const leader = !!r && (r.leaders > 0 || r.nazgul > 0 || r.characters.length > 0);
+      const leader = !!r && ((you === 'fp' ? r.leaders > 0 : r.nazgul > 0) || r.characters.some((c) => characterSide(c) === you));
       return pick(['army', 'armyMuster', 'will', ...(leader ? ['character' as DieFace] : [])]);
     }
     default: return [];

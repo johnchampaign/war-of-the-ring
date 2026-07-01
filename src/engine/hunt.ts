@@ -269,7 +269,12 @@ function huntRoll(state: GameState, level: number, bonus: number, rerolls: numbe
   });
   state.hunt.lastRoll = { level, bonus, dice, rerolls: rerollDice, successes, mordor: false };
   log(state, null, 'hunt', `Hunt roll: ${level} die${level === 1 ? '' : 'ce'}${bonus ? ` (+${bonus})` : ''} [${dice.join(',')}]${rerollDice.length ? ` re-roll [${rerollDice.join(',')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`);
-  if (successes >= 1) beginHuntDraw(state, successes, false);
+  if (successes >= 1) { beginHuntDraw(state, successes, false); return; }
+  // A miss: record it so the player still SEES the roll (dice + box bonus) and knows
+  // the Shadow rolled and missed — not that nothing happened.
+  const prev = state.hunt.draws ?? [];
+  const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
+  state.hunt.draws = [...prev, { seq, value: 0, damage: 0, reveal: false, onMordor: false, miss: true, roll: state.hunt.lastRoll }].slice(-16);
 }
 
 /** Resolve the Flocks of Crebain choice: optionally discard it for +1 to all Hunt

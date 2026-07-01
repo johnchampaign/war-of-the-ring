@@ -14,13 +14,13 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, resolveCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
+import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
-import { REGIONS, sideOfNation, EVENT_BY_ID } from '../engine/data';
+import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, type EventTarget } from '../engine/handlers/registry';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
@@ -138,6 +138,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return acts;
       }
       case 'combatCasualties':
+      case 'valinorCasualties': // Return to Valinor: FP chooses how the Elves absorb the losses
         return [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
       case 'combatContinue':
         return [{ kind: 'combatContinue', cont: true }, { kind: 'combatContinue', cont: false }];
@@ -364,8 +365,9 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         for (const [from, to] of moveTargets(state, actor)) acts.push({ kind: 'moveArmy', from, to });
         for (const [from, to] of attackTargets(state, actor)) acts.push({ kind: 'attack', from, to });
       } else if (faces.has('character')) {
-        // Character die: move OR attack with one army containing a Leader/Nazgûl/Character.
-        const leaderArmy = (from: string) => { const r = state.regions[from]!; return r.leaders > 0 || r.nazgul > 0 || r.characters.length > 0; };
+        // Character die: move OR attack with one army containing THIS side's own
+        // Leader/Nazgûl/Character (not an enemy Companion sharing the region).
+        const leaderArmy = (from: string) => { const r = state.regions[from]!; return (actor === 'fp' ? r.leaders > 0 : r.nazgul > 0) || r.characters.some((c) => characterSide(c) === actor); };
         for (const [from, to] of moveTargets(state, actor)) if (leaderArmy(from)) acts.push({ kind: 'moveArmy', from, to });
         for (const [from, to] of attackTargets(state, actor)) if (leaderArmy(from)) acts.push({ kind: 'attack', from, to });
       }
@@ -709,7 +711,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // An Army die moves any army; a Character die may move ONE army that
       // contains a Leader/Nazgûl/Character (rules-spec §6).
       const src = state.regions[action.from]!;
-      const leaderArmy = src.leaders > 0 || src.nazgul > 0 || src.characters.length > 0;
+      // Only the ACTOR's own Leader/Nazgûl/Character makes a Character-die move legal —
+      // NOT an enemy Companion who happens to share the region (e.g. one who separated
+      // into a Stronghold this Army holds). (FP use Leaders; Shadow use Nazgûl.)
+      const leaderArmy = (actor === 'fp' ? src.leaders > 0 : src.nazgul > 0) || src.characters.some((c) => characterSide(c) === actor);
       let viaArmyDie = false;
       if (action.die && consumeDie(state, actor, action.die)) viaArmyDie = action.die !== 'character';
       else if (consumeArmyDie(state, actor)) viaArmyDie = true;
@@ -794,6 +799,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       break;
     }
     case 'chooseCasualties':
+      if (state.pendingChoice?.kind === 'valinorCasualties') {
+        const { results } = state.pendingChoice.data as { results: { region: RegionId; hits: number }[] };
+        for (const r of results) applyCasualties(state, r.region, 'fp', r.hits, action.plan);
+        state.pendingChoice = null; break;
+      }
       requireChoice(state, 'combatCasualties', actor); resolveCasualties(state, action.plan); break;
     case 'combatContinue':
       requireChoice(state, 'combatContinue', actor); resolveContinue(state, action.cont); break;

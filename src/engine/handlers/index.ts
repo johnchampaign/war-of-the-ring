@@ -1229,12 +1229,24 @@ function elvenStrongholds(state: GameState): string[] {
 register('sh-str-01', {
   canPlay: (state) => elvenStrongholds(state).length > 0,
   apply(state) {
+    const results: { region: string; hits: number }[] = [];
+    let anyChoice = false;
     for (const id of elvenStrongholds(state)) {
       const u = state.regions[id]!.units.elves!;
       const hits = rollDice(state, u.regular + u.elite, 6);
-      if (hits > 0) applyCasualties(state, id, 'fp', hits, 'regularsFirst');
-      log(state, null, 'event', `Return to Valinor: ${hits} Elven units sail from ${id}`);
+      if (hits > 0) {
+        results.push({ region: id, hits });
+        // A choice exists only when the region holds BOTH Regulars and Elites and not
+        // every unit is lost (otherwise the absorption order is forced).
+        if (u.regular > 0 && u.elite > 0 && hits < u.regular + u.elite) anyChoice = true;
+      }
+      log(state, null, 'event', `Return to Valinor: ${hits} Elven unit${hits === 1 ? '' : 's'} sail from ${id}`);
     }
+    if (results.length === 0) return;
+    // Let the FP choose how the Elves absorb the losses (Regulars first vs Elites first),
+    // like combat casualties — instead of always auto-removing Regulars first.
+    if (anyChoice) state.pendingChoice = { owner: 'fp', kind: 'valinorCasualties', data: { results } };
+    else for (const r of results) applyCasualties(state, r.region, 'fp', r.hits, 'regularsFirst');
   },
 });
 

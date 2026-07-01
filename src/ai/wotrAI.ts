@@ -328,6 +328,7 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'huntDamage' && a.mode === 'corruption') ?? legal[0]!;
     }
     case 'combatCasualties': // keep Elites (strength): remove Regulars first
+    case 'valinorCasualties': // Return to Valinor: keep Elves' Elites → remove Regulars first
       return legal.find((a) => a.kind === 'chooseCasualties' && a.plan === 'regularsFirst') ?? legal[0]!;
     case 'combatContinue': {
       const cont = !!pc && unitCount(state, pc.from) >= unitCount(state, pc.to);
