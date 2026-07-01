@@ -68,7 +68,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
   return (
     <div style={backdrop}>
       <div style={modal}>
-        {pc && <CombatHeader pc={pc} />}
+        {pc && <CombatHeader pc={pc} view={view} />}
         {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>{CHOICE_TITLE[choice.kind] ?? choice.kind}</div>}
         {choice?.kind === 'huntDamage' && <HuntDetail view={view} data={(choice as any).data} onExplain={() => setHuntInfo(true)}
           modes={decisions.filter((a) => a.kind === 'huntDamage').map((a) => (a as Extract<WotrAction, { kind: 'huntDamage' }>).mode)} />}
@@ -102,7 +102,11 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
   );
 }
 
-function CombatHeader({ pc }: { pc: NonNullable<GameState['pendingCombat']> }) {
+function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']>; view: GameState }) {
+  // The attacker occupies `from`; the defender is in `to` (or its siege box on an assault).
+  const atk = view.regions[pc.from];
+  const boxed = pc.boxed === pc.defender ? view.regions[pc.to]?.siegeBox : undefined;
+  const def = boxed ?? view.regions[pc.to];
   return (
     <div style={{ borderBottom: '1px solid #443', paddingBottom: 8 }}>
       <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1 }}>
@@ -112,7 +116,12 @@ function CombatHeader({ pc }: { pc: NonNullable<GameState['pendingCombat']> }) {
         <b style={{ color: pc.attacker === 'fp' ? '#7fb6e6' : '#e6857f' }}>{sideName(pc.attacker)}</b> attacks{' '}
         <b>{rName(pc.to)}</b> <span style={{ color: '#998' }}>(from {rName(pc.from)})</span>
       </div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
+      {/* Army sizes — so the player can size up the fight without closing the modal (report). */}
+      <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
+        <ArmySize label="Attacker" force={atk} side={pc.attacker} />
+        <ArmySize label={boxed ? 'Defender (in siege)' : 'Defender'} force={def} side={pc.defender} />
+      </div>
+      <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
         <Hits label="Attacker hits" n={pc.atkHits} />
         <Hits label="Defender hits" n={pc.defHits} />
       </div>
@@ -128,6 +137,21 @@ function CombatHeader({ pc }: { pc: NonNullable<GameState['pendingCombat']> }) {
 
 function Hits({ label, n }: { label: string; n: number }) {
   return <div style={{ fontSize: 12, color: '#bba' }}>{label}: <b style={{ color: n ? '#e88' : '#9a9' }}>{n}</b></div>;
+}
+
+// A compact army summary for the combat header: total units + Regular/Elite split and
+// any Leaders/Nazgûl, so the player can judge the fight from inside the modal.
+function ArmySize({ label, force, side }: { label: string; force?: { units?: Record<string, { regular: number; elite: number }>; leaders: number; nazgul: number }; side: Side }) {
+  const us = Object.values(force?.units ?? {});
+  const reg = us.reduce((s, u) => s + (u?.regular ?? 0), 0);
+  const eli = us.reduce((s, u) => s + (u?.elite ?? 0), 0);
+  const lead = force?.leaders ?? 0, naz = force?.nazgul ?? 0;
+  const extra = [lead ? `${lead} Leader${lead === 1 ? '' : 's'}` : '', naz ? `${naz} Nazgûl` : ''].filter(Boolean).join(', ');
+  return (
+    <div style={{ fontSize: 12, color: side === 'fp' ? '#7fb6e6' : '#e6857f' }}>
+      {label}: <b>{reg + eli}</b> unit{reg + eli === 1 ? '' : 's'} <span style={{ color: '#998' }}>({reg}R / {eli}E{extra ? ` · ${extra}` : ''})</span>
+    </div>
+  );
 }
 
 function PlayedCard({ id, who }: { id: string; who: string }) {

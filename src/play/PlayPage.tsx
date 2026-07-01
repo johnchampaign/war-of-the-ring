@@ -135,6 +135,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const acts = g.legalActions.filter(isSpatial).filter((a) => !(a.kind === 'attack' && a.from === a.to));
     return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
   }, [g.legalActions, activeDie, g.view, g.you]);
+  // The optional SECOND army move (Army die). Board-driven like the first move: select
+  // the army on the map, then its destination (report: the panel list was awkward).
+  const armyMove2Acts = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'armyMove2' }> => a.kind === 'armyMove2' && !!a.from && !!a.to), [g.legalActions]);
+  const boardArmyActs = useMemo(() => [...armyActs, ...armyMove2Acts], [armyActs, armyMove2Acts]); // mutually exclusive states
+  const isArmyMove2 = armyMove2Acts.length > 0;
   // Board-click placement of the Fellowship figure: declaring it (Fellowship phase) or
   // choosing where it moves when revealed by the Hunt (revealMove choice).
   const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' | 'separateMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove' || a.kind === 'separateMove'), [g.legalActions]);
@@ -166,7 +171,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     return s;
   }, [g.view, canMoveChars, charMoveOk, charMoved, g.you]);
-  const sources = useMemo(() => new Set<RegionId>([...armyActs.map((a) => a.from), ...declareTargets, ...charSources, ...cardSepTargets]), [armyActs, declareTargets, charSources, cardSepTargets]);
+  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, declareTargets, charSources, cardSepTargets]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -188,8 +193,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     [g.view, charPick, g.you],
   );
   const destinations = useMemo(
-    () => new Set<RegionId>([...armyActs.filter((a) => a.from === selected).map((a) => a.to), ...charDestinations]),
-    [armyActs, selected, charDestinations],
+    () => new Set<RegionId>([...boardArmyActs.filter((a) => a.from === selected).map((a) => a.to!), ...charDestinations]),
+    [boardArmyActs, selected, charDestinations],
   );
 
   const clearMove = () => { setSelected(null); setCharPick(null); setMoveMenu(null); setNazPick(null); };
@@ -230,17 +235,18 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // An army move is in progress: click a highlighted destination (army-only set).
     if (selected && destinations.has(id)) {
-      const act = armyActs.find((a) => a.from === selected && a.to === id);
+      const act = boardArmyActs.find((a) => a.from === selected && a.to === id);
       if (act) {
         setSelected(null);
         if (act.kind === 'moveArmy') setMoveDraft({ from: act.from, to: act.to, kind: 'moveArmy' });
         else if (act.kind === 'attack') setMoveDraft({ from: act.from, to: act.to, kind: 'attack' });
+        else if (act.kind === 'armyMove2') setMoveDraft({ from: act.from!, to: act.to!, kind: 'armyMove2' });
         else void submit(act);
       }
       return;
     }
     // Clicking a region that has something to move: army, character(s), or both.
-    const armyHere = armyActs.some((a) => a.from === id);
+    const armyHere = boardArmyActs.some((a) => a.from === id);
     const charsHere = (g.view && canMoveChars && charMoveOk && g.you) ? movableCharsAt(g.view, g.you as Side, id, charMoved) : [];
     const opts: Array<{ kind: 'army' } | { kind: 'char'; char: string }> = [
       ...(armyHere ? [{ kind: 'army' as const }] : []),
@@ -259,10 +265,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (reason) setBlockMsg(reason);
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, armyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
@@ -309,6 +315,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // board (banner + highlighted regions), NOT a panel button — and revealMove has
     // no readable label, so it would otherwise show as raw JSON in the action list.
     && a.kind !== 'revealMove' && a.kind !== 'declareFellowship'
+    // The second army move (armyMove2 with from/to) is a board click now; keep only the
+    // "no second move" (done) option in the panel.
+    && !(a.kind === 'armyMove2' && !!a.from)
     && !(a.kind === 'eventTarget' && !!a.region && !!a.companion)); // card-separation destinations go on the board
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
@@ -355,7 +364,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`
                   : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : charName(charPick.char)} — click a highlighted region to move there (or click the piece again to cancel).`
                     : selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
-                      : 'Click a highlighted (green) region to move an army or an independent character (Nazgûl, Companion).'}
+                      : isArmyMove2 ? 'Second army move — click a green army to move it (a different army), or “No second army move” on the right.'
+                        : 'Click a highlighted (green) region to move an army or an independent character (Nazgûl, Companion).'}
             </div>
           )}
         </div>
