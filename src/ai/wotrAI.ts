@@ -216,7 +216,7 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'recruitUnit': return actor === 'shadow' ? 38 : 20; // build the war stacks
     case 'moveArmy': return armyMoveScore(state, actor, a.from, a.to, target);
     case 'moveCharacter': return moveCharacterScore(state, actor, a); // reposition Nazgûl/Companions
-    case 'diplomaticAction': return 32;                                // mobilize toward At War
+    case 'diplomaticAction': return diplomaticScore(state, actor, a.nation); // mobilize toward At War
     case 'companionMuster': // a Companion advances its Nation toward War (any die) — mobilization
       return state.nations[a.nation].step > 0 ? 28 : 6;                // worth it only while the Nation isn't yet At War
     case 'sarumanMuster': return a.mode === 'recruit' ? 45 : 30;       // Voice of Saruman: a big Isengard build / Elite upgrade
@@ -230,6 +230,35 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'pass': return 0;
     default: return 2;
   }
+}
+
+/** Total Army figures a Nation has on the board — the weight waiting behind its
+ *  Political Track position, unlocked for offense once it goes At War. */
+function nationArmy(state: GameState, nation: Nation): number {
+  let n = 0;
+  for (const r of Object.values(state.regions)) {
+    const u = r.units[nation]; if (u) n += u.regular + u.elite;
+    if (r.siegeBox) { const su = r.siegeBox.units[nation]; if (su) n += su.regular + su.elite; }
+  }
+  return n;
+}
+
+/** Advancing a Nation on the Political Track (rulebook p.35). Going At War unlocks
+ *  that Nation's Army for attack, so weight by proximity-to-War AND the size of the
+ *  Army waiting behind it — finishing a big Nation's march to War is a far bigger
+ *  tempo swing than mustering one more unit. A passive Nation can't pass step 1
+ *  until activated, so nudging it is worth little. Replaces a flat score that let
+ *  tie-break noise advance (e.g.) a stuck passive Nation over Sauron-one-from-War. */
+function diplomaticScore(state: GameState, actor: Side, nation: Nation): number {
+  const ns = state.nations[nation];
+  if (actor === 'shadow') {
+    if (!ns.active) return 12;                                          // can't reach War yet — barely worth a die
+    const army = Math.min(nationArmy(state, nation), 10);
+    const proximity = ns.step === 1 ? 46 : ns.step === 2 ? 30 : 20;     // one step from War is the decisive unlock
+    return proximity + army * 2;
+  }
+  if (!ns.active) return 8;                                             // FP advances toward War reactively
+  return ns.step === 1 ? 30 : 20;
 }
 
 /** March toward the campaign target, capture undefended enemy Settlements
