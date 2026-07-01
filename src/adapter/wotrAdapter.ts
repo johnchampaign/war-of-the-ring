@@ -178,9 +178,13 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const data = state.pendingChoice!.data as { nation: Nation };
         const acts: WotrAction[] = [];
         for (const id of Object.keys(state.regions)) {
-          const u = state.regions[id]!.units[data.nation];
+          const r = state.regions[id]!;
+          const u = r.units[data.nation];
           if (u && u.regular > 0) acts.push({ kind: 'stormcrowLoss', region: id, nation: data.nation, figure: 'regular' });
           if (u && u.elite > 0) acts.push({ kind: 'stormcrowLoss', region: id, nation: data.nation, figure: 'elite' });
+          // "…one Leader OR Army unit of that Nation": a Leader stacked with that
+          // Nation's Army may be eliminated instead (leaders are a generic count).
+          if (r.leaders > 0 && u && (u.regular > 0 || u.elite > 0)) acts.push({ kind: 'stormcrowLoss', region: id, nation: data.nation, figure: 'leader' });
         }
         return acts;
       }
@@ -578,10 +582,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'lureChoice':
       requireChoice(state, 'lureChoice', actor); resolveLureChoice(state, action.mode); break; // turn already passed
     case 'stormcrowLoss': {
-      requireChoice(state, 'stormcrowLoss', actor); // FP eliminates one unit of the targeted Nation
-      const u = state.regions[action.region]!.units[action.nation];
-      if (u && u[action.figure] > 0) { u[action.figure] -= 1; state.reinforcements[action.nation][action.figure] += 1; }
-      log(state, null, 'event', `Stormcrow: Free Peoples lose a ${action.nation} ${action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
+      requireChoice(state, 'stormcrowLoss', actor); // FP eliminates one Leader or unit of the targeted Nation
+      if (action.figure === 'leader') {
+        if (state.regions[action.region]!.leaders > 0) state.regions[action.region]!.leaders -= 1; // FP Leaders are permanently removed (not to reinforcements)
+      } else {
+        const u = state.regions[action.region]!.units[action.nation];
+        if (u && u[action.figure] > 0) { u[action.figure] -= 1; state.reinforcements[action.nation][action.figure] += 1; }
+      }
+      log(state, null, 'event', `Stormcrow: Free Peoples lose a ${action.nation} ${action.figure === 'leader' ? 'Leader' : action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
       state.pendingChoice = null; break; // the turn already passed when the Event resolved
     }
     case 'discardCard': {

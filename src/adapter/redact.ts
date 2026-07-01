@@ -26,6 +26,15 @@ export function redactStateForViewer(state: GameState, viewer: Side | null): Gam
     v.pendingChoice = { owner: v.pendingChoice.owner, kind: v.pendingChoice.kind };
   }
 
+  // Combat cards are chosen SIMULTANEOUSLY (face down) then revealed. While either
+  // side is still selecting (attackerCard / defenderCard steps), hide the OPPONENT's
+  // already-chosen-but-unrevealed card, so the second chooser can't see the first's
+  // card. Once the round begins (both locked), they're public.
+  if (v.pendingCombat && viewer != null && (v.pendingCombat.step === 'attackerCard' || v.pendingCombat.step === 'defenderCard')) {
+    if (viewer !== v.pendingCombat.attacker) v.pendingCombat.attackerCard = null;
+    if (viewer !== v.pendingCombat.defender) v.pendingCombat.defenderCard = null;
+  }
+
   // Log: public entries (side null) + the viewer's own side-tagged entries.
   v.log = v.log.filter((e) => e.side == null || e.side === viewer);
   return v;

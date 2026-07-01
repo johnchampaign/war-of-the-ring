@@ -19,6 +19,7 @@ import { combatModsFor, type CombatMods } from '../engine/combatCards';
 
 const HEAL_EVENTS = new Set(['fp-char-09', 'fp-char-10', 'fp-char-12', 'fp-char-13']);
 const CORRUPT_EVENTS = new Set(['sh-char-08', 'sh-char-12']);
+const SHADOW_CHARS = new Set(['witch-king', 'saruman', 'mouth-of-sauron']); // the rest are FP Companions
 
 export function chooseAction(state: GameState, actor: Side, legal: WotrAction[], rng: Rng): WotrAction {
   if (legal.length === 1) return legal[0]!;
@@ -107,7 +108,10 @@ function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): 
   const move: MoveSel = { units };
   if (r.leaders) move.leaders = r.leaders;
   if (r.nazgul) move.nazgul = r.nazgul;
-  if (r.characters.length) move.characters = [...r.characters];
+  // Only the MOVING side's own characters travel with the army — never the enemy's
+  // (e.g. FP Companions who separated into a besieged Shadow Stronghold this Army holds).
+  const mine = r.characters.filter((c) => (actor === 'shadow') === SHADOW_CHARS.has(c));
+  if (mine.length) move.characters = mine;
   return { kind: 'moveArmy', from, to: action.to, move };
 }
 
@@ -384,8 +388,9 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'recruitSecond' && !a.done) ?? legal[0]!;
     case 'armyMove2': return chooseArmyMove2(state, legal);
     case 'charMove2': return chooseCharMove(state, legal);
-    case 'stormcrowLoss': // forced army loss: shed a Regular before an Elite
-      return legal.find((a) => a.kind === 'stormcrowLoss' && a.figure === 'regular') ?? legal[0]!;
+    case 'stormcrowLoss': // forced loss: shed a Regular, then an Elite, keep Leaders
+      return legal.find((a) => a.kind === 'stormcrowLoss' && a.figure === 'regular')
+        ?? legal.find((a) => a.kind === 'stormcrowLoss' && a.figure === 'elite') ?? legal[0]!;
     case 'breakingSep': { // forced separation: keep the Guide, give up the lowest-Level Companion
       const seps = legal.filter((a): a is Extract<WotrAction, { kind: 'breakingSep' }> => a.kind === 'breakingSep');
       const pool = seps.filter((a) => a.companion !== state.fellowship.guide);

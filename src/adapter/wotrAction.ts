@@ -80,7 +80,7 @@ export type WotrAction =
   // Follow-up target choice for an interactive event card (fields per card).
   | { kind: 'eventTarget'; card: string; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; done?: boolean }
   // Stormcrow (FP responds): choose which unit of the targeted Nation to eliminate.
-  | { kind: 'stormcrowLoss'; region: RegionId; nation: Nation; figure: 'regular' | 'elite' }
+  | { kind: 'stormcrowLoss'; region: RegionId; nation: Nation; figure: 'regular' | 'elite' | 'leader' }
   // The Breaking of the Fellowship (FP responds): choose which Companion to separate.
   | { kind: 'breakingSep'; companion: string }
   // Over the 6-card hand limit: choose which Event card to discard (to its deck).

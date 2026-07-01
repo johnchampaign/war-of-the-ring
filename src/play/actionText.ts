@@ -95,7 +95,7 @@ export function describeAction(a: WotrAction): string {
     case 'guideDraw': return a.draw ? 'Gandalf: draw a card' : 'Gandalf: don’t draw';
     case 'sorcererDraw': return a.draw ? 'Sorcerer: draw a card' : 'Sorcerer: don’t draw';
     case 'lureChoice': return a.mode === 'corruption' ? 'Lure: take Corruption' : 'Lure: eliminate the Companion';
-    case 'stormcrowLoss': return `Lose ${cap(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
+    case 'stormcrowLoss': return `Lose ${cap(a.nation)} ${a.figure === 'leader' ? 'Leader' : a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
     case 'breakingSep': return `Separate ${charName(a.companion)} from the Fellowship`;
     case 'discardCard': return `Discard "${cardName(a.card)}"`;
     case 'huntPreventDraw': return a.prevent ? 'Discard Wizard’s Staff — no Hunt tile' : 'Let the Shadow draw';
