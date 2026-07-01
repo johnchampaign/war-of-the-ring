@@ -3,8 +3,9 @@
 // Nazgûl/Characters and leaving the rest behind. Defaults to "move all"; the engine
 // validates the split rules (≥1 unit, FP Leaders can't be stranded, etc.).
 import { useState } from 'react';
-import type { GameState, Nation } from '../engine/types';
+import type { GameState, Nation, Side } from '../engine/types';
 import type { MoveSel, WotrAction } from '../adapter/wotrAction';
+import { characterSide, sideOfNation } from '../engine/data';
 import { charName } from './charInfo';
 import mapData from '../../assets/map.json';
 
@@ -18,12 +19,16 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
   const verb = attackMode ? 'Attack' : 'Move';
   const r = view.regions[from];
   const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
+  // Only the MOVING army's OWN Characters can travel with it — never an enemy Companion
+  // who happens to share the region (e.g. one who separated into a besieged Stronghold).
+  const armySide: Side = nations.length ? sideOfNation(nations[0]!) : 'fp';
+  const myChars = r.characters.filter((c) => characterSide(c) === armySide);
   // Default selection = the whole Army (so an unchanged picker is a normal move).
   const [reg, setReg] = useState<Record<string, number>>(() => Object.fromEntries(nations.map((n) => [n, r.units[n]!.regular])));
   const [eli, setEli] = useState<Record<string, number>>(() => Object.fromEntries(nations.map((n) => [n, r.units[n]!.elite])));
   const [leaders, setLeaders] = useState(r.leaders);
   const [nazgul, setNazgul] = useState(r.nazgul);
-  const [chars, setChars] = useState<Set<string>>(() => new Set(r.characters));
+  const [chars, setChars] = useState<Set<string>>(() => new Set(myChars));
 
   const totalUnits = nations.reduce((s, n) => s + (reg[n] ?? 0) + (eli[n] ?? 0), 0);
   const armyUnits = nations.reduce((s, n) => s + r.units[n]!.regular + r.units[n]!.elite, 0);
@@ -32,7 +37,7 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
   const destUnits = !attackMode ? Object.values(view.regions[to]?.units ?? {}).reduce((s, u) => s + u!.regular + u!.elite, 0) : 0;
   const overAll = Math.max(0, destUnits + armyUnits - 10);
   const overSel = Math.max(0, destUnits + totalUnits - 10);
-  const isWhole = totalUnits === armyUnits && leaders === r.leaders && nazgul === r.nazgul && chars.size === r.characters.length;
+  const isWhole = totalUnits === armyUnits && leaders === r.leaders && nazgul === r.nazgul && chars.size === myChars.length;
 
   const buildSel = (): MoveSel => {
     const units: MoveSel['units'] = {};
@@ -50,7 +55,7 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
     const rg: MoveSel = { units };
     if (r.leaders - leaders) rg.leaders = r.leaders - leaders;
     if (r.nazgul - nazgul) rg.nazgul = r.nazgul - nazgul;
-    const left = r.characters.filter((c) => !chars.has(c));
+    const left = myChars.filter((c) => !chars.has(c));
     if (left.length) rg.characters = left;
     return rg;
   };
@@ -91,7 +96,7 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
         ))}
         {r.leaders > 0 && <Step label="Leaders" val={leaders} max={r.leaders} set={setLeaders} />}
         {r.nazgul > 0 && <Step label="Nazgûl" val={nazgul} max={r.nazgul} set={setNazgul} />}
-        {r.characters.map((c) => (
+        {myChars.map((c) => (
           <label key={c} style={{ ...row, cursor: 'pointer' }}>
             <input type="checkbox" checked={chars.has(c)} onChange={(e) => { const s = new Set(chars); e.target.checked ? s.add(c) : s.delete(c); setChars(s); }} />
             <span style={{ flex: 1 }}>{charName(c)}</span>

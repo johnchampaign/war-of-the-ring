@@ -7,7 +7,7 @@ import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount } from '../armies';
-import { applyCasualties, startBattle } from '../combat';
+import { applyCasualties, startBattle, queueOrApplyEventCasualties } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
@@ -701,18 +701,12 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       && state.regions['fangorn']!.characters.some((c) => COMPANION_SET.has(c))
       && armySide(state, 'orthanc') === 'shadow',
     apply(state) {
-      // Snapshot Nazgûl + Minions before combat resolution: applyCasualties clears
-      // them when the Army is destroyed, but the card wants them eliminated with it.
+      // Snapshot Nazgûl + Minions before casualties: when the Army is destroyed the
+      // card wants them eliminated with it — carried into the casualty follow-up.
       const naz0 = state.regions['orthanc']!.nazgul;
       const minionsHere = state.regions['orthanc']!.characters.filter((c) => MINIONS.includes(c));
       const hits = rollDice(state, 3, 4);
-      if (hits > 0) applyCasualties(state, 'orthanc', 'shadow', hits, 'regularsFirst');
-      let extra = '';
-      if (unitCount(state, 'orthanc') === 0) {
-        state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + naz0; // recycle
-        for (const m of minionsHere) { if (!state.characters.eliminated.includes(m)) state.characters.eliminated.push(m); extra += `, eliminated ${m}`; }
-      }
-      log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on Orthanc${extra}`);
+      log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on Orthanc`);
       // If Gandalf the White is in Fangorn or a Rohan region, the FP may play one more
       // Character Event card without an Action die (consumed in the next playEvent).
       const gw = charRegion(state, 'gandalf-white');
@@ -720,6 +714,9 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
         state.flags.fpFreeCharEventThisTurn = true;
         log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event without a die');
       }
+      // Shadow chooses how the Orthanc Army absorbs the hits (Regulars vs Elites);
+      // if the Army is wiped, its Nazgûl recycle and its Minions are eliminated.
+      queueOrApplyEventCasualties(state, 'shadow', 'orthanc', hits, { kind: 'entsAwake', region: 'orthanc', naz0, minions: minionsHere });
     },
   });
 }
@@ -772,8 +769,9 @@ register('sh-char-19', {
   apply(state) {
     const [fp, sh] = fpArmyNearNazgul(state)[0]!;
     const hits = rollDice(state, state.regions[sh]!.nazgul, 5);
-    if (hits > 0) applyCasualties(state, fp, 'fp', hits, 'regularsFirst');
     log(state, null, 'event', `Dreadful Spells: ${hits} hit(s) on ${fp}`);
+    // The Free Peoples choose how their Army absorbs the hits (Regulars vs Elites).
+    queueOrApplyEventCasualties(state, 'fp', fp, hits);
   },
 });
 

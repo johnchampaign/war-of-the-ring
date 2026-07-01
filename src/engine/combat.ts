@@ -178,6 +178,48 @@ function applyForceCasualties(state: GameState, f: Force, side: Side, hits: numb
   if (forceUnitCount(f) === 0) { f.leaders = 0; f.nazgul = 0; f.characters = []; }
 }
 
+// --- Event-inflicted casualties: the OWNER chooses absorption -----------------
+// Direct-damage Event cards (The Ents Awake, Dreadful Spells, …) eliminate Army
+// units. Per the casualty rules the OWNING player chooses which units are lost
+// (Regulars removed vs Elites reduced), exactly like combat casualties — so we
+// defer to an `eventCasualties` PendingChoice whenever the choice is meaningful,
+// then run any card-specific follow-up. `then` is plain data (serializable), not
+// a closure, so the choice survives a save/reload.
+export type CasualtyThen = { kind: 'entsAwake'; region: RegionId; naz0: number; minions: string[] };
+
+function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
+  if (!then) return;
+  if (then.kind === 'entsAwake') {
+    if (forceUnitCount(state.regions[then.region]!) === 0) {
+      state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + then.naz0; // recycle Nazgûl
+      const gone: string[] = [];
+      for (const m of then.minions) if (!state.characters.eliminated.includes(m)) { state.characters.eliminated.push(m); delete state.characters.inPlay[m]; gone.push(m); }
+      if (gone.length) log(state, null, 'event', `The Ents Awake: the Orthanc Army is destroyed — eliminated ${gone.join(', ')}`);
+    }
+  }
+}
+
+/** Apply event-inflicted `hits` to a region's Army, prompting the owner for the
+ *  absorption plan when the choice is meaningful; otherwise auto-resolve and run
+ *  the follow-up immediately. */
+export function queueOrApplyEventCasualties(state: GameState, side: Side, region: RegionId, hits: number, then?: CasualtyThen): void {
+  if (hits <= 0) { runCasualtyThen(state, then); return; }
+  if (meaningfulForceCasualty(state.regions[region]!, hits)) {
+    state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits, then: then ?? null } };
+    return;
+  }
+  applyCasualties(state, region, side, hits, 'regularsFirst');
+  runCasualtyThen(state, then);
+}
+
+/** Resolve a pending `eventCasualties` choice with the owner's chosen plan. */
+export function resolveEventCasualties(state: GameState, plan: 'regularsFirst' | 'elitesFirst'): void {
+  const d = state.pendingChoice!.data as { region: RegionId; side: Side; hits: number; then: CasualtyThen | null };
+  applyCasualties(state, d.region, d.side, d.hits, plan);
+  state.pendingChoice = null;
+  runCasualtyThen(state, d.then);
+}
+
 // --- Attack split: the rearguard (rulebook p.28) -----------------------------
 const nationAtWar = (state: GameState, n: Nation): boolean => state.nations[n].step === 0;
 

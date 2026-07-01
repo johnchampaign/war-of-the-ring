@@ -23,6 +23,7 @@ const CHOICE_TITLE: Record<string, string> = {
   combatCard: 'Play a Combat Card?',
   combatCasualties: 'Choose your casualties',
   valinorCasualties: 'Return to Valinor — how do the Elves absorb the losses?',
+  eventCasualties: 'How does your Army absorb the losses?',
   combatContinue: 'Continue the attack?',
   combatRetreat: 'Retreat or stand?',
   retreatTo: 'Retreat — choose a destination',

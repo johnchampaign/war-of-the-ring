@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard } from '../engine/combat';
+import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
@@ -139,6 +139,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       }
       case 'combatCasualties':
       case 'valinorCasualties': // Return to Valinor: FP chooses how the Elves absorb the losses
+      case 'eventCasualties': // direct-damage Event cards: the owner chooses how the Army absorbs the losses
         return [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
       case 'combatContinue':
         return [{ kind: 'combatContinue', cont: true }, { kind: 'combatContinue', cont: false }];
@@ -804,6 +805,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         for (const r of results) applyCasualties(state, r.region, 'fp', r.hits, action.plan);
         state.pendingChoice = null; break;
       }
+      if (state.pendingChoice?.kind === 'eventCasualties') { resolveEventCasualties(state, action.plan); break; }
       requireChoice(state, 'combatCasualties', actor); resolveCasualties(state, action.plan); break;
     case 'combatContinue':
       requireChoice(state, 'combatContinue', actor); resolveContinue(state, action.cont); break;
@@ -971,7 +973,7 @@ function placeFigure(state: GameState, side: Side, nation: Nation, region: strin
 }
 
 /** Free, friendly, At-War Settlement regions of `nation` (recruit targets). */
-function recruitRegions(state: GameState, side: Side, nation: Nation, cap = 4): string[] {
+function recruitRegions(state: GameState, side: Side, nation: Nation, cap = Infinity): string[] {
   const out: string[] = [];
   for (const id of Object.keys(state.regions)) {
     const def = REGIONS[id]!;
@@ -994,15 +996,15 @@ function recruitTargets(state: GameState, side: Side): WotrAction[] {
   const out: WotrAction[] = [];
   const naz = (state.reinforcements.sauron as { nazgul?: number }).nazgul ?? 0;
   for (const nation of Object.keys(state.nations) as Nation[]) {
-    if (out.length >= 24) break;
+    if (out.length >= 96) break;
     if (sideOfNation(nation) !== side || !isAtWar(state, nation)) continue;
     const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
     const fpLead = side === 'fp' ? (pool.leader ?? 0) : 0;
     const canLead = side === 'shadow' ? naz > 0 : fpLead >= 1;
     // Offer EVERY eligible settlement of the Nation (not just the first) so you can
     // choose where to muster — e.g. The Shire vs Bree (Ira Fay #10b).
-    for (const id of recruitRegions(state, side, nation, 4)) {
-      if (out.length >= 24) break;
+    for (const id of recruitRegions(state, side, nation)) {
+      if (out.length >= 96) break;
       if (pool.regular >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'regular' });
       if (pool.elite >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 1 });
       // 1 Regular + 1 Leader/Nazgûl, and 2 Leaders/Nazgûl. Shadow's "Leader" is a Nazgûl.
