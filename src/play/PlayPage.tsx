@@ -24,7 +24,7 @@ import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { isDecisionAction, dieOptions } from './actionText';
+import { isDecisionAction, dieOptions, describeAction } from './actionText';
 import { moveBlockReason } from '../engine/armies';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { separationActivates } from '../engine/fellowship';
@@ -60,7 +60,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [charPick, setCharPick] = useState<{ from: RegionId; char: string } | null>(null);
   // When a clicked region offers more than one thing to move (e.g. the army AND its
   // Nazgûl), let the player choose which.
-  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined } | { kind: 'assault'; char?: undefined } | { kind: 'char'; char: string }> } | null>(null);
+  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined } | { kind: 'assault'; char?: undefined } | { kind: 'muster'; char?: undefined } | { kind: 'char'; char: string }> } | null>(null);
+  const [musterMenu, setMusterMenu] = useState<RegionId | null>(null); // board-click muster: the chosen Settlement
   // Choosing HOW MANY Nazgûl to move from a stack (RAW: move any number, not the whole group).
   const [nazPick, setNazPick] = useState<{ from: RegionId; to: RegionId; max: number } | null>(null);
   // Why the last attempted move/merge was refused (shown so it isn't a silent no-op).
@@ -172,7 +173,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     return s;
   }, [g.view, canMoveChars, charMoveOk, charMoved, g.you]);
   const assaultSources = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'attack' }> => a.kind === 'attack' && a.from === a.to).map((a) => a.from), [g.legalActions]);
-  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...assaultSources, ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, assaultSources, declareTargets, charSources, cardSepTargets]);
+  // Board-click MUSTERING (player report: paging the panel's recruit buttons was
+  // tedious): eligible Settlements highlight; clicking one opens its bundle menu.
+  const recruitActs = useMemo(() => {
+    const acts = g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'recruitUnit' }> => a.kind === 'recruitUnit');
+    return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
+  }, [g.legalActions, activeDie, g.view, g.you]);
+  const musterTargets = useMemo(() => new Set(recruitActs.map((a) => a.region)), [recruitActs]);
+  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -198,14 +206,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     [boardArmyActs, selected, charDestinations],
   );
 
-  const clearMove = () => { setSelected(null); setCharPick(null); setMoveMenu(null); setNazPick(null); };
+  const clearMove = () => { setSelected(null); setCharPick(null); setMoveMenu(null); setNazPick(null); setMusterMenu(null); };
 
   // Begin moving whatever was chosen from a region: an army (select for the picker)
   // or a specific independent character (Nazgûl/Minion/Companion).
-  const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'assault' } | { kind: 'char'; char: string }) => {
+  const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'char'; char: string }) => {
     setMoveMenu(null);
     if (opt.kind === 'army') { setCharPick(null); setSelected(region); }
     else if (opt.kind === 'assault') { setCharPick(null); setSelected(null); setMoveDraft({ from: region, to: region, kind: 'attack' }); } // storm the besieged Stronghold
+    else if (opt.kind === 'muster') { setCharPick(null); setSelected(null); setMusterMenu(region); } // pick the bundle for this Settlement
     else { setSelected(null); setCharPick({ from: region, char: opt.char }); }
   }, []);
 
@@ -247,15 +256,18 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
       return;
     }
-    // Clicking a region that has something to move: army, an assault, character(s), or several.
+    // Clicking a region that has something to do: move an army, assault, muster,
+    // move character(s) — or several (menu).
     const armyHere = boardArmyActs.some((a) => a.from === id);
     // A siege ASSAULT (attack from===to) is board-clickable too (player report):
     // click the besieged region you occupy and choose "Assault".
     const assaultHere = g.legalActions.some((a) => a.kind === 'attack' && a.from === id && a.to === id);
+    const musterHere = musterTargets.has(id);
     const charsHere = (g.view && canMoveChars && charMoveOk && g.you) ? movableCharsAt(g.view, g.you as Side, id, charMoved) : [];
-    const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'char'; char: string }> = [
+    const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'char'; char: string }> = [
       ...(armyHere ? [{ kind: 'army' as const }] : []),
       ...(assaultHere ? [{ kind: 'assault' as const }] : []),
+      ...(musterHere ? [{ kind: 'muster' as const }] : []),
       ...charsHere.map((c) => ({ kind: 'char' as const, char: c })),
     ];
     if (opts.length > 1) { clearMove(); setMoveMenu({ region: id, options: opts }); return; }
@@ -271,7 +283,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (reason) setBlockMsg(reason);
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
@@ -324,7 +336,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // The second army move (armyMove2 with from/to) is a board click now; keep only the
     // "no second move" (done) option in the panel.
     && !(a.kind === 'armyMove2' && !!a.from)
-    && !(a.kind === 'eventTarget' && !!a.region && !!a.companion)); // card-separation destinations go on the board
+    && !(a.kind === 'eventTarget' && !!a.region && !!a.companion) // card-separation destinations go on the board
+    // Mustering is board-driven now (player report: the panel's per-Settlement recruit
+    // buttons were tedious to page through): click a highlighted Settlement instead.
+    && a.kind !== 'recruitUnit');
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
     : panelActionsAll;
@@ -371,7 +386,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : charName(charPick.char)} — click a highlighted region to move there (or click the piece again to cancel).`
                     : selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
                       : isArmyMove2 ? 'Second army move — click a green army to move it (a different army), or “No second army move” on the right.'
-                        : 'Click a highlighted (green) region to move an army or an independent character (Nazgûl, Companion).'}
+                        : `Click a highlighted (green) region to move an army or a character${musterTargets.size ? ', or to muster in a Settlement' : ''}.`}
             </div>
           )}
         </div>
@@ -422,6 +437,22 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         </div>
       )}
       {/* A region offered more than one thing to move (e.g. the army AND its Nazgûl). */}
+      {musterMenu && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.55)', display: 'grid', placeItems: 'center', zIndex: 60 }}
+          onClick={() => setMusterMenu(null)}>
+          <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 16, borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 280, boxShadow: '0 8px 40px #000' }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>Muster in {REGIONS[musterMenu]?.name ?? musterMenu}</div>
+            {recruitActs.filter((a) => a.region === musterMenu).map((a, i) => (
+              <button key={i} onClick={() => { setMusterMenu(null); void submit(a); }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
+                {describeAction(a)}
+              </button>
+            ))}
+            <button onClick={() => setMusterMenu(null)} style={{ marginTop: 6, padding: '5px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      )}
       {moveMenu && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.55)', display: 'grid', placeItems: 'center', zIndex: 60 }}
           onClick={() => setMoveMenu(null)}>
@@ -431,7 +462,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             {moveMenu.options.map((o, i) => (
               <button key={i} onClick={() => beginMove(moveMenu.region, o)}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
-                {o.kind === 'army' ? 'The army' : o.kind === 'assault' ? '⚔ Assault the besieged Stronghold' : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
+                {o.kind === 'army' ? 'The army' : o.kind === 'assault' ? '⚔ Assault the besieged Stronghold' : o.kind === 'muster' ? '🛡 Muster here' : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
               </button>
             ))}
             <button onClick={() => setMoveMenu(null)} style={{ marginTop: 6, padding: '5px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>

@@ -301,11 +301,13 @@ function CardBlurb({ id }: { id: string | null }) {
 // extends the modal DOWNWARD instead of re-centring it — otherwise the buttons slide
 // out from under the cursor and you can't click them.
 const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.72)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '7vh', boxSizing: 'border-box', zIndex: 50 };
-const modal: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #5a4a2a', maxWidth: 560, maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 8px 40px #000' };
+// Fixed width — a content-driven width made the modal reshape when the hover blurb
+// filled in, sliding the card buttons out from under the cursor (player report).
+const modal: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #5a4a2a', width: 560, maxWidth: '92vw', boxSizing: 'border-box', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 8px 40px #000' };
 const dbtn: React.CSSProperties = { background: '#7a1f1f', color: '#fff', border: '1px solid #944', borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontSize: 13, minWidth: 110 };
-// Reserve enough height for a typical combat card so the modal barely changes size on
-// hover (the top-anchor already keeps the buttons fixed even if it does grow).
-const blurb: React.CSSProperties = { marginTop: 10, padding: '8px 10px', background: '#1a160f', border: '1px solid #3a342a', borderRadius: 6, minHeight: 96, color: '#e9e1cc' };
+// FIXED height (scrolls internally) so hovering a card never changes the modal's
+// size at all — a growing blurb moved the buttons under the cursor (player report).
+const blurb: React.CSSProperties = { marginTop: 10, padding: '8px 10px', background: '#1a160f', border: '1px solid #3a342a', borderRadius: 6, height: 132, overflowY: 'auto', color: '#e9e1cc' };
 // "Play if…" requirement — amber italic so the precondition reads as a condition to
 // check, distinct from the effect text (so you can judge a card before discarding it).
 const req: React.CSSProperties = { color: '#d8b48c', fontStyle: 'italic' };

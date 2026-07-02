@@ -213,7 +213,7 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     }
     case 'bringUpgrade': return 70; // Aragorn / Gandalf the White: +1 FP die
     case 'bringMinion': return 55; // +1 die and a strong leader — high tempo
-    case 'recruitUnit': return actor === 'shadow' ? 38 : 20; // build the war stacks
+    case 'recruitUnit': return recruitScore(state, actor, a, target); // build the war stacks WHERE THEY MATTER
     case 'moveArmy': return armyMoveScore(state, actor, a.from, a.to, target);
     case 'moveCharacter': return moveCharacterScore(state, actor, a); // reposition Nazgûl/Companions
     case 'diplomaticAction': return diplomaticScore(state, actor, a.nation); // mobilize toward At War
@@ -221,10 +221,14 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       return state.nations[a.nation].step > 0 ? 28 : 6;                // worth it only while the Nation isn't yet At War
     case 'sarumanMuster': return a.mode === 'recruit' ? 45 : 30;       // Voice of Saruman: a big Isengard build / Elite upgrade
     case 'useElvenRing': return elvenRingScore(state, actor, a);       // change a die's face (conservatively)
-    case 'playEvent':
+    case 'playEvent': {
       if (actor === 'fp' && HEAL_EVENTS.has(a.cardId)) return fs.corruption >= 6 ? 95 : 25;
       if (actor === 'shadow' && CORRUPT_EVENTS.has(a.cardId)) return 70;
-      return 35;
+      // A card with a strong COMBAT box (Deadly Strife etc.) is usually worth more
+      // held for battle than played as its event — burning it is weak play (player
+      // report: "Return to Valinor for the top half is VERY weak").
+      return 35 - combatCardValue(combatModsFor(a.cardId)) * 3;
+    }
     case 'drawEvent': return 12;
     case 'skipDie': return 1;
     case 'pass': return 0;
@@ -259,6 +263,16 @@ function diplomaticScore(state: GameState, actor: Side, nation: Nation): number 
   }
   if (!ns.active) return 8;                                             // FP advances toward War reactively
   return ns.step === 1 ? 30 : 20;
+}
+
+/** Muster where it matters: into/near an existing army or near the campaign target —
+ *  not a lone Nazgûl in an empty rear Stronghold (player report: "spent musters on
+ *  nazgul in barad-dur (with no army) and angmar"). */
+function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { kind: 'recruitUnit' }>, target: RegionId | null): number {
+  let s = actor === 'shadow' ? 30 : 16;
+  if (armyHere(state, a.region, actor)) s += 10;                       // reinforce a real stack
+  if (target) s += Math.max(0, 12 - dist(a.region, target) * 2);       // near the front
+  return s;
 }
 
 /** March toward the campaign target, capture undefended enemy Settlements

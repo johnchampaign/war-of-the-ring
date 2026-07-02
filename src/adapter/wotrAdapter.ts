@@ -570,7 +570,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
         const target: EventTarget = { from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye };
-        h.applyTarget(state, actor, target);
+        h.applyTarget(state, actor, target, data.applied);
         data.applied.push(target);
         data.left -= 1;
         // Multi-target card with moves left and still-legal targets? Re-prompt (hold the

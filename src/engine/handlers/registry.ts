@@ -24,7 +24,9 @@ export interface EventHandler {
    *  player's pick is applied via applyTarget. `applied` lists the targets already
    *  chosen this card (for multi-target cards that must exclude them). */
   targets?(state: GameState, side: Side, applied?: EventTarget[]): EventTarget[];
-  applyTarget?(state: GameState, side: Side, target: EventTarget): void;
+  /** Apply the player's pick. `applied` lists the PRIOR picks this card (before this
+   *  one) — used by group-move cards whose destination moves the trailing group. */
+  applyTarget?(state: GameState, side: Side, target: EventTarget, applied?: EventTarget[]): void;
   /** Multi-target cards: the max number of targets to apply (the player may stop
    *  early with a "done" option). Default 1 (single target). */
   repeat?: number;

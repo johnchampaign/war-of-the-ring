@@ -1064,24 +1064,60 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
       notify(state, `A Companion in ${trigger.map((r) => REGIONS[r]?.name ?? r).join(' / ')} rouses the ${nm} to war!`);
     }
   };
+  // The trailing GROUP being assembled: consecutive picks (companion, no region, not a
+  // deselect) since the last completed move / deselect. RAW p.36: separated Companions
+  // moving together form a group that moves with the HIGHEST Level among them — so
+  // Pippin (1) travels with Gandalf (4) at range 4 (player report).
+  const trailingGroup = (applied: EventTarget[]): string[] => {
+    const g: string[] = [];
+    for (let i = applied.length - 1; i >= 0; i--) {
+      const t = applied[i]!;
+      if (t.region || t.mode === 'none' || !t.companion) break;
+      g.unshift(t.companion);
+    }
+    return g;
+  };
+  // Companions already moved this card: replay the picks, crediting the whole trailing
+  // group when its destination lands (only the leader appears on the region entry).
+  const movedSet = (applied: EventTarget[]): Set<string> => {
+    const done = new Set<string>();
+    let cur: string[] = [];
+    for (const t of applied) {
+      if (t.mode === 'none') { cur = []; continue; }              // deselect wipes the pending group
+      if (t.companion && !t.region) { cur.push(t.companion); continue; }
+      if (t.region) { for (const c of cur) done.add(c); cur = []; }
+    }
+    return done;
+  };
   return {
     canPlay: (state) => seps(state).some(([c, from]) => canMove(state, c, from)) || (!isAtWar(state, nation) && trigger.some((r) => (state.regions[r]?.characters ?? []).some((c) => COMPANION_SET.has(c)))),
     apply: (state) => checkRouse(state),     // rouse from an already-positioned Companion
-    repeat: 12,
+    repeat: 24,
     optionalFromStart: true,                  // "any or ALL" — moving zero is allowed
     targets(state, _side, applied = []) {
-      const last = applied[applied.length - 1];
-      if (last && last.companion && !last.region) {
-        // destination step for the just-picked Companion
-        const from = state.characters.inPlay[last.companion];
-        return from ? characterDestinations(state, 'fp', last.companion, from).map((region) => ({ companion: last.companion, region })) : [];
+      const group = trailingGroup(applied);
+      const done = movedSet(applied);
+      if (group.length) {
+        // Destination step for the group: range = the highest Level in it. Also offer
+        // (a) other Companions in the SAME region to join the group, and (b) a deselect.
+        const from = state.characters.inPlay[group[0]!]!;
+        const leader = group.reduce((best, c) => (levelOf(c) > levelOf(best) ? c : best), group[0]!);
+        const out: EventTarget[] = characterDestinations(state, 'fp', leader, from).map((region) => ({ companion: leader, region }));
+        for (const [c, r] of seps(state)) if (r === from && !group.includes(c) && !done.has(c)) out.push({ companion: c });
+        out.push({ companion: group[0], mode: 'none' });          // deselect (player report)
+        return out;
       }
-      // pick step: separated Companions that haven't completed a move and can still move
-      const done = new Set(applied.filter((t) => t.region).map((t) => t.companion));
+      // pick step: separated Companions that haven't moved yet and can still move
       return seps(state).filter(([c, from]) => !done.has(c) && canMove(state, c, from)).map(([c]) => ({ companion: c }));
     },
-    applyTarget(state, _side, t) {
-      if (t.region) moveCharacter(state, 'fp', t.companion!, state.characters.inPlay[t.companion!]!, t.region);
+    applyTarget(state, _side, t, applied = []) {
+      if (t.mode === 'none') return;                              // deselect: no mutation
+      if (t.region) {
+        // Move the whole trailing group (the leader carries the rest — RAW group move).
+        const members = new Set(trailingGroup(applied));
+        members.add(t.companion!);
+        for (const c of members) moveCharacter(state, 'fp', c, state.characters.inPlay[c]!, t.region);
+      }
       // pick step (no region): records the Companion; no mutation
     },
     finalize: (state) => checkRouse(state),  // rouse from a Companion moved into the trigger region
