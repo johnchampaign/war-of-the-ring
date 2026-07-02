@@ -97,9 +97,15 @@ export async function createOnlineGame(
   }).then((r) => r.json());
 }
 
-/** Parse a seat invite from the URL (?g=<gameId>&t=<token>, or an ?as= invite). */
-export function readOnlineInvite(search = window.location.search): { gameId: string; token: string } | null {
+/** Parse a seat invite from the URL: either query form (?g=<gameId>&t=<token>) or
+ *  the server's canonical path form (/play/<gameId>?as=<token>). The path form is
+ *  what invites and the ranked vs-AI buttons actually use — parsing only the query
+ *  sent players back to the lobby ("clicked Play and nothing happened"). */
+export function readOnlineInvite(
+  search = window.location.search, pathname = window.location.pathname,
+): { gameId: string; token: string } | null {
   const p = new URLSearchParams(search);
-  const gameId = p.get('g'); const token = p.get('t') ?? p.get('as');
+  const token = p.get('t') ?? p.get('as');
+  const gameId = p.get('g') ?? /^\/play\/([^/?#]+)/.exec(pathname)?.[1] ?? null;
   return gameId && token ? { gameId, token } : null;
 }
