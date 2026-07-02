@@ -13,6 +13,7 @@
 import type { GameState, RegionId, Side } from './types';
 import { REGIONS, levelOf } from './data';
 import { settlementController, armySide } from './armies';
+import { log } from './log';
 
 const FLY = 99;
 
@@ -86,6 +87,7 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
     const n = count === undefined ? src.nazgul : Math.min(Math.max(0, Math.floor(count)), src.nazgul);
     if (n <= 0) return false;
     dst.nazgul += n; src.nazgul -= n;
+    log(state, null, 'army', `Moved ${n} Nazgûl ${from} -> ${to}`);
     return true;
   }
   // A character figure (Minion or Companion): verify it belongs to this side and
@@ -96,6 +98,7 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
   src.characters.splice(i, 1);
   dst.characters.push(char);
   if (state.characters.inPlay[char]) state.characters.inPlay[char] = to;
+  log(state, null, 'army', `Moved ${char} ${from} -> ${to}`);
   return true;
 }
 
@@ -119,6 +122,7 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
     dst.characters.push(c);
     if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
   }
+  log(state, null, 'army', `Moved ${chars.join(', ')} ${from} -> ${to}`);
   return true;
 }
 

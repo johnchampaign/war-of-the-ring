@@ -59,8 +59,12 @@ function ReinfPips({ r }: { r: GameState['reinforcements'][Nation] }) {
 function NationRow({ n, ns, reinf }: { n: Nation; ns: GameState['nations'][Nation]; reinf: GameState['reinforcements'][Nation] }) {
   const step = Math.min(ns.step, TRACK_MAX);
   const atWar = ns.step === 0;
+  // flexWrap keeps the reinforcement pips (last child, marginLeft:auto) from clipping
+  // off the right edge when this column is narrow (the FP/Shadow groups sit side by
+  // side in a ~270px panel): the pips drop to a second line, still right-aligned, so a
+  // Nation's reinforcement pool is never hidden (player report).
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '2px 0' }}>
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, margin: '2px 0' }}>
       <span style={{ width: 9, height: 9, borderRadius: 2, background: NATION_COLOR[n], flexShrink: 0,
         border: ns.active ? '1px solid #fff' : '1px solid #665', opacity: ns.active ? 1 : 0.5 }} />
       {/* flexShrink:0 keeps every label exactly 52px wide. Without it, rows that carry a
