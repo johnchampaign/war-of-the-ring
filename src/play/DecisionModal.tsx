@@ -5,7 +5,7 @@
 // the mid-resolution decisions legible. The modal only shows for the player who
 // owns the choice; the opponent sees a passive "resolving battle…" note.
 import { useState } from 'react';
-import { describeAction, isDecisionAction } from './actionText';
+import { describeAction, isDecisionAction, eventChoiceInModal } from './actionText';
 import { RollLine, CorruptionLine, describeDraw, HuntTileFace } from './huntView';
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt } from './artCache';
@@ -58,7 +58,10 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
   const [huntInfo, setHuntInfo] = useState(false);
   const pc = view.pendingCombat;
   const choice = view.pendingChoice;
-  const decisions = actions.filter(isDecisionAction);
+  // Simple event-card picks (Regular vs Elite etc.) surface HERE — as quiet panel
+  // buttons they went unnoticed ("played Riders of Rohan and nothing happened").
+  const evModal = eventChoiceInModal(actions);
+  const decisions = actions.filter((a) => isDecisionAction(a) || (evModal && a.kind === 'eventTarget'));
 
   // Show only when there's a live decision (battle in progress, or a decision the
   // viewer owns). If a battle is up but it's the opponent's call, show a wait note.
@@ -71,7 +74,11 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
     <div style={backdrop}>
       <div style={modal}>
         {pc && <CombatHeader pc={pc} view={view} />}
-        {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>{CHOICE_TITLE[choice.kind] ?? choice.kind}</div>}
+        {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>
+          {choice.kind === 'eventTarget'
+            ? `${cardName((choice.data as { card?: string } | undefined)?.card ?? '')} — choose how it resolves`
+            : CHOICE_TITLE[choice.kind] ?? choice.kind}
+        </div>}
         {choice?.kind === 'huntDamage' && <HuntDetail view={view} data={(choice as any).data} onExplain={() => setHuntInfo(true)}
           modes={decisions.filter((a) => a.kind === 'huntDamage').map((a) => (a as Extract<WotrAction, { kind: 'huntDamage' }>).mode)} />}
         {huntInfo && <HuntInfoModal view={view} onClose={() => setHuntInfo(false)} />}

@@ -150,3 +150,16 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 // kept out of the plain action-button list.
 const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);
+
+/** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)
+ *  with no board aspect — no move/attack, no board-clickable destination. */
+const simpleEventTarget = (a: WotrAction): boolean =>
+  a.kind === 'eventTarget' && !a.from && !a.to && !(a.region && a.companion) && a.mode !== 'move' && a.mode !== 'attack';
+/** When EVERY pending event-card target is a simple pick, surface them in the
+ *  DecisionModal instead of the quiet panel list — a player report ("played Riders
+ *  of Rohan and nothing happened") showed the Regular-vs-Elite pick going unnoticed
+ *  as panel buttons. Board-driven card flows (moves, separations) are unaffected. */
+export function eventChoiceInModal(actions: WotrAction[]): boolean {
+  const ets = actions.filter((a) => a.kind === 'eventTarget');
+  return ets.length > 0 && ets.every(simpleEventTarget);
+}

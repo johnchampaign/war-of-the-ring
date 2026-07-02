@@ -115,12 +115,15 @@ const polyPath = (poly: { x: number; y: number }[]) =>
 // are distinguishable at a glance — the badge is tinted with the Nation's colour),
 // with the regular/elite split and a leader/Nazgûl pip. WotR has no 2D unit art
 // (the pieces are miniatures), so these are informative tokens.
-interface ArmyInfo { side: Side; nation: Nation | null; reg: number; elite: number; leaders: number; nazgul: number }
-function presentArmies(r: GameState['regions'][string]): ArmyInfo[] {
+interface ArmyInfo { side: Side; nation: Nation | null; reg: number; elite: number; leaders: number; nazgul: number; eliteLead?: number }
+function presentArmies(r: GameState['regions'][string], sarumanLead = false): ArmyInfo[] {
   const out: ArmyInfo[] = [];
   for (const [nation, u] of Object.entries(r.units)) {
     if (u!.regular + u!.elite === 0) continue;
-    out.push({ side: FP_SET.has(nation) ? 'fp' : 'shadow', nation: nation as Nation, reg: u!.regular, elite: u!.elite, leaders: 0, nazgul: 0 });
+    // Saruman's "Servants of the White Hand": each Isengard Elite also counts as a
+    // Leader — shown on the badge so their Leadership is visible (player request).
+    const eliteLead = sarumanLead && nation === 'isengard' ? u!.elite : 0;
+    out.push({ side: FP_SET.has(nation) ? 'fp' : 'shadow', nation: nation as Nation, reg: u!.regular, elite: u!.elite, leaders: 0, nazgul: 0, eliteLead });
   }
   // Region-level Leaders (FP) / Nazgûl (Shadow) attach to that side's first badge,
   // or get their own badge if that side has no units in the region.
@@ -154,12 +157,18 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
     const def = regions[id];
     const fill = def?.nation ? NATION_COLOR[def.nation] ?? '#888' : '#cfcab8';
     const r = view.regions[id];
-    const armies = r ? presentArmies(r) : [];
-    const layout = armies.length ? layoutTokensInPolygon(poly, armies.length, { tokenRadius: 22 }) : null;
+    const sarumanLead = view.characters.entered.includes('saruman') && !view.characters.eliminated.includes('saruman');
+    const armies = r ? presentArmies(r, sarumanLead) : [];
+    // Compute the in-region anchor whenever ANYTHING renders here — armies,
+    // characters, or a settlement marker. A character in an army-less region used
+    // to fall back to poly[0] (a border vertex), so its disc read as sitting in the
+    // NEIGHBOURING region (player report: Gandalf "in Lorien" while in Fangorn).
+    const layout = (armies.length || (r?.characters.length ?? 0) > 0 || def?.settlement)
+      ? layoutTokensInPolygon(poly, Math.max(1, armies.length), { tokenRadius: 22 }) : null;
     const control = r?.control;
     // Boxed garrison of a besieged Stronghold (RAW siege: defenders in the box, the
     // besieger occupies the region's open field above).
-    const boxed = r?.siegeBox ? presentArmies(r.siegeBox as unknown as GameState['regions'][string]) : [];
+    const boxed = r?.siegeBox ? presentArmies(r.siegeBox as unknown as GameState['regions'][string], sarumanLead) : [];
     return { id, poly, fill, def, armies, layout, control, r, boxed };
   }), [view]);
 
@@ -339,7 +348,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
 // plus a corner pip counting Leaders (FP) / Nazgûl (Shadow). Sized to stay legible
 // at fit-to-width zoom without overwhelming the small regions.
 function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number; army: ArmyInfo }) {
-  const { side, nation, reg, elite, leaders, nazgul } = army;
+  const { side, nation, reg, elite, leaders, nazgul, eliteLead = 0 } = army;
   // Tint the badge by the Nation so factions are distinguishable; fall back to a
   // generic side colour for a leaders-only badge (no units → no nation).
   const col = (nation && NATION_COLOR[nation]) || (side === 'shadow' ? '#b8332b' : '#2c5fb3');
@@ -347,9 +356,10 @@ function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number;
   const s = Math.min(1, Math.max(0.6, scale));
   const W = 34, H = 20;
   const both = reg > 0 && elite > 0;
-  const special = leaders + nazgul;
+  const special = leaders + nazgul + eliteLead;
   const label = `${nationName}: ${reg} Regular${reg === 1 ? '' : 's'}, ${elite} Elite${elite === 1 ? '' : 's'}` +
-    (leaders ? `, ${leaders} Leader${leaders === 1 ? '' : 's'}` : '') + (nazgul ? `, ${nazgul} Nazgûl` : '');
+    (leaders ? `, ${leaders} Leader${leaders === 1 ? '' : 's'}` : '') + (nazgul ? `, ${nazgul} Nazgûl` : '') +
+    (eliteLead ? ` (each Elite is also a Leader — Saruman)` : '');
   return (
     <g transform={`translate(${x},${y}) scale(${s})`}>
       <title>{label}</title>

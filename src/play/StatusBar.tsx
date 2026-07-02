@@ -50,6 +50,38 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
   );
 }
 
+// Characters on the map (both sides' separated Companions + Minions — public info).
+// Hover a name to read that character's card (player report: "is there a way to
+// display Minion cards when you're the FP?").
+function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const entries = Object.entries(view.characters?.inPlay ?? {});
+  if (entries.length === 0) return null;
+  return (
+    <span style={{ position: 'relative' }}>
+      <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
+        title="Characters on the map (Companions and Minions) — hover a name for its card">
+        On the map {entries.length} {open ? '▴' : '▾'}
+      </button>
+      {open && (
+        <div style={roster} onMouseLeave={() => onHoverChar?.(null)}>
+          {entries.map(([id, region]) => {
+            const d = charDef(id);
+            return (
+              <div key={id} onMouseEnter={() => onHoverChar?.(id)}
+                style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
+                <span style={{ fontWeight: 600 }}>{charName(id)}</span>
+                <span style={{ color: '#b9b29c', fontSize: 11 }}>{String(region)}{d ? ` · Lvl ${d.level === 'inf' ? '∞' : d.level}${d.leadership ? ` · Lead ${d.leadership}` : ''}` : ''}</span>
+              </div>
+            );
+          })}
+          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Hover a name for its character card</div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 // Browsable discard piles (player report: "no way to see the discarded or used
 // cards"). Played/discarded cards are open information; hand-limit discards are
 // face down — shown as type-only. Newest first. Hover a name for the card.
@@ -114,6 +146,7 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { v
         onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
         style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span></span>
       <FellowshipRoster guide={fs.guide} companions={fs.companions} onHoverChar={onHoverChar} />
+      <OnMapRoster view={view} onHoverChar={onHoverChar} />
       <span style={pill} title="Shadow dice in the Hunt Box (allocated + Eyes). FP dice added this turn (from moving the Fellowship) each add +1 to every Hunt die.">
         Hunt box {view.hunt.box}{view.hunt.fpDiceInBox ? ` · +${view.hunt.fpDiceInBox} FP` : ''}
       </span>

@@ -561,6 +561,11 @@ export function combatStep(state: GameState): void {
         atk = applyCombatEliminations(state, pc.to, aMods, atk);
         def = applyCombatEliminations(state, pc.from, dMods, def);
         pc.atkHits = atk; pc.defHits = def;
+        // Announce the round's dice PUBLICLY so both players can audit the resolution
+        // (player report: "the log should display the combat dice rolls").
+        const fmt = (roll: CombatRoll, hits: number) =>
+          `[${roll.dice.join(' ')}]${roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]` : ''} on ${roll.target}+ → ${hits} hit${hits === 1 ? '' : 's'}`;
+        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atk)}; defender ${fmt(dRoll, def)}`);
         pc.attackerCard = null; pc.defenderCard = null;
         pc.step = 'attackerCasualties'; continue;
       }

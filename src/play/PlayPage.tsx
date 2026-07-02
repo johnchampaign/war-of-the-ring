@@ -24,7 +24,7 @@ import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { isDecisionAction, dieOptions, describeAction } from './actionText';
+import { isDecisionAction, dieOptions, describeAction, eventChoiceInModal } from './actionText';
 import { moveBlockReason } from '../engine/armies';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { separationActivates } from '../engine/fellowship';
@@ -347,6 +347,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // "no second move" (done) option in the panel.
     && !(a.kind === 'armyMove2' && !!a.from)
     && !(a.kind === 'eventTarget' && !!a.region && !!a.companion) // card-separation destinations go on the board
+    // Simple event-card picks show in the DecisionModal (player report: they went
+    // unnoticed as panel buttons) — keep them out of the panel to avoid duplicates.
+    && !(a.kind === 'eventTarget' && eventChoiceInModal(g.legalActions))
     // Mustering is board-driven now (player report: the panel's per-Settlement recruit
     // buttons were tedious to page through): click a highlighted Settlement instead.
     && a.kind !== 'recruitUnit');
@@ -543,13 +546,23 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       </button>
       {logOpen && (
         <div onClick={() => setLogOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.7)', display: 'grid', placeItems: 'center', zIndex: 71 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', borderRadius: 12, border: '1px solid #5a4a2a', width: 520, maxWidth: '92vw', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px #000' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 10px', borderBottom: '1px solid #2a2418' }}>
-              <button onClick={() => setLogOpen(false)} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
+          {/* Hovered card renders in a bright side box INSIDE the overlay — it used to
+              land in the right-hand panel UNDER the dark backdrop, unreadably dim
+              (player report: "grayed-out … difficult to read"). */}
+          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 12, alignItems: 'stretch', maxWidth: '96vw' }}>
+            <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', borderRadius: 12, border: '1px solid #5a4a2a', width: 520, maxWidth: '92vw', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px #000' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 10px', borderBottom: '1px solid #2a2418' }}>
+                <button onClick={() => setLogOpen(false)} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
+              </div>
+              <div style={{ height: '60vh', overflowY: 'auto' }}>
+                <LogPanel view={g.view} onHoverCard={onHoverCard} />
+              </div>
             </div>
-            <div style={{ height: '60vh', overflowY: 'auto' }}>
-              <LogPanel view={g.view} onHoverCard={onHoverCard} />
-            </div>
+            {hover?.kind === 'card' && (
+              <div style={{ width: 320, background: '#1c1710', borderRadius: 12, border: '1px solid #5a4a2a', boxShadow: '0 8px 40px #000', overflow: 'hidden' }}>
+                <HoverPreview hover={hover} view={g.view} />
+              </div>
+            )}
           </div>
         </div>
       )}
