@@ -32,6 +32,7 @@ const CHOICE_TITLE: Record<string, string> = {
   huntPreventDraw: 'Prevent the Hunt tile draw? (you won’t see it)',
   huntRedraw: 'Redraw the Hunt tile?',
   siegeWithdraw: 'Withdraw into the siege, or fight in the open?',
+  siegeExtend: 'Press the assault? (reduce one Elite to a Regular for another round)',
   whiteRider: 'The White Rider — forfeit Gandalf’s Leadership to negate all Nazgûl Leadership?',
   balrog: 'Balrog of Moria — discard it to draw an extra Hunt tile?',
   crebain: 'Flocks of Crebain — discard for +1 to all Hunt dice this roll?',

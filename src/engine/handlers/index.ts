@@ -1217,21 +1217,24 @@ register('sh-char-08b', {
 });
 
 // Return to Valinor: each non-besieged Elven Stronghold with Elven units takes a
-// Hunt-style roll (1 die per unit, max 5; hit on 6). (The data precond reads "you
-// control an Elven Stronghold"; the effect targets the Elves' own Strongholds, so
-// playability follows the effect — at least one such Stronghold has Elven units.)
+// Hunt-style roll (1 die per unit, max 5; hit on 6). Playable only per the printed
+// precondition — "Play if you control at least one Elven Stronghold", i.e. the
+// SHADOW has captured one (player report: it was wrongly playable from turn 1).
 function elvenStrongholds(state: GameState): string[] {
   return Object.keys(state.regions).filter((id) => REGIONS[id]!.nation === 'elves' && REGIONS[id]!.settlement === 'Stronghold'
     && !state.regions[id]!.besieged && (state.regions[id]!.units.elves?.regular ?? 0) + (state.regions[id]!.units.elves?.elite ?? 0) > 0);
 }
+const shadowControlsElvenStronghold = (state: GameState): boolean =>
+  Object.keys(state.regions).some((id) => REGIONS[id]!.nation === 'elves' && REGIONS[id]!.settlement === 'Stronghold'
+    && settlementController(state, id) === 'shadow');
 register('sh-str-01', {
-  canPlay: (state) => elvenStrongholds(state).length > 0,
+  canPlay: (state) => shadowControlsElvenStronghold(state) && elvenStrongholds(state).length > 0,
   apply(state) {
     const results: { region: string; hits: number }[] = [];
     let anyChoice = false;
     for (const id of elvenStrongholds(state)) {
       const u = state.regions[id]!.units.elves!;
-      const hits = rollDice(state, u.regular + u.elite, 6);
+      const hits = rollDice(state, Math.min(u.regular + u.elite, 5), 6); // card: max 5 dice
       if (hits > 0) {
         results.push({ region: id, hits });
         // A choice exists only when the region holds BOTH Regulars and Elites and not

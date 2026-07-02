@@ -67,6 +67,7 @@ export type WotrAction =
   | { kind: 'retreatTo'; region: RegionId }     // defender: chosen retreat destination
   | { kind: 'preCombatRetreat'; region: RegionId } // Scouts: chosen pre-combat retreat destination
   | { kind: 'siegeWithdraw'; withdraw: boolean } // defender: withdraw into the siege or fight
+  | { kind: 'siegeExtend'; extend: boolean } // attacker: reduce an Elite to press the assault another round (p.32)
   | { kind: 'whiteRider'; forfeit: boolean } // FP: forfeit Gandalf the White's Leadership to negate Nazgûl Leadership
   | { kind: 'balrog'; use: boolean } // Shadow: discard Balrog of Moria to draw an extra Hunt tile
   | { kind: 'crebain'; use: boolean } // Shadow: discard Flocks of Crebain for +1 to all Hunt dice this roll

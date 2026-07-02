@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
+import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
@@ -145,6 +145,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'combatContinue', cont: true }, { kind: 'combatContinue', cont: false }];
       case 'siegeWithdraw':
         return [{ kind: 'siegeWithdraw', withdraw: true }, { kind: 'siegeWithdraw', withdraw: false }];
+      case 'siegeExtend':
+        return [{ kind: 'siegeExtend', extend: true }, { kind: 'siegeExtend', extend: false }];
       case 'whiteRider':
         return [{ kind: 'whiteRider', forfeit: true }, { kind: 'whiteRider', forfeit: false }];
       case 'balrog':
@@ -814,6 +816,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'combatRetreat', actor); resolveRetreat(state, action.retreat); break;
     case 'siegeWithdraw':
       requireChoice(state, 'siegeWithdraw', actor); resolveSiegeWithdraw(state, action.withdraw); break;
+    case 'siegeExtend':
+      requireChoice(state, 'siegeExtend', actor); resolveSiegeExtend(state, action.extend); break;
     case 'whiteRider':
       requireChoice(state, 'whiteRider', actor); resolveWhiteRider(state, action.forfeit); break;
     case 'crebain':

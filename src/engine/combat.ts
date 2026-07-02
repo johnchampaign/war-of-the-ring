@@ -590,6 +590,10 @@ export function combatStep(state: GameState): void {
         if (forceUnitCount(defForce(state, pc)) === 0) { finishCombat(state, true); return; }
         pc.siegeRoundsLeft = (pc.siegeRoundsLeft ?? 1) - 1;
         if (pc.siegeRoundsLeft > 0 && unitCount(state, pc.from) > 0) { pc.round += 1; pc.step = 'attackerCard'; continue; }
+        // Out of rounds: the attacker MAY extend the assault one more round by
+        // reducing one of his Elite units to a Regular (rulebook p.32) — a real
+        // choice, not an auto-decline (player report).
+        if (attackerHasElite(state, pc)) { state.pendingChoice = { owner: pc.attacker, kind: 'siegeExtend' }; return; }
         finishCombat(state, false); return; // the siege holds; attacker remains besieging
       }
       case 'continueDecision': {
@@ -612,6 +616,27 @@ export function resolveCasualties(state: GameState, plan: 'regularsFirst' | 'eli
   applyForceCasualties(state, d.boxed && box ? box : state.regions[d.region]!, d.side, d.hits, plan);
   state.pendingCombat!.step = d.next;
   state.pendingChoice = null;
+}
+/** Whether the assaulting army still has an Elite unit to reduce (the currency for
+ *  extending an assault past its rounds — rulebook p.32). */
+function attackerHasElite(state: GameState, pc: PendingCombat): boolean {
+  if (unitCount(state, pc.from) === 0) return false;
+  return Object.values(state.regions[pc.from]!.units).some((u) => (u?.elite ?? 0) > 0);
+}
+/** Resolve the attacker's press-the-assault choice: reduce one Elite to a Regular to
+ *  fight one more siege round (rulebook p.32), or stop (the siege holds). */
+export function resolveSiegeExtend(state: GameState, extend: boolean): void {
+  const pc = state.pendingCombat!;
+  state.pendingChoice = null;
+  if (!extend) { finishCombat(state, false); return; }
+  const r = state.regions[pc.from]!;
+  const n = (Object.keys(r.units) as Nation[]).find((k) => (r.units[k]?.elite ?? 0) > 0);
+  if (!n) { finishCombat(state, false); return; } // no Elite left to spend (shouldn't happen — gated on offer)
+  r.units[n]!.elite -= 1; r.units[n]!.regular += 1; // the reduction swaps the figure on the board
+  log(state, null, 'combat', `${pc.attacker} presses the assault: an Elite is reduced to a Regular for another round`);
+  pc.siegeRoundsLeft = 1;
+  pc.round += 1;
+  pc.step = 'attackerCard'; // advance() re-drives the battle sub-machine
 }
 /** Resolve the defender's siege-withdraw choice: retreat into the Stronghold (the
  *  region becomes besieged, no battle this action) or stand and fight a field battle. */

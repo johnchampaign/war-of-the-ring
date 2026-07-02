@@ -375,6 +375,16 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const hold = !pc || unitCount(state, pc.to) < unitCount(state, pc.from) + 2;
       return legal.find((a) => a.kind === 'siegeWithdraw' && a.withdraw === hold) ?? legal[0]!;
     }
+    case 'siegeExtend': {
+      // Attacker: press the assault (spend an Elite step) while clearly winning —
+      // when we still outnumber the boxed garrison by ≥2 the extra round is worth
+      // more than the Elite; otherwise stop and let the siege hold. (In an assault
+      // from === to: the attacker holds the field, the garrison is in the siege box.)
+      const box = pc ? state.regions[pc.to]!.siegeBox : null;
+      const garrison = box ? Object.values(box.units).reduce((s, u) => s + (u?.regular ?? 0) + (u?.elite ?? 0), 0) : 0;
+      const press = !!pc && !!box && unitCount(state, pc.from) >= garrison + 2;
+      return legal.find((a) => a.kind === 'siegeExtend' && a.extend === press) ?? legal[0]!;
+    }
     case 'lureChoice': {
       // FP: absorb as Corruption unless that nears death — then sacrifice the Companion.
       const level = (state.pendingChoice!.data as { level: number }).level;
