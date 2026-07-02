@@ -351,7 +351,9 @@ const ridersRegions = (s: GameState): string[] => {
 };
 
 // Círdan's Ships: TWO Elven units (each Regular OR Elite) in a coastal FP-Army region.
-register('fp-str-13', placeChoiceCard('elves', (s) => COASTAL.filter((r) => armySide(s, r) === 'fp'), { count: 2 }));
+// Círdan's Ships: printed precondition — 'Play if the Elves are "At War"'.
+const cirdans = placeChoiceCard('elves', (s) => COASTAL.filter((r) => armySide(s, r) === 'fp'), { count: 2 });
+register('fp-str-13', { ...cirdans, canPlay: (s, side) => isAtWar(s, 'elves') && cirdans.canPlay!(s, side) });
 // Riders of Théoden / Éomer: 1 Rohan unit (Regular OR Elite) + a Rohan Leader.
 register('fp-str-16', placeChoiceCard('rohan', ridersRegions, { leader: true }));
 register('fp-str-23', placeChoiceCard('rohan', (s) => ROHAN_REGIONS.filter((r) => REGIONS[r]!.settlement && recruitable(s, 'fp', r)), { leader: true }));
@@ -637,7 +639,9 @@ register('sh-str-12', {
 // --- Recruit + draw / upgrade cards ------------------------------------------
 // House of the Stewards: recruit a Gondor unit (R or E) with Boromir + draw 2 Strategy.
 register('fp-char-23', {
-  canPlay: (state) => charRegion(state, 'boromir') !== null && state.reinforcements.gondor.regular + state.reinforcements.gondor.elite > 0,
+  // Printed precondition: "Play if Boromir is in a GONDOR region" — anywhere else
+  // (Rohan, Rivendell, …) doesn't qualify.
+  canPlay: (state) => { const r = charRegion(state, 'boromir'); return !!r && REGIONS[r]!.nation === 'gondor' && state.reinforcements.gondor.regular + state.reinforcements.gondor.elite > 0; },
   targets(state) {
     const r = charRegion(state, 'boromir'); if (!r) return [];
     const pool = state.reinforcements.gondor; const room = STACKING_LIMIT - unitCount(state, r);

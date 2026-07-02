@@ -49,3 +49,46 @@ export function wormtongueAllowsActivation(
   if (n !== 'rohan' || !onTable(s, 'shadow', 'sh-char-22')) return true;
   return !!opts.viaCompanion || opts.region === 'edoras' || opts.region === 'helms-deep';
 }
+
+// --- Cease-to-be-met discards (rulebook p.22) ---------------------------------
+// "If the condition required to play such a card ceases to be met, the card is
+// immediately discarded" (the rulebook's own example: Denethor's Folly when Minas
+// Tirith is no longer under siege). Each on-table card with a play condition that
+// CAN cease is listed with a condition-still-holds check; `pruneTableCards` runs
+// from advance() after every action, so a broken condition sweeps the card at the
+// next state transition. (The Fellowship trio — Axe and Bow / Horn of Gondor /
+// Wizard's Staff — is pruned separately at the Fellowship seams in fellowship.ts.)
+const sarumanInPlay = (s: GameState): boolean =>
+  !!s.characters.inPlay['saruman'] && !s.characters.eliminated.includes('saruman');
+const TABLE_CONDITIONS: Array<{ side: 'fp' | 'shadow'; id: string; holds: (s: GameState, armySideOf: (s: GameState, r: RegionId) => 'fp' | 'shadow' | null, nationSideOf: (r: RegionId) => 'fp' | 'shadow' | null) => boolean }> = [
+  // fp-str-01 The Last Battle: "if Aragorn is with a Free Peoples Army in a region
+  // outside of a Free Peoples Nation".
+  {
+    side: 'fp', id: 'fp-str-01', holds: (s, armySideOf, nationSideOf) => {
+      const r = s.characters.inPlay['aragorn'];
+      return !!r && armySideOf(s, r) === 'fp' && nationSideOf(r) !== 'fp';
+    },
+  },
+  // sh-str-03 Denethor's Folly: "if Minas Tirith is under siege by a Shadow Army".
+  { side: 'shadow', id: 'sh-str-03', holds: (s) => !!s.regions['minas-tirith']?.besieged },
+  // sh-char-21 Palantír of Orthanc / sh-char-22 Wormtongue: "if Saruman is in play".
+  { side: 'shadow', id: 'sh-char-21', holds: sarumanInPlay },
+  { side: 'shadow', id: 'sh-char-22', holds: sarumanInPlay },
+];
+/** Discard any on-table card whose play condition ceased (rulebook p.22). The army/
+ *  nation lookups are passed in to keep this module import-cycle-free. */
+export function pruneTableCards(
+  s: GameState,
+  armySideOf: (s: GameState, r: RegionId) => 'fp' | 'shadow' | null,
+  nationSideOf: (r: RegionId) => 'fp' | 'shadow' | null,
+  logDiscard: (s: GameState, side: 'fp' | 'shadow', id: string) => void,
+): void {
+  for (const c of TABLE_CONDITIONS) {
+    const t = s.cards[c.side].table;
+    const i = t.indexOf(c.id);
+    if (i >= 0 && !c.holds(s, armySideOf, nationSideOf)) {
+      t.splice(i, 1);
+      logDiscard(s, c.side, c.id);
+    }
+  }
+}

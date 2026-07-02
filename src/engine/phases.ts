@@ -11,6 +11,9 @@ import type { GameState, Side, DieFace, Deck } from './types';
 import { poolSize, rollPool } from './dice';
 import { checkMilitaryVictory, checkRingVictory } from './victory';
 import { combatStep } from './combat';
+import { pruneTableCards } from './persistent';
+import { armySide } from './armies';
+import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { log } from './log';
 
 const opponent = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
@@ -72,8 +75,24 @@ function runActionRoll(state: GameState): void {
 const noDiceLeft = (state: GameState): boolean =>
   state.dice.fp.length === 0 && state.dice.shadow.length === 0;
 
+/** Discard on-table cards whose play condition ceased (rulebook p.22) — checked
+ *  after every state transition via advance(). */
+function sweepTableCards(state: GameState): void {
+  pruneTableCards(
+    state,
+    armySide,
+    (r) => { const n = REGIONS[r]?.nation; return n ? sideOfNation(n) : null; },
+    (s, side, id) => {
+      const deck = EVENT_BY_ID[id]?.deck === 'Character' ? 'character' : 'strategy';
+      s.cards[side].discard[deck].push(id);
+      log(s, null, 'event', `${EVENT_BY_ID[id]?.name ?? id} is discarded — its play condition no longer holds (p.22)`);
+    },
+  );
+}
+
 /** Run automatic phases; stop at the next phase that needs a player decision. */
 export function advance(state: GameState): void {
+  sweepTableCards(state);
   for (;;) {
     if (state.winner) { state.phase = 'gameOver'; return; }
     if (state.pendingChoice) return;              // await the choice owner
