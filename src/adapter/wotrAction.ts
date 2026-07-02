@@ -96,7 +96,7 @@ export type WotrAction =
   | { kind: 'lureChoice'; mode: 'corruption' | 'eliminate' }
   // Hunt damage resolution (FP): absorb as Corruption, lose a Companion, or use a
   // damage-reduction ability (separate the Hobbit Guide / Gollum reveal).
-  | { kind: 'huntDamage'; mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard' }
+  | { kind: 'huntDamage'; mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard'; card?: string }
   // On-table Hunt interceptions (FP): Wizard's Staff (prevent the draw) and
   // Mithril Coat (redraw the drawn tile).
   | { kind: 'huntPreventDraw'; prevent: boolean }

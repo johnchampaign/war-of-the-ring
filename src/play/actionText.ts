@@ -90,7 +90,7 @@ export function describeAction(a: WotrAction): string {
         case 'random': return 'Sacrifice a random Companion';
         case 'reduceSeparate': return 'Separate the Hobbit Guide (−1 damage)';
         case 'reduceReveal': return 'Reveal the Fellowship (−1 damage)';
-        case 'reduceCard': return 'Discard a table card (−1 damage)';
+        case 'reduceCard': return a.card ? `Discard ${cardName(a.card)} (−1 damage)` : 'Discard a table card (−1 damage)';
       }
       return 'Resolve Hunt';
     case 'bonusDraw': return a.deck === 'none' ? 'Palantír: don’t draw' : `Palantír: draw a ${cap(a.deck)} card`;

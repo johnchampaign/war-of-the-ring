@@ -15,7 +15,7 @@ import {
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
 } from '../engine/armies';
 import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
-import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCardAvailable, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
+import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
@@ -214,7 +214,9 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         if (!noReduce) {
           if ((fs.guide === 'meriadoc' || fs.guide === 'peregrin') && fs.mordor === null) acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
           if (fs.guide === 'gollum' && fs.hidden) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
-          if (huntReduceCardAvailable(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard' });
+          // One option PER on-table reducer — Axe and Bow vs Horn of Gondor is a real
+          // choice (their keep-conditions differ; player report).
+          for (const card of huntReduceCards(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard', card });
         }
         return acts;
       }
@@ -884,7 +886,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         if (!separateCompanion(state, state.fellowship.guide)) throw new Error('The Guide cannot be separated here (Companions cannot be separated in Mordor) — eliminate a Companion as a casualty instead.');
         reduceHuntDamageBySeparate(state);
       } else {
-        resolveHuntDamage(state, action.mode);
+        resolveHuntDamage(state, action.mode, action.card);
       }
       break;
     case 'revealMove': {

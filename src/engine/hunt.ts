@@ -135,6 +135,8 @@ export function huntReductionAvailable(state: GameState): boolean {
     || (fs.guide === 'gollum' && fs.hidden) || hasOnTableReducer(state);
 }
 export const huntReduceCardAvailable = hasOnTableReducer;
+/** The on-table reducer cards currently available to discard (each a distinct option). */
+export const huntReduceCards = (state: GameState): string[] => state.cards.fp.table.filter((id) => ON_TABLE_HUNT_REDUCERS.has(id));
 
 // On-table cards that intercept the draw itself: Wizard's Staff (prevent the
 // draw, decided BLIND, before the tile) and Mithril Coat (redraw, decided after
@@ -340,7 +342,7 @@ export function reduceHuntDamageBySeparate(state: GameState): void {
 }
 
 /** Resolve the FP's Hunt-damage choice (PendingChoice 'huntDamage'). */
-export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard'): void {
+export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard', card?: string): void {
   const fs = state.fellowship;
   const d = state.pendingChoice!.data as { damage: number; reveal: boolean };
 
@@ -353,7 +355,11 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
   }
   // Discard an on-table reduction card (Axe and Bow / Horn of Gondor) for −1.
   if (mode === 'reduceCard') {
-    const i = state.cards.fp.table.findIndex((id) => ON_TABLE_HUNT_REDUCERS.has(id));
+    // Discard the PLAYER'S chosen reducer (Axe and Bow vs Horn of Gondor is a real
+    // choice — their bold keep-conditions differ); fall back to the first if unspecified.
+    const i = card && ON_TABLE_HUNT_REDUCERS.has(card)
+      ? state.cards.fp.table.indexOf(card)
+      : state.cards.fp.table.findIndex((id) => ON_TABLE_HUNT_REDUCERS.has(id));
     if (i >= 0) {
       const id = state.cards.fp.table.splice(i, 1)[0]!;
       state.cards.fp.discard.character.push(id);
