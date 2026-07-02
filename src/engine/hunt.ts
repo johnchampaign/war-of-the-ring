@@ -108,11 +108,19 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) beginReveal(state); return; }
   if (damage === 0) { if (reveal) beginReveal(state); return; }
 
+  // Isildur's Bane: "Hunt damage may not be reduced in any way before using the
+  // Ring" — ruled (per playtester Samuel Carey, confirming the community ruling) as
+  // STRAIGHT CORRUPTION: no reductions AND no Guide/Companion casualty either.
+  if (opts.noReduce) {
+    fs.corruption = Math.min(12, fs.corruption + damage);
+    if (reveal) beginReveal(state);
+    log(state, null, 'hunt', `${opts.source ?? 'Hunt'}: damage ${damage} taken as straight Corruption (${fs.corruption}) — no reduction or casualty allowed`);
+    return;
+  }
   // Interactive resolution when FP has any choice — a Companion to spend, a Hobbit
   // Guide to separate, or Gollum's reveal-to-reduce — otherwise apply directly.
-  // (Under noReduce the corruption-vs-casualty choice still stands; only reductions are barred.)
-  if (fs.companions.length > 0 || (!opts.noReduce && huntReductionAvailable(state))) {
-    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, ...(opts.noReduce ? { noReduce: true } : {}), ...(opts.source ? { source: opts.source } : {}) } };
+  if (fs.companions.length > 0 || huntReductionAvailable(state)) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, ...(opts.source ? { source: opts.source } : {}) } };
     log(state, null, 'hunt', `Hunt damage ${damage} pending (FP decision)${opts.source ? ` — ${opts.source}` : ''}`);
   } else {
     fs.corruption = Math.min(12, fs.corruption + damage);
@@ -324,10 +332,10 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
  *  (a Companion to sacrifice or a reduction ability); otherwise finish. */
 function repromptOrFinish(state: GameState, damage: number, reveal: boolean): void {
   const fs = state.fellowship;
-  // Preserve the originating card's flags (noReduce / source) across re-prompts.
-  const prev = (state.pendingChoice?.data ?? {}) as { noReduce?: boolean; source?: string };
-  if (damage > 0 && (fs.companions.length > 0 || (!prev.noReduce && huntReductionAvailable(state)))) {
-    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, ...(prev.noReduce ? { noReduce: true } : {}), ...(prev.source ? { source: prev.source } : {}) } };
+  // Preserve the originating card's source across re-prompts.
+  const prev = (state.pendingChoice?.data ?? {}) as { source?: string };
+  if (damage > 0 && (fs.companions.length > 0 || huntReductionAvailable(state))) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, ...(prev.source ? { source: prev.source } : {}) } };
     return;
   }
   finishHunt(state, damage, reveal);

@@ -209,15 +209,13 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // Gollum reveals the Fellowship. The Hobbit "separate −1" is NOT available in
         // Mordor — Companions can't be separated there (rulebook p.43); eliminate one
         // as a casualty instead (the 'guide'/'random' options give the same −1 for a
-        // Level-1 Hobbit). Isildur's Bane bars ALL reductions (data.noReduce).
-        const noReduce = !!(state.pendingChoice!.data as { noReduce?: boolean } | undefined)?.noReduce;
-        if (!noReduce) {
-          if ((fs.guide === 'meriadoc' || fs.guide === 'peregrin') && fs.mordor === null) acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
-          if (fs.guide === 'gollum' && fs.hidden) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
-          // One option PER on-table reducer — Axe and Bow vs Horn of Gondor is a real
-          // choice (their keep-conditions differ; player report).
-          for (const card of huntReduceCards(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard', card });
-        }
+        // Level-1 Hobbit). (Isildur's Bane never reaches this prompt — its damage is
+        // straight Corruption, applied in the engine.)
+        if ((fs.guide === 'meriadoc' || fs.guide === 'peregrin') && fs.mordor === null) acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
+        if (fs.guide === 'gollum' && fs.hidden) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
+        // One option PER on-table reducer — Axe and Bow vs Horn of Gondor is a real
+        // choice (their keep-conditions differ; player report).
+        for (const card of huntReduceCards(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard', card });
         return acts;
       }
       case 'musterSecond': {

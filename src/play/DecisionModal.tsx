@@ -209,7 +209,6 @@ function HuntDetail({ view, data, modes, onExplain }: { view: GameState; data?: 
       {data.source && (
         <div style={{ fontSize: 13, color: '#cbbf9a', marginBottom: 6 }}>
           The Shadow played <b>{data.source}</b> — no Hunt roll; a tile is drawn directly.
-          {data.noReduce && <> Its damage <b>cannot be reduced</b> (Guide abilities and cards are barred); absorb it as Corruption or a Companion casualty.</>}
         </div>
       )}
       {fieldRoll && (
