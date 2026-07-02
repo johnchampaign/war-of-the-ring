@@ -60,7 +60,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [charPick, setCharPick] = useState<{ from: RegionId; char: string } | null>(null);
   // When a clicked region offers more than one thing to move (e.g. the army AND its
   // Nazgûl), let the player choose which.
-  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined } | { kind: 'char'; char: string }> } | null>(null);
+  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined } | { kind: 'assault'; char?: undefined } | { kind: 'char'; char: string }> } | null>(null);
   // Choosing HOW MANY Nazgûl to move from a stack (RAW: move any number, not the whole group).
   const [nazPick, setNazPick] = useState<{ from: RegionId; to: RegionId; max: number } | null>(null);
   // Why the last attempted move/merge was refused (shown so it isn't a silent no-op).
@@ -171,7 +171,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     return s;
   }, [g.view, canMoveChars, charMoveOk, charMoved, g.you]);
-  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, declareTargets, charSources, cardSepTargets]);
+  const assaultSources = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'attack' }> => a.kind === 'attack' && a.from === a.to).map((a) => a.from), [g.legalActions]);
+  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...assaultSources, ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, assaultSources, declareTargets, charSources, cardSepTargets]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -201,9 +202,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   // Begin moving whatever was chosen from a region: an army (select for the picker)
   // or a specific independent character (Nazgûl/Minion/Companion).
-  const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'char'; char: string }) => {
+  const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'assault' } | { kind: 'char'; char: string }) => {
     setMoveMenu(null);
     if (opt.kind === 'army') { setCharPick(null); setSelected(region); }
+    else if (opt.kind === 'assault') { setCharPick(null); setSelected(null); setMoveDraft({ from: region, to: region, kind: 'attack' }); } // storm the besieged Stronghold
     else { setSelected(null); setCharPick({ from: region, char: opt.char }); }
   }, []);
 
@@ -245,11 +247,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
       return;
     }
-    // Clicking a region that has something to move: army, character(s), or both.
+    // Clicking a region that has something to move: army, an assault, character(s), or several.
     const armyHere = boardArmyActs.some((a) => a.from === id);
+    // A siege ASSAULT (attack from===to) is board-clickable too (player report):
+    // click the besieged region you occupy and choose "Assault".
+    const assaultHere = g.legalActions.some((a) => a.kind === 'attack' && a.from === id && a.to === id);
     const charsHere = (g.view && canMoveChars && charMoveOk && g.you) ? movableCharsAt(g.view, g.you as Side, id, charMoved) : [];
-    const opts: Array<{ kind: 'army' } | { kind: 'char'; char: string }> = [
+    const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'char'; char: string }> = [
       ...(armyHere ? [{ kind: 'army' as const }] : []),
+      ...(assaultHere ? [{ kind: 'assault' as const }] : []),
       ...charsHere.map((c) => ({ kind: 'char' as const, char: c })),
     ];
     if (opts.length > 1) { clearMove(); setMoveMenu({ region: id, options: opts }); return; }
@@ -265,7 +271,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (reason) setBlockMsg(reason);
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
@@ -425,7 +431,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             {moveMenu.options.map((o, i) => (
               <button key={i} onClick={() => beginMove(moveMenu.region, o)}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
-                {o.kind === 'army' ? 'The army' : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
+                {o.kind === 'army' ? 'The army' : o.kind === 'assault' ? '⚔ Assault the besieged Stronghold' : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
               </button>
             ))}
             <button onClick={() => setMoveMenu(null)} style={{ marginTop: 6, padding: '5px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>

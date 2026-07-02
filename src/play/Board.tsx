@@ -233,6 +233,15 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           1:1 to their pixel space. When present, region fills go near-transparent
           so the map shows through; strokes/highlights stay for click targeting. */}
       {boardArt && <image href={boardArt} x={0} y={0} width={W} height={H} preserveAspectRatio="none" />}
+      {/* Unused "special areas" printed on the board IMAGE, painted over with a colour
+          sampled from the surrounding board so they blend in rather than reading as
+          black holes (#7). Rendered directly over the image — BENEATH all region
+          groups and tokens, so army badges (e.g. Southrons in Far/Near Harad) are
+          never hidden behind a mask (player report). */}
+      {boardArt && blockedAreas.map((a, i) => (
+        <path key={`blocked-${i}`} d={blockedAreaPath(a.polygon)} fill={maskColors?.[i] ?? MASK_FALLBACK}
+          stroke="none" style={{ pointerEvents: 'none' }} />
+      ))}
       {regionEls.map((e) => e && (
         <g key={e.id} onClick={() => pickRegion(e.id)}
           onMouseEnter={() => onHoverRegion?.(e.id)} onMouseLeave={() => onHoverRegion?.(null)}
@@ -259,9 +268,15 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
             );
           })()}
           {/* settlement marker — control-coloured diamond, the VP value, and a red
-              dashed ring while the Stronghold is under siege (defenders in the box). */}
+              dashed ring while the Stronghold is under siege (defenders in the box).
+              Anchored INSIDE the region (pole of inaccessibility, offset from the army
+              spot) — poly[0] is an arbitrary border vertex, which made markers read as
+              belonging to the neighbouring region (player report: "a red diamond
+              appeared in Druadan Forest"). */}
           {e.def?.settlement && (() => {
-            const mx = e.poly[0]!.x, my = e.poly[0]!.y;
+            const anchor = e.layout?.anchor ?? e.poly[0]!;
+            const m = clampToCrop({ x: anchor.x - 16, y: anchor.y - 14 });
+            const mx = m.x, my = m.y;
             return (
               <g style={{ pointerEvents: 'none' }}>
                 {e.r?.besieged && <circle cx={mx} cy={my} r={11} fill="none" stroke="#ff5252" strokeWidth={2} strokeDasharray="3 2" />}
@@ -283,7 +298,8 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           {/* Boxed garrison of a besieged Stronghold — small badges by the settlement
               marker (inside the red siege ring), distinct from the besieger above. */}
           {e.boxed.map((a, i) => {
-            const c = clampToCrop({ x: e.poly[0]!.x + (i - (e.boxed.length - 1) / 2) * 16, y: e.poly[0]!.y + 16 });
+            const base = e.layout?.anchor ?? e.poly[0]!;
+            const c = clampToCrop({ x: base.x - 16 + (i - (e.boxed.length - 1) / 2) * 16, y: base.y + 2 });
             return (
               <g key={`box-${a.side}-${i}`} style={{ pointerEvents: 'none' }}>
                 <rect x={c.x - 11} y={c.y - 8} width={22} height={16} rx={3} fill="none" stroke="#caa84b" strokeWidth={1} strokeDasharray="2 1.5" />
@@ -311,13 +327,6 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
             });
           })()}
         </g>
-      ))}
-      {/* Unused "special areas" printed on the board IMAGE, painted over with a colour
-          sampled from the surrounding board so they blend in rather than reading as
-          black holes (#7). Only over the image — the polygon map has no such art. */}
-      {boardArt && blockedAreas.map((a, i) => (
-        <path key={`blocked-${i}`} d={blockedAreaPath(a.polygon)} fill={maskColors?.[i] ?? MASK_FALLBACK}
-          stroke="none" style={{ pointerEvents: 'none' }} />
       ))}
       {/* Fellowship marker (last-known position) */}
       <FellowshipMarker view={view} />
