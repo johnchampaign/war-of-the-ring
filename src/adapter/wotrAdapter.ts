@@ -368,7 +368,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       } else if (faces.has('character')) {
         // Character die: move OR attack with one army containing THIS side's own
         // Leader/Nazgûl/Character (not an enemy Companion sharing the region).
-        const leaderArmy = (from: string) => { const r = state.regions[from]!; return (actor === 'fp' ? r.leaders > 0 : r.nazgul > 0) || r.characters.some((c) => characterSide(c) === actor); };
+        // Saruman can't leave Orthanc, so he can't satisfy a Character-die move.
+        const leaderArmy = (from: string) => { const r = state.regions[from]!; return (actor === 'fp' ? r.leaders > 0 : r.nazgul > 0) || r.characters.some((c) => characterSide(c) === actor && c !== 'saruman'); };
         for (const [from, to] of moveTargets(state, actor)) if (leaderArmy(from)) acts.push({ kind: 'moveArmy', from, to });
         for (const [from, to] of attackTargets(state, actor)) if (leaderArmy(from)) acts.push({ kind: 'attack', from, to });
       }
@@ -715,7 +716,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Only the ACTOR's own Leader/Nazgûl/Character makes a Character-die move legal —
       // NOT an enemy Companion who happens to share the region (e.g. one who separated
       // into a Stronghold this Army holds). (FP use Leaders; Shadow use Nazgûl.)
-      const leaderArmy = (actor === 'fp' ? src.leaders > 0 : src.nazgul > 0) || src.characters.some((c) => characterSide(c) === actor);
+      const leaderArmy = (actor === 'fp' ? src.leaders > 0 : src.nazgul > 0) || src.characters.some((c) => characterSide(c) === actor && c !== 'saruman'); // Saruman can't leave Orthanc
       let viaArmyDie = false;
       if (action.die && consumeDie(state, actor, action.die)) viaArmyDie = action.die !== 'character';
       else if (consumeArmyDie(state, actor)) viaArmyDie = true;

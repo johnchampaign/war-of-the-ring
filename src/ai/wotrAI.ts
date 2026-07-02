@@ -110,7 +110,7 @@ function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): 
   if (r.nazgul) move.nazgul = r.nazgul;
   // Only the MOVING side's own characters travel with the army — never the enemy's
   // (e.g. FP Companions who separated into a besieged Shadow Stronghold this Army holds).
-  const mine = r.characters.filter((c) => (actor === 'shadow') === SHADOW_CHARS.has(c));
+  const mine = r.characters.filter((c) => (actor === 'shadow') === SHADOW_CHARS.has(c) && c !== 'saruman'); // Saruman can't leave Orthanc
   if (mine.length) move.characters = mine;
   return { kind: 'moveArmy', from, to: action.to, move };
 }

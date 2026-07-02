@@ -204,7 +204,10 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
     movingUnits += mr + me;
   }
   if (movingUnits < 1) return false;
-  const movingLeaders = sel.leaders ?? 0, movingNazgul = sel.nazgul ?? 0, chars = sel.characters ?? [];
+  const movingLeaders = sel.leaders ?? 0, movingNazgul = sel.nazgul ?? 0;
+  // Saruman cannot leave Orthanc (character card) — silently drop him from the movers
+  // rather than rejecting the whole move, so he simply holds.
+  const chars = (sel.characters ?? []).filter((c) => c !== 'saruman');
   if (movingLeaders < 0 || movingLeaders > src.leaders || movingNazgul < 0 || movingNazgul > src.nazgul) return false;
   for (const c of chars) if (!src.characters.includes(c) || characterSide(c) !== side) return false;
   // Only the moving Nations matter for the not-At-War border rule.
@@ -245,11 +248,12 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
     d.regular += u.regular; d.elite += u.elite; dst.units[nation] = d;
   }
   // Only THIS side's Characters move with its Army; an enemy Character sharing the
-  // region (e.g. a stranded Companion under a Shadow Army) stays put.
-  const movingChars = src.characters.filter((c) => characterSide(c) === side);
+  // region (e.g. a stranded Companion under a Shadow Army) stays put. Saruman never
+  // leaves Orthanc (character card: "Saruman cannot leave Orthanc"), so he holds too.
+  const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
   dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
   src.units = {}; src.leaders = 0; src.nazgul = 0;
-  src.characters = src.characters.filter((c) => characterSide(c) !== side);
+  src.characters = src.characters.filter((c) => !movingChars.includes(c));
   // Capture an undefended enemy Settlement.
   captureIfEnemySettlement(state, to, side);
   // Entering a Nation's region activates that Nation (rules p.34) — covers regions

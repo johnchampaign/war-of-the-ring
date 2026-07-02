@@ -256,7 +256,12 @@ export function attackError(state: GameState, from: RegionId, side: Side, explic
   if (armyUnits - rgUnits < 1) return 'The attacking army must keep at least one unit';
   const rgHasFigure = rgUnits > 0 || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
   if (rgHasFigure && rgUnits < 1) return 'A rearguard must contain at least one unit';
-  if (viaCharacterDie && (r.leaders - rg.leaders) + (r.nazgul - rg.nazgul) + (r.characters.length - rg.characters.length) < 1) {
+  // Only the attacker's OWN Leaders/Characters satisfy a Character-die attack — never
+  // an enemy Character sharing the region, and never Saruman (who can't leave Orthanc,
+  // so he can't be the figure that lets the army advance).
+  const ownChars = r.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
+  const rgOwnChars = rg.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
+  if (viaCharacterDie && (r.leaders - rg.leaders) + (r.nazgul - rg.nazgul) + (ownChars.length - rgOwnChars.length) < 1) {
     return 'A Character-die attack must include a Leader or Character';
   }
   return null;
@@ -422,10 +427,11 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
   }
   // Only the attacker's own Characters advance; an enemy Character in `from` stays.
-  const movingChars = src.characters.filter((c) => characterSide(c) === attacker);
+  // Saruman never leaves Orthanc (character card), so he holds even on an advance.
+  const movingChars = src.characters.filter((c) => characterSide(c) === attacker && c !== 'saruman');
   dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
   src.units = {}; src.leaders = 0; src.nazgul = 0;
-  src.characters = src.characters.filter((c) => characterSide(c) !== attacker);
+  src.characters = src.characters.filter((c) => !movingChars.includes(c));
   captureIfEnemySettlement(state, to, attacker);
 }
 
@@ -676,11 +682,11 @@ function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side): 
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
   }
   // Only the moving side's Characters travel; an enemy Character stranded in the
-  // region stays behind (it never belonged to this Army).
-  const movingChars = src.characters.filter((c) => characterSide(c) === side);
+  // region stays behind (it never belonged to this Army). Saruman never leaves Orthanc.
+  const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
   dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
   src.units = {}; src.leaders = 0; src.nazgul = 0;
-  src.characters = src.characters.filter((c) => characterSide(c) !== side);
+  src.characters = src.characters.filter((c) => !movingChars.includes(c));
 }
 
 export const canRetreat = (state: GameState): boolean => retreatRegion(state, state.pendingCombat!) !== null;

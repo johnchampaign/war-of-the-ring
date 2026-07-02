@@ -5,7 +5,7 @@ import type { GameState, RegionId, CharacterId, Nation } from './types';
 import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
-import { activateNation, advancePolitical } from './politics';
+import { activateNation } from './politics';
 import { settlementController, armySide } from './armies';
 import { MINION_IDS } from './minions';
 import { log, notify } from './log';
@@ -181,16 +181,17 @@ function activatableNations(id: CharacterId): Nation[] {
   return [n as Nation];
 }
 
-/** Would placing `companion` at `region` rouse a Free Peoples nation toward War?
+/** Would placing `companion` at `region` ACTIVATE a passive Free Peoples nation?
  *  True when `region` is a City/Stronghold of a nation the Companion can activate
- *  that isn't already At War. Used to highlight the rousing destinations on the
- *  map when a Companion separates (so it isn't a hidden consequence). */
+ *  that is still passive. Used to highlight the activation destinations on the map
+ *  when a Companion separates (so it isn't a hidden consequence). Presence activates
+ *  only — it never advances the Political Track. */
 export function separationActivates(state: GameState, companion: CharacterId, region: RegionId): boolean {
   const dn = REGIONS[region]?.nation as Nation | null;
   if (!dn || !activatableNations(companion).includes(dn)) return false;
   const st = REGIONS[region]?.settlement;
   if (st !== 'City' && st !== 'Stronghold') return false;
-  return (state.nations[dn]?.step ?? 0) > 0; // not yet At War — the rouse still matters
+  return !state.nations[dn]?.active; // still passive — activation still matters
 }
 
 /** BFS for the nearest region within `maxMove` steps satisfying `pred`. */
@@ -214,7 +215,7 @@ function nearestMatch(from: RegionId, maxMove: number, pred: (id: RegionId) => b
 /** Separate one Companion from the Fellowship (Character die; forbidden on the
  *  Mordor Track). The Companion moves up to (Progress + Level) regions toward the
  *  nearest City/Stronghold of a Nation it can activate that isn't yet At War, and
- *  activates + advances that Nation on arrival. Separation is permanent. */
+ *  activates that Nation on arrival (never advances the track). Separation is permanent. */
 export function separateCompanion(state: GameState, id: CharacterId,
   opts: { extraMove?: number; levelOverride?: number } = {}): boolean {
   const fs = state.fellowship;
@@ -226,7 +227,7 @@ export function separateCompanion(state: GameState, id: CharacterId,
     return !!def.nation && nations.includes(def.nation as Nation)
       && (def.settlement === 'City' || def.settlement === 'Stronghold')
       && settlementController(state, r) !== 'shadow'
-      && state.nations[def.nation as Nation].step > 0; // activation still useful
+      && !state.nations[def.nation as Nation].active; // still passive — activation useful
   };
   const dest = nearestMatch(fs.location, maxMove, isTarget) ?? fs.location;
   beginSeparation(state, id);
@@ -279,9 +280,15 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
   const nations = activatableNations(id);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
-    activateNation(state, dn, { viaCompanion: true }); advancePolitical(state, dn, 1);
-    const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-    notify(state, `${COMPANIONS[id]?.name ?? id} rouses the ${nm(dn)} to war — ${nm(dn)} ${state.nations[dn].step === 0 ? 'is now At War' : 'advances on the Political Track'}.`);
+    // A Companion ending movement in a Nation's City/Stronghold ACTIVATES it (rulebook
+    // p.34) — it does NOT advance the Political Track. Advancing is a separate explicit
+    // action (Boromir/Legolas/Gimli's "use any Action die to advance", i.e. companionMuster).
+    const wasPassive = !state.nations[dn].active;
+    activateNation(state, dn, { viaCompanion: true });
+    if (wasPassive && state.nations[dn].active) {
+      const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+      notify(state, `${COMPANIONS[id]?.name ?? id} activates the ${nm(dn)}.`);
+    }
   }
   pruneFellowshipOnTableCards(state);
   log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);
@@ -298,9 +305,13 @@ export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: 
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')
     && ids.some((id) => activatableNations(id).includes(dn))) {
-    activateNation(state, dn, { viaCompanion: true }); advancePolitical(state, dn, 1);
-    const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-    notify(state, `The Companions rouse the ${nm(dn)} to war — ${nm(dn)} ${state.nations[dn].step === 0 ? 'is now At War' : 'advances on the Political Track'}.`);
+    // Presence ACTIVATES the Nation (p.34); it does not advance the Political Track.
+    const wasPassive = !state.nations[dn].active;
+    activateNation(state, dn, { viaCompanion: true });
+    if (wasPassive && state.nations[dn].active) {
+      const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+      notify(state, `The Companions activate the ${nm(dn)}.`);
+    }
   }
   pruneFellowshipOnTableCards(state);
   log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} separated to ${dest}; guide now ${fs.guide}`);

@@ -22,7 +22,9 @@ export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
   // Only the MOVING army's OWN Characters can travel with it — never an enemy Companion
   // who happens to share the region (e.g. one who separated into a besieged Stronghold).
   const armySide: Side = nations.length ? sideOfNation(nations[0]!) : 'fp';
-  const myChars = r.characters.filter((c) => characterSide(c) === armySide);
+  // Saruman can never leave Orthanc (character card) — he may fight from it (attack
+  // mode; the advance holds him) but is never offered as a mover.
+  const myChars = r.characters.filter((c) => characterSide(c) === armySide && (attackMode || c !== 'saruman'));
   // Default selection = the whole Army (so an unchanged picker is a normal move).
   const [reg, setReg] = useState<Record<string, number>>(() => Object.fromEntries(nations.map((n) => [n, r.units[n]!.regular])));
   const [eli, setEli] = useState<Record<string, number>>(() => Object.fromEntries(nations.map((n) => [n, r.units[n]!.elite])));
