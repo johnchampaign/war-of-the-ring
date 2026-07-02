@@ -144,9 +144,9 @@ function RegionPreview({ id, view, bottom }: { id: string; view: GameState; bott
 }
 
 function CardPreview({ id, bottom }: { id: string; bottom?: boolean }) {
-  const art = useCardArt(id === 'hidden' ? null : id);
+  const art = useCardArt(id.startsWith('hidden') ? null : id);
   const def = CARD.get(id);
-  if (id === 'hidden') return <div style={hint}>Hidden card.</div>;
+  if (id.startsWith('hidden')) return <div style={hint}>Hidden card.</div>;
   const text = (
     <div style={{ overflowY: 'auto', minWidth: 0, flex: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>

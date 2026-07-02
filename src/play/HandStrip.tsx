@@ -24,7 +24,7 @@ export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Si
       {/* Hand on top, played ("in play") cards underneath. */}
       <div style={wrap}>
         <span style={label}>Hand ({hand.length}):</span>
-        {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => id !== 'hidden' && setZoom(id)} onHover={onHoverCard} />)}
+        {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => !id.startsWith('hidden') && setZoom(id)} onHover={onHoverCard} />)}
       </div>
       {tabled.length > 0 && (
         <div style={wrap}>
@@ -39,7 +39,7 @@ export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Si
 }
 
 function HandCard({ id, onZoom, onHover }: { id: string; onZoom: () => void; onHover?: (id: string | null) => void }) {
-  const art = useCardArt(id === 'hidden' ? null : id);
+  const art = useCardArt(id.startsWith('hidden') ? null : id);
   const def = CARD.get(id);
   const hov = { onMouseEnter: () => onHover?.(id), onMouseLeave: () => onHover?.(null) };
   if (art) return (
@@ -47,7 +47,7 @@ function HandCard({ id, onZoom, onHover }: { id: string; onZoom: () => void; onH
     // readable at a glance even on the image (Ira #3).
     <div style={{ position: 'relative', flexShrink: 0 }} {...hov}>
       <img src={art} alt={def?.name ?? id} title={`${def?.name ?? id} — click to enlarge`} style={img} onClick={onZoom} />
-      {id !== 'hidden' && def && <CardTypeBadge deck={def.deck} small style={{ position: 'absolute', top: 2, left: 2, boxShadow: '0 1px 3px #000' }} />}
+      {!id.startsWith('hidden') && def && <CardTypeBadge deck={def.deck} small style={{ position: 'absolute', top: 2, left: 2, boxShadow: '0 1px 3px #000' }} />}
     </div>
   );
   // Text-card placeholder.

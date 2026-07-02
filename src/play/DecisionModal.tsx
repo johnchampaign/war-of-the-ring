@@ -196,22 +196,29 @@ function RemoveExcessDetail({ view, data }: { view: GameState; data?: { region?:
 // the damage is the tile's value (not the success count) — so the choice isn't
 // made blind to what produced it. A link opens the full "how the Hunt works"
 // dialog with every modifier.
-function HuntDetail({ view, data, modes, onExplain }: { view: GameState; data?: { damage?: number; reveal?: boolean }; modes: string[]; onExplain: () => void }) {
+function HuntDetail({ view, data, modes, onExplain }: { view: GameState; data?: { damage?: number; reveal?: boolean; source?: string; noReduce?: boolean }; modes: string[]; onExplain: () => void }) {
   if (!data) return null;
   const draws = view.hunt.draws ?? [];
   const last = draws.length ? draws[draws.length - 1] : undefined;
   const roll = last?.roll ?? view.hunt.lastRoll ?? undefined;
   const numericTile = last && typeof last.value === 'number' && last.value > 0;
-  const fieldRoll = roll && !roll.mordor;
+  // An Event-card Hunt (no roll — the card drew a tile directly) names its card.
+  const fieldRoll = roll && !roll.mordor && !data.source;
   return (
     <div style={{ margin: '4px 0 2px' }}>
+      {data.source && (
+        <div style={{ fontSize: 13, color: '#cbbf9a', marginBottom: 6 }}>
+          The Shadow played <b>{data.source}</b> — no Hunt roll; a tile is drawn directly.
+          {data.noReduce && <> Its damage <b>cannot be reduced</b> (Guide abilities and cards are barred); absorb it as Corruption or a Companion casualty.</>}
+        </div>
+      )}
       {fieldRoll && (
         <div style={{ fontSize: 13, color: '#cbbf9a', marginBottom: 6 }}>
           The Shadow rolled <b>{roll!.level}</b> Hunt {roll!.level === 1 ? 'die' : 'dice'} — one per die in the Hunt&nbsp;Box
           {roll!.bonus ? <>, each <b>+{roll!.bonus}</b> from Free&nbsp;Peoples dice in the box</> : null}. A die hits on <b>6+</b>.
         </div>
       )}
-      {roll && <RollLine roll={roll} />}
+      {roll && !data.source && <RollLine roll={roll} />}
       {fieldRoll && (
         <div style={{ fontSize: 12, color: '#998', margin: '6px 0 0' }}>
           Modifiers: {roll!.bonus ? `+${roll!.bonus} box bonus` : 'no box bonus'};{' '}

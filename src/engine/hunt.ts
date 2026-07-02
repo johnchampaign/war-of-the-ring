@@ -84,8 +84,11 @@ function huntRerolls(state: GameState): number {
 }
 
 /** Apply a drawn tile. Damage>0 with Companions present sets a PendingChoice;
- *  otherwise applies directly. Reveal is applied with the resolution. */
-function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): void {
+ *  otherwise applies directly. Reveal is applied with the resolution. `opts.source`
+ *  names the Event card that caused a no-roll draw (shown in the FP's damage prompt);
+ *  `opts.noReduce` bars the damage-reduction options (Isildur's Bane). */
+export type HuntOpts = { noReduce?: boolean; source?: string };
+function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, opts: HuntOpts = {}): void {
   const fs = state.fellowship;
   let damage = 0;
   if (typeof tile.value === 'number') damage = tile.value;
@@ -107,9 +110,10 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number): 
 
   // Interactive resolution when FP has any choice — a Companion to spend, a Hobbit
   // Guide to separate, or Gollum's reveal-to-reduce — otherwise apply directly.
-  if (fs.companions.length > 0 || huntReductionAvailable(state)) {
-    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal } };
-    log(state, null, 'hunt', `Hunt damage ${damage} pending (FP decision)`);
+  // (Under noReduce the corruption-vs-casualty choice still stands; only reductions are barred.)
+  if (fs.companions.length > 0 || (!opts.noReduce && huntReductionAvailable(state))) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, ...(opts.noReduce ? { noReduce: true } : {}), ...(opts.source ? { source: opts.source } : {}) } };
+    log(state, null, 'hunt', `Hunt damage ${damage} pending (FP decision)${opts.source ? ` — ${opts.source}` : ''}`);
   } else {
     fs.corruption = Math.min(12, fs.corruption + damage);
     if (reveal) beginReveal(state);
@@ -196,12 +200,12 @@ export const huntPreventAvailable = hasWizardStaff;
 /** An "extra" Hunt from an Event card (Orc Patrol / Isildur's Bane / Foul Thing):
  *  draw a tile; if it's an Eye or a Free-Peoples special tile, discard it without
  *  effect; otherwise apply it as a successful Hunt (which may prompt FP). */
-export function extraHunt(state: GameState): void {
+export function extraHunt(state: GameState, opts: HuntOpts = {}): void {
   const { tile, ref } = drawTile(state);
   const isEye = tile.value === 'eye';
   const isFpSpecial = 'spec' in ref && ref.spec.startsWith('fp-');
   if (isEye || isFpSpecial) { log(state, null, 'hunt', 'extra Hunt tile discarded (Eye / FP special)'); return; }
-  applyHuntTile(state, tile, Math.min(5, state.hunt.box));
+  applyHuntTile(state, tile, Math.min(5, state.hunt.box), opts);
 }
 
 /** Challenge of the King: draw 3 Hunt tiles. If all 3 are Eyes, return them to the
@@ -318,8 +322,10 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
  *  (a Companion to sacrifice or a reduction ability); otherwise finish. */
 function repromptOrFinish(state: GameState, damage: number, reveal: boolean): void {
   const fs = state.fellowship;
-  if (damage > 0 && (fs.companions.length > 0 || huntReductionAvailable(state))) {
-    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal } };
+  // Preserve the originating card's flags (noReduce / source) across re-prompts.
+  const prev = (state.pendingChoice?.data ?? {}) as { noReduce?: boolean; source?: string };
+  if (damage > 0 && (fs.companions.length > 0 || (!prev.noReduce && huntReductionAvailable(state)))) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, ...(prev.noReduce ? { noReduce: true } : {}), ...(prev.source ? { source: prev.source } : {}) } };
     return;
   }
   finishHunt(state, damage, reveal);

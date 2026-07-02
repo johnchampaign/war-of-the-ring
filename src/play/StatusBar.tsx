@@ -2,6 +2,19 @@
 import { useState } from 'react';
 import type { GameState } from '../engine/types';
 import { charName, charDef } from './charInfo';
+import eventCards from '../../assets/event-cards.json';
+
+// Deck type per card id (for the hand pill's Character/Strategy split).
+const CARD_DECK = new Map<string, string>((eventCards as { cards: { id: string; deck: string }[] }).cards.map((c) => [c.id, c.deck]));
+/** "3C+2S" — Character/Strategy counts for a hand of real ids or 'hidden-*' placeholders. */
+function handSplit(hand: string[] | undefined): string {
+  let ch = 0, st = 0;
+  for (const id of hand ?? []) {
+    const deck = id === 'hidden-character' ? 'Character' : id === 'hidden-strategy' ? 'Strategy' : CARD_DECK.get(id);
+    if (deck === 'Character') ch++; else st++;
+  }
+  return `${ch}C+${st}S`;
+}
 
 // A browsable roster of everyone currently in the Fellowship (Ira #4): click the
 // companion pill to open it; hover a name to show that character's card in the
@@ -37,7 +50,52 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
   );
 }
 
-export function StatusBar({ view, you, onHoverChar, trailing }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void; trailing?: React.ReactNode }) {
+// Browsable discard piles (player report: "no way to see the discarded or used
+// cards"). Played/discarded cards are open information; hand-limit discards are
+// face down — shown as type-only. Newest first. Hover a name for the card.
+const CARD_NAME = new Map<string, string>((eventCards as { cards: { id: string; name: string }[] }).cards.map((c) => [c.id, c.name]));
+function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: (id: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const rows: { side: string; label: string; id: string | null }[] = [];
+  for (const side of ['fp', 'shadow'] as const) {
+    const p = view.cards?.[side];
+    if (!p) continue;
+    const sideName = side === 'fp' ? 'FP' : 'SH';
+    for (const id of [...(p.discard?.character ?? []), ...(p.discard?.strategy ?? [])]) {
+      rows.push({ side: sideName, label: CARD_NAME.get(id) ?? id, id });
+    }
+    for (const id of p.discardFaceDown ?? []) {
+      const label = id.startsWith('hidden') ? `face-down ${id === 'hidden-character' ? 'Character' : 'Strategy'} card`
+        : `${CARD_NAME.get(id) ?? id} (face down — only you see this)`;
+      rows.push({ side: sideName, label, id: id.startsWith('hidden') ? null : id });
+    }
+    for (const id of p.table ?? []) rows.push({ side: sideName, label: `${CARD_NAME.get(id) ?? id} (in play on the table)`, id });
+  }
+  const total = rows.length;
+  return (
+    <span style={{ position: 'relative' }}>
+      <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
+        title="Browse discarded / played / on-table Event cards (open information)">
+        Discards {total} {open ? '▴' : '▾'}
+      </button>
+      {open && (
+        <div style={{ ...roster, maxHeight: 300, overflowY: 'auto', width: 300 }} onMouseLeave={() => onHoverCard?.(null)}>
+          {total === 0 && <div style={{ color: '#998', fontSize: 12 }}>No cards discarded yet.</div>}
+          {[...rows].reverse().map((r, i) => (
+            <div key={i} onMouseEnter={() => r.id && onHoverCard?.(r.id)}
+              style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 6px', borderRadius: 5, cursor: r.id ? 'help' : 'default' }}>
+              <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: r.side === 'FP' ? '#7fa8e6' : '#e6857f' }}>{r.side}</span>
+              <span style={{ fontSize: 12, color: r.id ? '#e9e1cc' : '#998' }}>{r.label}</span>
+            </div>
+          ))}
+          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Hover a name for its card · hand-limit discards are face down (type only)</div>
+        </div>
+      )}
+    </span>
+  );
+}
+
+export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void; onHoverCard?: (id: string | null) => void; trailing?: React.ReactNode }) {
   const fs = view.fellowship;
   return (
     <div style={bar}>
@@ -59,9 +117,10 @@ export function StatusBar({ view, you, onHoverChar, trailing }: { view: GameStat
       <span style={pill} title="Shadow dice in the Hunt Box (allocated + Eyes). FP dice added this turn (from moving the Fellowship) each add +1 to every Hunt die.">
         Hunt box {view.hunt.box}{view.hunt.fpDiceInBox ? ` · +${view.hunt.fpDiceInBox} FP` : ''}
       </span>
-      <span style={pill} title="Event cards in hand. The opponent's individual cards are hidden, but the count is open information.">
-        🂠 FP {view.cards?.fp?.hand?.length ?? 0} · Shadow {view.cards?.shadow?.hand?.length ?? 0}
+      <span style={pill} title="Event cards in hand, split Character/Strategy. The opponent's cards are hidden, but their card BACKS (deck type) are open information on the tabletop.">
+        🂠 FP {handSplit(view.cards?.fp?.hand)} · Shadow {handSplit(view.cards?.shadow?.hand)}
       </span>
+      <DiscardBrowser view={view} onHoverCard={onHoverCard} />
       <span style={pill} title="The three Elven Rings. Held by the Free Peoples; when the FP use one it flips to the Shadow (who may then use it once), after which it is spent.">
         Elven Rings:{' '}
         {view.elvenRings.map((r, i) => (

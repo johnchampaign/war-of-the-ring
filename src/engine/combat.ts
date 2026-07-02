@@ -509,6 +509,12 @@ export function combatStep(state: GameState): void {
       }
       case 'beginRound': {
         if (pc.round >= MAX_ROUNDS) { finishCombat(state, false); return; }
+        // Both cards are now committed — announce them PUBLICLY (they're revealed
+        // simultaneously per RAW; a "none" is stated explicitly so the opponent can
+        // tell "no card" apart from "a card I didn't see" — player report).
+        const cardName = (id: string | null) => (id ? `'${EVENT_BY_ID[id]?.combat?.title ?? id}'` : 'no Combat Card');
+        const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.attacker)} (attacker) play ${cardName(pc.attackerCard)}; ${sideName(pc.defender)} (defender) play ${cardName(pc.defenderCard)}`);
         // Each side's combat card (if any) applies THIS round, then is spent —
         // a fresh card may be played next round (rules-spec §7, p.29).
         let aMods = pc.attackerCard ? (combatModsFor(pc.attackerCard) ?? EMPTY_MODS) : EMPTY_MODS;

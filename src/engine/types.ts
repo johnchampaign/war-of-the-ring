@@ -132,6 +132,9 @@ export interface CardPiles {
   draw: Record<Deck, string[]>;
   hand: string[];
   discard: Record<Deck, string[]>;
+  /** Hand-limit discards — face DOWN per RAW p.20: identity hidden from the
+   *  opponent (redact maps to type-only placeholders), deck type public. */
+  discardFaceDown?: string[];
   /** "Play on the table" cards in effect, by id. */
   table: string[];
 }

@@ -209,10 +209,13 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // Gollum reveals the Fellowship. The Hobbit "separate −1" is NOT available in
         // Mordor — Companions can't be separated there (rulebook p.43); eliminate one
         // as a casualty instead (the 'guide'/'random' options give the same −1 for a
-        // Level-1 Hobbit).
-        if ((fs.guide === 'meriadoc' || fs.guide === 'peregrin') && fs.mordor === null) acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
-        if (fs.guide === 'gollum' && fs.hidden) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
-        if (huntReduceCardAvailable(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard' });
+        // Level-1 Hobbit). Isildur's Bane bars ALL reductions (data.noReduce).
+        const noReduce = !!(state.pendingChoice!.data as { noReduce?: boolean } | undefined)?.noReduce;
+        if (!noReduce) {
+          if ((fs.guide === 'meriadoc' || fs.guide === 'peregrin') && fs.mordor === null) acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
+          if (fs.guide === 'gollum' && fs.hidden) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
+          if (huntReduceCardAvailable(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard' });
+        }
         return acts;
       }
       case 'musterSecond': {
@@ -604,9 +607,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const i = p.hand.indexOf(action.card);
       if (i >= 0) {
         p.hand.splice(i, 1);
-        const deck = EVENT_BY_ID[action.card]?.deck === 'Character' ? 'character' : 'strategy';
-        p.discard[deck].push(action.card);
-        log(state, actor, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discards ${EVENT_BY_ID[action.card]?.name ?? action.card} (over the 6-card limit)`);
+        // Hand-limit discards are FACE DOWN (RAW p.20): the identity stays hidden
+        // from the opponent; only the deck type is public (the card back).
+        (p.discardFaceDown ??= []).push(action.card);
+        const deckName = EVENT_BY_ID[action.card]?.deck ?? 'Event';
+        log(state, actor, 'event', `You discard ${EVENT_BY_ID[action.card]?.name ?? action.card} face down (over the 6-card limit)`);
+        log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discard a ${deckName} card face down (over the 6-card limit)`);
       }
       state.pendingChoice = null; break; // advance() re-checks and re-prompts if still over 6
     }

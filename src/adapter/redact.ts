@@ -6,6 +6,7 @@
 // At game over, everything is revealed (no hidden-info-dependent client scoring,
 // but faithful + future-proof).
 import type { GameState, Side } from '../engine/types';
+import { EVENT_BY_ID } from '../engine/data';
 
 export function redactStateForViewer(state: GameState, viewer: Side | null): GameState {
   const v: GameState = JSON.parse(JSON.stringify(state));
@@ -15,9 +16,14 @@ export function redactStateForViewer(state: GameState, viewer: Side | null): Gam
 
   for (const side of ['fp', 'shadow'] as Side[]) {
     if (side === viewer) continue;
-    v.cards[side].hand = v.cards[side].hand.map(() => 'hidden');
+    // The DECK (Character vs Strategy) of each held card is public on the tabletop —
+    // the card backs differ — so keep it (player report: "6 Character cards is very
+    // different than 6 Strategy cards"). The identity stays hidden.
+    v.cards[side].hand = state.cards[side].hand.map((id) => (EVENT_BY_ID[id]?.deck === 'Character' ? 'hidden-character' : 'hidden-strategy'));
     v.cards[side].draw.character = v.cards[side].draw.character.map(() => 'hidden');
     v.cards[side].draw.strategy = v.cards[side].draw.strategy.map(() => 'hidden');
+    // Face-down (hand-limit) discards: deck type is public, identity is not.
+    if (v.cards[side].discardFaceDown) v.cards[side].discardFaceDown = state.cards[side].discardFaceDown!.map((id) => (EVENT_BY_ID[id]?.deck === 'Character' ? 'hidden-character' : 'hidden-strategy'));
   }
 
   // A pending choice belonging to the opponent: keep a non-leaky "opponent is

@@ -11,7 +11,7 @@ import { applyCasualties, startBattle, queueOrApplyEventCasualties } from '../co
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
-import { REGIONS, levelOf, characterSide } from '../data';
+import { REGIONS, levelOf, characterSide, EVENT_BY_ID } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations } from '../fellowship';
 import { moveCharacter, characterDestinations } from '../charMove';
 import { log, notify } from '../log';
@@ -783,7 +783,10 @@ const fellowshipInFpSettlement = (state: GameState): boolean => {
 for (const id of ['sh-char-05', 'sh-char-06', 'sh-char-07']) { // Orc Patrol / Isildur's Bane / Foul Thing
   register(id, {
     canPlay: (state) => !fellowshipInFpSettlement(state),
-    apply(state) { extraHunt(state); },
+    // Name the card in the FP's damage prompt (a no-roll tile draw is otherwise
+    // indistinguishable from a normal Hunt — player report). Isildur's Bane
+    // additionally bars all damage reduction ("may not be reduced in any way").
+    apply(state) { extraHunt(state, { source: EVENT_BY_ID[id]?.name ?? id, noReduce: id === 'sh-char-06' }); },
   });
 }
 

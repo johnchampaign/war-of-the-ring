@@ -372,7 +372,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {/* The status bar lives at the top of the right column (may wrap to several
               rows). The Undo button rides along at its right end (after Elven Rings). */}
-          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} trailing={statusTrailing} />
+          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} onHoverCard={onHoverCard} trailing={statusTrailing} />
           {/* Dice pool and Politics share one row when there's width; when the column
               is narrow they WRAP (Politics drops below the dice, each full-width) so the
               Politics reinforcement pips can't run off the right edge (report 6q0s). */}
