@@ -19,7 +19,7 @@ import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolve
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
-import { moveCharacter, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
+import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, type EventTarget } from '../engine/handlers/registry';
@@ -855,17 +855,20 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Cap a Nazgûl move to the UNMOVED remainder of the stack (a moved Nazgûl can't
       // relay onward); a named figure may only move once this die.
       const avail = action.char === 'nazgul' ? availableNazgul(state, action.from, prev) : 0;
+      const group = action.chars && action.chars.length > 1 ? action.chars : null; // Companion GROUP move (p.24)
       if (cont) {
-        if (action.char === 'nazgul' ? avail <= 0 : prev.chars.includes(action.char))
+        if (action.char === 'nazgul' ? avail <= 0 : (group ?? [action.char]).some((c) => prev.chars.includes(c)))
           throw new Error('That figure already moved with this Character die');
       } else if (!consumePreferred(state, actor, ['character', 'will'], action.die)) {
         throw new Error('No Character die');
       }
       const moveCount = action.char === 'nazgul' ? Math.min(action.count ?? avail, avail) : undefined;
-      if (!moveCharacter(state, actor, action.char, action.from, action.to, moveCount)) throw new Error('Illegal character move');
+      if (group) {
+        if (!group.includes(action.char) || !moveCompanionGroup(state, actor, action.from, action.to, group)) throw new Error('Illegal character move');
+      } else if (!moveCharacter(state, actor, action.char, action.from, action.to, moveCount)) throw new Error('Illegal character move');
       const moved: CharMoveState = action.char === 'nazgul'
         ? { chars: prev.chars, movedNazgul: { ...prev.movedNazgul, [action.to]: (prev.movedNazgul[action.to] ?? 0) + (moveCount ?? avail) } }
-        : { chars: [...prev.chars, action.char], movedNazgul: prev.movedNazgul };
+        : { chars: [...prev.chars, ...(group ?? [action.char])], movedNazgul: prev.movedNazgul };
       // Keep moving the rest of the eligible characters on the same die, or finish.
       if (remainingCharMoves(state, actor, moved)) state.pendingChoice = { owner: actor, kind: 'charMove2', data: moved };
       else { state.pendingChoice = null; passResolutionTurn(state, actor); }

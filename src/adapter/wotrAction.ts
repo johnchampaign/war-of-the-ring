@@ -75,7 +75,9 @@ export type WotrAction =
   // Move an independent character via a Character die: 'nazgul' (a region's
   // Nazgûl group), a Minion id, or a separated Companion id.
   // `count` (Nazgûl only) moves part of a stack; omit to move the whole group.
-  | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId; die?: DieFace; count?: number }
+  // `chars` (Companions only) moves a GROUP together — range is the highest Level
+  // in the group (rulebook p.24); `char` is the group's leader (a member).
+  | { kind: 'moveCharacter'; char: string; from: RegionId; to: RegionId; die?: DieFace; count?: number; chars?: string[] }
   // Stop the Character-die move chain (RAW: one die may move all eligible characters).
   | { kind: 'charMove2'; done: true }
   // Follow-up target choice for an interactive event card (fields per card).

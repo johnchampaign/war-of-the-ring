@@ -99,6 +99,29 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
   return true;
 }
 
+/** Move a GROUP of separated Companions together to one destination. RAW p.24: "a
+ *  group of Companions in the same region can be moved to a common destination at a
+ *  distance equal to or less than the highest Level in the group" — so a Level-1
+ *  Hobbit travels with a Level-4 Gandalf. Returns false if illegal. */
+export function moveCompanionGroup(state: GameState, side: Side, from: RegionId, to: RegionId, chars: string[]): boolean {
+  if (side !== 'fp' || from === to || !REGIONS[to] || chars.length === 0) return false;
+  const src = state.regions[from]!;
+  let range = 0;
+  for (const c of chars) {
+    if (!COMPANION_SET.has(c) || !src.characters.includes(c)) return false;
+    range = Math.max(range, rangeOf(state, c, from));
+  }
+  if (range <= 0 || regionDistance(from, to) > range) return false;
+  if (!canLand(state, to, side)) return false;
+  const dst = state.regions[to]!;
+  for (const c of chars) {
+    src.characters.splice(src.characters.indexOf(c), 1);
+    dst.characters.push(c);
+    if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
+  }
+  return true;
+}
+
 /** The actor's independent characters and where each sits: 'nazgul' groups (by
  *  region) plus Minion / Companion figures. */
 function movablePieces(state: GameState, side: Side, excl?: CharMoveState): Array<{ char: string; from: RegionId }> {

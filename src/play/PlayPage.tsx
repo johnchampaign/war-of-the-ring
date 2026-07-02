@@ -28,7 +28,7 @@ import { isDecisionAction, dieOptions, describeAction } from './actionText';
 import { moveBlockReason } from '../engine/armies';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { separationActivates } from '../engine/fellowship';
-import { REGIONS } from '../engine/data';
+import { REGIONS, levelOf } from '../engine/data';
 import { charName } from './charInfo';
 
 const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ? 'Shadow' : s);
@@ -57,10 +57,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [selected, setSelected] = useState<RegionId | null>(null);
   const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' | 'armyMove2' } | null>(null);
   // Board-driven independent-character (Nazgûl / Minion / Companion) move in progress.
-  const [charPick, setCharPick] = useState<{ from: RegionId; char: string } | null>(null);
+  // `group` (Companions only): move several together — range = highest Level (p.24).
+  const [charPick, setCharPick] = useState<{ from: RegionId; char: string; group?: string[] } | null>(null);
   // When a clicked region offers more than one thing to move (e.g. the army AND its
   // Nazgûl), let the player choose which.
-  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined } | { kind: 'assault'; char?: undefined } | { kind: 'muster'; char?: undefined } | { kind: 'char'; char: string }> } | null>(null);
+  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined; chars?: undefined } | { kind: 'assault'; char?: undefined; chars?: undefined } | { kind: 'muster'; char?: undefined; chars?: undefined } | { kind: 'chargroup'; chars: string[]; char?: undefined } | { kind: 'char'; char: string; chars?: undefined }> } | null>(null);
   const [musterMenu, setMusterMenu] = useState<RegionId | null>(null); // board-click muster: the chosen Settlement
   // Choosing HOW MANY Nazgûl to move from a stack (RAW: move any number, not the whole group).
   const [nazPick, setNazPick] = useState<{ from: RegionId; to: RegionId; max: number } | null>(null);
@@ -210,11 +211,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   // Begin moving whatever was chosen from a region: an army (select for the picker)
   // or a specific independent character (Nazgûl/Minion/Companion).
-  const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'char'; char: string }) => {
+  const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }) => {
     setMoveMenu(null);
     if (opt.kind === 'army') { setCharPick(null); setSelected(region); }
     else if (opt.kind === 'assault') { setCharPick(null); setSelected(null); setMoveDraft({ from: region, to: region, kind: 'attack' }); } // storm the besieged Stronghold
     else if (opt.kind === 'muster') { setCharPick(null); setSelected(null); setMusterMenu(region); } // pick the bundle for this Settlement
+    else if (opt.kind === 'chargroup') {
+      // Group move: destination range keys off the highest-Level member (p.24).
+      const leader = opt.chars.reduce((b, c) => (levelOf(c) > levelOf(b) ? c : b), opt.chars[0]!);
+      setSelected(null); setCharPick({ from: region, char: leader, group: opt.chars });
+    }
     else { setSelected(null); setCharPick({ from: region, char: opt.char }); }
   }, []);
 
@@ -240,7 +246,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           const avail = (g.view.regions[charPick.from]?.nazgul ?? 0) - (charMoved?.movedNazgul[charPick.from] ?? 0);
           if (avail > 1) { setNazPick({ from: charPick.from, to: id, max: avail }); setCharPick(null); return; }
         }
-        void submit({ kind: 'moveCharacter', char: charPick.char, from: charPick.from, to: id }); clearMove(); return;
+        void submit({ kind: 'moveCharacter', char: charPick.char, from: charPick.from, to: id, ...(charPick.group ? { chars: charPick.group } : {}) }); clearMove(); return;
       }
       if (id === charPick.from) { setCharPick(null); return; } // click the piece again to cancel
     }
@@ -264,10 +270,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const assaultHere = g.legalActions.some((a) => a.kind === 'attack' && a.from === id && a.to === id);
     const musterHere = musterTargets.has(id);
     const charsHere = (g.view && canMoveChars && charMoveOk && g.you) ? movableCharsAt(g.view, g.you as Side, id, charMoved) : [];
-    const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'char'; char: string }> = [
+    // ≥2 movable Companions here: offer moving them TOGETHER (group range = the
+    // highest Level in the group — rulebook p.24).
+    const compsHere = g.you === 'fp' ? charsHere.filter((c) => c !== 'nazgul') : [];
+    const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }> = [
       ...(armyHere ? [{ kind: 'army' as const }] : []),
       ...(assaultHere ? [{ kind: 'assault' as const }] : []),
       ...(musterHere ? [{ kind: 'muster' as const }] : []),
+      ...(compsHere.length >= 2 ? [{ kind: 'chargroup' as const, chars: compsHere }] : []),
       ...charsHere.map((c) => ({ kind: 'char' as const, char: c })),
     ];
     if (opts.length > 1) { clearMove(); setMoveMenu({ region: id, options: opts }); return; }
@@ -462,7 +472,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             {moveMenu.options.map((o, i) => (
               <button key={i} onClick={() => beginMove(moveMenu.region, o)}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
-                {o.kind === 'army' ? 'The army' : o.kind === 'assault' ? '⚔ Assault the besieged Stronghold' : o.kind === 'muster' ? '🛡 Muster here' : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
+                {o.kind === 'army' ? 'The army' : o.kind === 'assault' ? '⚔ Assault the besieged Stronghold' : o.kind === 'muster' ? '🛡 Muster here' : o.kind === 'chargroup' ? `All Companions together (${o.chars.map(charName).join(', ')})` : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
               </button>
             ))}
             <button onClick={() => setMoveMenu(null)} style={{ marginTop: 6, padding: '5px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
