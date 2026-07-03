@@ -101,6 +101,12 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
   // When the player has pre-selected a die that can pay for this action, spend it
   // directly (no per-action die-picker) — the choice was already made up top.
   const forced = forceDie && options.includes(forceDie) ? forceDie : null;
+  // The die tag should show the die that will ACTUALLY be spent. When the canonical
+  // die (e.g. Muster) isn't in the player's pool but a wildcard is — a Will of the
+  // West, or an Army/Muster die paying for a card — show that substitute. Otherwise
+  // a muster button advertises a Muster die the player never rolled, which reads as
+  // "I can't muster despite nations at war" (reported).
+  const tagDie = forced ?? (die && options.includes(die as DieFace) ? (die as DieFace) : options[0] ?? die);
   const ambiguous = !forced && options.length > 1;
   const onMain = () => {
     if (forced) onClick({ ...action, die: forced } as WotrAction);
@@ -111,7 +117,7 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
   return (
     <div>
       <button disabled={disabled} onClick={onMain} {...hov} style={{ ...bstyle, display: 'flex', alignItems: 'center', gap: 8 }}>
-        {(forced ?? die) && <DieTag face={(forced ?? die)!} />}
+        {tagDie && <DieTag face={tagDie} />}
         {art && <img src={art} alt="" style={{ height: compact ? 30 : 48, borderRadius: 3, flexShrink: 0 }} />}
         <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
         {ambiguous && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cb8' }}>choose die ▸</span>}
