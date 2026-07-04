@@ -88,6 +88,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     return () => { cancelled = true; };
   }, []);
   const [hover, setHover] = useState<Hover>(null);
+  // The Log pop-up has its OWN hover state. If it drove the shared `hover`, hovering
+  // a card in the log would ALSO light up the always-on bottom inspector behind the
+  // pop-up backdrop — the card rendered twice, offset and dimmed ("doubled and
+  // staggered", player report). Keeping it separate confines the preview to the pop-up.
+  const [logHover, setLogHover] = useState<Hover>(null);
   const onHoverRegion = useCallback((id: RegionId | null) => setHover(id ? { kind: 'region', id } : null), []);
   const onHoverCard = useCallback((id: string | null) => setHover(id ? { kind: 'card', id } : null), []);
   const onHoverChar = useCallback((id: string | null) => setHover(id ? { kind: 'character', id } : null), []);
@@ -545,22 +550,22 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         📜 Log
       </button>
       {logOpen && (
-        <div onClick={() => setLogOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.7)', display: 'grid', placeItems: 'center', zIndex: 71 }}>
+        <div onClick={() => { setLogOpen(false); setLogHover(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.7)', display: 'grid', placeItems: 'center', zIndex: 71 }}>
           {/* Hovered card renders in a bright side box INSIDE the overlay — it used to
               land in the right-hand panel UNDER the dark backdrop, unreadably dim
               (player report: "grayed-out … difficult to read"). */}
           <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 12, alignItems: 'stretch', maxWidth: '96vw' }}>
             <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', borderRadius: 12, border: '1px solid #5a4a2a', width: 520, maxWidth: '92vw', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px #000' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 10px', borderBottom: '1px solid #2a2418' }}>
-                <button onClick={() => setLogOpen(false)} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
+                <button onClick={() => { setLogOpen(false); setLogHover(null); }} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
               </div>
               <div style={{ height: '60vh', overflowY: 'auto' }}>
-                <LogPanel view={g.view} onHoverCard={onHoverCard} />
+                <LogPanel view={g.view} onHoverCard={(id) => setLogHover(id ? { kind: 'card', id } : null)} />
               </div>
             </div>
-            {hover?.kind === 'card' && (
+            {logHover?.kind === 'card' && (
               <div style={{ width: 320, background: '#1c1710', borderRadius: 12, border: '1px solid #5a4a2a', boxShadow: '0 8px 40px #000', overflow: 'hidden' }}>
-                <HoverPreview hover={hover} view={g.view} />
+                <HoverPreview hover={logHover} view={g.view} />
               </div>
             )}
           </div>

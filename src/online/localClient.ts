@@ -74,7 +74,14 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat'; aiSid
     // hotseat: show whoever is currently up (they control this screen).
     const viewer: Side = aiSide ? human : (actor ?? 'fp');
     const view = wotrAdapter.viewFor(state, viewer) as GameState;
-    (view as unknown as { oppLogStart: number }).oppLogStart = oppLogStart;
+    // `oppLogStart` is an index into the FULL log, but the view's log is REDACTED
+    // (opponent-side-tagged entries are stripped, same rule as redact.ts). Slicing
+    // the shorter redacted log with a full-log index shows the wrong entries — or,
+    // once enough hidden entries pile up (e.g. the Shadow's combat-card plays by
+    // turn 2), an index PAST the end, so the "while you waited" summary silently
+    // shows nothing. Translate the boundary into the redacted log's index space.
+    const redactedBoundary = state.log.slice(0, oppLogStart).filter((e) => e.side == null || e.side === viewer).length;
+    (view as unknown as { oppLogStart: number }).oppLogStart = redactedBoundary;
     return { view, yourTurn: !over && (aiSide ? actor === human : true), turn: state.turn, gameOver: over, you: viewer };
   };
 
@@ -144,8 +151,20 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat'; aiSid
       const cur = wotrAdapter.currentActor(state);
       let stateSnap = '';
       try {
+        // Client context (mode, viewport, UI-summary state) so triage doesn't have to
+        // guess the setup — a "no pop-up" / "layout looks wrong" report is only
+        // diagnosable if we know vs-AI vs hotseat and the screen size it was seen on.
+        const w = typeof window !== 'undefined' ? window : undefined;
+        const client = {
+          mode: aiSide ? 'vs-ai' : 'hotseat',
+          humanSide: human, aiSide: aiSide ?? null,
+          yourTurn: aiSide ? cur === human : true,
+          oppLogStart, // full-log index the "while you waited" summary keys off
+          viewport: w ? { w: w.innerWidth, h: w.innerHeight, dpr: w.devicePixelRatio } : null,
+          userAgent: (typeof navigator !== 'undefined' ? navigator.userAgent : '').slice(0, 200),
+        };
         stateSnap = JSON.stringify({
-          seat, currentActor: cur,
+          seat, currentActor: cur, client,
           legalActions: cur ? wotrAdapter.legalActions(state, cur) : [],
           view: wotrAdapter.viewFor(state, seat),
         }).slice(0, 200000);
