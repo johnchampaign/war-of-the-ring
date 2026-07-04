@@ -32,13 +32,17 @@ export function redactStateForViewer(state: GameState, viewer: Side | null): Gam
     v.pendingChoice = { owner: v.pendingChoice.owner, kind: v.pendingChoice.kind };
   }
 
-  // Combat cards are chosen SIMULTANEOUSLY (face down) then revealed. While either
-  // side is still selecting (attackerCard / defenderCard steps), hide the OPPONENT's
-  // already-chosen-but-unrevealed card, so the second chooser can't see the first's
-  // card. Once the round begins (both locked), they're public.
+  // Combat-card DECLARATION is OPEN per RAW (p.29): "the attacker declares whether
+  // he wants to use a Combat card ... then the defender declares ...; cards are
+  // chosen secretly, then revealed simultaneously." So the second chooser must know
+  // WHETHER the first is playing a card (the declaration) — the defender often bases
+  // his own play on it — while the card's IDENTITY stays secret until the reveal.
+  // While either side is still selecting (attackerCard / defenderCard steps), replace
+  // the opponent's committed-but-unrevealed card with a face-down marker ('hidden')
+  // rather than erasing it. Once the round begins (both locked), they're public.
   if (v.pendingCombat && viewer != null && (v.pendingCombat.step === 'attackerCard' || v.pendingCombat.step === 'defenderCard')) {
-    if (viewer !== v.pendingCombat.attacker) v.pendingCombat.attackerCard = null;
-    if (viewer !== v.pendingCombat.defender) v.pendingCombat.defenderCard = null;
+    if (viewer !== v.pendingCombat.attacker) v.pendingCombat.attackerCard = v.pendingCombat.attackerCard ? 'hidden' : null;
+    if (viewer !== v.pendingCombat.defender) v.pendingCombat.defenderCard = v.pendingCombat.defenderCard ? 'hidden' : null;
   }
 
   // Log: public entries (side null) + the viewer's own side-tagged entries.

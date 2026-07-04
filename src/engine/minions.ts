@@ -53,6 +53,13 @@ export function bringMinion(state: GameState, minion: Minion, region: RegionId):
   if (!canBringMinion(state, minion)) return false;
   if (region !== entryRegion(state, minion) && minion !== 'mouth-of-sauron' && minion !== 'witch-king') return false;
   state.characters.entered.push(minion);
+  // Track the minion in `inPlay` (charId → region), same as separated Companions.
+  // Without this the "On the map" roster never lists Minions (player couldn't find
+  // Saruman's card), army/character moves can't update the minion's location, and
+  // the `sarumanInPlay` table-condition (Palantír of Orthanc / Wormtongue) never
+  // holds. Every other site already reads/updates inPlay for minions; only entry
+  // was missing.
+  state.characters.inPlay[minion] = region;
   state.regions[region]!.characters.push(minion);
   if (minion === 'witch-king') for (const n of FP_NATIONS as Nation[]) activateNation(state, n);
   log(state, null, 'muster', `${minion} enters play at ${region}` + (minion === 'witch-king' ? ' (all FP Nations activated)' : ''));

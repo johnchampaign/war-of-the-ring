@@ -164,11 +164,16 @@ function ArmySize({ label, force, side }: { label: string; force?: { units?: Rec
 }
 
 function PlayedCard({ id, who }: { id: string; who: string }) {
-  const art = useCardArt(id);
+  // 'hidden' = the opponent has DECLARED a Combat card but it's still face down
+  // (RAW p.29: the declaration is open, the card's identity secret until reveal).
+  const hidden = id === 'hidden' || id.startsWith('hidden');
+  const art = useCardArt(hidden ? null : id);
   return (
     <div style={{ fontSize: 11, color: '#aa9', textAlign: 'center' }}>
-      <div>{who}: {cardName(id)}</div>
-      {art && <img src={art} alt={cardName(id)} style={{ height: 80, borderRadius: 3, marginTop: 2 }} />}
+      <div>{who}: {hidden ? 'a Combat card (face down)' : cardName(id)}</div>
+      {hidden
+        ? <div style={{ height: 80, width: 56, borderRadius: 3, marginTop: 2, background: '#2a2418', border: '1px dashed #6a5f3a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8a7f5a', fontSize: 22 }}>?</div>
+        : art && <img src={art} alt={cardName(id)} style={{ height: 80, borderRadius: 3, marginTop: 2 }} />}
     </div>
   );
 }
