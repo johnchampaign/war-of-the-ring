@@ -233,6 +233,7 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   src.nazgul -= movingNazgul; dst.nazgul += movingNazgul;
   for (const c of chars) { src.characters.splice(src.characters.indexOf(c), 1); dst.characters.push(c); }
   captureIfEnemySettlement(state, to, side);
+  liftSiegeIfAbandoned(state, from); // a besieger that vacates the field lifts the siege
   if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
   log(state, null, 'army', `Split army ${from} -> ${to} (${movingUnits} unit${movingUnits > 1 ? 's' : ''})`);
   return true;
@@ -256,6 +257,7 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   // Capture an undefended enemy Settlement.
   captureIfEnemySettlement(state, to, side);
+  liftSiegeIfAbandoned(state, from); // a besieger that vacates the field lifts the siege
   // Entering a Nation's region activates that Nation (rules p.34) — covers regions
   // with no Settlement, where capture wouldn't fire.
   const dn = REGIONS[to]!.nation;
@@ -307,5 +309,22 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
     state.victoryPoints[side] += def.vp;
     log(state, null, 'army', `${side} captured ${id} (+${def.vp} VP, total ${state.victoryPoints[side]})`);
   }
-  if (def.nation) onSettlementCaptured(state, def.nation, id);
+  // A Fortification (Fords of Isen, Osgiliath) is NOT a Settlement, so capturing it
+  // never advances the owning Nation's political track (rulebook p.36).
+  if (def.nation && def.settlement !== 'Fortification') onSettlementCaptured(state, def.nation, id);
+}
+
+/** A siege ends the instant the besieger leaves the region's open field. If `id` is a
+ *  besieged region whose field no longer holds a besieging (enemy) Army, lift the
+ *  siege: the boxed garrison returns to the open field (rulebook p.51). Called after
+ *  any operation that may vacate a region. No-op unless a siege was actually abandoned. */
+export function liftSiegeIfAbandoned(state: GameState, id: RegionId): void {
+  const r = state.regions[id]!;
+  if (!r.besieged || !r.siegeBox) return;
+  const garrison = settlementController(state, id); // the boxed defenders' side
+  const besieger: Side = garrison === 'fp' ? 'shadow' : 'fp';
+  if (armySide(state, id) === besieger) return; // besieger still holds the field — siege continues
+  r.units = r.siegeBox.units; r.leaders = r.siegeBox.leaders; r.nazgul = r.siegeBox.nazgul; r.characters = r.siegeBox.characters;
+  delete r.siegeBox; r.besieged = false;
+  log(state, null, 'combat', `the siege of ${REGIONS[id]!.name ?? id} is lifted — its garrison returns to the field`);
 }

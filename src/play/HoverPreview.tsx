@@ -9,7 +9,7 @@ import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, Nation } from '../engine/types';
-import { charName, charDef } from './charInfo';
+import { charName, charDef, isMinion } from './charInfo';
 import { CardTypeBadge } from './cardTypeBadge';
 
 export type Hover = { kind: 'region'; id: string } | { kind: 'card'; id: string } | { kind: 'character'; id: string } | null;
@@ -171,6 +171,15 @@ function CardPreview({ id, bottom }: { id: string; bottom?: boolean }) {
   return <div style={info}>{text}</div>;
 }
 
+// Shadow Minions enter play via a Muster die when their card condition is met — they
+// are NOT Companions, so the "Activates … when separated" line is meaningless for them
+// (player reports). Show the actual entry requirement instead (rules-spec §5).
+const MINION_ENTRY: Record<string, string> = {
+  'witch-king': 'Enters play when Sauron and at least one Free Peoples Nation are “At War”. On arrival, all Free Peoples Nations are activated.',
+  'saruman': 'Enters play when Isengard is “At War” and Orthanc is under Shadow control (unconquered).',
+  'mouth-of-sauron': 'Enters play (in an unconquered Sauron Stronghold) when the Fellowship is in Mordor, or all Free Peoples Nations are “At War”.',
+};
+
 function CharacterPreview({ id, bottom }: { id: string; bottom?: boolean }) {
   const d = charDef(id);
   const art = useCardArt(id);
@@ -180,7 +189,9 @@ function CharacterPreview({ id, bottom }: { id: string; bottom?: boolean }) {
       <div style={{ fontWeight: 700, fontSize: 15 }}>{d.name}</div>
       {d.title && <div style={{ color: '#b9b29c', fontSize: 12, fontStyle: 'italic' }}>{d.title}</div>}
       <div style={{ color: '#d9c98a', fontSize: 12 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</div>
-      {d.nation && <div style={{ color: '#9cc77a', fontSize: 12 }}>Activates: {d.nation === 'any' ? 'any Nation' : cap(d.nation)} <span style={{ color: '#887' }}>(when separated to its City/Stronghold)</span></div>}
+      {isMinion(id)
+        ? <div style={{ color: '#e0a06a', fontSize: 12 }}><b>Enters play (Muster die):</b> {MINION_ENTRY[id] ?? 'when its card condition is met.'}</div>
+        : d.nation && <div style={{ color: '#9cc77a', fontSize: 12 }}>Activates: {d.nation === 'any' ? 'any Nation' : cap(d.nation)} <span style={{ color: '#887' }}>(when separated to its City/Stronghold)</span></div>}
       {d.guide && <p style={{ fontSize: 12, margin: '4px 0' }}><b>Guide:</b> {d.guide}</p>}
       {d.becomesGuide && <p style={{ fontSize: 12, margin: '4px 0' }}><b>Becomes Guide:</b> {d.becomesGuide}</p>}
       {d.abilities?.map((a, i) => <p key={i} style={{ fontSize: 12, margin: '4px 0' }}><b>{a.name}:</b> {a.text}</p>)}

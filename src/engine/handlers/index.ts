@@ -144,10 +144,18 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
       return [];
     },
     applyTarget(state, _side, t) {
+      const before = unitCount(state, t.region!);
       placeUnits(state, t.nation!, t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0);
+      // Log the recruit (previously silent — a player report read the missing log as
+      // "the unit/leader wasn't recruited"). Same public format as a Muster recruit.
+      if (unitCount(state, t.region!) > before) log(state, null, 'muster', `Recruited ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} ${t.nation} in ${t.region}`);
     },
     finalize(state) {
-      for (const l of opts.leaders ?? []) placeForce(state, l.nation, l.region, { leader: 1 });
+      for (const l of opts.leaders ?? []) {
+        const before = state.regions[l.region]!.leaders;
+        placeForce(state, l.nation, l.region, { leader: 1 });
+        if (state.regions[l.region]!.leaders > before) log(state, null, 'muster', `Recruited a ${l.nation} Leader in ${l.region}`);
+      }
       opts.then?.(state);
     },
   };

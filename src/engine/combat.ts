@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, type Force, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, liftSiegeIfAbandoned, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, hasCombatEffect, EMPTY_MODS, type CombatMods } from './combatCards';
@@ -433,6 +433,10 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
   src.units = {}; src.leaders = 0; src.nazgul = 0;
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   captureIfEnemySettlement(state, to, attacker);
+  // If the advancing army was besieging `from`, vacating its field lifts that siege
+  // (the boxed garrison returns to the field) — e.g. a besieger that wins a field
+  // battle in an adjacent region and advances out (player report).
+  liftSiegeIfAbandoned(state, from);
 }
 
 /** Move the boxed garrison back into the region's open field (siege lifted). */

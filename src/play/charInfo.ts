@@ -9,6 +9,11 @@ interface CharDef {
 const c = characters as any;
 const ALL: Record<string, CharDef> = { ...c.companions, ...c.upgrades, ...c.minions, gollum: c.gollum };
 
+const MINION_KEYS = new Set(Object.keys(c.minions ?? {}));
+/** Whether a character id is a Shadow Minion (Witch-king / Saruman / Mouth of Sauron).
+ *  Minions are not Companions — they don't "separate" or activate a Nation on arrival. */
+export const isMinion = (id: string): boolean => MINION_KEYS.has(id);
+
 /** Proper card name for a character id; falls back to the id if unknown. */
 export const charName = (id: string): string => ALL[id]?.name ?? id;
 /** Full character card def (for the hover preview), or undefined. */
