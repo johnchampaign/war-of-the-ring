@@ -515,10 +515,16 @@ export function combatStep(state: GameState): void {
         if (pc.round >= MAX_ROUNDS) { finishCombat(state, false); return; }
         // Both cards are now committed — announce them PUBLICLY (they're revealed
         // simultaneously per RAW; a "none" is stated explicitly so the opponent can
-        // tell "no card" apart from "a card I didn't see" — player report).
+        // tell "no card" apart from "a card I didn't see" — player report). One entry
+        // per side, tagged with the card id, so the OPPONENT's revealed combat card is
+        // hoverable in the log and sorts by play order in the discard browser (the
+        // owner's own earlier side-tagged play entry is hidden from the other seat).
         const cardName = (id: string | null) => (id ? `'${EVENT_BY_ID[id]?.combat?.title ?? id}'` : 'no Combat Card');
         const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.attacker)} (attacker) play ${cardName(pc.attackerCard)}; ${sideName(pc.defender)} (defender) play ${cardName(pc.defenderCard)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.attacker)} (attacker) play ${cardName(pc.attackerCard)}`);
+        if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.defender)} (defender) play ${cardName(pc.defenderCard)}`);
+        if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
         // Each side's combat card (if any) applies THIS round, then is spent —
         // a fresh card may be played next round (rules-spec §7, p.29).
         let aMods = pc.attackerCard ? (combatModsFor(pc.attackerCard) ?? EMPTY_MODS) : EMPTY_MODS;

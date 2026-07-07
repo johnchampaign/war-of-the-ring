@@ -26,6 +26,11 @@ export function LogPanel({ view, onHoverCard }: { view: GameState; onHoverCard?:
           : newestFirst.map((e, i) => (
             <div key={i} style={{ fontSize: 12, lineHeight: 1.35, padding: '1px 0', display: 'flex', gap: 6 }}>
               <span style={{ flexShrink: 0, color: '#665', width: 22, textAlign: 'right' }}>T{e.turn}</span>
+              {/* Who acted (player report: the kind tags alone don't say whose action it was).
+                  Engine/phase entries (rolls, combat rounds) have no actor — blank keeps columns aligned. */}
+              <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, width: 18, color: e.actor === 'fp' ? '#7fa8e6' : e.actor === 'shadow' ? '#e6857f' : '#554' }}>
+                {e.actor === 'fp' ? 'FP' : e.actor === 'shadow' ? 'SH' : ''}
+              </span>
               <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 52 }}>{e.kind}</span>
               {e.die && <span title="action die spent" style={{ flexShrink: 0, background: (FACE[e.die] ?? { bg: '#555' }).bg, color: '#fff', borderRadius: 3, padding: '0 4px', fontSize: 8, fontWeight: 700, alignSelf: 'center' }}>{(FACE[e.die] ?? { label: e.die }).label}</span>}
               {/* A card-play entry: hover to read the card's text (report: "tell me what the AI's card does"). */}

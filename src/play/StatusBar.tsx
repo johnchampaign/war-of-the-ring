@@ -88,21 +88,29 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
 const CARD_NAME = new Map<string, string>((eventCards as { cards: { id: string; name: string }[] }).cards.map((c) => [c.id, c.name]));
 function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: (id: string | null) => void }) {
   const [open, setOpen] = useState(false);
-  const rows: { side: string; label: string; id: string | null }[] = [];
+  const rows: { side: string; label: string; id: string | null; played: number }[] = [];
+  // Global play order comes from the log: each card play logs an entry with `.card`
+  // (player report: discards should be sorted in order played, not grouped by player).
+  // Face-down (hand-limit) discards log no card id, so they can't be interleaved —
+  // they sink to the oldest end, keeping their pile order.
+  const playedAt = new Map<string, number>();
+  (view.log ?? []).forEach((e, i) => { if (e.card) playedAt.set(e.card, i); });
   for (const side of ['fp', 'shadow'] as const) {
     const p = view.cards?.[side];
     if (!p) continue;
     const sideName = side === 'fp' ? 'FP' : 'SH';
+    const at = (id: string | null) => (id != null ? playedAt.get(id) ?? -1 : -1);
     for (const id of [...(p.discard?.character ?? []), ...(p.discard?.strategy ?? [])]) {
-      rows.push({ side: sideName, label: CARD_NAME.get(id) ?? id, id });
+      rows.push({ side: sideName, label: CARD_NAME.get(id) ?? id, id, played: at(id) });
     }
     for (const id of p.discardFaceDown ?? []) {
       const label = id.startsWith('hidden') ? `face-down ${id === 'hidden-character' ? 'Character' : 'Strategy'} card`
         : `${CARD_NAME.get(id) ?? id} (face down — only you see this)`;
-      rows.push({ side: sideName, label, id: id.startsWith('hidden') ? null : id });
+      rows.push({ side: sideName, label, id: id.startsWith('hidden') ? null : id, played: at(id.startsWith('hidden') ? null : id) });
     }
-    for (const id of p.table ?? []) rows.push({ side: sideName, label: `${CARD_NAME.get(id) ?? id} (in play on the table)`, id });
+    for (const id of p.table ?? []) rows.push({ side: sideName, label: `${CARD_NAME.get(id) ?? id} (in play on the table)`, id, played: at(id) });
   }
+  rows.sort((a, b) => b.played - a.played); // newest play first; unlogged (face-down) last
   const total = rows.length;
   return (
     <span style={{ position: 'relative' }}>
@@ -113,7 +121,7 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
       {open && (
         <div style={{ ...roster, maxHeight: 300, overflowY: 'auto', width: 300 }} onMouseLeave={() => onHoverCard?.(null)}>
           {total === 0 && <div style={{ color: '#998', fontSize: 12 }}>No cards discarded yet.</div>}
-          {[...rows].reverse().map((r, i) => (
+          {rows.map((r, i) => (
             <div key={i} onMouseEnter={() => r.id && onHoverCard?.(r.id)}
               style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 6px', borderRadius: 5, cursor: r.id ? 'help' : 'default' }}>
               <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: r.side === 'FP' ? '#7fa8e6' : '#e6857f' }}>{r.side}</span>

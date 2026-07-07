@@ -936,6 +936,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (state.log[i]!.die === undefined) state.log[i]!.die = spent;
     }
   }
+  // Tag them with the ACTING player too (die or not — free actions included), so the
+  // log can lead each line with who acted (player report: the kind tags alone don't
+  // say whose action it was). Who acted is public tabletop information.
+  for (let i = logBefore; i < state.log.length; i++) {
+    if (state.log[i]!.actor === undefined) state.log[i]!.actor = actor;
+  }
   checkRingVictory(state);
   advance(state);
 }

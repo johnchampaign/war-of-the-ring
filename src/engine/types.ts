@@ -301,4 +301,9 @@ export interface LogEntry {
   /** The event/combat card this entry refers to (id), so the UI can show its text on
    *  hover — e.g. "Shadow plays Return to Valinor". Public info (card plays are open). */
   card?: string;
+  /** The player whose action produced this entry (set by the adapter dispatch).
+   *  PUBLIC — who acted is open tabletop information; distinct from `side`, which
+   *  controls redaction visibility. Absent for phase/engine-driven entries (rolls,
+   *  phase transitions). Player report: "show which player is acting in the log". */
+  actor?: Side;
 }
