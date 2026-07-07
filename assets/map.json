@@ -14,8 +14,8 @@
     "counts": {
       "regions": 105,
       "strongholds": 16,
-      "cities": 7,
-      "towns": 13,
+      "cities": 6,
+      "towns": 14,
       "fortifications": 2
     }
   },
@@ -137,8 +137,8 @@
     "iron-hills": {
       "name": "Iron Hills",
       "nation": "dwarves",
-      "settlement": "City",
-      "vp": 1,
+      "settlement": "Town",
+      "vp": 0,
       "setup": {
         "regular": 1
       },

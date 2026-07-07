@@ -52,7 +52,12 @@ const S = (nation, settlement, setup) => ({ nation, settlement, setup: setup || 
 const SETTLEMENTS = {
   // Dwarves (p.16)
   'erebor':        S('dwarves',  'Stronghold',   { regular: 1, elite: 2, leader: 1 }),
-  'iron-hills':    S('dwarves',  'City',         { regular: 1 }),
+  // Iron Hills is a TOWN (no VP symbol on the board). Was mis-typed 'City' — that
+  // both handed the Shadow a phantom 1 VP (FP capturable total must be 20: 8
+  // Strongholds ×2 + 4 Cities — Dale, Edoras, Pelargir, The Shire) and wrongly gave
+  // its defender the City first-round fortification bonus. TTS board data agrees
+  // (isTown: true).
+  'iron-hills':    S('dwarves',  'Town',         { regular: 1 }),
   'ered-luin':     S('dwarves',  'Town',         { regular: 1 }),
   // Elves (p.16) — all four Elven settlements are Strongholds
   'grey-havens':   S('elves',    'Stronghold',   { regular: 1, elite: 1, leader: 1 }),
