@@ -9,7 +9,7 @@ import { FACE } from './DiceTray';
 
 const KIND_COLOR: Record<string, string> = {
   combat: '#e6857f', army: '#d8cfa8', muster: '#9cc77a', hunt: '#e6a3d0',
-  fellowship: '#e6b85a', event: '#9fb6e6', politics: '#cbb', roll: '#8aa', victory: '#ffd23f',
+  fellowship: '#e6b85a', event: '#9fb6e6', politics: '#cbb', roll: '#8aa', victory: '#ffd23f', pass: '#889',
 };
 
 export function LogPanel({ view, onHoverCard }: { view: GameState; onHoverCard?: (id: string | null) => void }) {

@@ -920,6 +920,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       passResolutionTurn(state, actor); break;
     case 'pass':
       requirePhase(state, 'actionResolution');
+      // Log the pass publicly (player report: "a player passing should be listed in
+      // the log") — otherwise a yielded turn leaves no trace and the recap looks empty.
+      log(state, null, 'pass', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} pass`);
       passResolutionTurn(state, actor); break; // yield to opponent (who has more dice)
     default: throw new Error(`Unknown action ${(action as { kind: string }).kind}`);
   }
