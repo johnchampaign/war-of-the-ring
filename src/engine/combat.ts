@@ -175,7 +175,21 @@ function applyForceCasualties(state: GameState, f: Force, side: Side, hits: numb
       else { const n = nations[0]!; f.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
     }
   }
-  if (forceUnitCount(f) === 0) { f.leaders = 0; f.nazgul = 0; f.characters = []; }
+  if (forceUnitCount(f) === 0) {
+    // The Army is destroyed. Per rulebook p.30, every Character that was part of it
+    // is permanently removed from play — Companions AND Shadow Minions (Saruman,
+    // the Witch-king, the Mouth of Sauron). Record each elimination so its bonus
+    // Action die is lost (dice.poolSize reads entered && !eliminated) and the on-map
+    // roster / inPlay stops listing it. Without this a besieged Saruman survived the
+    // fall of Orthanc and kept his die (player report). Idempotent with the event-
+    // casualty follow-up (The Ents Awake), which re-checks `eliminated` before adding.
+    for (const c of f.characters) {
+      if (!state.characters.eliminated.includes(c)) state.characters.eliminated.push(c);
+      delete state.characters.inPlay[c];
+    }
+    if (f.characters.length) log(state, null, 'combat', `${f.characters.join(', ')} eliminated with the destroyed Army`);
+    f.leaders = 0; f.nazgul = 0; f.characters = [];
+  }
 }
 
 // --- Event-inflicted casualties: the OWNER chooses absorption -----------------
