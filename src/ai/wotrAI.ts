@@ -40,7 +40,7 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // when it's near its last-known spot. Uploaded games showed fast Mordor rushes
     // slipping through under-pressured Hunts.
     const fs = state.fellowship;
-    const target = (fs.mordor !== null || fs.progress >= 4) ? hi : fs.progress >= 2 ? 2 : 1;
+    const target = (fs.mordor !== null || fs.progress >= 4) ? hi : fs.progress >= 2 ? 2 : fs.progress >= 1 ? 1 : 0;
     const want = Math.max(lo, Math.min(hi, target));
     return opts.reduce((best, a) => (Math.abs(a.dice - want) < Math.abs(best.dice - want) ? a : best), opts[0]!);
   }

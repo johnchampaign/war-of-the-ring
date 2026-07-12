@@ -232,8 +232,7 @@
       "adjacency": [
         "arnor",
         "ettenmoors",
-        "mount-gram",
-        "north-downs"
+        "mount-gram"
       ]
     },
     "arnor": {
@@ -1014,7 +1013,6 @@
         "elite": 1
       },
       "adjacency": [
-        "angmar",
         "arnor",
         "bree",
         "buckland",

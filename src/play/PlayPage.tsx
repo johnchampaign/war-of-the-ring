@@ -443,7 +443,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             {/* The enlarge/inspect area — fills the whole right side of the lower area
                 (enlarged cards & board territories). The Report / Log buttons float over it. */}
             <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418' }}>
-              <HoverPreview hover={hover} view={g.view} bottom />
+              {/* Blank while the Log pop-up is open: otherwise a lingering hover
+                  shows here, dimmed behind the pop-up backdrop, beside the pop-up's
+                  own bright preview — the "doubled (and flickering) card" report. */}
+              <HoverPreview hover={logOpen ? null : hover} view={g.view} bottom />
             </div>
           </div>
         </div>
