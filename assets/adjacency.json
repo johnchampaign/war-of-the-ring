@@ -13,11 +13,11 @@
    "arnor|north-downs",
    "dimrill-dale|moria",
    "northern-dorwinion|southern-dorwinion",
-   "northern-dorwinion|southern-rhovanion",
-   "northern-rhovanion|southern-dorwinion"
+   "northern-dorwinion|southern-rhovanion"
   ],
   "corrections": [
-   "Removed spurious angmar|north-downs edge: polygons do not touch (56px gap, Arnor+Ettenmoors between them); player-confirmed non-adjacent (report vhwm4wnkwus0thwl). Was a one-directional artifact in the source."
+   "Removed spurious angmar|north-downs edge: polygons do not touch (56px gap, Arnor+Ettenmoors between them); player-confirmed non-adjacent (report vhwm4wnkwus0thwl). Was a one-directional artifact in the source.",
+   "Removed spurious northern-rhovanion|southern-dorwinion edge: printed rulebook map shows them separated by Southern Rhovanion + Northern Dorwinion (98px polygon gap, the largest on the board). One-directional artifact in the source."
   ]
  },
  "edges": [
@@ -811,10 +811,6 @@
   ],
   [
    "northern-rhovanion",
-   "southern-dorwinion"
-  ],
-  [
-   "northern-rhovanion",
    "southern-mirkwood"
   ],
   [
@@ -1387,7 +1383,6 @@
    "dale",
    "eastern-mirkwood",
    "old-forest-road",
-   "southern-dorwinion",
    "southern-mirkwood",
    "southern-rhovanion",
    "vale-of-the-carnen",
@@ -1505,7 +1500,6 @@
    "ash-mountains",
    "noman-lands",
    "northern-dorwinion",
-   "northern-rhovanion",
    "south-rhun",
    "southern-rhovanion"
   ],
