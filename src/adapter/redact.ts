@@ -45,7 +45,8 @@ export function redactStateForViewer(state: GameState, viewer: Side | null): Gam
     if (viewer !== v.pendingCombat.defender) v.pendingCombat.defenderCard = v.pendingCombat.defenderCard ? 'hidden' : null;
   }
 
-  // Log: public entries (side null) + the viewer's own side-tagged entries.
-  v.log = v.log.filter((e) => e.side == null || e.side === viewer);
+  // Log: public entries + the viewer's own secret ones (log-format v2: `secret`
+  // governs visibility; side-private entries carry secret:true from engine/log.ts).
+  v.log = v.log.filter((e) => !e.secret || e.side === viewer);
   return v;
 }

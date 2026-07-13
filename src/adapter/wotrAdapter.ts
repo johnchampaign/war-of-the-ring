@@ -396,7 +396,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
 
   // Snapshot so we can tag this action's log entries with the die it spent (Ira #9).
   const usedBefore = state.usedDice?.[actor]?.length ?? 0;
-  const logBefore = state.log.length;
+  // seq-based (not index-based): appendGameLog caps the log, which would shift indices.
+  const seqBefore = state.log.length ? state.log[state.log.length - 1]!.seq : 0;
 
   switch (action.kind) {
     case 'skipFellowshipPhase':
@@ -932,15 +933,15 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
   const used = state.usedDice?.[actor] ?? [];
   if (used.length > usedBefore) {
     const spent = used[used.length - 1];
-    for (let i = logBefore; i < state.log.length; i++) {
-      if (state.log[i]!.die === undefined) state.log[i]!.die = spent;
+    for (const e of state.log) {
+      if (e.seq > seqBefore && e.die === undefined) e.die = spent;
     }
   }
   // Tag them with the ACTING player too (die or not — free actions included), so the
   // log can lead each line with who acted (player report: the kind tags alone don't
   // say whose action it was). Who acted is public tabletop information.
-  for (let i = logBefore; i < state.log.length; i++) {
-    if (state.log[i]!.actor === undefined) state.log[i]!.actor = actor;
+  for (const e of state.log) {
+    if (e.seq > seqBefore && e.actor === undefined) e.actor = actor;
   }
   checkRingVictory(state);
   advance(state);
@@ -1114,7 +1115,7 @@ function guideEventDraw(state: GameState, actor: Side, deck: 'character' | 'stra
 }
 
 export const wotrAdapter: GameAdapter<GameState, WotrAction, Side> = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   applyAction(state, action, actor) {
     const next = clone(state);
     dispatch(next, action, actor);
@@ -1133,7 +1134,17 @@ export const wotrAdapter: GameAdapter<GameState, WotrAction, Side> = {
   result(state) {
     return state.winner ? { winners: [state.winner], reason: state.winReason ?? undefined } : null;
   },
-  migrate() { throw new Error('No migrations defined (schemaVersion 1).'); },
+  // v1 → v2: log-format v2. Old log entries lack `seq` (stamp index order) and
+  // `secret` (the old semantic was "side set = private to that side").
+  migrate(rawState, fromVersion) {
+    if (fromVersion >= 2) return rawState as GameState;
+    const s = rawState as GameState;
+    (s.log ?? []).forEach((e, i) => {
+      if (e.seq === undefined) e.seq = i + 1;
+      if (e.secret === undefined && e.side != null) e.secret = true;
+    });
+    return s;
+  },
 };
 
 /** Run automatic phases so a freshly created game rests at its first decision. */

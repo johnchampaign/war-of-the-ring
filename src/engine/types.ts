@@ -4,6 +4,10 @@
 // `rngState`); all turn-boundary serialization through the codec. See
 // docs/rules-spec.md for the rules these model.
 
+// (Type-only framework import — erased at compile time, so the "no framework
+// imports" rule above still holds for runtime code.)
+import type { GameLogEntry } from 'digital-boardgame-framework';
+
 export type Side = 'fp' | 'shadow';
 
 // Nation ids (match assets/map.json / characters.json).
@@ -289,9 +293,12 @@ export interface GameState {
   };
 }
 
-export interface LogEntry {
+/** Framework log-format v2 (GameLogEntry) plus WotR extras. `seq` is stamped by
+ *  appendGameLog and survives capping; old snapshots are migrated (schemaVersion 2). */
+export interface LogEntry extends GameLogEntry<Side> {
   turn: number;
-  /** null = public; otherwise only visible to this side in redacted views. */
+  /** null = public; who this entry is about/for. Visibility is governed by `secret`
+   *  (side-private entries carry secret:true; see engine/log.ts + adapter/redact.ts). */
   side: Side | null;
   kind: string;
   msg: string;

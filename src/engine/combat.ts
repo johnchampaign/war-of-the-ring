@@ -484,7 +484,12 @@ function finishCombat(state: GameState, advance: boolean): void {
     if (advance && atkSurv > 0) { advanceInto(state, pc.attacker, pc.from, pc.to); r.besieged = false; }
     if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
   }
-  log(state, null, 'combat', `battle at ${pc.to} ended — ${outcome}`);
+  log(state, null, 'combat', `battle at ${pc.to} ended — ${outcome}`, {
+    from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
+    atkLosses: Math.max(0, (pc.atkUnits0 ?? atkSurv) - atkSurv),
+    defLosses: Math.max(0, (pc.defUnits0 ?? defSurv) - defSurv),
+    captured, siege: !!pc.siege, outcome,
+  });
   if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
   state.lastBattle = {
     seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
@@ -589,7 +594,8 @@ export function combatStep(state: GameState): void {
         // (player report: "the log should display the combat dice rolls").
         const fmt = (roll: CombatRoll, hits: number) =>
           `[${roll.dice.join(' ')}]${roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]` : ''} on ${roll.target}+ → ${hits} hit${hits === 1 ? '' : 's'}`;
-        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atk)}; defender ${fmt(dRoll, def)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atk)}; defender ${fmt(dRoll, def)}`,
+          { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk }, defender: { ...dRoll, hits: def } });
         pc.attackerCard = null; pc.defenderCard = null;
         pc.step = 'attackerCasualties'; continue;
       }

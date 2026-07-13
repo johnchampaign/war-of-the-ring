@@ -69,7 +69,8 @@ function runActionRoll(state: GameState): void {
   const eyes = shadowRoll.filter((f) => f === 'eye').length;
   state.hunt.box += eyes;
   state.dice.shadow = shadowRoll.filter((f) => f !== 'eye');
-  log(state, null, 'roll', `Rolled FP ${state.dice.fp.length}, Shadow ${state.dice.shadow.length} (+${eyes} eyes, hunt box ${state.hunt.box})`);
+  log(state, null, 'roll', `Rolled FP ${state.dice.fp.length}, Shadow ${state.dice.shadow.length} (+${eyes} eyes, hunt box ${state.hunt.box})`,
+    { fp: [...state.dice.fp], shadow: [...state.dice.shadow], eyes, huntBox: state.hunt.box });
 }
 
 const noDiceLeft = (state: GameState): boolean =>

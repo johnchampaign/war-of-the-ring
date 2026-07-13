@@ -282,7 +282,8 @@ function huntRoll(state: GameState, level: number, bonus: number, rerolls: numbe
     return { successes: hits, dice: faces, rerollDice: rfaces };
   });
   state.hunt.lastRoll = { level, bonus, dice, rerolls: rerollDice, successes, mordor: false };
-  log(state, null, 'hunt', `Hunt roll: ${level} die${level === 1 ? '' : 'ce'}${bonus ? ` (+${bonus})` : ''} [${dice.join(',')}]${rerollDice.length ? ` re-roll [${rerollDice.join(',')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`);
+  log(state, null, 'hunt', `Hunt roll: ${level} die${level === 1 ? '' : 'ce'}${bonus ? ` (+${bonus})` : ''} [${dice.join(',')}]${rerollDice.length ? ` re-roll [${rerollDice.join(',')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`,
+    { level, bonus, dice, rerolls: rerollDice, successes });
   if (successes >= 1) { beginHuntDraw(state, successes, false); return; }
   // A miss: record it so the player still SEES the roll (dice + box bonus) and knows
   // the Shadow rolled and missed — not that nothing happened.
