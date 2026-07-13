@@ -557,8 +557,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           {/* Hovered card renders in a bright side box INSIDE the overlay — it used to
               land in the right-hand panel UNDER the dark backdrop, unreadably dim
               (player report: "grayed-out … difficult to read"). */}
-          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 12, alignItems: 'stretch', maxWidth: '96vw' }}>
-            <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', borderRadius: 12, border: '1px solid #5a4a2a', width: 520, maxWidth: '92vw', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px #000' }}>
+          {/* The log box is centred on its OWN width; the hover-preview is absolutely
+              positioned to its right so it never changes the row's width. Previously
+              the preview box was in normal flow, so it appearing re-centred the row and
+              slid the hovered log line out from under the cursor — mouseleave/enter
+              looping = the "doubled, flickering" report. */}
+          <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', width: 520, maxWidth: '92vw' }}>
+            <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', borderRadius: 12, border: '1px solid #5a4a2a', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px #000' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 10px', borderBottom: '1px solid #2a2418' }}>
                 <button onClick={() => { setLogOpen(false); setLogHover(null); }} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
               </div>
@@ -567,7 +572,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               </div>
             </div>
             {logHover?.kind === 'card' && (
-              <div style={{ width: 320, background: '#1c1710', borderRadius: 12, border: '1px solid #5a4a2a', boxShadow: '0 8px 40px #000', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', left: '100%', top: 0, marginLeft: 12, width: 320, maxHeight: '70vh', overflow: 'hidden', background: '#1c1710', borderRadius: 12, border: '1px solid #5a4a2a', boxShadow: '0 8px 40px #000', pointerEvents: 'none' }}>
                 <HoverPreview hover={logHover} view={g.view} />
               </div>
             )}

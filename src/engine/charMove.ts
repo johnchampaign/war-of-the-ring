@@ -10,9 +10,11 @@
 // figure moves at most once (relay guard). The one residual simplification is the
 // engine's group-granularity (a region's Nazgûl move as a group, not figure by
 // figure); see docs/rules-spec.md §5.
-import type { GameState, RegionId, Side } from './types';
-import { REGIONS, levelOf } from './data';
+import type { GameState, RegionId, Side, Nation } from './types';
+import { FP_NATIONS } from './types';
+import { REGIONS, levelOf, COMPANIONS } from './data';
 import { settlementController, armySide } from './armies';
+import { activateNation } from './politics';
 import { log } from './log';
 
 const FLY = 99;
@@ -54,6 +56,23 @@ function canLand(state: GameState, to: RegionId, side: Side): boolean {
   const def = REGIONS[to]!;
   if (def.settlement === 'Stronghold' && settlementController(state, to) === enemyOf(side) && !state.regions[to]!.besieged) return false;
   return true;
+}
+
+const FP_NATION_SET = new Set<string>(FP_NATIONS);
+/** RAW p.34: a Companion (or group) that ENDS its movement in a City/Stronghold of a
+ *  Free Peoples Nation it can activate — and not enemy-controlled — activates that
+ *  Nation (presence only; never advances the track). Mirrors the separation rule; the
+ *  Character-die move path previously skipped it (report: Gandalf into The Shire). */
+function activateOnCompanionLand(state: GameState, side: Side, chars: string[], to: RegionId): void {
+  if (side !== 'fp') return;
+  const dn = REGIONS[to]?.nation as Nation | undefined;
+  const st = REGIONS[to]?.settlement;
+  if (!dn || !FP_NATION_SET.has(dn) || (st !== 'City' && st !== 'Stronghold')) return;
+  if (settlementController(state, to) === 'shadow') return; // "unless controlled by the enemy"
+  for (const c of chars) {
+    const cn = COMPANIONS[c]?.nation; // 'any' companion (Gandalf/Aragorn-line) activates any FP Nation
+    if (!cn || cn === 'any' || cn === dn) { activateNation(state, dn, { viaCompanion: true }); return; }
+  }
 }
 
 const HOBBITS = new Set(['meriadoc', 'peregrin']);
@@ -98,6 +117,7 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
   src.characters.splice(i, 1);
   dst.characters.push(char);
   if (state.characters.inPlay[char]) state.characters.inPlay[char] = to;
+  activateOnCompanionLand(state, side, [char], to); // ends movement in a City/Stronghold?
   log(state, null, 'army', `Moved ${char} ${from} -> ${to}`);
   return true;
 }
@@ -122,6 +142,7 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
     dst.characters.push(c);
     if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
   }
+  activateOnCompanionLand(state, side, chars, to); // group ends movement in a City/Stronghold?
   log(state, null, 'army', `Moved ${chars.join(', ')} ${from} -> ${to}`);
   return true;
 }
