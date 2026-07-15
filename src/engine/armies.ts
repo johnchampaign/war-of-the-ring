@@ -295,8 +295,12 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
   const enemy: Side = side === 'fp' ? 'shadow' : 'fp';
   if (side === owner) {
     // Recapture by the original owner: remove the Settlement Control marker and
-    // reverse the VP the enemy had gained when they captured it (rules p.32).
+    // reverse the VP the enemy had gained when they captured it (rules p.32). Also
+    // clear any stale siege state — a Settlement you've just retaken can't still be
+    // "besieged by the enemy", and a lingering flag wrongly blocks mustering there
+    // (player report: couldn't muster in a liberated Helm's Deep).
     state.regions[id]!.control = null;
+    state.regions[id]!.besieged = false;
     if (def.vp > 0) {
       state.victoryPoints[enemy] = Math.max(0, state.victoryPoints[enemy] - def.vp);
       log(state, null, 'army', `${side} recaptured ${id} (−${def.vp} VP from ${enemy}, total ${state.victoryPoints[enemy]})`);
