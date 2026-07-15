@@ -176,6 +176,14 @@ die already showing an Eye.
   **Deviation:** declaring the Fellowship in a region does not activate that Nation in this
   engine, so Wormtongue's "declared in Edoras/Helm's Deep" exception is moot. Worn with
   Sorrow's "you may" is auto-applied (always to the Shadow's benefit).
+- **FP force-discard of a Shadow table card** (`persistent.ts` `fpForceDiscardMethods`,
+  adapter `forceDiscardCard`): two Shadow "play on the table" cards let the FP player
+  spend an action to discard them — *The Palantír of Orthanc* (sh-char-21: a Will of the
+  West die, OR any Action die + one Elven Ring) and *Denethor's Folly* (sh-str-03: a Will
+  of the West die, OR any Action die if Gandalf or Aragorn is in Minas Tirith). The die
+  spent IS the action (p.22); the Elven Ring flips FP→Shadow and counts against the
+  one-Ring-per-turn limit (p.21). All other table cards discard only on a ceased play
+  condition (`pruneTableCards`), never by an opponent's action.
 - **Handlers** (`handlers/index.ts`, all 96/96 implemented): each registered card
   applies its effect; unimplemented cards aren't offered. **Interactive cards**
   (those whose effect needs a player-chosen target) use an `EventHandler.targets`/

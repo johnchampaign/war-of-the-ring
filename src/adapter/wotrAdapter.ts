@@ -17,7 +17,7 @@ import {
 import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
-import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive } from '../engine/persistent';
+import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide } from '../engine/data';
@@ -381,6 +381,13 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       // Companion political abilities: any Action die advances their Nation.
       if (actor === 'fp' && state.dice.fp.length > 0) acts.push(...companionMusterOptions(state));
       acts.push(...elvenRingOptions(state, actor)); // Elven Rings: change a die's face
+      // FP may force-discard a Shadow on-table card that carries an FP discard clause
+      // (The Palantír of Orthanc, Denethor's Folly) — RAW card text.
+      if (actor === 'fp') {
+        for (const cardId of FP_FORCE_DISCARD_CARDS) {
+          for (const via of fpForceDiscardMethods(state, cardId)) acts.push({ kind: 'forceDiscardCard', cardId, via });
+        }
+      }
 
       for (const f of faces) acts.push({ kind: 'skipDie', face: f });
       if (state.dice[actor].length < state.dice[opp(actor)].length) acts.push({ kind: 'pass' });
@@ -672,6 +679,33 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (ri >= 0) state.elvenRings[ri] = actor === 'fp' ? 'shadow' : 'used';
       state.flags[actor === 'fp' ? 'fpUsedElvenRingThisTurn' : 'shadowUsedElvenRingThisTurn'] = true;
       break; // free action — the player still acts this turn (no turn pass)
+    }
+    case 'forceDiscardCard': {
+      requirePhase(state, 'actionResolution');
+      if (actor !== 'fp') throw new Error('Only the Free Peoples can force-discard a card');
+      if (!fpForceDiscardMethods(state, action.cardId).includes(action.via)) throw new Error('That discard method is not available');
+      // Spend the die (the die IS the action, p.22): a Will die for 'will', else any die.
+      if (action.via === 'will') {
+        if (!consumeDie(state, 'fp', 'will')) throw new Error('No Will of the West die');
+      } else if (!consumePreferred(state, 'fp', [...new Set(state.dice.fp)], action.die)) {
+        throw new Error('No Action die');
+      }
+      // 'ring': also spend one Elven Ring (flips FP→Shadow; one Ring per turn, p.21).
+      if (action.via === 'ring') {
+        const ri = state.elvenRings.indexOf('fp');
+        if (ri < 0) throw new Error('No Elven Ring available');
+        state.elvenRings[ri] = 'shadow';
+        state.flags.fpUsedElvenRingThisTurn = true;
+      }
+      // Move the card from the Shadow table to its deck's discard pile.
+      const t = state.cards.shadow.table;
+      const ci = t.indexOf(action.cardId);
+      if (ci < 0) throw new Error('Card is not on the table');
+      t.splice(ci, 1);
+      const deck = EVENT_BY_ID[action.cardId]?.deck === 'Character' ? 'character' : 'strategy';
+      state.cards.shadow.discard[deck].push(action.cardId);
+      log(state, null, 'event', `Free Peoples force ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId} to be discarded${action.via === 'ring' ? ' (Elven Ring + Action die)' : action.via === 'will' ? ' (Will of the West)' : ' (Action die)'}`);
+      passResolutionTurn(state, actor); break;
     }
     case 'sarumanMuster': {
       requirePhase(state, 'actionResolution');

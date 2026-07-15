@@ -36,6 +36,39 @@ export const fpCombatCardsBarredAt = (s: GameState, region: RegionId): boolean =
  *  immediately draw another card from either Shadow deck. */
 export const palantirActive = (s: GameState): boolean => onTable(s, 'shadow', 'sh-char-21');
 
+/** Two Shadow "play on the table" cards carry an FP-triggered discard clause (card
+ *  text). This reports which RAW methods are currently open, so the FP can force the
+ *  discard as an action (all other table cards only discard on a ceased play
+ *  condition — see pruneTableCards):
+ *   - 'will' — spend a Will of the West Action die result;
+ *   - 'ring' — spend any Action die result AND one Elven Ring (Palantír only);
+ *   - 'die'  — spend any Action die result under the card's free condition
+ *              (Denethor's Folly: Gandalf or Aragorn is in Minas Tirith).
+ *  Using an Elven Ring here counts against the one-Ring-per-turn limit (p.21) and,
+ *  like any die-costing table discard, the die spent IS the action (p.22). */
+export type FpForceDiscardMethod = 'will' | 'ring' | 'die';
+const inMinasTirith = (s: GameState, id: string): boolean =>
+  (s.characters.inPlay as Record<string, RegionId>)[id] === 'minas-tirith';
+export function fpForceDiscardMethods(s: GameState, cardId: string): FpForceDiscardMethod[] {
+  if (!onTable(s, 'shadow', cardId)) return [];
+  const hasDie = s.dice.fp.length > 0;
+  const hasWill = s.dice.fp.includes('will');
+  const ringReady = s.elvenRings.includes('fp') && !s.flags.fpUsedElvenRingThisTurn;
+  const m: FpForceDiscardMethod[] = [];
+  if (cardId === 'sh-char-21') { // The Palantír of Orthanc
+    if (hasWill) m.push('will');
+    if (hasDie && ringReady) m.push('ring');
+  } else if (cardId === 'sh-str-03') { // Denethor's Folly
+    if (hasWill) m.push('will');
+    const gandalfOrAragorn = inMinasTirith(s, 'gandalf-grey') || inMinasTirith(s, 'gandalf-white')
+      || inMinasTirith(s, 'aragorn') || inMinasTirith(s, 'strider');
+    if (hasDie && gandalfOrAragorn) m.push('die');
+  }
+  return m;
+}
+/** Card ids with an FP-triggered discard clause, enumerated by the adapter. */
+export const FP_FORCE_DISCARD_CARDS = ['sh-char-21', 'sh-str-03'];
+
 /** sh-char-15 "Worn with Sorrow and Toil": when a Companion in the Fellowship is
  *  taken as a casualty, the Shadow also discards an FP Character Event card. */
 export const wornWithSorrowActive = (s: GameState): boolean => onTable(s, 'shadow', 'sh-char-15');

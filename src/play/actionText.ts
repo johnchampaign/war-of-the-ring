@@ -27,6 +27,7 @@ export function describeAction(a: WotrAction): string {
     case 'changeGuide': return `Make ${charName(a.companion)} the Guide`;
     case 'companionMuster': return `${charName(a.companion)}: advance ${cap(a.nation)} (any die)`;
     case 'useElvenRing': return `Elven Ring: change a ${cap(a.from)} die to ${a.to === 'eye' ? 'an Eye (→ Hunt Box)' : cap(a.to)}`;
+    case 'forceDiscardCard': return `Discard "${cardName(a.cardId)}" (${a.via === 'will' ? 'Will of the West' : a.via === 'ring' ? 'Elven Ring + any die' : 'any die'})`;
     case 'sarumanMuster': return a.mode === 'upgrade'
       ? 'Voice of Saruman: upgrade 2 Orthanc Regulars to Elites'
       : 'Voice of Saruman: recruit Isengard in every Settlement';
@@ -119,6 +120,7 @@ export function actionDie(a: WotrAction): string | null {
     case 'moveArmy': case 'armyMove2': case 'attack': return 'army';
     case 'drawEvent': case 'playEvent': return 'event';
     case 'bringUpgrade': return 'will';
+    case 'forceDiscardCard': return a.via === 'will' ? 'will' : null; // 'ring'/'die' spend any die
     default: return null; // companionMuster (any die), Elven Ring (free), skip/pass, fellowship/hunt-phase actions
   }
 }
@@ -135,6 +137,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
     case 'moveFellowship': case 'separateCompanion': case 'moveCharacter': return pick(['character', 'will']);
     case 'recruitUnit': case 'diplomaticAction': case 'bringMinion': case 'sarumanMuster': return pick(['muster', 'armyMuster', 'will']);
     case 'drawEvent': return pick(['event', 'will']);
+    case 'forceDiscardCard': return a.via === 'will' ? pick(['will']) : [...new Set(pool)]; // any Action die pays 'ring'/'die'
     // A card plays via its type die (Character / Army-Muster) or the Event/Will wildcards (p.22).
     case 'playEvent': return pick(cardDeck(a.cardId) === 'Character' ? ['character', 'event', 'will'] : ['army', 'armyMuster', 'muster', 'event', 'will']);
     case 'moveArmy': case 'attack': {

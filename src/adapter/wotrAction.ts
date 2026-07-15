@@ -72,6 +72,10 @@ export type WotrAction =
   | { kind: 'balrog'; use: boolean } // Shadow: discard Balrog of Moria to draw an extra Hunt tile
   | { kind: 'crebain'; use: boolean } // Shadow: discard Flocks of Crebain for +1 to all Hunt dice this roll
   | { kind: 'useElvenRing'; from: DieFace; to: DieFace } // change one unused die's face via an Elven Ring
+  // FP forces a Shadow "play on the table" card to be discarded (rulebook card text).
+  // via 'will' spends a Will of the West die; 'ring' spends any die + one Elven Ring;
+  // 'die' spends any die under the card's free condition. Only sh-char-21 / sh-str-03.
+  | { kind: 'forceDiscardCard'; cardId: string; via: 'will' | 'ring' | 'die'; die?: DieFace }
   // Move an independent character via a Character die: 'nazgul' (a region's
   // Nazgûl group), a Minion id, or a separated Companion id.
   // `count` (Nazgûl only) moves part of a stack; omit to move the whole group.
