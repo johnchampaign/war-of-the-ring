@@ -224,6 +224,11 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'playEvent': {
       if (actor === 'fp' && HEAL_EVENTS.has(a.cardId)) return fs.corruption >= 6 ? 95 : 25;
       if (actor === 'shadow' && CORRUPT_EVENTS.has(a.cardId)) return 70;
+      // Wormtongue only LOCKS Rohan's activation — once Rohan is already active
+      // (let alone At War) the table effect is moot, and the card's combat half
+      // (Foul Stench: cancels the FP Leader re-roll) is its remaining value. Don't
+      // burn it as a dead event (player report: "should have kept it for Combat").
+      if (a.cardId === 'sh-char-22' && state.nations.rohan.active) return 1;
       // A card with a strong COMBAT box (Deadly Strife etc.) is usually worth more
       // held for battle than played as its event — burning it is weak play (player
       // report: "Return to Valinor for the top half is VERY weak").

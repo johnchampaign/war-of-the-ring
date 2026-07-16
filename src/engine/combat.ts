@@ -538,7 +538,17 @@ export function combatStep(state: GameState): void {
         // per side, tagged with the card id, so the OPPONENT's revealed combat card is
         // hoverable in the log and sorts by play order in the discard browser (the
         // owner's own earlier side-tagged play entry is hidden from the other seat).
-        const cardName = (id: string | null) => (id ? `'${EVENT_BY_ID[id]?.combat?.title ?? id}'` : 'no Combat Card');
+        // Name BOTH halves — the combat title ('Desperate Battle') and the card it's
+        // printed on ('Monsters Roused') — so the log entry correlates with the same
+        // card's appearance in the discard browser, which lists the EVENT name
+        // (player report: found "Monsters Roused" in the discard, couldn't find it
+        // in the log — it was announced only by its combat title).
+        const cardName = (id: string | null) => {
+          if (!id) return 'no Combat Card';
+          const def = EVENT_BY_ID[id];
+          const combat = def?.combat?.title, event = def?.name;
+          return combat && event && combat !== event ? `'${combat}' (combat half of ${event})` : `'${combat ?? event ?? id}'`;
+        };
         const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
         log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.attacker)} (attacker) play ${cardName(pc.attackerCard)}`);
         if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
