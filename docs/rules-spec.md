@@ -374,8 +374,16 @@ Captured settlements can't muster or advance the political track (p.32).
   in the Hunt Box) (p.37, p.41).
 - **Declaring** (Fellowship phase, only if Hidden): move Ring-bearers figure ≤
   Progress regions from last known position; reset Progress to 0; stays Hidden
-  (p.38). Used to heal / activate / satisfy card location. If path traced through
-  a SH-controlled Stronghold, draw a Hunt tile per such Stronghold (p.38).
+  (p.38). Used to heal / activate / satisfy card location. Declaring keeps the
+  Fellowship **Hidden**, so it draws **no** Hunt tile — the "one tile per Shadow
+  Stronghold on the traced path" rule fires **only when the Fellowship is
+  Revealed** by the Shadow ("This drawing of a Hunt tile is done only if the
+  Fellowship is revealed by the Shadow player", p.39), so it lives in the
+  `revealMove` handler, not the declare path. The **only** tile drawn on a *declare*
+  is the *Balrog of Moria* card's own text ("declared or revealed" through Moria).
+  Declaring does **not** end the Fellowship phase: the FP may then change the Guide
+  or, if the figure now sits at Morannon/Minas Morgul, **enter Mordor this same
+  phase** (p.43: enter Mordor "after fully resolving the declaration").
 - **Revealed** (by successful Hunt or events): flip Progress to Revealed; FP must
   move the Ring-bearers figure (≤ Progress, never ending in an FP City/Stronghold)
   and reset to 0 (p.38). **A Revealed Fellowship cannot be moved** (via Character

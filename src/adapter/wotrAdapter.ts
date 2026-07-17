@@ -419,17 +419,19 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const stepsBefore = Math.min(state.fellowship.progress, pathTo(fromLoc, action.target).length);
       const traversed = [fromLoc, ...pathTo(fromLoc, action.target).slice(0, stepsBefore)];
       declareFellowship(state, action.target);
-      state.phase = 'huntAllocation';
-      // Declaring through a Shadow-controlled Stronghold draws a Hunt tile per such
-      // Stronghold on the path (rules p.38). (If a tile's damage opens an FP choice,
-      // any further Strongholds' tiles are deferred — see deviation log; very rare.)
-      for (const r of traversed) {
-        if (state.pendingChoice) break;
-        if (REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow') extraHunt(state);
-      }
-      // Balrog of Moria: a declaration that moves the Fellowship through Moria lets the
-      // Shadow CHOOSE to discard the on-table card to draw an extra Hunt tile.
-      if (!state.pendingChoice && state.cards.shadow.table.includes('sh-char-17') && traversed.includes('moria')) {
+      // Declaring keeps the Fellowship HIDDEN, so it draws NO Hunt tile — not even when
+      // its traced path crosses (or ends in) a Shadow-controlled Stronghold. The
+      // "one Hunt tile per Shadow Stronghold on the path" rule fires ONLY when the
+      // Fellowship is REVEALED by the Shadow (rulebook p.39: "This drawing of a Hunt
+      // tile is done only if the Fellowship is revealed by the Shadow player") — that
+      // path lives in the revealMove handler, not here. (Reports: declaring into Minas
+      // Morgul must NOT trigger a Hunt.) The Fellowship phase stays OPEN after declaring
+      // so the FP may still change the Guide, proceed, or — if the figure now sits at
+      // Morannon / Minas Morgul — enter Mordor this same phase (rulebook p.43: enter
+      // Mordor "after fully resolving the declaration of the Fellowship's position").
+      // Balrog of Moria is a CARD-SPECIFIC exception: its own text draws an extra tile
+      // when the Fellowship is "declared or revealed" through Moria.
+      if (state.cards.shadow.table.includes('sh-char-17') && traversed.includes('moria')) {
         state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: {} };
       }
       break;
