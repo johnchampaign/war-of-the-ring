@@ -40,7 +40,16 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // when it's near its last-known spot. Uploaded games showed fast Mordor rushes
     // slipping through under-pressured Hunts.
     const fs = state.fellowship;
-    const target = (fs.mordor !== null || fs.progress >= 4) ? hi : fs.progress >= 2 ? 2 : fs.progress >= 1 ? 1 : 0;
+    const raw = (fs.mordor !== null || fs.progress >= 4) ? hi : fs.progress >= 2 ? 2 : fs.progress >= 1 ? 1 : 0;
+    // Hard cap on top of the pressure target (player report: the AI dumped SEVEN
+    // dice in the box and nearly left itself no actions). A Hunt roll uses at most
+    // FIVE dice (`Math.min(5, hunt.box)` in hunt.ts), so anything past 5 is STRICTLY
+    // wasted — it cannot help the Hunt at all, it only disarms us for the turn.
+    // Capping at 5 is therefore free: same Hunt pressure, spare dice back for actions.
+    // (A *further* reserve — holding dice back below 5 — was measured and it LOSES:
+    // it cut Mordor-phase pressure and the Ring got through far more often.)
+    const HUNT_ROLL_CAP = 5;
+    const target = Math.min(raw, HUNT_ROLL_CAP);
     const want = Math.max(lo, Math.min(hi, target));
     return opts.reduce((best, a) => (Math.abs(a.dice - want) < Math.abs(best.dice - want) ? a : best), opts[0]!);
   }
