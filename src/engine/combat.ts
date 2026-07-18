@@ -352,9 +352,11 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   };
   if (assault) {
     pc.siege = true; pc.siegeRoundsLeft = opts.siegeRounds ?? 1; pc.boxed = defender; pc.fpCardLock = !!opts.fpCardLock;
-  } else if (opts.siegeRounds) {
+  } else if (opts.siegeRounds && box) {
     // Grond / The Fighting Uruk-hai force a multi-round assault on a besieged Stronghold.
-    pc.siege = true; pc.siegeRoundsLeft = opts.siegeRounds; pc.fpCardLock = !!opts.fpCardLock;
+    // `boxed` MUST be set with `siege`, or defForce() resolves the assault against the
+    // besieger's own units in the region and the battle ends after a round or two.
+    pc.siege = true; pc.siegeRoundsLeft = opts.siegeRounds; pc.boxed = defender; pc.fpCardLock = !!opts.fpCardLock;
   } else if (isStronghold && settlementController(state, to) === defender) {
     pc.step = 'siegeWithdraw'; // the defender may withdraw into the siege instead of a field battle
   }
@@ -584,8 +586,12 @@ export function combatStep(state: GameState): void {
         const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit, dRoll, pc.boxed === pc.defender ? state.regions[pc.to]!.siegeBox : undefined);
         pc.atkRoll = aRoll; pc.defRoll = dRoll;
         // Hit cancellation: Shield-wall, plus Heroic Death's sacrifice-a-Leader.
-        const dCancel = (dMods.cancelHits ?? 0) + (dMods.sacrificeLeaderToCancelHit ?? 0);
-        const aCancel = (aMods.cancelHits ?? 0) + (aMods.sacrificeLeaderToCancelHit ?? 0);
+        // Shield-wall only fires "if your opponent scored two or more hits", so a
+        // cancel is gated on the ENEMY's rolled hits clearing cancelHitsMinEnemyHits.
+        const cancelFor = (m: CombatMods, enemyHits: number) =>
+          (enemyHits >= (m.cancelHitsMinEnemyHits ?? 1) ? (m.cancelHits ?? 0) : 0) + (m.sacrificeLeaderToCancelHit ?? 0);
+        const dCancel = cancelFor(dMods, atkHits);
+        const aCancel = cancelFor(aMods, defHits);
         if ((aMods.sacrificeLeaderToCancelHit ?? 0) > 0 && defHits > 0) state.regions[pc.from]!.leaders = Math.max(0, state.regions[pc.from]!.leaders - 1);
         if ((dMods.sacrificeLeaderToCancelHit ?? 0) > 0 && atkHits > 0) { const df = defForce(state, pc); df.leaders = Math.max(0, df.leaders - 1); }
         let atk = Math.max(0, atkHits - dCancel);
@@ -602,10 +608,14 @@ export function combatStep(state: GameState): void {
         pc.atkHits = atk; pc.defHits = def;
         // Announce the round's dice PUBLICLY so both players can audit the resolution
         // (player report: "the log should display the combat dice rolls").
-        const fmt = (roll: CombatRoll, hits: number) =>
-          `[${roll.dice.join(' ')}]${roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]` : ''} on ${roll.target}+ → ${hits} hit${hits === 1 ? '' : 's'}`;
-        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atk)}; defender ${fmt(dRoll, def)}`,
-          { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk }, defender: { ...dRoll, hits: def } });
+        // `rolled` is what the dice scored; `hits` is what survives card effects.
+        // Show both when they differ, so a cancelled hit doesn't read as a bad
+        // dice count (player report: "Shield Wall reduced the hits — did it?").
+        const fmt = (roll: CombatRoll, rolled: number, hits: number) =>
+          `[${roll.dice.join(' ')}]${roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]` : ''} on ${roll.target}+ → ${rolled} hit${rolled === 1 ? '' : 's'}`
+          + (hits !== rolled ? ` (${hits} after card effects)` : '');
+        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk)}; defender ${fmt(dRoll, defHits, def)}`,
+          { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
         pc.attackerCard = null; pc.defenderCard = null;
         pc.step = 'attackerCasualties'; continue;
       }
@@ -837,9 +847,11 @@ export function playableCombatCards(state: GameState, side: Side): string[] {
   // Denethor's Folly: the FP may not use Combat cards for a battle in Minas Tirith.
   if (side === 'fp' && pc && fpCombatCardsBarredAt(state, pc.to)) return [];
   // Grond / The Fighting Uruk-hai: no FP Combat card in the first siege round unless
-  // a Companion is in the besieged Stronghold.
+  // a Companion is in the besieged Stronghold. The garrison's Companions live in the
+  // siege BOX (the region itself holds the besieger), so ask defForce — reading the
+  // region made the exemption unreachable, locking the FP out even with a Companion.
   if (side === 'fp' && pc?.fpCardLock && pc.round === 0
-    && !state.regions[pc.to]!.characters.some(isCompanion)) return [];
+    && !defForce(state, pc).characters.some(isCompanion)) return [];
   return state.cards[side].hand.filter((id) => hasCombatEffect(id) && (!pc || combatPrecondMet(state, pc, id)));
 }
 const hasPlayableCombatCard = (state: GameState, side: Side): boolean => playableCombatCards(state, side).length > 0;

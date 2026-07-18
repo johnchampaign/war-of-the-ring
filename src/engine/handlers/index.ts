@@ -885,8 +885,16 @@ register('sh-char-17', { onTable: true, apply() { /* Balrog of Moria — extra H
 // --- Card-granted Army actions with a Nazgûl. A "Shadow Army containing a Nazgûl"
 //     is a region with Shadow units and ≥1 Nazgûl. The card grants a real prompt to
 //     move and/or attack with such an Army (move = whole stack; attack = startBattle).
+// The Witch-king IS a Nazgûl for every Event-card reference to "Nazgûl" (rulebook
+// p.25) unless the card names him or the "Minion" title — so an Army containing
+// only the Witch-king still counts as Nazgûl-led (player report).
 const nazgulArmies = (state: GameState): string[] =>
-  Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow' && state.regions[id]!.nazgul > 0 && unitCount(state, id) > 0);
+  Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow'
+    && (state.regions[id]!.nazgul > 0 || state.regions[id]!.characters.includes('witch-king'))
+    && unitCount(state, id) > 0);
+/** A figure that a card's "move the Nazgûl" clause may fly: a region's Nazgûl
+ *  group, or the Witch-king (himself a Nazgûl — rulebook p.25). */
+const isNazgulFigure = (c: string | undefined): boolean => c === 'nazgul' || c === 'witch-king';
 /** Legal move/attack EventTargets for Nazgûl-led Armies. `allowAttack` gates the
  *  attack option (Ringwraiths: only as the sole action); `exclude` skips Armies that
  *  have already moved this card. */
@@ -916,12 +924,13 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
   // (player report: couldn't fly a Nazgûl to the Fords of Isen).
   repeat: 24,
   optionalFromStart: true, // "any or ALL" + the army clause is optional
-  canPlay: (state) => Object.values(state.regions).some((r) => r.nazgul > 0) || nazgulArmyActions(state, true).length > 0,
+  canPlay: (state) => Object.values(state.regions).some((r) => r.nazgul > 0) || !!charRegion(state, 'witch-king') || nazgulArmyActions(state, true).length > 0,
   targets(state, _side, applied = []) {
     const last = applied[applied.length - 1];
-    // Destination step of a Nazgûl figure-move (fly anywhere it can land).
-    if (last && last.companion === 'nazgul' && last.from && !last.region) {
-      return characterDestinations(state, 'shadow', 'nazgul', last.from).map((region) => ({ companion: 'nazgul', from: last.from, region }));
+    // Destination step of a Nazgûl figure-move (fly anywhere it can land). The
+    // Witch-king flies on this card too — he is a Nazgûl (rulebook p.25).
+    if (last && isNazgulFigure(last.companion) && last.from && !last.region) {
+      return characterDestinations(state, 'shadow', last.companion!, last.from).map((region) => ({ companion: last.companion, from: last.from, region }));
     }
     const armyActs = applied.filter((a) => a.mode === 'move' || a.mode === 'attack');
     if (armyActs.some((a) => a.mode === 'attack') || armyActs.length >= 2) return []; // army clause spent (1 attack, or 2 moves)
@@ -930,6 +939,8 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
       // Phase 1 still open: pick a Nazgûl group to fly (exclude groups already moved this card).
       const blocked = new Set([...applied.filter((a) => a.companion === 'nazgul').flatMap((a) => [a.from, a.region])].filter(Boolean) as string[]);
       for (const from of Object.keys(state.regions)) if (state.regions[from]!.nazgul > 0 && !blocked.has(from)) out.push({ companion: 'nazgul', from });
+      const wk = charRegion(state, 'witch-king');
+      if (wk && !applied.some((a) => a.companion === 'witch-king')) out.push({ companion: 'witch-king', from: wk });
     }
     // Phase 2: move a Nazgûl-led Army (≤2, different armies) or attack with one (first action only).
     const movedFrom = new Set(armyActs.map((a) => a.from!));
@@ -937,7 +948,7 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
     return out;
   },
   applyTarget(state, _side, t) {
-    if (t.companion === 'nazgul') { if (t.region && t.from) moveCharacter(state, 'shadow', 'nazgul', t.from, t.region); return; }
+    if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region); return; }
     applyNazgulArmyAction(state, t);
   },
 });
@@ -966,12 +977,12 @@ register('sh-char-24', { // The Black Captain Commands
   targets(state, _side, applied = []) {
     const wk = charRegion(state, 'witch-king');
     const last = applied[applied.length - 1];
-    // Destination step of a Nazgûl figure-fly.
-    if (last && last.companion === 'nazgul' && last.from && !last.region) {
-      return characterDestinations(state, 'shadow', 'nazgul', last.from).map((region) => ({ companion: 'nazgul', from: last.from, region }));
+    // Destination step of a Nazgûl figure-fly (the Witch-king flies too — p.25).
+    if (last && isNazgulFigure(last.companion) && last.from && !last.region) {
+      return characterDestinations(state, 'shadow', last.companion!, last.from).map((region) => ({ companion: last.companion, from: last.from, region }));
     }
     const recruited = applied.some((a) => a.mode === 'recruit');
-    const flies = applied.filter((a) => a.companion === 'nazgul');
+    const flies = applied.filter((a) => isNazgulFigure(a.companion));
     const armyActs = applied.filter((a) => a.mode === 'move' || a.mode === 'attack');
     const out: EventTarget[] = [];
     // Phase 1 — recruit XOR fly — only before any army action and before recruiting.
@@ -979,6 +990,7 @@ register('sh-char-24', { // The Black Captain Commands
       if (flies.length === 0 && wk && (state.reinforcements.sauron.nazgul ?? 0) > 0) out.push({ mode: 'recruit', region: wk });
       const blocked = new Set(flies.flatMap((a) => [a.from, a.region]).filter(Boolean) as string[]);
       for (const id of Object.keys(state.regions)) if (state.regions[id]!.nazgul > 0 && !blocked.has(id)) out.push({ companion: 'nazgul', from: id });
+      if (wk && !flies.some((a) => a.companion === 'witch-king')) out.push({ companion: 'witch-king', from: wk });
     }
     // Phase 2 — ONE move/attack with the Army containing the Witch-king.
     if (armyActs.length === 0 && wk) out.push(...wkArmyActions(state, wk));
@@ -990,7 +1002,7 @@ register('sh-char-24', { // The Black Captain Commands
       if (k > 0) { state.regions[t.region]!.nazgul += k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) - k; log(state, null, 'event', `The Black Captain Commands: ${k} Nazgûl muster at ${t.region}`); }
       return;
     }
-    if (t.companion === 'nazgul') { if (t.region && t.from) moveCharacter(state, 'shadow', 'nazgul', t.from, t.region); return; }
+    if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region); return; }
     applyNazgulArmyAction(state, t);
   },
 });
@@ -1022,6 +1034,10 @@ function siegeAssaultTargets(state: GameState, qualifies: (from: string) => bool
     const def = REGIONS[id]!;
     const r = state.regions[id]!;
     if (def.settlement !== 'Stronghold' || !r.besieged) continue;
+    // A LIVE garrison is required, same gate as an ordinary assault: without a box
+    // there is nothing to storm, and startBattle would resolve the "assault" against
+    // the besieger's own units (player report: the 3-round siege ended early).
+    if (!r.siegeBox || forceUnitCount(r.siegeBox) === 0) continue;
     if (settlementController(state, id) !== 'fp') continue; // garrison (in the box) still holds it
     if (armySide(state, id) === 'shadow' && qualifies(id)) out.push({ from: id, to: id });
   }

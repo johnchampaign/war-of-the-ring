@@ -290,6 +290,15 @@ export function removeStackUnit(state: GameState, id: RegionId, nation: Nation, 
 export function captureIfEnemySettlement(state: GameState, id: RegionId, side: Side): void {
   const def = REGIONS[id]!;
   if (!def.settlement) return;
+  // A Stronghold under siege is still held by its boxed garrison — walking a second
+  // (reinforcing) Army into the besieger's region must NOT capture it. Doing so set
+  // the control marker early, so the real storm later found the Settlement already
+  // "ours" and awarded no VP (player report: "Elves take Moria but no VP"). The
+  // legitimate capture in finishCombat deletes the box first, so it still fires.
+  // Keyed on a LIVE garrison, not the `besieged` flag: a stale flag with no box must
+  // still fall through to the recapture branch below, which clears it.
+  const garrison = state.regions[id]!.siegeBox;
+  if (garrison && forceUnitCount(garrison) > 0) return;
   if (settlementController(state, id) === side) return;
   const owner = def.nation ? sideOfNation(def.nation) : null;
   const enemy: Side = side === 'fp' ? 'shadow' : 'fp';

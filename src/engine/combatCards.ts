@@ -25,6 +25,10 @@ export interface CombatMods {
   negateEnemyReroll?: boolean;
   /** Cancel N hits the owner would take this round. */
   cancelHits?: number;
+  /** `cancelHits` only applies if the ENEMY scored at least this many hits this
+   *  round. Shield-wall reads "if your opponent scored two or more hits, cancel
+   *  one hit" — a single hit is NOT cancelled (player report). Default 1. */
+  cancelHitsMinEnemyHits?: number;
   /** +N hits if, after the re-roll, the owner scored MORE total hits than the
    *  enemy (Mûmakil's second, later-initiative effect). Evaluated post-roll. */
   bonusHitIfOutscore?: number;
@@ -101,7 +105,7 @@ const BY_TITLE: Record<string, CombatMods> = {
   // cancels / defense
   'Daring Defiance': { cancelEnemyCard: true },
   'Swarm of Bats': { cancelEnemyCard: true },
-  'Shield-wall': { cancelHits: 1 },
+  'Shield-wall': { cancelHits: 1, cancelHitsMinEnemyHits: 2 },
   // multi-effect (per-effect initiative 3-5): +1 dice (init 3) AND +1 hit if you
   // outscore the enemy after the re-roll (init 5). See data.ts initiative note.
   'Mûmakil': { rollBonus: 1, bonusHitIfOutscore: 1 },

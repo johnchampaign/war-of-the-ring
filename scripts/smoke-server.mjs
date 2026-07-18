@@ -41,8 +41,12 @@ const shView = await server.fetch(gameId, invites.shadow);
 check('fp token authenticates as fp seat', fpView.you === 'fp', `got ${fpView.you}`);
 check('shadow token authenticates as shadow seat', shView.you === 'shadow', `got ${shView.you}`);
 check('RNG hidden in fp view', fpView.view.rngState === 0);
-check('Shadow hand hidden from FP', fpView.view.cards.shadow.hand.every((c) => c === 'hidden'));
-check('FP hand hidden from Shadow', shView.view.cards.fp.hand.every((c) => c === 'hidden'));
+// redact.ts masks a hidden card as 'hidden-character' / 'hidden-strategy' (the deck
+// is public, the card is not) — asserting the bare string 'hidden' left the leak
+// check permanently red, i.e. not actually guarding anything.
+const masked = (c) => typeof c === 'string' && c.startsWith('hidden');
+check('Shadow hand hidden from FP', fpView.view.cards.shadow.hand.every(masked));
+check('FP hand hidden from Shadow', shView.view.cards.fp.hand.every(masked));
 check('FP sees its OWN hand', fpView.view.cards.fp.hand.every((c) => c !== 'hidden'));
 check('Shadow sees its OWN hand', shView.view.cards.shadow.hand.every((c) => c !== 'hidden'));
 
