@@ -27,27 +27,31 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
   // --- pending choices (combat / hunt) ---
   if (state.pendingChoice) return resolveChoice(state, legal);
 
-  // --- hunt allocation (Shadow): put a FEW dice in the Hunt Box (pressure scales with
-  //     the Fellowship's progress) but keep most for actions — never dump them all,
-  //     which would leave Shadow with no Action dice this turn. ---
+  // --- hunt allocation (Shadow): ALL-OR-NOTHING. Max the Hunt Box once the Ring is
+  //     the live threat (Mordor Track), otherwise spend nothing and keep the dice
+  //     for actions. Every intermediate setting measured worse — see below. ---
   if (state.phase === 'huntAllocation') {
     const opts = legal.filter((a) => a.kind === 'allocateHunt') as Extract<WotrAction, { kind: 'allocateHunt' }>[];
     if (!opts.length) return legal[0]!;
     const lo = Math.min(...opts.map((a) => a.dice)), hi = Math.max(...opts.map((a) => a.dice));
-    // Hunt pressure is the Shadow's win condition; the cap is the Companion count
-    // (rulebook p.18). When the Fellowship is in Mordor or far along, max out the
-    // Hunt box (corruption is now the priority over saving Action dice); ease off
-    // when it's near its last-known spot. Uploaded games showed fast Mordor rushes
-    // slipping through under-pressured Hunts.
+    // Hunt dice ARE Action dice — the exchange rate decides everything, and it is
+    // brutal pre-Mordor: measured self-play (300g) a flat 2-per-turn baseline gave
+    // Shadow 105/300 vs 143/300 for spending nothing. The Shadow's edge is board
+    // tempo (muster/march/attack), not speculative Hunt rolls at low dice counts.
+    //
+    // NB the old heuristic scaled with fs.progress — that signal is near-useless
+    // here. Allocation happens in phase 3, right after the FP's phase-2 declare
+    // RESETS progress, and progress only accrues from phase-5 moves. Instrumented
+    // over 60 games: progress was 0 in 864 of 1137 allocations, 1 in 272, and >=2
+    // exactly ONCE — so the escalation rungs were dead code and the Shadow drifted
+    // through the game at ~0.69 dice.
     const fs = state.fellowship;
-    const raw = (fs.mordor !== null || fs.progress >= 4) ? hi : fs.progress >= 2 ? 2 : fs.progress >= 1 ? 1 : 0;
-    // Hard cap on top of the pressure target (player report: the AI dumped SEVEN
-    // dice in the box and nearly left itself no actions). A Hunt roll uses at most
-    // FIVE dice (`Math.min(5, hunt.box)` in hunt.ts), so anything past 5 is STRICTLY
-    // wasted — it cannot help the Hunt at all, it only disarms us for the turn.
-    // Capping at 5 is therefore free: same Hunt pressure, spare dice back for actions.
-    // (A *further* reserve — holding dice back below 5 — was measured and it LOSES:
-    // it cut Mordor-phase pressure and the Ring got through far more often.)
+    const raw = (fs.mordor !== null || fs.progress >= 4) ? hi : 0;
+    // On the Mordor Track the Ring is the clock, so max out — but only to what a
+    // roll can USE. A Hunt roll rolls `Math.min(5, hunt.box)` dice (hunt.ts), so a
+    // 6th/7th die is STRICTLY wasted: it cannot help the Hunt, it only disarms us
+    // (player report: the AI dumped SEVEN and nearly had no actions). Holding back
+    // BELOW 5 in Mordor was also measured and it loses — the Ring gets through.
     const HUNT_ROLL_CAP = 5;
     const target = Math.min(raw, HUNT_ROLL_CAP);
     const want = Math.max(lo, Math.min(hi, target));
