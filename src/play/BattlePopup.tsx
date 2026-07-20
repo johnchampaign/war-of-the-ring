@@ -22,15 +22,18 @@ function CDie({ n, target }: { n: number; target: number }) {
   );
 }
 
-function RollRow({ label, roll, color }: { label: string; roll?: { dice: number[]; rerolls: number[]; target: number }; color: string }) {
+function RollRow({ label, roll, color }: { label: string; roll?: { dice: number[]; rerolls: number[]; target: number; rerollTarget?: number }; color: string }) {
   if (!roll || (roll.dice.length === 0 && roll.rerolls.length === 0)) return null;
+  // A Combat card can bonus the Combat roll and the Leader re-roll separately, so
+  // the re-roll may hit on a different number — label it when it differs.
+  const rt = roll.rerollTarget ?? roll.target;
   return (
     <div style={{ margin: '3px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
       <span style={{ width: 64, fontSize: 12, color }}>{label}</span>
       <span style={{ fontSize: 11, color: '#887', marginRight: 4 }}>(hits {roll.target}+)</span>
       {roll.dice.map((n, i) => <CDie key={i} n={n} target={roll.target} />)}
-      {roll.rerolls.length > 0 && <span style={{ color: '#887', margin: '0 4px', fontSize: 11 }}>re-roll</span>}
-      {roll.rerolls.map((n, i) => <CDie key={`r${i}`} n={n} target={roll.target} />)}
+      {roll.rerolls.length > 0 && <span style={{ color: '#887', margin: '0 4px', fontSize: 11 }}>re-roll{rt !== roll.target ? ` (${rt}+)` : ''}</span>}
+      {roll.rerolls.map((n, i) => <CDie key={`r${i}`} n={n} target={rt} />)}
     </div>
   );
 }

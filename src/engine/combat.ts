@@ -12,7 +12,7 @@ import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, liftSiegeIfAbandoned, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
-import { combatModsFor, hasCombatEffect, EMPTY_MODS, type CombatMods } from './combatCards';
+import { combatModsFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods } from './combatCards';
 import { log } from './log';
 
 // Safety backstop only — a real field battle terminates when the attacker ceases
@@ -61,7 +61,7 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
  *  enemy's penalty mods. */
 /** A combat roll's faces, for the battle popup: the main dice, any leadership
  *  re-rolls, and the to-hit target so the UI can colour the hits. */
-export interface CombatRoll { dice: number[]; rerolls: number[]; target: number }
+export interface CombatRoll { dice: number[]; rerolls: number[]; target: number; rerollTarget?: number }
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
   baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll, force?: Force): number {
   // `force` (a siege box) overrides where this side's figures are read from — used
@@ -71,7 +71,16 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   const captain = side === 'fp' && !enemyMods.enemyCaptainCancel && own.characters.some((c) => CAPTAINS.has(c)) ? 1 : 0;
   let count = Math.min(5, forceUnitCount(own) + captain);
   if (enemyMods.maxDiceEnemy != null) count = Math.min(count, enemyMods.maxDiceEnemy);
-  const target = clamp(2, 6, baseTarget - (ownMods.rollBonus ?? 0) + (enemyMods.enemyRollPenalty ?? 0));
+  // Dread and Despair: "rolls one Combat die less (to a minimum of one)".
+  if (enemyMods.enemyDiceReduction) count = Math.max(1, count - enemyMods.enemyDiceReduction);
+  // "Both Armies add N…" (Deadly Strife, Desperate Battle) also lifts THIS side's dice.
+  const shared = enemyMods.symmetricBonus ? enemyMods : null;
+  const rollBonus = (ownMods.rollBonus ?? 0) + (shared?.rollBonus ?? 0);
+  const rerollBonus = (ownMods.rerollBonus ?? 0) + (shared?.rerollBonus ?? 0);
+  // Two targets: the cards bonus the Combat roll and the Leader re-roll separately.
+  // Enemy to-hit penalties (Advantageous Position, Confusion) name the Combat roll only.
+  const target = clamp(2, 6, baseTarget - rollBonus + (enemyMods.enemyRollPenalty ?? 0));
+  const rerollTarget = clamp(2, 6, baseTarget - rerollBonus);
   // Forfeiting a Companion's Leadership (Mighty Attack) costs re-roll dice.
   let leadVal = Math.min(5, forceLeadership(state, own, side));
   // Gandalf the White "The White Rider": when the FP chose (at battle start) to forfeit
@@ -83,11 +92,11 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   }
   const lead = Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0) - (enemyMods.enemyLeadershipPenalty ?? 0));
   const allowReroll = !enemyMods.negateEnemyReroll;
-  if (roll) { roll.dice = []; roll.rerolls = []; roll.target = target; }
+  if (roll) { roll.dice = []; roll.rerolls = []; roll.target = target; roll.rerollTarget = rerollTarget; }
   let hits = withRng(state, (rng) => {
     let h = 0, failed = 0;
     for (let i = 0; i < count; i++) { const d = rng.rollDie(6); roll?.dice.push(d); if (d === 6 || (d !== 1 && d >= target)) h++; else failed++; }
-    if (allowReroll) for (let i = 0; i < Math.min(lead, failed); i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= target)) { h++; failed--; } }
+    if (allowReroll) for (let i = 0; i < Math.min(lead, failed); i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; failed--; } }
     for (let i = 0; i < (ownMods.extraAttackDice ?? 0); i++) { const d = rng.rollDie(6); if (d >= 5) h++; } // extra attack hits on 5+
     // Mighty Attack: turn up to N still-missed dice into hits.
     h += Math.min(ownMods.guaranteedHits ?? 0, failed);
@@ -552,10 +561,6 @@ export function combatStep(state: GameState): void {
           return combat && event && combat !== event ? `'${combat}' (combat half of ${event})` : `'${combat ?? event ?? id}'`;
         };
         const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.attacker)} (attacker) play ${cardName(pc.attackerCard)}`);
-        if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.defender)} (defender) play ${cardName(pc.defenderCard)}`);
-        if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
         // Each side's combat card (if any) applies THIS round, then is spent —
         // a fresh card may be played next round (rules-spec §7, p.29).
         let aMods = pc.attackerCard ? (combatModsFor(pc.attackerCard) ?? EMPTY_MODS) : EMPTY_MODS;
@@ -566,8 +571,23 @@ export function combatStep(state: GameState): void {
         // defender wins ties.
         const aIni = pc.attackerCard ? cardInitiative(pc.attackerCard) : 99;
         const dIni = pc.defenderCard ? cardInitiative(pc.defenderCard) : 99;
-        if (aMods.cancelEnemyCard && pc.defenderCard && aIni < dIni) dMods = EMPTY_MODS;
-        if (dMods.cancelEnemyCard && pc.attackerCard && dIni <= aIni) aMods = EMPTY_MODS;
+        let aCancelled = false, dCancelled = false;
+        if (aMods.cancelEnemyCard && pc.defenderCard && aIni < dIni) { dMods = EMPTY_MODS; dCancelled = true; }
+        if (dMods.cancelEnemyCard && pc.attackerCard && dIni <= aIni) { aMods = EMPTY_MODS; aCancelled = true; }
+        // Announce each card WITH what it mechanically does this round, so the dice
+        // that follow can be audited against it (player report: a card was played
+        // "for an effect without telling me what it did"). Logged after the cancel
+        // check so a cancelled card reads as cancelled.
+        const played = (card: string | null, mods: CombatMods, cancelled: boolean) => {
+          if (!card) return cardName(card);
+          if (cancelled) return `${cardName(card)} — CANCELLED by the opposing card`;
+          const what = describeCombatMods(mods);
+          return `${cardName(card)}${what ? ` — ${what}` : ''}`;
+        };
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.attacker)} (attacker) play ${played(pc.attackerCard, aMods, aCancelled)}`);
+        if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.defender)} (defender) play ${played(pc.defenderCard, dMods, dCancelled)}`);
+        if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
         // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
         // resolve in initiative order before the normal roll; either can end the
         // battle (a retreat empties a region, a pre-attack can wipe one).
@@ -612,7 +632,10 @@ export function combatStep(state: GameState): void {
         // Show both when they differ, so a cancelled hit doesn't read as a bad
         // dice count (player report: "Shield Wall reduced the hits — did it?").
         const fmt = (roll: CombatRoll, rolled: number, hits: number) =>
-          `[${roll.dice.join(' ')}]${roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]` : ''} on ${roll.target}+ → ${rolled} hit${rolled === 1 ? '' : 's'}`
+          `[${roll.dice.join(' ')}] on ${roll.target}+`
+          // The re-roll can have its OWN to-hit (cards bonus the two rolls separately).
+          + (roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]${roll.rerollTarget != null && roll.rerollTarget !== roll.target ? ` on ${roll.rerollTarget}+` : ''}` : '')
+          + ` → ${rolled} hit${rolled === 1 ? '' : 's'}`
           + (hits !== rolled ? ` (${hits} after card effects)` : '');
         log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk)}; defender ${fmt(dRoll, defHits, def)}`,
           { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });

@@ -7,12 +7,22 @@
 import { EVENT_BY_ID } from './data';
 
 export interface CombatMods {
-  /** +N to the owner's Combat roll AND Leader re-roll dice (lowers the hit target). */
+  /** +N to the owner's COMBAT ROLL dice (lowers the hit target). The cards name the
+   *  Combat roll and the Leader re-roll separately ("Add 1 to all dice on your Combat
+   *  roll" vs "…on your Combat roll and Leader re-roll"), so these are two fields —
+   *  a Combat-roll bonus does NOT carry into the re-roll (player report). */
   rollBonus?: number;
-  /** +N to the enemy's hit target (their dice are worse). */
+  /** +N to the owner's LEADER RE-ROLL dice. */
+  rerollBonus?: number;
+  /** "Both Armies add N…" (Deadly Strife, Desperate Battle): the roll/re-roll bonus
+   *  applies to the ENEMY's rolls too, not just the owner's. */
+  symmetricBonus?: boolean;
+  /** +N to the enemy's COMBAT ROLL hit target (their dice are worse). */
   enemyRollPenalty?: number;
   /** Cap the enemy's number of dice this round. */
   maxDiceEnemy?: number;
+  /** The enemy rolls N fewer Combat dice, to a minimum of one (Dread and Despair). */
+  enemyDiceReduction?: number;
   /** Roll an extra attack of N dice (hits on 5+), added to the owner's hits. */
   extraAttackDice?: number;
   /** +N hits if the owner scored at least one hit. */
@@ -66,27 +76,32 @@ export interface CombatMods {
 
 // Effects by combat title.
 const BY_TITLE: Record<string, CombatMods> = {
-  // straight die bonuses
+  // straight die bonuses — Combat roll ONLY ("Add 1 to all dice on your Combat roll")
   'Valour': { rollBonus: 1 },
   'Servant of the Secret Fire': { rollBonus: 1 },
   'Devilry of Orthanc': { rollBonus: 1 },
   "Ents' Rage": { rollBonus: 2 },
-  'It Is a Gift': { rollBonus: 1 },
-  'One for the Dark Lord': { rollBonus: 1 },
-  'Cruel as Death': { rollBonus: 1 },
-  'They Are Terrible': { rollBonus: 1 },
+  // …and the ones that name BOTH rolls ("your Combat roll and Leader re-roll")
+  'It Is a Gift': { rollBonus: 1, rerollBonus: 1 },
+  'One for the Dark Lord': { rollBonus: 1, rerollBonus: 1 },
+  // fixed Nazgûl-Leadership forfeits (no choice — the cost is stated on the card)
+  'Cruel as Death': { rollBonus: 1, ownLeadershipPenalty: 2 },
+  'They Are Terrible': { rerollBonus: 1, ownLeadershipPenalty: 1 }, // Leader re-roll ONLY
   // forfeit a Companion's Leadership to turn one miss into a hit
   'Mighty Attack': { guaranteedHits: 1, ownLeadershipPenalty: 1 },
-  'Andúril': { rollBonus: 1 },
-  'Deadly Strife': { rollBonus: 2 },
-  'Desperate Battle': { rollBonus: 1 },
-  'Relentless Assault': { rollBonus: 1 },
+  'Andúril': { guaranteedHits: 1, ownLeadershipPenalty: 1 }, // Strider's forfeit; Aragorn's 2-hit option is a choice (D5)
+  // "Both Armies add N to all dice on their Combat roll and Leader re-roll"
+  'Deadly Strife': { rollBonus: 2, rerollBonus: 2, symmetricBonus: true },
+  'Desperate Battle': { rollBonus: 1, rerollBonus: 1, symmetricBonus: true },
+  'Relentless Assault': { rollBonus: 1 }, // self-inflicted-hits cost is a choice — unmodelled (D5)
   // weaken the enemy
   'Daylight': { maxDiceEnemy: 3 },
   'Brave Stand': { maxDiceEnemy: 3 },
   'Huorn-dark': { maxDiceEnemy: 2 },
   'Advantageous Position': { enemyRollPenalty: 1 },
-  'Dread and Despair': { enemyRollPenalty: 1 },
+  // Forfeit 1 Nazgûl Leadership → the enemy rolls 1 fewer COMBAT die (not a worse
+  // to-hit). Forfeiting more than one point is a choice — unmodelled (D5).
+  'Dread and Despair': { enemyDiceReduction: 1, ownLeadershipPenalty: 1 },
   'Confusion': { enemyRollPenalty: 1 },
   'Foul Stench': { negateEnemyReroll: true },
   // cancel one enemy Companion's Leadership + abilities for the round
@@ -117,6 +132,40 @@ const BY_TITLE: Record<string, CombatMods> = {
   'Scouts': { retreatBeforeCombat: true },          // init 1
   "Durin's Bane": { preCombatAttackDice: 3 },       // init 2
 };
+
+/** A short, plain-language summary of what a combat card actually DOES mechanically,
+ *  for the battle log — so a player can audit the resolution against the dice that
+ *  follow instead of guessing (player report: "the AI plays a card for an effect
+ *  without telling me what it did"). Empty string if nothing is modelled. */
+export function describeCombatMods(mods: CombatMods): string {
+  const p: string[] = [];
+  if (mods.rollBonus && mods.rerollBonus) p.push(`+${mods.rollBonus} to Combat roll and Leader re-roll dice${mods.symmetricBonus ? ' for BOTH Armies' : ''}`);
+  else {
+    if (mods.rollBonus) p.push(`+${mods.rollBonus} to Combat roll dice`);
+    if (mods.rerollBonus) p.push(`+${mods.rerollBonus} to Leader re-roll dice`);
+  }
+  if (mods.enemyRollPenalty) p.push(`−${mods.enemyRollPenalty} to the enemy's Combat roll dice`);
+  if (mods.maxDiceEnemy != null) p.push(`enemy rolls at most ${mods.maxDiceEnemy} Combat dice`);
+  if (mods.enemyDiceReduction) p.push(`enemy rolls ${mods.enemyDiceReduction} fewer Combat ${mods.enemyDiceReduction === 1 ? 'die' : 'dice'} (min 1)`);
+  if (mods.ownLeadershipPenalty) p.push(`forfeits ${mods.ownLeadershipPenalty} Leadership (fewer re-roll dice)`);
+  if (mods.enemyLeadershipPenalty) p.push(`enemy Leadership −${mods.enemyLeadershipPenalty}`);
+  if (mods.enemyCaptainCancel) p.push('cancels the Captain of the West bonus');
+  if (mods.negateEnemyReroll) p.push('cancels the enemy Leader re-roll');
+  if (mods.cancelEnemyCard) p.push("cancels the enemy's Combat card");
+  if (mods.preCombatAttackDice) p.push(`pre-combat attack: ${mods.preCombatAttackDice} dice, hits on 4+`);
+  if (mods.extraAttackDice) p.push(`extra attack: ${mods.extraAttackDice} dice, hits on 5+`);
+  if (mods.guaranteedHits) p.push(`turns ${mods.guaranteedHits} miss into a hit`);
+  if (mods.bonusHitsIfAny) p.push(`+${mods.bonusHitsIfAny} hit${mods.bonusHitsIfAny === 1 ? '' : 's'} if it scored any`);
+  if (mods.bonusHitsIfOutnumber) p.push(`+${mods.bonusHitsIfOutnumber} hit if it outnumbers 2:1`);
+  if (mods.bonusHitIfOutscore) p.push(`+${mods.bonusHitIfOutscore} hit if it outscores the enemy`);
+  if (mods.cancelHits) p.push(`cancels ${mods.cancelHits} incoming hit${(mods.cancelHitsMinEnemyHits ?? 1) > 1 ? ` (only if the enemy scored ${mods.cancelHitsMinEnemyHits}+)` : ''}`);
+  if (mods.sacrificeLeaderToCancelHit) p.push('may sacrifice a Leader to cancel a hit');
+  if (mods.eliminateMinion) p.push('may spend a hit to eliminate a Minion');
+  if (mods.eliminateNazgulIfHit) p.push('eliminates a Nazgûl if it scored a hit');
+  if (mods.blackBreath) p.push('eliminates an enemy Leader/Companion if it scored a hit');
+  if (mods.retreatBeforeCombat) p.push('retreats before the Combat roll');
+  return p.join('; ');
+}
 
 /** The combat mods for a card id, or null if its combat half isn't modelled. */
 export function combatModsFor(cardId: string): CombatMods | null {

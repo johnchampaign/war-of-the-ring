@@ -742,7 +742,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!action.done) {
         if (action.region === data.first) throw new Error('Second figure must go to a different Settlement');
         if (action.nation && sideOfNation(action.nation) !== actor) throw new Error('Not your nation');
-        if (!placeFigure(state, actor, action.nation ?? 'sauron', action.region!, data.figure)) throw new Error('Illegal second recruit');
+        // The second figure's TYPE is the player's choice here (2 Regulars, 2 Leaders,
+        // or 1 of each — p.26); `data.figure` is only the default the first pick implied.
+        if (!placeFigure(state, actor, action.nation ?? 'sauron', action.region!, action.figure ?? data.figure)) throw new Error('Illegal second recruit');
       }
       passResolutionTurn(state, actor);
       break;
@@ -1060,15 +1062,16 @@ function recruitTargets(state: GameState, side: Side): WotrAction[] {
     if (sideOfNation(nation) !== side || !isAtWar(state, nation)) continue;
     const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
     const fpLead = side === 'fp' ? (pool.leader ?? 0) : 0;
-    const canLead = side === 'shadow' ? naz > 0 : fpLead >= 1;
     // Offer EVERY eligible settlement of the Nation (not just the first) so you can
     // choose where to muster — e.g. The Shire vs Bree (Ira Fay #10b).
     for (const id of recruitRegions(state, side, nation)) {
       if (out.length >= 96) break;
+      // `then` only marks "a second figure follows" — its TYPE is chosen at the
+      // 'recruitSecond' step, so Regular-first covers both 2 Regulars and
+      // 1 Regular + 1 Leader (and Leader-first covers 2 Leaders and Leader + Regular).
       if (pool.regular >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'regular' });
       if (pool.elite >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 1 });
-      // 1 Regular + 1 Leader/Nazgûl, and 2 Leaders/Nazgûl. Shadow's "Leader" is a Nazgûl.
-      if (pool.regular >= 1 && canLead) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'leader' });
+      // Shadow's "Leader" is a Nazgûl, mustered separately (below) at Sauron Strongholds.
       if (side === 'fp' && fpLead >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 0, leader: 1, then: 'leader' });
     }
   }
@@ -1080,24 +1083,29 @@ function recruitTargets(state: GameState, side: Side): WotrAction[] {
   return out;
 }
 
-/** Second-figure placements for a two-figure muster: the same figure type, in a
- *  Settlement other than the first (RAW: separate Settlements). */
-function recruitSecondTargets(state: GameState, side: Side, figure: 'regular' | 'leader', first: string): WotrAction[] {
+/** Second-figure placements for a two-figure muster, in a Settlement other than
+ *  the first (RAW: separate Settlements). One Muster die yields 2 Regulars,
+ *  2 Leaders, or 1 Regular + 1 Leader (p.26) — so whichever figure went down
+ *  first, the second may be EITHER type (report: placing a Leader first wrongly
+ *  locked the muster into a second Leader). */
+function recruitSecondTargets(state: GameState, side: Side, _figure: 'regular' | 'leader', first: string): WotrAction[] {
   const out: WotrAction[] = [{ kind: 'recruitSecond', done: true }];
-  if (figure === 'leader' && side === 'shadow') {
-    // EVERY eligible Sauron Stronghold (other than the first), not just one.
-    for (const r of Object.keys(state.regions)) if (r !== first && canRecruitNazgul(state, r)) out.push({ kind: 'recruitSecond', nation: 'sauron', region: r, figure });
-    return out;
-  }
-  for (const nation of Object.keys(state.nations) as Nation[]) {
-    if (sideOfNation(nation) !== side || !isAtWar(state, nation)) continue;
-    const pool = state.reinforcements[nation] as { regular: number; leader?: number };
-    if (figure === 'regular' ? pool.regular < 1 : (pool.leader ?? 0) < 1) continue;
-    // Offer EVERY eligible Settlement of the Nation (other than the first), so the
-    // second figure has the same placement freedom as the first (report: the 2nd
-    // recruit was limited to one spot per Nation).
-    for (const r of recruitRegions(state, side, nation, 6)) if (r !== first) out.push({ kind: 'recruitSecond', nation, region: r, figure });
-    if (out.length >= 24) break;
+  for (const figure of ['regular', 'leader'] as const) {
+    if (figure === 'leader' && side === 'shadow') {
+      // EVERY eligible Sauron Stronghold (other than the first), not just one.
+      for (const r of Object.keys(state.regions)) if (r !== first && canRecruitNazgul(state, r)) out.push({ kind: 'recruitSecond', nation: 'sauron', region: r, figure });
+      continue;
+    }
+    for (const nation of Object.keys(state.nations) as Nation[]) {
+      if (sideOfNation(nation) !== side || !isAtWar(state, nation)) continue;
+      const pool = state.reinforcements[nation] as { regular: number; leader?: number };
+      if (figure === 'regular' ? pool.regular < 1 : (pool.leader ?? 0) < 1) continue;
+      // Offer EVERY eligible Settlement of the Nation (other than the first), so the
+      // second figure has the same placement freedom as the first (report: the 2nd
+      // recruit was limited to one spot per Nation).
+      for (const r of recruitRegions(state, side, nation, 6)) if (r !== first) out.push({ kind: 'recruitSecond', nation, region: r, figure });
+      if (out.length >= 48) break;
+    }
   }
   return out;
 }

@@ -38,7 +38,7 @@ export function describeAction(a: WotrAction): string {
     case 'diplomaticAction': return `Diplomacy: advance ${cap(a.nation)}`;
     case 'recruitUnit': {
       const fig = a.nazgul ? 'Nazgûl' : a.leader ? 'Leader' : a.elite ? 'Elite' : 'Regular';
-      const more = a.then ? ` (+ a 2nd ${a.then === 'leader' ? 'Leader/Nazgûl' : 'Regular'} elsewhere)` : '';
+      const more = a.then ? ' (+ an optional 2nd figure elsewhere)' : '';
       return `Recruit ${fig} ${cap(a.nation)} in ${rName(a.region)}${more}`;
     }
     case 'recruitSecond':
