@@ -212,7 +212,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // Level-1 Hobbit). (Isildur's Bane never reaches this prompt — its damage is
         // straight Corruption, applied in the engine.)
         if ((fs.guide === 'meriadoc' || fs.guide === 'peregrin') && fs.mordor === null) acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
-        if (fs.guide === 'gollum' && fs.hidden) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
+        // Gollum reduces damage by REVEALING the Fellowship — impossible when the
+        // drawn tile itself already reveals it (his card: only while it would stay
+        // hidden; player report from a Mordor Eye+Reveal tile).
+        const tileReveals = !!(state.pendingChoice!.data as { reveal?: boolean } | undefined)?.reveal;
+        if (fs.guide === 'gollum' && fs.hidden && !tileReveals) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
         // One option PER on-table reducer — Axe and Bow vs Horn of Gondor is a real
         // choice (their keep-conditions differ; player report).
         for (const card of huntReduceCards(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard', card });

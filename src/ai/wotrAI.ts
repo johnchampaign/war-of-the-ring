@@ -242,6 +242,11 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // (Foul Stench: cancels the FP Leader re-roll) is its remaining value. Don't
       // burn it as a dead event (player report: "should have kept it for Combat").
       if (a.cardId === 'sh-char-22' && state.nations.rohan.active) return 1;
+      // Threats and Promises only bars the FP from advancing a PASSIVE Nation with a
+      // Muster die — once every FP Nation is active it's a dead table card; keep it
+      // for its combat half (Devilry of Orthanc). Same trap as Wormtongue (player
+      // report: "played Threats & Promises after the Witch-King activated all FP nations").
+      if (a.cardId === 'sh-str-05' && (['dwarves', 'elves', 'gondor', 'north', 'rohan'] as Nation[]).every((n) => state.nations[n].active)) return 1;
       // A card with a strong COMBAT box (Deadly Strife etc.) is usually worth more
       // held for battle than played as its event — burning it is weak play (player
       // report: "Return to Valinor for the top half is VERY weak").
@@ -526,6 +531,11 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     if (a.mode === 'hide') return 50;
     if (a.mode === 'none') return 5;
     if (a.mode === 'move' && !a.to && !a.region) return 25;
+    // Nazgûl-move cards (Nazgûl Search / The Nazgûl Strike!): the whole POINT is
+    // landing on the Fellowship (reveal / extra Hunt fires only if a Nazgûl shares
+    // its region) — aim there, not at the army campaign target (player report:
+    // "put 4 Nazgûl in Dimrill Dale" after a declare in Parth Celebrant).
+    if (a.companion === 'nazgul' && a.region) return 120 - dist(a.region, state.fellowship.location) * 20;
     if (a.companion && a.region) return 110 - (target ? dist(a.region, target) : 0); // place the (group of) Companion(s) — do this rather than piling the whole Fellowship in
     if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
     if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;

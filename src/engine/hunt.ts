@@ -312,7 +312,11 @@ export function resolveMordorStep(state: GameState): void {
   const fs = state.fellowship;
   if (fs.mordor === null) return;
   if (!fellowshipDieSkipsHuntBox(state)) state.hunt.fpDiceInBox += 1; // FP die enters the Hunt Box (unless "The Last Battle")
-  const level = Math.min(5, state.hunt.box);
+  // Eye-tile damage on the Mordor Track = ALL dice in the Hunt Box, "including Free
+  // Peoples dice previously used" (p.43) — and the FP die for THIS move enters the
+  // box first. No 5-cap here: that cap is for rolled Hunt dice (p.41); in Mordor no
+  // roll happens. (Report: 2 Shadow dice + 1 FP die dealt 2 damage instead of 3.)
+  const level = state.hunt.box + state.hunt.fpDiceInBox;
   // On the Mordor Track the tile is drawn automatically (no Hunt roll); record that.
   state.hunt.lastRoll = { level, bonus: 0, dice: [], rerolls: [], successes: level, mordor: true };
   beginHuntDraw(state, level, true);

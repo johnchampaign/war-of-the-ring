@@ -2,7 +2,53 @@
 import { useState } from 'react';
 import type { GameState } from '../engine/types';
 import { charName, charDef } from './charInfo';
+import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, EVENT_BY_ID, type HuntTileDef } from '../engine/data';
 import eventCards from '../../assets/event-cards.json';
+
+// Human label for a Hunt tile ("3, reveal" / "Eye" / "die, stop").
+function tileLabel(t: HuntTileDef | undefined): string {
+  if (!t) return '?';
+  const v = t.value === 'eye' ? 'Eye' : t.value === 'die' ? 'die roll' : String(t.value);
+  return v + (t.reveal ? ', reveal' : '') + (t.stop ? ', stop' : '');
+}
+
+// Drawn Hunt tiles + special-tile status (player request, twice: "display played
+// Hunt tiles somewhere — relevant info for a FP player deciding to move"). All of
+// this is open information: drawn tiles are public, and the pool contents are
+// deducible from the fixed tile mix minus the drawn ones.
+function HuntTilesBrowser({ view }: { view: GameState }) {
+  const [open, setOpen] = useState(false);
+  const h = view.hunt;
+  const drawn = (h.drawn ?? []).map((i) => tileLabel(STANDARD_TILE_LIST[i]));
+  const specialsDrawn = (h.specialsDrawn ?? []).map((id) => `${tileLabel(SPECIAL_TILE_BY_CARD[id])} (${EVENT_BY_ID[id]?.name ?? id})`);
+  const inPlay = (h.specialsInPlay ?? []).map((id) => `${tileLabel(SPECIAL_TILE_BY_CARD[id])} (${EVENT_BY_ID[id]?.name ?? id})`);
+  const inPool = (h.specialsInPool ?? []).map((id) => `${tileLabel(SPECIAL_TILE_BY_CARD[id])} (${EVENT_BY_ID[id]?.name ?? id})`);
+  const total = drawn.length + specialsDrawn.length;
+  return (
+    <span style={{ position: 'relative' }}>
+      <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
+        title="Hunt tiles drawn so far (they return when the pool reshuffles), plus special tiles in play / in the pool">
+        Hunt tiles {total} {open ? '▴' : '▾'}
+      </button>
+      {open && (
+        <div style={{ ...roster, maxHeight: 300, overflowY: 'auto', width: 300 }}>
+          <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5 }}>Drawn (out of the bag)</div>
+          {total === 0 && <div style={{ color: '#998', fontSize: 12, padding: '2px 6px' }}>No tiles drawn yet.</div>}
+          {[...drawn, ...specialsDrawn].map((s, i) => <div key={i} style={{ fontSize: 12, padding: '1px 6px' }}>{s}</div>)}
+          {inPlay.length > 0 && <>
+            <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 6 }}>Special tiles in play (enter the bag on Mordor)</div>
+            {inPlay.map((s, i) => <div key={i} style={{ fontSize: 12, padding: '1px 6px' }}>{s}</div>)}
+          </>}
+          {inPool.length > 0 && <>
+            <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 6 }}>Special tiles in the bag</div>
+            {inPool.map((s, i) => <div key={i} style={{ fontSize: 12, padding: '1px 6px' }}>{s}</div>)}
+          </>}
+          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Drawn standard tiles reshuffle back in when the bag empties.</div>
+        </div>
+      )}
+    </span>
+  );
+}
 
 // Deck type per card id (for the hand pill's Character/Strategy split).
 const CARD_DECK = new Map<string, string>((eventCards as { cards: { id: string; deck: string }[] }).cards.map((c) => [c.id, c.deck]));
@@ -162,6 +208,7 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { v
         🂠 FP {handSplit(view.cards?.fp?.hand)} · Shadow {handSplit(view.cards?.shadow?.hand)}
       </span>
       <DiscardBrowser view={view} onHoverCard={onHoverCard} />
+      <HuntTilesBrowser view={view} />
       <span style={pill} title="The three Elven Rings. Held by the Free Peoples; when the FP use one it flips to the Shadow (who may then use it once), after which it is spent.">
         Elven Rings:{' '}
         {view.elvenRings.map((r, i) => (

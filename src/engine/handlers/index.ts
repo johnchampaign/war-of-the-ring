@@ -69,11 +69,13 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
   }
   // Only this side's Characters move with its Army; an enemy Character sharing the
-  // region stays behind.
-  const movingChars = src.characters.filter((c) => characterSide(c) === side);
+  // region stays behind. Saruman never leaves Orthanc (character card) — a card-
+  // driven army move (Shadows Gather etc.) previously carried him out (report).
+  const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
   dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
   src.units = {}; src.leaders = 0; src.nazgul = 0;
-  src.characters = src.characters.filter((c) => characterSide(c) !== side);
+  src.characters = src.characters.filter((c) => !movingChars.includes(c));
+  for (const c of movingChars) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to; // keep the roster index honest
   captureIfEnemySettlement(state, to, side);
 }
 /** Force-place units into a region (a card that recruits in a NAMED region,
@@ -707,25 +709,45 @@ register('sh-str-04', {
 
 // --- Direct-damage event cards (roll dice -> hits on an Army) ----------------
 // The Ents Awake (Treebeard/Huorns/Entmoot): hit the Shadow Army in Orthanc.
+// Printed precondition is ONLY "Gandalf the White is in play and a Companion is in
+// Fangorn" — playable with Orthanc empty too (report: "it won't let me play the
+// card"), where the card text's other clause fires instead: "If Saruman is in
+// Orthanc without a Shadow Army, eliminate him."
 for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
   register(id, {
     canPlay: (state) => state.characters.entered.includes('gandalf-white')
-      && state.regions['fangorn']!.characters.some((c) => COMPANION_SET.has(c))
-      && armySide(state, 'orthanc') === 'shadow',
+      && state.regions['fangorn']!.characters.some((c) => COMPANION_SET.has(c)),
     apply(state) {
+      const orthanc = state.regions['orthanc']!;
+      const freeChar = () => {
+        // If Gandalf the White is in Fangorn or a Rohan region, the FP may play one more
+        // Character Event card without an Action die (consumed in the next playEvent).
+        const gw = charRegion(state, 'gandalf-white');
+        if (gw && (gw === 'fangorn' || REGIONS[gw]!.nation === 'rohan')) {
+          state.flags.fpFreeCharEventThisTurn = true;
+          log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event without a die');
+        }
+      };
+      if (armySide(state, 'orthanc') !== 'shadow') {
+        // No Shadow Army: Saruman alone in Orthanc is eliminated (card text).
+        if (orthanc.characters.includes('saruman')) {
+          orthanc.characters.splice(orthanc.characters.indexOf('saruman'), 1);
+          state.characters.eliminated.push('saruman');
+          delete state.characters.inPlay['saruman'];
+          log(state, null, 'event', 'The Ents Awake: Saruman is alone in Orthanc — eliminated');
+        } else {
+          log(state, null, 'event', 'The Ents Awake: Orthanc holds no Shadow Army — no effect');
+        }
+        freeChar();
+        return;
+      }
       // Snapshot Nazgûl + Minions before casualties: when the Army is destroyed the
       // card wants them eliminated with it — carried into the casualty follow-up.
-      const naz0 = state.regions['orthanc']!.nazgul;
-      const minionsHere = state.regions['orthanc']!.characters.filter((c) => MINIONS.includes(c));
+      const naz0 = orthanc.nazgul;
+      const minionsHere = orthanc.characters.filter((c) => MINIONS.includes(c));
       const hits = rollDice(state, 3, 4);
       log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on Orthanc`);
-      // If Gandalf the White is in Fangorn or a Rohan region, the FP may play one more
-      // Character Event card without an Action die (consumed in the next playEvent).
-      const gw = charRegion(state, 'gandalf-white');
-      if (gw && (gw === 'fangorn' || REGIONS[gw]!.nation === 'rohan')) {
-        state.flags.fpFreeCharEventThisTurn = true;
-        log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event without a die');
-      }
+      freeChar();
       // Shadow chooses how the Orthanc Army absorbs the hits (Regulars vs Elites);
       // if the Army is wiped, its Nazgûl recycle and its Minions are eliminated.
       queueOrApplyEventCasualties(state, 'shadow', 'orthanc', hits, { kind: 'entsAwake', region: 'orthanc', naz0, minions: minionsHere });

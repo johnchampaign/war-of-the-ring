@@ -375,6 +375,10 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     const arr = state.regions[r]!.characters;
     arr.splice(arr.indexOf('strider'), 1); arr.push('aragorn');
     state.characters.entered.push('aragorn');
+    // Re-key the on-map index too — the roster read a stale 'strider' at his old
+    // region after the crowning (player report).
+    delete state.characters.inPlay['strider'];
+    state.characters.inPlay['aragorn'] = r;
     log(state, null, 'muster', `Strider becomes Aragorn at ${r} (+1 FP die next turn)`);
   } else {
     if (!canBringGandalfWhite(state)) return false;
@@ -383,6 +387,8 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     if (grey) { const a = state.regions[grey]!.characters; a.splice(a.indexOf('gandalf-grey'), 1); }
     state.regions[target]!.characters.push('gandalf-white');
     state.characters.entered.push('gandalf-white');
+    delete state.characters.inPlay['gandalf-grey'];
+    state.characters.inPlay['gandalf-white'] = target;
     log(state, null, 'muster', `Gandalf the White enters at ${target} (+1 FP die next turn)`);
   }
   return true;

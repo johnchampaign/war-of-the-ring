@@ -389,6 +389,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               ⚠ {blockMsg}
             </div>
           )}
+          {/* The Ents Awake rider: one Character Event playable without a die. Surface
+              it — a player couldn't tell why a card was suddenly playable ("I didn't
+              have an [E] or [C] die left... so I did"). */}
+          {g.you === 'fp' && g.view.flags?.fpFreeCharEventThisTurn && (
+            <div style={{ color: '#bfe6bf', background: '#1d2f1d', border: '1px solid #3a5a3a', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', margin: '2px 8px', borderRadius: 6, flexShrink: 0 }}>
+              🌳 The Ents Awake: you may play ONE Character Event card without spending a die (your next Character-card play is free).
+            </div>
+          )}
           {sources.size > 0 && (
             <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px', flexShrink: 0 }}>
               {isCardSep
@@ -515,7 +523,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       {/* Floating "Peek board" toggle (top-left) — shown whenever a blocking choice
           modal (move picker / combat-hunt decision) covers the board; lives outside
           the hidden wrappers so it stays clickable while peeking. */}
-      {(!!moveDraft || g.legalActions.some(isDecisionAction)) && (
+      {(!!moveDraft || !!g.view.pendingCombat || g.legalActions.some(isDecisionAction)) && (
         <button onClick={() => setPeekBoard((p) => !p)}
           title="Temporarily hide this prompt to study the board, then click again to go back and choose"
           style={{ position: 'fixed', top: 10, left: 10, zIndex: 90, padding: '6px 12px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', boxShadow: '0 4px 16px #000a',
