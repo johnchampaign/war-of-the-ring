@@ -81,6 +81,8 @@ import mapData from '../../assets/map.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
 import { HuntIndicator } from './HuntIndicator';
+import { MordorTrack } from './MordorTrack';
+import { RingGlyph } from './RingIcon';
 import { charName } from './charInfo';
 
 // Characters render as small labelled discs near the region anchor so they're
@@ -221,6 +223,8 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
     {/* Always-visible Hunt status (top-right) — click for the full modifier breakdown. */}
     <HuntIndicator view={view} />
+    {/* The Mordor Track (bottom-right, only once the Ring-bearers are on it). */}
+    <MordorTrack view={view} />
     {/* Snap back to the default cropped view (also recovers from zoom/pan). */}
     <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 5, display: 'flex', gap: 6 }}>
       <button onClick={resetView} title="Reset view to the board crop"
@@ -386,15 +390,28 @@ function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number;
 }
 
 function FellowshipMarker({ view }: { view: GameState }) {
-  const poly = regionPolygon(view.fellowship.location);
+  const fs = view.fellowship;
+  const poly = regionPolygon(fs.location);
   if (!poly) return null;
   const anchor = clampToCrop(layoutTokensInPolygon(poly, 1, { tokenRadius: 9 }).anchor);
   const x = anchor.x - 12, y = anchor.y - 12;
+  // On the Mordor Track the figure has LEFT the map — it stands on the track, not
+  // on the entrance region. Keep a marker at the entrance so the route is readable,
+  // but stamp it with the step so it can't be misread as "still at Morannon".
+  const onTrack = fs.mordor !== null;
   return (
     <g>
-      <circle cx={anchor.x} cy={anchor.y} r={13} fill="#f2e6c2" stroke="#7a5a1e" strokeWidth={2} />
-      <text x={anchor.x} y={anchor.y + 5} fontSize={15} textAnchor="middle">💍</text>
-      {!view.fellowship.hidden && <circle cx={x + 24} cy={y} r={6} fill="#c0392b" stroke="#fff" strokeWidth={1} />}
+      <title>{onTrack ? `Ring-bearers — Mordor Track step ${fs.mordor}/5 (see the track, lower right)` : 'The Fellowship'}</title>
+      <circle cx={anchor.x} cy={anchor.y} r={13} fill="#f2e6c2" stroke="#7a5a1e" strokeWidth={2}
+        opacity={onTrack ? 0.5 : 1} />
+      <RingGlyph cx={anchor.x} cy={anchor.y} r={7} />
+      {onTrack && (
+        <g style={{ pointerEvents: 'none' }}>
+          <circle cx={x + 24} cy={y + 26} r={7.5} fill="#3a1410" stroke="#e3bf47" strokeWidth={1.4} />
+          <text x={x + 24} y={y + 29.5} fontSize={10} fontWeight="bold" fill="#e3bf47" textAnchor="middle">{fs.mordor}</text>
+        </g>
+      )}
+      {!fs.hidden && <circle cx={x + 24} cy={y} r={6} fill="#c0392b" stroke="#fff" strokeWidth={1} />}
     </g>
   );
 }

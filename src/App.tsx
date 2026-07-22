@@ -12,7 +12,7 @@ import { LoadArtPanel } from './play/LoadArtPanel';
 
 type Mode =
   | { kind: 'lobby' }
-  | { kind: 'local'; seed: number; scenario?: 'combat'; aiSide?: 'fp' | 'shadow' }
+  | { kind: 'local'; seed: number; scenario?: 'combat' | 'mordor'; aiSide?: 'fp' | 'shadow' }
   | { kind: 'online'; gameId: string; token: string };
 
 export function App() {
@@ -25,10 +25,10 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  const combatScenario = hash === '#combat';
+  const devScenario = hash === '#combat' ? 'combat' as const : hash === '#mordor' ? 'mordor' as const : null;
   const invite = readOnlineInvite();
   const [mode, setMode] = useState<Mode>(
-    combatScenario ? { kind: 'local', seed: 1, scenario: 'combat' }
+    devScenario ? { kind: 'local', seed: 1, scenario: devScenario }
       : invite ? { kind: 'online', gameId: invite.gameId, token: invite.token }
         : { kind: 'lobby' });
 

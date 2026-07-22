@@ -14,6 +14,7 @@ import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameClientApi, ViewResult } from './gameClient';
 import { applyCombatScenario } from '../devtabs/combatScenario';
+import { applyMordorScenario } from '../devtabs/mordorScenario';
 
 const other = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 const sideName = (s: Side): string => (s === 'fp' ? 'Free Peoples' : 'Shadow');
@@ -32,13 +33,14 @@ const drawTotal = (s: GameState): number =>
   (['fp', 'shadow'] as Side[]).reduce((n, side) => n + s.cards[side].draw.character.length + s.cards[side].draw.strategy.length, 0);
 const fingerprint = (s: GameState): string => `${s.rngState}|${drawTotal(s)}`;
 
-export function makeLocalClient(seed: number, opts: { scenario?: 'combat'; aiSide?: Side } = {}): GameClientApi {
+export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mordor'; aiSide?: Side } = {}): GameClientApi {
   let state: GameState = startGame(createGame({ seed }));
   if (opts.scenario === 'combat') state = applyCombatScenario(state);
+  if (opts.scenario === 'mordor') state = applyMordorScenario(state);
   const aiSide = opts.aiSide ?? null;          // the side the AI plays (null = hotseat)
   const human: Side = aiSide ? other(aiSide) : 'fp';
   // Best-effort play-count beacon, once when a local game starts (never throws/blocks).
-  if (opts.scenario !== 'combat') recordPlay('war-of-the-ring', aiSide ? 'ai' : 'hotseat');
+  if (!opts.scenario) recordPlay('war-of-the-ring', aiSide ? 'ai' : 'hotseat');
   const aiRng = new Rng(seed * 1000 + 7);      // independent tie-break RNG for the AI
 
   // Let the AI take every turn that is its own until control returns to the human
