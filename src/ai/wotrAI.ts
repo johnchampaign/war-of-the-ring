@@ -386,6 +386,14 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         const reduceCard = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'reduceCard');
         if (reduceCard) return reduceCard;
       }
+      // Gandalf gambit (playtester suggestion): on a meaty hit, sacrifice Gandalf
+      // the Grey as the casualty — it absorbs the damage AND unlocks Gandalf the
+      // White (a stronger piece + the die he brings). Only while Corruption is not
+      // yet critical (the sacrifice covers the whole hit regardless of his Level).
+      if (damage >= 2 && state.fellowship.guide === 'gandalf-grey' && wouldCorrupt < 10) {
+        const guide = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide');
+        if (guide) return guide;
+      }
       // Trade a Companion (random, to keep the Guide) only when Corruption is
       // about to get dangerous; otherwise absorb.
       if (wouldCorrupt >= 8 && state.fellowship.companions.length > 0) {

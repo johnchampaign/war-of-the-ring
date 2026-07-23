@@ -240,7 +240,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const data = state.pendingChoice!.data as { src: string; dest: string };
         const acts: WotrAction[] = [{ kind: 'armyMove2', done: true }];
         for (const [from, to] of moveTargets(state, actor)) {
-          if (from === data.src || from === data.dest) continue; // a different army
+          // Only the army that MOVED (now at data.dest) is barred. The stack left in
+          // data.src after a SPLIT is, per RAW p.27, "two different Armies" — its
+          // units never moved, so the die's second move may take it (player report:
+          // split Gorgoroth→Morannon, then couldn't move the remainder).
+          if (from === data.dest) continue;
           acts.push({ kind: 'armyMove2', from, to });
         }
         return acts;
@@ -684,6 +688,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const ri = state.elvenRings.indexOf(actor === 'fp' ? 'fp' : 'shadow');
       if (ri >= 0) state.elvenRings[ri] = actor === 'fp' ? 'shadow' : 'used';
       state.flags[actor === 'fp' ? 'fpUsedElvenRingThisTurn' : 'shadowUsedElvenRingThisTurn'] = true;
+      // PUBLIC log — the Ring flip and both dice pools are open information, and the
+      // opponent otherwise can't reconstruct the swap (player report: "used an elven
+      // ring to change the [E] to... something, but nothing is in the log").
+      log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} use an Elven Ring: a ${action.from} die becomes ${actor === 'shadow' && action.to === 'eye' ? 'an Eye (into the Hunt Box)' : `a ${action.to} die`}`);
       break; // free action — the player still acts this turn (no turn pass)
     }
     case 'forceDiscardCard': {
@@ -792,8 +800,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const data = state.pendingChoice!.data as { src: RegionId; dest: RegionId };
       state.pendingChoice = null;
       if (!action.done) {
-        // "Cannot move the same Army twice": the second move must be a different army.
-        if (action.from === data.dest || action.from === data.src) throw new Error('Cannot move the same army twice');
+        // "Cannot move the same Army twice": only the army that MOVED (at data.dest)
+        // is barred. A split's remainder at data.src is a DIFFERENT army (RAW p.27
+        // "An Army can split itself into two different Armies") and may move second.
+        if (action.from === data.dest) throw new Error('Cannot move the same army twice');
         const ok2 = action.move
           ? moveArmySplit(state, action.from!, action.to!, actor, action.move, false)
           : moveArmy(state, action.from!, action.to!, actor);
@@ -1079,10 +1089,13 @@ function recruitTargets(state: GameState, side: Side): WotrAction[] {
       if (side === 'fp' && fpLead >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 0, leader: 1, then: 'leader' });
     }
   }
-  // Shadow Nazgûl muster (Sauron Strongholds): up to 2 Nazgûl.
+  // Shadow Nazgûl muster (Sauron Strongholds): up to 2 Nazgûl — offered at EVERY
+  // eligible Stronghold, not just the first found (player report: clicking Minas
+  // Morgul / Morannon showed no Nazgûl option because only Barad-dûr carried it).
   if (side === 'shadow' && naz > 0) {
-    const sr = Object.keys(state.regions).find((r) => canRecruitNazgul(state, r));
-    if (sr) out.push({ kind: 'recruitUnit', nation: 'sauron', region: sr, regular: 0, elite: 0, nazgul: 1, then: 'leader' });
+    for (const sr of Object.keys(state.regions)) {
+      if (canRecruitNazgul(state, sr)) out.push({ kind: 'recruitUnit', nation: 'sauron', region: sr, regular: 0, elite: 0, nazgul: 1, then: 'leader' });
+    }
   }
   return out;
 }
