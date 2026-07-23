@@ -222,6 +222,18 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'attack': {
       const fromU = unitCount(state, a.from), toU = unitCount(state, a.to);
       if (fromU < toU) return -50;                                     // don't attack uphill
+      // Fortified targets (City first round, Stronghold siege every round) mean the
+      // attacker hits on 6s while the defender hits on 5s — a near-even force just
+      // bleeds. Require a real margin before assaulting a defended fortification.
+      const fortified = a.from !== a.to && !!REGIONS[a.to]!.settlement && REGIONS[a.to]!.settlement !== 'Town' && toU > 0;
+      if (fortified && fromU < toU * 2) return -40;
+      // Assault (from===to): the garrison is in the SIEGE BOX (toU counts ourselves);
+      // storming also hits on 6s vs the defender's 5s — same margin rule.
+      if (a.from === a.to) {
+        const box = state.regions[a.to]!.siegeBox;
+        const gar = box ? Object.values(box.units).reduce((s2, u) => s2 + (u?.regular ?? 0) + (u?.elite ?? 0), 0) : 0;
+        if (gar > 0 && fromU < gar * 2) return -40;
+      }
       return (fromU - toU) * 8 + REGIONS[a.to]!.vp * 25 + 25;
     }
     case 'bringUpgrade': return 70; // Aragorn / Gandalf the White: +1 FP die
