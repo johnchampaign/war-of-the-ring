@@ -75,7 +75,11 @@ export type WotrAction =
   // FP forces a Shadow "play on the table" card to be discarded (rulebook card text).
   // via 'will' spends a Will of the West die; 'ring' spends any die + one Elven Ring;
   // 'die' spends any die under the card's free condition. Only sh-char-21 / sh-str-03.
-  | { kind: 'forceDiscardCard'; cardId: string; via: 'will' | 'ring' | 'die'; die?: DieFace }
+  // Force-discard an opponent's on-table card per ITS printed clause. FP methods:
+  // 'will' / 'ring' / 'die' (Palantír, Denethor's Folly). Shadow method: 'cards' —
+  // any die + discard one Strategy AND one Character card from hand (A Power too
+  // Great / Tom Bombadil); the two hand cards are the player's explicit picks.
+  | { kind: 'forceDiscardCard'; cardId: string; via: 'will' | 'ring' | 'die' | 'cards'; die?: DieFace; discardStrategy?: string; discardCharacter?: string }
   // Move an independent character via a Character die: 'nazgul' (a region's
   // Nazgûl group), a Minion id, or a separated Companion id.
   // `count` (Nazgûl only) moves part of a stack; omit to move the whole group.

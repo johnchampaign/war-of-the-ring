@@ -69,6 +69,18 @@ export function fpForceDiscardMethods(s: GameState, cardId: string): FpForceDisc
 /** Card ids with an FP-triggered discard clause, enumerated by the adapter. */
 export const FP_FORCE_DISCARD_CARDS = ['sh-char-21', 'sh-str-03'];
 
+/** FP table cards the SHADOW can force-discard, per their printed italic clause
+ *  (card art, verbatim): "The Shadow player can force [this card] to be discarded
+ *  by using any one Action die result and discarding one Army Event card and one
+ *  Character Event card from his hand." ("Army Event card" is the card's legacy
+ *  deck name — the 2nd-edition Shadow decks are Character and Strategy.) */
+export const SH_FORCE_DISCARD_CARDS = ['fp-str-02', 'fp-str-03'];
+/** The regions the card bars the Shadow from (what a discard would unlock). */
+export const SH_FORCE_DISCARD_UNLOCKS: Record<string, RegionId[]> = {
+  'fp-str-02': POWER_TOO_GREAT,
+  'fp-str-03': TOM_BOMBADIL,
+};
+
 /** sh-char-15 "Worn with Sorrow and Toil": when a Companion in the Fellowship is
  *  taken as a casualty, the Shadow also discards an FP Character Event card. */
 export const wornWithSorrowActive = (s: GameState): boolean => onTable(s, 'shadow', 'sh-char-15');

@@ -27,7 +27,9 @@ export function describeAction(a: WotrAction): string {
     case 'changeGuide': return `Make ${charName(a.companion)} the Guide`;
     case 'companionMuster': return `${charName(a.companion)}: advance ${cap(a.nation)} (any die)`;
     case 'useElvenRing': return `Elven Ring: change a ${cap(a.from)} die to ${a.to === 'eye' ? 'an Eye (→ Hunt Box)' : cap(a.to)}`;
-    case 'forceDiscardCard': return `Discard "${cardName(a.cardId)}" (${a.via === 'will' ? 'Will of the West' : a.via === 'ring' ? 'Elven Ring + any die' : 'any die'})`;
+    case 'forceDiscardCard': return a.via === 'cards'
+      ? `Discard "${cardName(a.cardId)}" (any die + discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
+      : `Discard "${cardName(a.cardId)}" (${a.via === 'will' ? 'Will of the West' : a.via === 'ring' ? 'Elven Ring + any die' : 'any die'})`;
     case 'sarumanMuster': return a.mode === 'upgrade'
       ? 'Voice of Saruman: upgrade 2 Orthanc Regulars to Elites'
       : 'Voice of Saruman: recruit Isengard in every Settlement';

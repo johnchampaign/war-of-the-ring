@@ -16,6 +16,7 @@ import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf } from '../engine/data';
 import { unitCount, STACKING_LIMIT } from '../engine/armies';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
+import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
 
 const HEAL_EVENTS = new Set(['fp-char-09', 'fp-char-10', 'fp-char-12', 'fp-char-13']);
 const CORRUPT_EVENTS = new Set(['sh-char-08', 'sh-char-12']);
@@ -264,6 +265,14 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // report: "Return to Valinor for the top half is VERY weak").
       return 35 - combatCardValue(combatModsFor(a.cardId)) * 3;
     }
+    case 'forceDiscardCard':
+      // Shadow: burning a die + two hand cards to lift A Power too Great / Tom
+      // Bombadil is worth it ONLY when the ban actually blocks the campaign —
+      // i.e. our current march target is one of the barred regions.
+      if (actor === 'shadow' && a.via === 'cards') {
+        return target && (SH_FORCE_DISCARD_UNLOCKS[a.cardId] ?? []).includes(target) ? 45 : 1;
+      }
+      return 20; // FP: lifting Palantír / Denethor's Folly is generally good value
     case 'drawEvent': return 12;
     case 'skipDie': return 1;
     case 'pass': return 0;

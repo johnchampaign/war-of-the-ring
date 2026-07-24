@@ -621,7 +621,7 @@
         "text": "If your Combat roll or Leader re-roll scores at least one hit, score one additional hit."
       },
       "precondition": "Play on the table.",
-      "eventText": "Advance the Elven Nation one step on the Political Track. While this card is in play, the Shadow player cannot move an Army into or attack (either in a field battle or in a siege) Lórien, Rivendell or The Grey Havens.",
+      "eventText": "Advance the Elven Nation one step on the Political Track. While this card is in play, the Shadow player cannot move an Army into or attack (either in a field battle or in a siege) Lórien, Rivendell or The Grey Havens. The Shadow player can force this card to be discarded by using any one Action die result and discarding one Strategy (Army) Event card and one Character Event card from his hand.",
       "discardCondition": "The Shadow player can force \"A Power too Great\" to be discarded by using any one Action die result and discarding one Army Event card and one Character Event card from his hand."
     },
     {
@@ -645,7 +645,7 @@
         "text": "Subtract 1 from all dice on the Combat roll of the Shadow player (an unmodified '6' is still considered a hit for him)."
       },
       "precondition": "Play on the table.",
-      "eventText": "Advance the North Nation one step on the Political Track. While this card is in play, the Shadow player cannot move an Army into or attack The Old Forest, The Shire or Buckland.",
+      "eventText": "Advance the North Nation one step on the Political Track. While this card is in play, the Shadow player cannot move an Army into or attack The Old Forest, The Shire or Buckland. The Shadow player can force this card to be discarded by using any one Action die result and discarding one Strategy (Army) Event card and one Character Event card from his hand.",
       "discardCondition": "The Shadow player can force \"The Power of Tom Bombadil\" to be discarded by using any one Action die result and discarding one Army Event card and one Character Event card from his hand."
     },
     {

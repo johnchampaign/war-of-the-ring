@@ -17,7 +17,7 @@ import {
 import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
-import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS } from '../engine/persistent';
+import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
 import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide } from '../engine/data';
@@ -297,7 +297,14 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       // last-known position (the figure moves there; the player chooses — not a
       // forced march toward Mordor). The hidden Fellowship sneaks through anywhere,
       // including Shadow-Stronghold regions (Moria, Mordor), so no region is excluded.
-      if (fs.hidden && fs.mordor === null && fs.progress > 0) {
+      if (fs.hidden && fs.mordor === null) {
+        // Declaring IN PLACE is always legal — even at Progress 0 — and it's how the
+        // Fellowship rests: "If the Fellowship remains in a City or Stronghold for
+        // several turns, during the Fellowship phase of each turn it is possible to
+        // declare them in that region and heal one Corruption each time" (p.39).
+        // (Report: couldn't declare-to-heal at Minas Tirith with Progress 0 — the
+        // option was gated on Progress > 0 and never offered the current region.)
+        if (!MORDOR_INTERIOR.includes(fs.location)) acts.push({ kind: 'declareFellowship', target: fs.location });
         // The figure can be declared up to a Mordor entrance (Morannon / Minas Morgul)
         // but never into Mordor's interior — that strands it off the Mordor Track (report 681l).
         for (const r of regionsWithin(fs.location, fs.progress)) {
@@ -394,6 +401,22 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       if (actor === 'fp') {
         for (const cardId of FP_FORCE_DISCARD_CARDS) {
           for (const via of fpForceDiscardMethods(state, cardId)) acts.push({ kind: 'forceDiscardCard', cardId, via });
+        }
+      }
+      // Shadow may force-discard A Power too Great / Tom Bombadil per their printed
+      // clause: any one Action die + discard one Strategy AND one Character card from
+      // hand (card art verbatim; the OCR'd text had dropped the italic clause —
+      // player report: "impossible to get rid of when playing shadow"). One option
+      // per distinct Strategy×Character pair so the discards are the player's choice.
+      if (actor === 'shadow' && state.dice.shadow.length > 0) {
+        for (const cardId of SH_FORCE_DISCARD_CARDS) {
+          if (!state.cards.fp.table.includes(cardId)) continue;
+          const hand = state.cards.shadow.hand;
+          const strat = [...new Set(hand.filter((c) => EVENT_BY_ID[c]?.deck === 'Strategy'))];
+          const chars = [...new Set(hand.filter((c) => EVENT_BY_ID[c]?.deck === 'Character'))];
+          for (const s of strat) for (const c of chars) {
+            acts.push({ kind: 'forceDiscardCard', cardId, via: 'cards', discardStrategy: s, discardCharacter: c });
+          }
         }
       }
 
@@ -696,8 +719,31 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'forceDiscardCard': {
       requirePhase(state, 'actionResolution');
+      // SHADOW clause (A Power too Great / Tom Bombadil, card text verbatim): any
+      // one Action die + discard one Strategy and one Character card from hand.
+      if (actor === 'shadow') {
+        if (action.via !== 'cards' || !SH_FORCE_DISCARD_CARDS.includes(action.cardId)) throw new Error('That discard method is not available');
+        if (!state.cards.fp.table.includes(action.cardId)) throw new Error('Card is not on the table');
+        const hand = state.cards.shadow.hand;
+        const si = hand.indexOf(action.discardStrategy ?? '');
+        const ci2 = hand.indexOf(action.discardCharacter ?? '');
+        if (si < 0 || ci2 < 0 || EVENT_BY_ID[action.discardStrategy!]?.deck !== 'Strategy' || EVENT_BY_ID[action.discardCharacter!]?.deck !== 'Character')
+          throw new Error('Must discard one Strategy and one Character card from hand');
+        if (!consumePreferred(state, 'shadow', [...new Set(state.dice.shadow)], action.die)) throw new Error('No Action die');
+        // Remove the two hand cards (indices re-found after each splice) to their piles.
+        hand.splice(hand.indexOf(action.discardStrategy!), 1);
+        state.cards.shadow.discard.strategy.push(action.discardStrategy!);
+        hand.splice(hand.indexOf(action.discardCharacter!), 1);
+        state.cards.shadow.discard.character.push(action.discardCharacter!);
+        // The FP table card goes to the FP discard.
+        const ft = state.cards.fp.table;
+        ft.splice(ft.indexOf(action.cardId), 1);
+        state.cards.fp.discard[EVENT_BY_ID[action.cardId]?.deck === 'Character' ? 'character' : 'strategy'].push(action.cardId);
+        log(state, null, 'event', `Shadow forces ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId} to be discarded (an Action die + two cards from hand)`);
+        passResolutionTurn(state, actor); break;
+      }
       if (actor !== 'fp') throw new Error('Only the Free Peoples can force-discard a card');
-      if (!fpForceDiscardMethods(state, action.cardId).includes(action.via)) throw new Error('That discard method is not available');
+      if (action.via === 'cards' || !fpForceDiscardMethods(state, action.cardId).includes(action.via)) throw new Error('That discard method is not available');
       // Spend the die (the die IS the action, p.22): a Will die for 'will', else any die.
       if (action.via === 'will') {
         if (!consumeDie(state, 'fp', 'will')) throw new Error('No Will of the West die');
