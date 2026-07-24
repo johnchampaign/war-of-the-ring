@@ -171,8 +171,11 @@ die already showing an Eye.
   card can't trigger off itself; adapter `playEvent`/`eventTarget`), *Worn with Sorrow
   and Toil* (on a Fellowship-Companion casualty the Shadow discards an FP Character card,
   random from hand else from the table; hunt.ts `discardFpCharacterCard`), and *Wormtongue*
-  (`activateNation` gains a `trigger` arg so Rohan stays passive unless roused by an
-  appropriate Companion or an attack on/capture of Edoras/Helm's Deep; politics.ts).
+  (`activateNation` gains a `trigger` arg — carrying `viaAttack` — so Rohan stays passive
+  unless roused by an appropriate Companion or a genuine **attack** on Edoras/Helm's Deep;
+  politics.ts. A plain army move into those regions, or a walk-in occupation of an
+  undefended Edoras/Helm's Deep, is *not* an attack and no longer rouses Rohan — the
+  Wormtongue `viaAttack` flag is set only on the combat capture paths, `combat.ts`).
   **Deviation:** declaring the Fellowship in a region does not activate that Nation in this
   engine, so Wormtongue's "declared in Edoras/Helm's Deep" exception is moot. Worn with
   Sorrow's "you may" is auto-applied (always to the Shadow's benefit).

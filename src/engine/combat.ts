@@ -457,7 +457,7 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
   dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
   src.units = {}; src.leaders = 0; src.nazgul = 0;
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
-  captureIfEnemySettlement(state, to, attacker);
+  captureIfEnemySettlement(state, to, attacker, true); // a post-battle capture is an attack (Wormtongue)
   // If the advancing army was besieging `from`, vacating its field lifts that siege
   // (the boxed garrison returns to the field) — e.g. a besieger that wins a field
   // battle in an adjacent region and advances out (player report).
@@ -483,7 +483,7 @@ function finishCombat(state: GameState, advance: boolean): void {
   let captured = false, outcome: string;
   if (assault) {
     if (advance && defSurv === 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
-      captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker);
+      captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker, true);
       outcome = `${side(pc.attacker)} storm ${name}`;
     } else if (atkSurv === 0) { liftSiege(state, pc.to); outcome = `The assault on ${name} is thrown back — siege lifted`; }
     else outcome = `The siege of ${name} holds`;

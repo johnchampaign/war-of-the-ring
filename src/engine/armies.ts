@@ -287,7 +287,7 @@ export function removeStackUnit(state: GameState, id: RegionId, nation: Nation, 
   return true;
 }
 
-export function captureIfEnemySettlement(state: GameState, id: RegionId, side: Side): void {
+export function captureIfEnemySettlement(state: GameState, id: RegionId, side: Side, viaAttack = false): void {
   const def = REGIONS[id]!;
   if (!def.settlement) return;
   // A Stronghold under siege is still held by its boxed garrison — walking a second
@@ -324,7 +324,7 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
   }
   // A Fortification (Fords of Isen, Osgiliath) is NOT a Settlement, so capturing it
   // never advances the owning Nation's political track (rulebook p.36).
-  if (def.nation && def.settlement !== 'Fortification') onSettlementCaptured(state, def.nation, id);
+  if (def.nation && def.settlement !== 'Fortification') onSettlementCaptured(state, def.nation, id, viaAttack);
 }
 
 /** A siege ends the instant the besieger leaves the region's open field. If `id` is a

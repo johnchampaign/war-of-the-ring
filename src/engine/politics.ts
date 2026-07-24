@@ -10,7 +10,7 @@ export const isAtWar = (state: GameState, n: Nation): boolean => state.nations[n
 
 /** Activate a Nation. `trigger` carries the activation source so persistent cards
  *  (Wormtongue) can veto it; default (no trigger) is a generic activation. */
-export function activateNation(state: GameState, n: Nation, trigger: { region?: RegionId; viaCompanion?: boolean } = {}): void {
+export function activateNation(state: GameState, n: Nation, trigger: { region?: RegionId; viaCompanion?: boolean; viaAttack?: boolean } = {}): void {
   if (!wormtongueAllowsActivation(state, n, trigger)) return; // Wormtongue: Rohan stays passive
   if (!state.nations[n].active) {
     state.nations[n].active = true;
@@ -29,15 +29,18 @@ export function advancePolitical(state: GameState, n: Nation, steps = 1): void {
   }
 }
 
-/** Automatic political reaction when a nation's army is attacked (in `region`). */
+/** Automatic political reaction when a nation's army is attacked (in `region`). An
+ *  attack is the only army trigger that can rouse Rohan while Wormtongue is in play. */
 export function onArmyAttacked(state: GameState, n: Nation, region?: RegionId): void {
-  activateNation(state, n, { region });
+  activateNation(state, n, { region, viaAttack: true });
   advancePolitical(state, n, 1);
 }
 
-/** Automatic reaction when one of a nation's Settlements (in `region`) is captured. */
-export function onSettlementCaptured(state: GameState, n: Nation, region?: RegionId): void {
-  activateNation(state, n, { region });
+/** Automatic reaction when one of a nation's Settlements (in `region`) is captured.
+ *  `viaAttack` distinguishes a battle capture (an attack — can rouse Rohan under
+ *  Wormtongue) from a walk-in occupation of an undefended Settlement (which cannot). */
+export function onSettlementCaptured(state: GameState, n: Nation, region?: RegionId, viaAttack = false): void {
+  activateNation(state, n, { region, viaAttack });
   advancePolitical(state, n, 1);
 }
 

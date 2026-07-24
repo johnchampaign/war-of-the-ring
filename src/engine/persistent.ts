@@ -77,10 +77,14 @@ export const wornWithSorrowActive = (s: GameState): boolean => onTable(s, 'shado
  *  Companion, the Fellowship being declared in Edoras/Helm's Deep, or an attack on
  *  Edoras/Helm's Deep. Given an activation trigger, may it activate Rohan? */
 export function wormtongueAllowsActivation(
-  s: GameState, n: string, opts: { region?: RegionId; viaCompanion?: boolean },
+  s: GameState, n: string, opts: { region?: RegionId; viaCompanion?: boolean; viaAttack?: boolean },
 ): boolean {
   if (n !== 'rohan' || !onTable(s, 'shadow', 'sh-char-22')) return true;
-  return !!opts.viaCompanion || opts.region === 'edoras' || opts.region === 'helms-deep';
+  // Only an appropriate Companion, or an ATTACK on Edoras/Helm's Deep, rouses Rohan.
+  // A plain army move into those regions (or a walk-in capture of an undefended one)
+  // is not an attack, so it must not activate Rohan (player report).
+  if (opts.viaCompanion) return true;
+  return !!opts.viaAttack && (opts.region === 'edoras' || opts.region === 'helms-deep');
 }
 
 // --- Cease-to-be-met discards (rulebook p.22) ---------------------------------
