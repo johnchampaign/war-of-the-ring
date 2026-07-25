@@ -31,27 +31,30 @@ export function canBringMinion(state: GameState, minion: Minion): boolean {
   }
 }
 
-/** A valid placement region for a minion, or null. */
-export function entryRegion(state: GameState, minion: Minion): RegionId | null {
-  if (minion === 'saruman') return settlementController(state, 'orthanc') === 'shadow' ? 'orthanc' : null;
+/** EVERY valid placement region for a minion — the placement is the SHADOW
+ *  PLAYER'S choice (player report: the Witch-king auto-appeared in Angmar; his
+ *  card says "any region with a Shadow Army that includes at least one Sauron
+ *  unit"). Saruman's card names Orthanc, so his list is a single region. */
+export function entryRegions(state: GameState, minion: Minion): RegionId[] {
+  if (minion === 'saruman') return settlementController(state, 'orthanc') === 'shadow' ? ['orthanc'] : [];
   if (minion === 'witch-king') {
-    for (const id of Object.keys(state.regions)) {
-      if (armySide(state, id) === 'shadow' && hasSauronUnit(state, id)) return id;
-    }
-    return null;
+    return Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow' && hasSauronUnit(state, id));
   }
   // Mouth of Sauron: any unconquered Sauron Stronghold.
-  for (const id of Object.keys(state.regions)) {
+  return Object.keys(state.regions).filter((id) => {
     const def = REGIONS[id]!;
-    if (def.settlement === 'Stronghold' && def.nation === 'sauron' && settlementController(state, id) === 'shadow') return id;
-  }
-  return null;
+    return def.settlement === 'Stronghold' && def.nation === 'sauron' && settlementController(state, id) === 'shadow';
+  });
+}
+/** A valid placement region for a minion, or null (existence check). */
+export function entryRegion(state: GameState, minion: Minion): RegionId | null {
+  return entryRegions(state, minion)[0] ?? null;
 }
 
 /** Place a minion into play in `region` (must satisfy its condition). */
 export function bringMinion(state: GameState, minion: Minion, region: RegionId): boolean {
   if (!canBringMinion(state, minion)) return false;
-  if (region !== entryRegion(state, minion) && minion !== 'mouth-of-sauron' && minion !== 'witch-king') return false;
+  if (!entryRegions(state, minion).includes(region)) return false; // must be a REAL candidate, whichever minion
   state.characters.entered.push(minion);
   // Track the minion in `inPlay` (charId → region), same as separated Companions.
   // Without this the "On the map" roster never lists Minions (player couldn't find

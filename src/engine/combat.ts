@@ -734,7 +734,7 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
     r.siegeBox = { units: r.units, leaders: r.leaders, nazgul: r.nazgul, characters: r.characters };
     r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = [];
     capSiegeBox(state, pc.to); // a besieged Stronghold's garrison is at most 5 (rulebook p.31)
-    moveStack(state, pc.from, pc.to, pc.attacker); // besieger occupies the open field (no capture — garrison holds the Settlement)
+    moveStack(state, pc.from, pc.to, pc.attacker, false); // besieger occupies the open field (NO capture — the boxed garrison holds the Settlement)
     r.besieged = true;
     log(state, null, 'combat', `${pc.defender} withdraws into the siege at ${pc.to}; ${pc.attacker} besieges`);
     // The rearguard rejoins `from`; record the siege as established; resume the turn.
@@ -784,7 +784,11 @@ export const retreatDestinations = (state: GameState): RegionId[] => {
   const pc = state.pendingCombat;
   return pc ? freeAdjacentRegions(state, pc.to, pc.defender) : [];
 };
-function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side): void {
+/** `capture`: a retreat that ENTERS an undefended enemy Settlement captures it
+ *  (p.32: "captured when an enemy Army enters" — any movement counts; player
+ *  report: a Shadow army retreated into Pelargir without taking it). The one
+ *  NON-capturing use is siege entry, where the boxed garrison still holds. */
+function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side, capture = true): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
   for (const n of Object.keys(src.units) as Nation[]) {
     const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
@@ -796,6 +800,7 @@ function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side): 
   dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
   src.units = {}; src.leaders = 0; src.nazgul = 0;
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
+  if (capture) captureIfEnemySettlement(state, to, side);
 }
 
 export const canRetreat = (state: GameState): boolean => retreatRegion(state, state.pendingCombat!) !== null;

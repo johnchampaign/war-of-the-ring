@@ -519,6 +519,7 @@ function retreatShadowStack(state: GameState, from: RegionId, to: RegionId): voi
   src.characters = src.characters.filter((c) => COMPANION_SET.has(c));
   dst.characters.push(...minions);
   for (const c of minions) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
+  captureIfEnemySettlement(state, to, 'shadow'); // a retreat that ENTERS an undefended enemy Settlement captures it (p.32)
 }
 /** Destroy the Shadow army at `region` — units recycle to reinforcements, Nazgûl
  *  return to the Sauron pool, Minions are eliminated (Dead Men's "if it cannot

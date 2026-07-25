@@ -18,7 +18,7 @@ import { startBattle, attackError, attackTargets, resolveCasualties, applyCasual
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
-import { canBringMinion, entryRegion, bringMinion, MINION_IDS } from '../engine/minions';
+import { canBringMinion, entryRegions, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
@@ -377,7 +377,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         acts.push(...recruitTargets(state, actor));
         if (actor === 'shadow') {
           for (const m of MINION_IDS) {
-            if (canBringMinion(state, m)) { const r = entryRegion(state, m); if (r) acts.push({ kind: 'bringMinion', minion: m, region: r }); }
+            // One option PER candidate region — placement is the player's choice
+            // (the Witch-king: 'any region with a Shadow Army that includes at
+            // least one Sauron unit'; report: he auto-appeared in Angmar).
+            if (canBringMinion(state, m)) for (const r of entryRegions(state, m)) acts.push({ kind: 'bringMinion', minion: m, region: r });
           }
           acts.push(...sarumanMusterOptions(state));
         }

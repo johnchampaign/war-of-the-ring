@@ -426,7 +426,10 @@ function discardFpCharacterCard(state: GameState): void {
     const pick = withRng(state, (rng) => rng.pick(handChars));
     cards.hand.splice(cards.hand.indexOf(pick), 1);
     cards.discard.character.push(pick);
-    log(state, null, 'event', `Worn with Sorrow and Toil: FP discards a Character card (${pick})`);
+    // Name the card and make it hoverable — "(fp-char-13)" read as a mystery
+    // disappearance (player report: "two cards in my hand disappeared").
+    log(state, null, 'event', `Worn with Sorrow and Toil: the Companion casualty costs the Free Peoples a Character card — ${EVENT_BY_ID[pick]?.name ?? pick} is discarded`);
+    state.log[state.log.length - 1]!.card = pick;
     return;
   }
   const ti = cards.table.findIndex(isChar);

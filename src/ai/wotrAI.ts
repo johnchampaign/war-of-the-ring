@@ -238,7 +238,7 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       return (fromU - toU) * 8 + REGIONS[a.to]!.vp * 25 + 25;
     }
     case 'bringUpgrade': return 70; // Aragorn / Gandalf the White: +1 FP die
-    case 'bringMinion': return 55; // +1 die and a strong leader — high tempo
+    case 'bringMinion': return 55 - (target ? Math.min(10, dist(a.region, target)) : 0); // +1 die and a strong leader — placed toward the front
     case 'recruitUnit': return recruitScore(state, actor, a, target); // build the war stacks WHERE THEY MATTER
     case 'moveArmy': return armyMoveScore(state, actor, a.from, a.to, target);
     case 'moveCharacter': return moveCharacterScore(state, actor, a); // reposition Nazgûl/Companions

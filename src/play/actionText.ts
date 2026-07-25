@@ -45,7 +45,7 @@ export function describeAction(a: WotrAction): string {
     }
     case 'recruitSecond':
       return a.done ? 'Muster: no second figure' : `Muster 2nd: ${a.figure === 'leader' ? 'Leader/Nazgûl' : 'Regular'}${a.nation ? ` ${cap(a.nation)}` : ''} in ${rName(a.region!)}`;
-    case 'bringMinion': return `Bring ${charName(a.minion)} into play`;
+    case 'bringMinion': return `Bring ${charName(a.minion)} into play in ${rName(a.region)}`;
     case 'eventTarget': {
       if (a.done) return `${cardName(a.card)}: done`;
       // Fellowship hide/move/decline choice (There Is Another Way).
