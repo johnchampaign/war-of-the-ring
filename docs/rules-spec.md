@@ -331,14 +331,34 @@ Attacking an already-besieged Stronghold is a **siege assault** (`pc.siege`):
 attacker hits on 6 every round, the defender cannot retreat, and the assault is
 **round-capped** (`siegeRoundsLeft`, default 1) — after the cap the battle ends with
 the siege still standing. Capturing (garrison destroyed) clears `besieged` and flips
-control; the siege also lifts if the attacker is wiped. **Deviations:** (1) no
-dual-occupancy — the besieger stays in its own region rather than occupying the open
-ground (`besieged` flags "an adjacent enemy is besieging"); the withdraw choice is
-offered once, pre-battle, not before every round. (2) Extending a siege by reducing
-an Elite→Regular is not modelled (only the 1-round default and the card-driven
-3-round assault exist). *Grond* (sh-char-20) / *The Fighting Uruk-hai* (sh-str-02)
-set `siegeRounds:3` + `fpCardLock` (FP gets no Combat card in siege round 0 unless a
-Companion is in the Stronghold). Sortie / relieve-by-outside-army are not yet modelled.
+control; the siege also lifts if the attacker is wiped. On withdrawal the besieger
+**advances into the region's open field** (`resolveSiegeWithdraw` `moveStack`s it in,
+without capturing — the boxed garrison still holds the Settlement), so an assault has
+`from === to`. Extending the assault by reducing an Elite→Regular **is** modelled as a
+real choice (`siegeExtend`, offered whenever the attacker still has an Elite).
+*Grond* (sh-char-20) / *The Fighting Uruk-hai* (sh-str-02) set `siegeRounds:3` +
+`fpCardLock` (FP gets no Combat card in siege round 0 unless a Companion is in the
+Stronghold).
+
+**Relieving a siege (p.32) — modelled.** An outside army attacking into a besieged
+region fights the besieger in the open as a normal field battle (`startBattle`'s
+`assault` needs `from === to`, so a relief attack isn't one); the boxed garrison takes
+no part (`defForce` returns the region, not the box). When the besieger is destroyed or
+retreats, `finishCombat` lifts the siege (the garrison returns to the field) and then
+asks the reliever, via a `relieveAdvance` PendingChoice, whether to march in — p.32
+permits the advance only once the besieging Army "is destroyed or retreats," and p.31
+makes it optional ("**may** immediately move"). Declining is a real option: the region
+is friendly, so there's nothing to capture, and joining the freed garrison can breach
+the 10-unit limit (the advance chains into the normal `removeExcess` prompt). The
+rearguard is restored to the origin region **after** the advance resolves, so it never
+gets swept along (p.28). Covered by `scripts/probe-relief-advance.mjs`.
+**Deviation:** RAW advances "all or part" of the Army; this advances all of it, matching
+the field battle's advance — partial commitment is available before the battle via the
+rearguard split (p.28).
+
+**Still not modelled:** the **sortie** (p.32 — a besieged army attacking the besiegers),
+and retreating into siege *mid-battle* (p.31 lets the defender choose before every combat
+round; the `siegeWithdraw` choice is offered once, pre-battle).
 
 ### Capturing a settlement (p.32)
 Captured when an enemy army enters a region with a City / Town / unoccupied

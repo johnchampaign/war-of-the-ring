@@ -488,6 +488,9 @@ function finishCombat(state: GameState, advance: boolean): void {
   // and (p.31) ends any siege, since an Army was completely eliminated.
   const mutualWipe = atkSurv === 0 && defSurv === 0;
   let captured = false, outcome: string;
+  // Set when a relieving Army has earned the right to march into the freed region
+  // (asked once the battle is fully wrapped up — see the end of this function).
+  let reliefAdvance: { from: RegionId; to: RegionId; owner: Side } | null = null;
   if (assault) {
     if (advance && defSurv === 0 && atkSurv > 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
       captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker, true);
@@ -499,6 +502,12 @@ function finishCombat(state: GameState, advance: boolean): void {
     else outcome = `The siege of ${name} holds`;
   } else if (box && advance && defSurv === 0) { // RELIEF: the besieger (defender here) is wiped → garrison reoccupies
     liftSiege(state, pc.to); outcome = `The siege of ${name} is lifted`;
+    // p.32: a relieving Army "cannot advance into the region containing the Stronghold
+    // unless the besieging Army is destroyed or retreats" — it just was, so the advance
+    // is open, and p.31 makes it optional ("may immediately move"). It's a real choice:
+    // the region is already friendly, so there's nothing to capture, and piling onto the
+    // freed garrison can push the stack over the 10-unit limit. Ask, don't assume.
+    if (atkSurv > 0) reliefAdvance = { from: pc.from, to: pc.to, owner: pc.attacker };
   } else { // normal field battle
     captured = advance && defSurv === 0 && atkSurv > 0;
     outcome = captured ? `${side(pc.attacker)} take ${name}`
@@ -513,7 +522,11 @@ function finishCombat(state: GameState, advance: boolean): void {
     defLosses: Math.max(0, (pc.defUnits0 ?? defSurv) - defSurv),
     captured, siege: !!pc.siege, outcome,
   });
-  if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
+  // The rearguard takes no part in the battle and never advances (p.28). When a relief
+  // advance is still to be answered it must therefore stay held aside — restoring it
+  // into `from` now would let advanceInto sweep it along. resolveRelieveAdvance puts it
+  // back once the advance has (or hasn't) happened, matching the field battle's ordering.
+  if (pc.rearguard && !reliefAdvance) restoreRearguard(state, pc.from, pc.rearguard);
   state.lastBattle = {
     seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
     atkLosses: Math.max(0, (pc.atkUnits0 ?? atkSurv) - atkSurv), defLosses: Math.max(0, (pc.defUnits0 ?? defSurv) - defSurv),
@@ -522,6 +535,36 @@ function finishCombat(state: GameState, advance: boolean): void {
   const opp = other(pc.attacker);
   state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;
   state.pendingCombat = null;
+  // Asked after the battle is fully wrapped up — the advance is an End of Battle step
+  // (p.31), so pendingCombat is already clear; currentActor follows pendingChoice.owner.
+  if (reliefAdvance) {
+    state.pendingChoice = {
+      owner: reliefAdvance.owner, kind: 'relieveAdvance',
+      data: { from: reliefAdvance.from, to: reliefAdvance.to, rearguard: pc.rearguard ?? null },
+    };
+  }
+}
+
+/** Resolve the relieving Army's optional End of Battle advance into the region whose
+ *  siege it just broke (p.31 "may immediately move"; p.32 permits it once the besieging
+ *  Army is destroyed or retreats). Returns the region advanced into, so the caller can
+ *  run the over-stack check — the freed garrison is back on the field, so the combined
+ *  stack can exceed 10 (p.26). Returns null when the Army holds its ground.
+ *  DEVIATION (documented in docs/rules-spec.md): RAW advances "all or part" of the Army;
+ *  this moves all of it, matching the field battle's advance. Splitting is available
+ *  before the battle via the rearguard (p.28). */
+export function resolveRelieveAdvance(state: GameState, advance: boolean): RegionId | null {
+  const d = state.pendingChoice!.data as { from: RegionId; to: RegionId; rearguard: PendingCombat['rearguard'] | null };
+  const owner = state.pendingChoice!.owner;
+  const who = owner === 'fp' ? 'Free Peoples' : 'Shadow';
+  state.pendingChoice = null;
+  if (advance) advanceInto(state, owner, d.from, d.to);
+  log(state, null, 'combat', advance
+    ? `${who} advance into ${REGIONS[d.to]!.name ?? d.to}, relieving the siege`
+    : `${who} hold at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
+  // Only now — the rearguard must not be swept along by the advance (p.28).
+  if (d.rearguard) restoreRearguard(state, d.from, d.rearguard);
+  return advance ? d.to : null;
 }
 
 /** Drive the combat sub-machine until it needs a decision (sets pendingChoice)

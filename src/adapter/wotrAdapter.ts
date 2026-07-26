@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
+import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
@@ -147,6 +147,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'siegeWithdraw', withdraw: true }, { kind: 'siegeWithdraw', withdraw: false }];
       case 'siegeExtend':
         return [{ kind: 'siegeExtend', extend: true }, { kind: 'siegeExtend', extend: false }];
+      case 'relieveAdvance':
+        return [{ kind: 'relieveAdvance', advance: true }, { kind: 'relieveAdvance', advance: false }];
       case 'whiteRider':
         return [{ kind: 'whiteRider', forfeit: true }, { kind: 'whiteRider', forfeit: false }];
       case 'balrog':
@@ -926,6 +928,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'siegeWithdraw', actor); resolveSiegeWithdraw(state, action.withdraw); break;
     case 'siegeExtend':
       requireChoice(state, 'siegeExtend', actor); resolveSiegeExtend(state, action.extend); break;
+    case 'relieveAdvance': {
+      requireChoice(state, 'relieveAdvance', actor);
+      const to = resolveRelieveAdvance(state, action.advance);
+      // The freed garrison is back on the field, so the advance can breach the 10-unit
+      // limit (p.26). `none`: finishCombat already handed the resolution turn over.
+      if (to) afterMove(state, actor, to, { kind: 'none' });
+      break;
+    }
     case 'whiteRider':
       requireChoice(state, 'whiteRider', actor); resolveWhiteRider(state, action.forfeit); break;
     case 'crebain':
@@ -1178,7 +1188,7 @@ function recruitSecondTargets(state: GameState, side: Side, _figure: 'regular' |
 
 // What happens once a move (and any over-stack removal) is fully resolved: either
 // offer the Army die's optional second move, or pass the resolution turn.
-type MoveNext = { kind: 'armyMove2'; src: RegionId; dest: RegionId } | { kind: 'pass' };
+type MoveNext = { kind: 'armyMove2'; src: RegionId; dest: RegionId } | { kind: 'pass' } | { kind: 'none' };
 
 /** After a move lands, prompt to remove any units over the 10-stacking limit
  *  (rulebook p.26) before continuing; otherwise continue immediately. */
@@ -1192,6 +1202,7 @@ function afterMove(state: GameState, actor: Side, to: RegionId, next: MoveNext):
 
 function applyMoveNext(state: GameState, actor: Side, next: MoveNext): void {
   if (next.kind === 'armyMove2') state.pendingChoice = { owner: actor, kind: 'armyMove2', data: { src: next.src, dest: next.dest } };
+  else if (next.kind === 'none') return; // caller already settled whose turn it is (post-battle advance)
   else passResolutionTurn(state, actor);
 }
 

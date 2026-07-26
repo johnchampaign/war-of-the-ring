@@ -451,6 +451,15 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const press = !!pc && !!box && unitCount(state, pc.from) >= garrison + 2;
       return legal.find((a) => a.kind === 'siegeExtend' && a.extend === press) ?? legal[0]!;
     }
+    case 'relieveAdvance': {
+      // Reliever: march into the Stronghold we just freed, so the two forces defend as
+      // one behind its walls — but not if the combined stack would breach the 10-unit
+      // limit, since the excess is destroyed outright for no gain (nothing is captured
+      // here; the region was friendly all along).
+      const d = state.pendingChoice!.data as { from: RegionId; to: RegionId };
+      const join = unitCount(state, d.from) + unitCount(state, d.to) <= STACKING_LIMIT;
+      return legal.find((a) => a.kind === 'relieveAdvance' && a.advance === join) ?? legal[0]!;
+    }
     case 'lureChoice': {
       // FP: absorb as Corruption unless that nears death — then sacrifice the Companion.
       const level = (state.pendingChoice!.data as { level: number }).level;
