@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, liftSiegeIfAbandoned, type Force, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, liftSiegeIfAbandoned, mergeForceInto, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods } from './combatCards';
@@ -536,7 +536,9 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
 /** Move the boxed garrison back into the region's open field (siege lifted). */
 function liftSiege(state: GameState, id: RegionId): void {
   const r = state.regions[id]!, box = r.siegeBox; if (!box) return;
-  r.units = box.units; r.leaders = box.leaders; r.nazgul = box.nazgul; r.characters = box.characters;
+  // MERGE, never assign — see mergeForceInto: the open field can already hold friendly
+  // figures, and overwriting `r.units` deletes them outright.
+  mergeForceInto(state, id, box);
   delete r.siegeBox; r.besieged = false;
 }
 

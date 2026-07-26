@@ -337,7 +337,26 @@ export function liftSiegeIfAbandoned(state: GameState, id: RegionId): void {
   const garrison = settlementController(state, id); // the boxed defenders' side
   const besieger: Side = garrison === 'fp' ? 'shadow' : 'fp';
   if (armySide(state, id) === besieger) return; // besieger still holds the field — siege continues
-  r.units = r.siegeBox.units; r.leaders = r.siegeBox.leaders; r.nazgul = r.siegeBox.nazgul; r.characters = r.siegeBox.characters;
+  mergeForceInto(state, id, r.siegeBox);
   delete r.siegeBox; r.besieged = false;
   log(state, null, 'combat', `the siege of ${REGIONS[id]!.name ?? id} is lifted — its garrison returns to the field`);
+}
+
+/** Merge a Force's figures INTO a region, additively.
+ *  A returning garrison MUST be merged, never assigned: the open field can already
+ *  hold friendly figures (the besieger having left, or a stale `besieged` flag with
+ *  friendly units walked back in), and `r.units = box.units` silently deletes them.
+ *  That was a real units-vanishing bug — a split move that left a one-unit garrison
+ *  behind in a stale-besieged Stronghold saw that unit overwritten by the returning
+ *  box, along with any Leaders standing with it. */
+export function mergeForceInto(state: GameState, id: RegionId, f: Force): void {
+  const r = state.regions[id]!;
+  for (const n of Object.keys(f.units) as Nation[]) {
+    const u = f.units[n]!;
+    if (u.regular + u.elite === 0) continue;
+    const d = r.units[n] ?? { regular: 0, elite: 0 };
+    d.regular += u.regular; d.elite += u.elite; r.units[n] = d;
+  }
+  r.leaders += f.leaders; r.nazgul += f.nazgul;
+  for (const c of f.characters) if (!r.characters.includes(c)) r.characters.push(c);
 }
