@@ -120,7 +120,7 @@ function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']
   return (
     <div style={{ borderBottom: '1px solid #443', paddingBottom: 8 }}>
       <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1 }}>
-        {pc.fortified ? '⚔ Siege' : '⚔ Battle'} — Round {pc.round + 1}
+        {pc.siege ? '⚔ Siege' : '⚔ Battle'} — Round {pc.round + 1}
       </div>
       <div style={{ fontSize: 15, marginTop: 2 }}>
         <b style={{ color: pc.attacker === 'fp' ? '#7fb6e6' : '#e6857f' }}>{sideName(pc.attacker)}</b> attacks{' '}

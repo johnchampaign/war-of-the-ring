@@ -410,9 +410,13 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   if (assault) for (const n of Object.keys(box!.units) as Nation[]) if ((box!.units[n]!.regular + box!.units[n]!.elite) > 0) onArmyAttacked(state, n, to);
   const pc: PendingCombat = {
     attacker, defender, from, to, round: 0,
-    // A sortie forfeits the Stronghold's protection — "both Armies scoring hits on a
-    // '5' or higher" (p.32) — so it is explicitly NOT fortified.
-    fortified: !sortie && (dReg.settlement === 'City' || dReg.settlement === 'Fortification' || dReg.settlement === 'Stronghold'),
+    // `fortified` means ONLY "this Settlement grants the first-round 6-to-hit", which
+    // RAW p.31 gives to a City or Fortification and NOT to a Stronghold: "Attacking a
+    // Stronghold … Fighting a Field Battle — a field battle is resolved normally as
+    // described before." A Stronghold's protection is the retreat-into-siege option,
+    // not a to-hit penalty. (The siege battle's own every-round 6+ is p.32 and comes
+    // from `pc.siege`; a sortie forfeits everything and is neither.)
+    fortified: !sortie && (dReg.settlement === 'City' || dReg.settlement === 'Fortification'),
     step: 'attackerCard', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0,
     defDicePenalty: opts.defenderDicePenalty,
     atkUnits0: sortie ? forceUnitCount(box!) : unitCount(state, from),
@@ -763,7 +767,7 @@ export function combatStep(state: GameState): void {
         // battle, and EVERY round of a siege assault. A sortie forfeits the
         // Stronghold's protection entirely (p.32: "both Armies scoring hits on a
         // '5' or higher"), which `fortified: false` already encodes.
-        const atkTarget = pc.fortified && (pc.siege || pc.round === 0) ? 6 : 5;
+        const atkTarget = (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
         const aRoll: CombatRoll = { dice: [], rerolls: [], target: atkTarget };
         const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, pc.whiteRiderForfeit, aRoll,
           pc.boxed === pc.attacker ? state.regions[pc.from]!.siegeBox : undefined);
@@ -1043,7 +1047,10 @@ function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): 
   if (has('Strider/Aragorn')) return fpChars.includes('strider') || fpChars.includes('aragorn');
   if (has('Gandalf is in the battle')) return fpChars.includes('gandalf-grey') || fpChars.includes('gandalf-white');
   if (has('Hobbit')) return fpChars.some((c) => HOBBIT_IDS.has(c));
-  if (has('defending in a field battle')) return pc.defender === 'fp' && !pc.fortified;
+  // "Field battle" is RAW's term for any battle that is not a SIEGE battle (p.31 calls
+  // the Stronghold's stand-and-fight option exactly that), so this keys on pc.siege —
+  // not pc.fortified, which now only marks the City/Fortification to-hit penalty.
+  if (has('defending in a field battle')) return pc.defender === 'fp' && !pc.siege;
   return true;
 }
 

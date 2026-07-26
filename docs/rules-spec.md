@@ -310,6 +310,18 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
 
 ### Fortifications & Cities (p.31)
 First combat round only: attacker hits on **6+** (instead of 5+). Then normal.
+This applies to a **City or Fortification ONLY** — p.31 gives Strongholds their own
+section, and its *Fighting a Field Battle* clause says "a field battle is resolved
+**normally** as described before." A Stronghold therefore grants **no to-hit penalty in a
+field battle**; its protection is the retreat-into-siege option, and the 6+ that does
+apply every round of a *siege battle* is p.32's, keyed on `pc.siege`. `pc.fortified` means
+only "this Settlement grants the first-round 6-to-hit" and is set for City/Fortification
+alone. (It previously included Stronghold, which wrongly handed the attacker a 6+ round 0
+in a Stronghold field battle — and handed the same shield to a **besieger standing in the
+open** when a relieving army attacked it.) "Defending in a field battle" combat-card
+preconditions key on `!pc.siege`, RAW's actual sense of the term.
+Locked down by `scripts/probe-tohit.mjs`, which pins all five cases: City field battle,
+Stronghold field battle, siege assault, relief, and sortie.
 
 ### Strongholds & sieges (p.31–32)
 Attacking a Stronghold: before each combat round defender chooses **field battle**
