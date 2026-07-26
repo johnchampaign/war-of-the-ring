@@ -291,6 +291,12 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
    Elite→Regular (replacement); for every 2 hits may instead remove 1 Elite (p.30).
    Attacker chooses his removals first (p.30). FP casualties are permanent &
    stored away from reinforcements; SH casualties recycle (p.30).
+   **Casualties are simultaneous** — p.30 fixes only the *decision* order ("the
+   attacker decides first"), and p.31 names "one **or both** Armies are completely
+   eliminated" as an End of Battle outcome. So a wiped attacker's hits still land:
+   `combatStep`'s "someone is wiped → end the battle" guard is skipped for the one
+   transition into `defenderCasualties` (including after a casualty-choice pause),
+   which is what makes a **mutual wipe** possible.
 5. **Cease or retreat**: attacker may **cease** (survivors stay); else defender
    may **retreat** to an adjacent free region (p.30). Eliminating all Army units
    also removes that army's Leaders/Characters (p.30).
@@ -336,7 +342,14 @@ Companion is in the Stronghold). Sortie / relieve-by-outside-army are not yet mo
 
 ### Capturing a settlement (p.32)
 Captured when an enemy army enters a region with a City / Town / unoccupied
-Stronghold, or when all defenders of a besieged Stronghold are eliminated.
+Stronghold, or when all defenders of a besieged Stronghold are eliminated **and the
+besieging Army still has at least one unit remaining in the region** (p.32).
+Both triggers require a surviving attacker, so a **mutual wipe takes no ground** —
+`finishCombat` gates `captured` on `atkSurv > 0` in the field-battle *and* assault
+branches, and the siege simply ends (p.31: "a siege ends if … at any time the
+attacking or defending Army is completely eliminated"). Covered by
+`scripts/probe-mutual-wipe.mjs`, which drives the casualty step directly (random
+play effectively never reaches a mutual wipe).
 Place Settlement Control marker; advance VP track (+1 City, +2 Stronghold).
 Recapture by original owner removes the marker and reverses the VP (p.32, p.44).
 Captured settlements can't muster or advance the political track (p.32).

@@ -480,18 +480,30 @@ function finishCombat(state: GameState, advance: boolean): void {
   const defSurv = assault ? forceUnitCount(box!) : unitCount(state, pc.to);
   const name = REGIONS[pc.to]!.name ?? pc.to;
   const side = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
+  // A wipe-out takes no ground. RAW p.32 ("Capturing a Settlement") gives the two
+  // capture triggers, and BOTH require a surviving attacker: an enemy Army "enters
+  // a region" (a dead Army enters nothing), or the Stronghold's defenders are
+  // eliminated "and the besieging Army still has at least one unit remaining in the
+  // region". A mutual wipe therefore captures nothing — it just ends the battle,
+  // and (p.31) ends any siege, since an Army was completely eliminated.
+  const mutualWipe = atkSurv === 0 && defSurv === 0;
   let captured = false, outcome: string;
   if (assault) {
-    if (advance && defSurv === 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
+    if (advance && defSurv === 0 && atkSurv > 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
       captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker, true);
       outcome = `${side(pc.attacker)} storm ${name}`;
-    } else if (atkSurv === 0) { liftSiege(state, pc.to); outcome = `The assault on ${name} is thrown back — siege lifted`; }
+    } else if (atkSurv === 0) {
+      liftSiege(state, pc.to); // an empty box on a mutual wipe: the region simply ends up empty, control unchanged
+      outcome = mutualWipe ? `Both Armies are destroyed at ${name} — siege lifted` : `The assault on ${name} is thrown back — siege lifted`;
+    }
     else outcome = `The siege of ${name} holds`;
   } else if (box && advance && defSurv === 0) { // RELIEF: the besieger (defender here) is wiped → garrison reoccupies
     liftSiege(state, pc.to); outcome = `The siege of ${name} is lifted`;
   } else { // normal field battle
-    captured = advance && defSurv === 0;
-    outcome = captured ? `${side(pc.attacker)} take ${name}` : pc.siege ? `The siege of ${name} holds` : `The attack on ${name} is repulsed`;
+    captured = advance && defSurv === 0 && atkSurv > 0;
+    outcome = captured ? `${side(pc.attacker)} take ${name}`
+      : mutualWipe ? `Both Armies are destroyed at ${name}`
+      : pc.siege ? `The siege of ${name} holds` : `The attack on ${name} is repulsed`;
     if (advance && atkSurv > 0) { advanceInto(state, pc.attacker, pc.from, pc.to); r.besieged = false; }
     if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
   }
@@ -518,7 +530,16 @@ export function combatStep(state: GameState): void {
   const pc = state.pendingCombat;
   if (!pc) return;
   for (;;) {
-    if (unitCount(state, pc.from) === 0 || unitCount(state, pc.to) === 0) { finishCombat(state, true); return; }
+    // A wiped Army ends the battle — but NEVER between the two halves of the
+    // casualty step. RAW p.29: the five Combat-round steps are "resolved
+    // simultaneously by the players"; p.30 fixes only the DECISION order ("the
+    // attacker decides first how to remove his units"). So when the attacker's
+    // removal wipes him, the defender must STILL take the attacker's hits — p.31
+    // names "one or BOTH Armies are completely eliminated" as an End of Battle
+    // outcome. Skipping this guard for that one transition is what makes hits
+    // simultaneous rather than attacker-first-resolved (a defender used to survive
+    // a mutual wipe because pc.atkHits were silently discarded).
+    if (pc.step !== 'defenderCasualties' && (unitCount(state, pc.from) === 0 || unitCount(state, pc.to) === 0)) { finishCombat(state, true); return; }
     // The White Rider: once per battle, if Gandalf the White is in the FP Army and the
     // Shadow has Nazgûl Leadership to negate, ask the FP whether to forfeit his Leadership.
     if (!pc.whiteRiderAsked && whiteRiderApplicable(state, pc)) {
