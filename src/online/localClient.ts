@@ -15,6 +15,7 @@ import type { WotrAction } from '../adapter/wotrAction';
 import type { GameClientApi, ViewResult } from './gameClient';
 import { applyCombatScenario } from '../devtabs/combatScenario';
 import { applyMordorScenario } from '../devtabs/mordorScenario';
+import { saveLocalGame, clearLocalGame, type LocalSave } from './localSave';
 
 const other = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 const sideName = (s: Side): string => (s === 'fp' ? 'Free Peoples' : 'Shadow');
@@ -33,15 +34,33 @@ const drawTotal = (s: GameState): number =>
   (['fp', 'shadow'] as Side[]).reduce((n, side) => n + s.cards[side].draw.character.length + s.cards[side].draw.strategy.length, 0);
 const fingerprint = (s: GameState): string => `${s.rngState}|${drawTotal(s)}`;
 
-export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mordor'; aiSide?: Side } = {}): GameClientApi {
-  let state: GameState = startGame(createGame({ seed }));
-  if (opts.scenario === 'combat') state = applyCombatScenario(state);
-  if (opts.scenario === 'mordor') state = applyMordorScenario(state);
-  const aiSide = opts.aiSide ?? null;          // the side the AI plays (null = hotseat)
+export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mordor'; aiSide?: Side; resume?: LocalSave } = {}): GameClientApi {
+  const resume = opts.resume ?? null;
+  let state: GameState = resume ? resume.state : startGame(createGame({ seed }));
+  if (!resume && opts.scenario === 'combat') state = applyCombatScenario(state);
+  if (!resume && opts.scenario === 'mordor') state = applyMordorScenario(state);
+  const aiSide = resume ? resume.aiSide : (opts.aiSide ?? null);  // the side the AI plays (null = hotseat)
   const human: Side = aiSide ? other(aiSide) : 'fp';
+  // Dev scenarios are throwaway boards; a resumed game is not a NEW play, so neither
+  // is beaconed or persisted.
+  const persist = !opts.scenario;
   // Best-effort play-count beacon, once when a local game starts (never throws/blocks).
-  if (!opts.scenario) recordPlay('war-of-the-ring', aiSide ? 'ai' : 'hotseat');
-  const aiRng = new Rng(seed * 1000 + 7);      // independent tie-break RNG for the AI
+  if (persist && !resume) recordPlay('war-of-the-ring', aiSide ? 'ai' : 'hotseat');
+  // Restoring the AI's tie-break cursor (rather than re-seeding) keeps a resumed game
+  // on the same deterministic track it was already following.
+  const aiRng = resume ? Rng.fromState(resume.aiRng) : new Rng(seed * 1000 + 7);
+
+  /** Write the game to its slot after anything that changes it. Once the game is over
+   *  the slot is dropped instead — there is nothing left to resume, and leaving it
+   *  would offer the player a finished game from the lobby. */
+  const persistNow = (): void => {
+    if (!persist) return;
+    if (wotrAdapter.result?.(state)) { clearLocalGame(); return; }
+    saveLocalGame({
+      schemaVersion: wotrAdapter.schemaVersion ?? 0, state, aiSide,
+      aiRng: aiRng.serialize(), oppLogStart, turn: state.turn,
+    });
+  };
 
   // Let the AI take every turn that is its own until control returns to the human
   // (or the game ends). Guarded against a stall so it can never loop forever.
@@ -61,8 +80,10 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
   // first entry the current viewer didn't cause. vs-AI: just after the human's
   // action (summary = the AI's turn). Hotseat: before the acting player's action (so
   // the NEXT player sees that turn). Surfaced on the view for the TurnSummary UI.
-  let oppLogStart = 0;
-  let opened = false;
+  // On resume, keep the boundary the saved game had and treat the session as already
+  // opened, so reloading mid-turn does not wipe a pending "while you were away" summary.
+  let oppLogStart = resume ? resume.oppLogStart : 0;
+  let opened = !!resume;
 
   // Undo history: a snapshot of the state + its fingerprint taken just BEFORE each
   // action the controlling human takes. Undo restores the most recent snapshot.
@@ -91,7 +112,17 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
     // Opening sets the marker to "nothing new"; later refreshes must NOT reset it
     // (in local play the opponent acts inside submit, so a poll mustn't wipe the
     // pending summary).
-    fetch: async () => { runAI(); if (!opened) { oppLogStart = state.log.length; opened = true; } return snapshot(); },
+    fetch: async () => {
+      const before = state.log.length;
+      runAI();
+      const firstOpen = !opened;
+      if (firstOpen) { oppLogStart = state.log.length; opened = true; }
+      // Persist on the very first open too, not just on a move: a game the player
+      // started but has not yet acted in is still a game, and losing it to a reload is
+      // the exact complaint this exists to fix.
+      if (firstOpen || state.log.length !== before) persistNow();
+      return snapshot();
+    },
     submit: async (action: WotrAction) => {
       const before = state.log.length;
       const actor = wotrAdapter.currentActor(state) as Side | null;
@@ -104,6 +135,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
       const afterHuman = state.log.length;
       runAI();                                            // then let the AI take its turn(s)
       oppLogStart = aiSide ? afterHuman : before;         // vs-AI: AI's entries; hotseat: the acting player's turn (for the next viewer)
+      persistNow();
       return snapshot();
     },
     legalActions: async () => {
@@ -134,6 +166,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
       if (foreknowledge) log(state, human, 'undo', `${sideName(human)} used a foreknowledge undo — re-deciding after seeing a random outcome (dice/cards).`);
       oppLogStart = state.log.length;
       opened = true;
+      persistNow();
       return snapshot();
     },
     // Local play has no server-side game, so reports go to the public /api/report

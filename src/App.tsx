@@ -7,13 +7,17 @@ import { PolygonAudit } from './devtabs/PolygonAudit';
 import { ContentAudit } from './devtabs/ContentAudit';
 import { BlockedAreasEditor } from './devtabs/BlockedAreasEditor';
 import { makeLocalClient } from './online/localClient';
+import { loadLocalGame, peekLocalGame, clearLocalGame, describeSave, type LocalSave, type SavePeek } from './online/localSave';
+import { wotrAdapter } from './adapter/wotrAdapter';
 import { makeGameClient, createOnlineGame, readOnlineInvite, claimSeat } from './online/gameClient';
 import { LoadArtPanel } from './play/LoadArtPanel';
 
 type Mode =
   | { kind: 'lobby' }
-  | { kind: 'local'; seed: number; scenario?: 'combat' | 'mordor'; aiSide?: 'fp' | 'shadow' }
+  | { kind: 'local'; seed: number; scenario?: 'combat' | 'mordor'; aiSide?: 'fp' | 'shadow'; resume?: LocalSave }
   | { kind: 'online'; gameId: string; token: string };
+
+const SCHEMA = wotrAdapter.schemaVersion ?? 0;
 
 export function App() {
   // Re-render on hash change so the dev routes (#audit / #content / #blocked /
@@ -39,7 +43,7 @@ export function App() {
   idTokRef.current = identity?.token;
 
   const client = useMemo(() => {
-    if (mode.kind === 'local') return makeLocalClient(mode.seed, { scenario: mode.scenario, aiSide: mode.aiSide });
+    if (mode.kind === 'local') return makeLocalClient(mode.seed, { scenario: mode.scenario, aiSide: mode.aiSide, resume: mode.resume });
     if (mode.kind === 'online') return makeGameClient(mode.gameId, mode.token, () => idTokRef.current);
     return null;
   }, [mode]);
@@ -68,11 +72,35 @@ export function App() {
       </>
     ) : page;
   }
-  const startLocal = (aiSide?: 'fp' | 'shadow') => setMode({ kind: 'local', seed: Math.floor(Math.random() * 1e9), aiSide });
-  return <Lobby onStart={startLocal} />;
+  // Starting a new local game abandons any saved one — there is a single slot, and the
+  // lobby warns before this is reachable with a save present.
+  const startLocal = (aiSide?: 'fp' | 'shadow') => {
+    clearLocalGame();
+    setMode({ kind: 'local', seed: Math.floor(Math.random() * 1e9), aiSide });
+  };
+  const resumeLocal = () => {
+    const save = loadLocalGame(SCHEMA);
+    if (!save) return;                       // vanished or unreadable — the lobby re-checks
+    setMode({ kind: 'local', seed: 0, aiSide: save.aiSide ?? undefined, resume: save });
+  };
+  return <Lobby onStart={startLocal} onResume={resumeLocal} />;
 }
 
-function Lobby({ onStart }: { onStart: (aiSide?: 'fp' | 'shadow') => void }) {
+function Lobby({ onStart, onResume }: { onStart: (aiSide?: 'fp' | 'shadow') => void; onResume: () => void }) {
+  // A local game in progress, if one was saved. Read once on mount; starting a new game
+  // leaves the lobby, so it cannot go stale under us.
+  const [saved, setSaved] = useState<SavePeek | null>(() => peekLocalGame(SCHEMA));
+  const discard = () => {
+    if (!window.confirm('Discard the saved game? This cannot be undone.')) return;
+    clearLocalGame();
+    setSaved(null);
+  };
+  // Guard the new-game buttons while a save exists, so a stray click cannot silently
+  // destroy a game in progress.
+  const startGuarded = (aiSide?: 'fp' | 'shadow') => {
+    if (saved && !window.confirm('Starting a new game will discard your saved game in progress. Continue?')) return;
+    onStart(aiSide);
+  };
   const [invites, setInvites] = useState<Record<'fp' | 'shadow', string> | null>(null);
   const [creating, setCreating] = useState(false);
   // Best-effort play counter from the games hub (never blocks the lobby).
@@ -109,15 +137,23 @@ function Lobby({ onStart }: { onStart: (aiSide?: 'fp' | 'shadow') => void }) {
         <h1 style={{ fontVariant: 'small-caps', letterSpacing: 1 }}>War of the Ring</h1>
         <p style={{ color: '#a99' }}>Unofficial digital port · 2-player (Free Peoples vs Shadow)</p>
         {plays != null && <p style={{ color: '#776', fontSize: 12, marginTop: -6 }}>{plays.toLocaleString()} games played</p>}
+        {saved && (
+          <div style={{ margin: '14px 0 4px', textAlign: 'left', background: '#1a2a1a', border: '1px solid #3a5a3a', padding: 12, borderRadius: 8 }}>
+            <div style={{ fontSize: 12, color: '#bfe6bf', marginBottom: 6 }}>Game in progress</div>
+            <div style={{ fontSize: 13, color: '#e9e1cc', marginBottom: 8 }}>{describeSave(saved)}</div>
+            <button onClick={onResume} style={{ ...primary, margin: 0, background: '#2c6a3a' }}>Resume game</button>
+            <button onClick={discard} style={{ ...secondary, margin: '6px 0 0', padding: 8, fontSize: 13, background: '#2a2320' }}>Discard it</button>
+          </div>
+        )}
         <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Ranked online — vs the leaderboard AI:</div>
         <button onClick={() => createVsAi('fp')} disabled={creating} style={{ ...primary, background: '#2f4f9e' }}>{creating ? 'Creating…' : 'Play Free Peoples (vs AI Shadow) — ranked'}</button>
         <button onClick={() => createVsAi('shadow')} disabled={creating} style={{ ...primary, background: '#a83232' }}>{creating ? 'Creating…' : 'Play Shadow (vs AI Free Peoples) — ranked'}</button>
         <div style={{ fontSize: 11, color: '#776', textAlign: 'left', margin: '2px 4px 0' }}>Sign in first so your result counts on the leaderboard.</div>
         <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Play vs the AI (local, unranked):</div>
-        <button onClick={() => onStart('shadow')} style={secondary}>Free Peoples (vs AI Shadow)</button>
-        <button onClick={() => onStart('fp')} style={secondary}>Shadow (vs AI Free Peoples)</button>
+        <button onClick={() => startGuarded('shadow')} style={secondary}>Free Peoples (vs AI Shadow)</button>
+        <button onClick={() => startGuarded('fp')} style={secondary}>Shadow (vs AI Free Peoples)</button>
         <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Two players, one screen:</div>
-        <button onClick={() => onStart()} style={secondary}>New hotseat game (2 humans)</button>
+        <button onClick={() => startGuarded()} style={secondary}>New hotseat game (2 humans)</button>
         <button onClick={createOnline} disabled={creating} style={secondary}>{creating ? 'Creating…' : 'New online game'}</button>
         {invites && (
           <div style={{ marginTop: 18, textAlign: 'left', background: '#1a160f', padding: 14, borderRadius: 8 }}>
