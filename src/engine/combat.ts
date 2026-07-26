@@ -113,8 +113,10 @@ const MINION_SET = new Set(['witch-king', 'saruman', 'mouth-of-sauron']);
  *  owner's remaining hits (Blade of Westernesse spends a hit per Minion killed).
  *  Eliminated Nazgûl return to the Sauron reinforcements; Minions are removed for
  *  good. `enemy` is the region holding the card owner's opponent. */
-function applyCombatEliminations(state: GameState, enemy: RegionId, mods: CombatMods, ownHits: number): number {
-  const e = state.regions[enemy]!;
+/** `e` is the TARGET side's Force and `enemy` the region it is fought in — they differ
+ *  whenever one side is in the siege box (assault or sortie), where the region's own
+ *  `units`/`characters` belong to the OTHER side. */
+function applyCombatEliminations(state: GameState, e: Force, enemy: RegionId, mods: CombatMods, ownHits: number): number {
   let hits = ownHits;
   for (let n = mods.eliminateNazgulIfHit ?? 0; n > 0 && hits > 0 && e.nazgul > 0; n--) {
     e.nazgul -= 1;
@@ -250,8 +252,8 @@ const nationAtWar = (state: GameState, n: Nation): boolean => state.nations[n].s
  *  selection, plus ALL units of the attacker's not-At-War Nations (which may never
  *  join a battle — a split is mandatory when such units are present). */
 type Rearguard = NonNullable<PendingCombat['rearguard']>;
-function fullRearguard(state: GameState, from: RegionId, side: Side, explicit?: MoveSelection): Rearguard {
-  const r = state.regions[from]!;
+function fullRearguard(state: GameState, from: RegionId, side: Side, explicit?: MoveSelection, force?: Force): Rearguard {
+  const r = force ?? state.regions[from]!; // a sortie's army is the siege box, not the region
   const units: Record<string, { regular: number; elite: number }> = {};
   for (const [n, u] of Object.entries(explicit?.units ?? {})) units[n] = { regular: u?.regular ?? 0, elite: u?.elite ?? 0 };
   for (const n of Object.keys(r.units) as Nation[]) {
@@ -262,11 +264,29 @@ function fullRearguard(state: GameState, from: RegionId, side: Side, explicit?: 
   return { units, leaders: explicit?.leaders ?? 0, nazgul: explicit?.nazgul ?? 0, characters: explicit?.characters ?? [] };
 }
 
+/** The side whose Army units occupy a Force (a region or a siege box), or null. */
+function forceSide(f: Force): Side | null {
+  for (const n of Object.keys(f.units) as Nation[]) if ((f.units[n]!.regular + f.units[n]!.elite) > 0) return sideOfNation(n);
+  return null;
+}
+/** `id`'s siege box when it is `side`'s besieged garrison with an enemy Army standing in
+ *  the open field — i.e. the force that could mount a SORTIE from that Stronghold (p.32).
+ *  Null when `side` is the besieger instead, or there is no live siege. */
+export function sortieForce(state: GameState, id: RegionId, side: Side): Force | null {
+  const r = state.regions[id]!, box = r.siegeBox;
+  if (!box || !r.besieged || forceUnitCount(box) === 0) return null;
+  if (armySide(state, id) !== other(side)) return null; // no besieger in the open field to attack
+  return forceSide(box) === side ? box : null;
+}
+
 /** Validate an attack's (optional) rearguard split. Returns an error string, or null. */
 export function attackError(state: GameState, from: RegionId, side: Side, explicit?: MoveSelection, viaCharacterDie = false): string | null {
-  if (armySide(state, from) !== side) return 'No attacking army';
-  const r = state.regions[from]!;
-  const rg = fullRearguard(state, from, side, explicit);
+  // A SORTIE attacks out of the siege box, so the attacking "army" is the box, not the
+  // region — the region holds the besieger (p.32).
+  const sortieBox = sortieForce(state, from, side);
+  if (!sortieBox && armySide(state, from) !== side) return 'No attacking army';
+  const r = sortieBox ?? state.regions[from]!;
+  const rg = fullRearguard(state, from, side, explicit, sortieBox ?? undefined);
   let armyUnits = 0, rgUnits = 0;
   for (const n of Object.keys(r.units) as Nation[]) armyUnits += r.units[n]!.regular + r.units[n]!.elite;
   for (const [n, u] of Object.entries(rg.units)) {
@@ -292,8 +312,8 @@ export function attackError(state: GameState, from: RegionId, side: Side, explic
 
 /** Remove the rearguard figures from `from`, returning the stash (held in the
  *  PendingCombat for the battle's duration). */
-function stashRearguard(state: GameState, from: RegionId, rg: Rearguard): PendingCombat['rearguard'] {
-  const r = state.regions[from]!;
+function stashRearguard(state: GameState, from: RegionId, rg: Rearguard, force?: Force): PendingCombat['rearguard'] {
+  const r = force ?? state.regions[from]!; // a sortie splits its rearguard out of the siege box
   const stash = { units: {} as Record<string, { regular: number; elite: number }>, leaders: rg.leaders, nazgul: rg.nazgul, characters: [...rg.characters] };
   for (const [n, u] of Object.entries(rg.units)) {
     if (u.regular + u.elite === 0) continue;
@@ -308,7 +328,11 @@ function stashRearguard(state: GameState, from: RegionId, rg: Rearguard): Pendin
 
 /** Put a stashed rearguard back into a region (when the battle ends). */
 function restoreRearguard(state: GameState, region: RegionId, stash: NonNullable<PendingCombat['rearguard']>): void {
-  const r = state.regions[region]!;
+  restoreRearguardInto(state.regions[region]!, stash);
+}
+/** As above, but into an arbitrary Force — a sortie's rearguard stays in the siege box
+ *  ("A rearguard may be formed and left behind in the Stronghold", p.32). */
+function restoreRearguardInto(r: Force, stash: NonNullable<PendingCombat['rearguard']>): void {
   for (const [n, u] of Object.entries(stash.units)) {
     const d = r.units[n as Nation] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; r.units[n as Nation] = d;
@@ -323,6 +347,16 @@ function defForce(state: GameState, pc: PendingCombat): Force {
   const box = state.regions[pc.to]!.siegeBox;
   return pc.boxed === pc.defender && box ? box : state.regions[pc.to]!;
 }
+/** The ATTACKER's figures during a battle: the siege box in a SORTIE (p.32 — the
+ *  besieged Army attacks the besiegers, and in this model never physically leaves the
+ *  box, which is also why ceasing puts it back in the Stronghold for free), otherwise
+ *  the region. In a sortie `from === to`, so the region itself holds the BESIEGER. */
+function atkForce(state: GameState, pc: PendingCombat): Force {
+  const box = state.regions[pc.from]!.siegeBox;
+  return pc.boxed === pc.attacker && box ? box : state.regions[pc.from]!;
+}
+const atkCount = (state: GameState, pc: PendingCombat): number => forceUnitCount(atkForce(state, pc));
+const defCount = (state: GameState, pc: PendingCombat): number => forceUnitCount(defForce(state, pc));
 /** Cap a region's siege box at the 5-unit garrison limit (excess recycled). */
 function capSiegeBox(state: GameState, id: RegionId): void {
   const box = state.regions[id]!.siegeBox; if (!box) return;
@@ -348,18 +382,33 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   // ASSAULT: the besieger occupies the besieged region (from===to) and attacks the
   // boxed defenders. RELIEF (from≠to into a besieged region) is a normal field
   // battle vs the besieger in the open — not an assault.
-  const assault = from === to && !!box && state.regions[to]!.besieged;
-  // Political reaction lands on the army actually attacked (the box, in an assault).
+  // Both an ASSAULT and a SORTIE happen inside one region (from===to) with a live siege;
+  // which one it is depends on who is acting. The besieger occupies the open field, so
+  // if the region's Army is the attacker's it's an assault on the box; if the BOX is the
+  // attacker's it's a sortie (p.32). RELIEF (from≠to into a besieged region) is neither —
+  // it's a normal field battle against the besieger in the open.
+  const inSiegeRegion = from === to && !!box && state.regions[to]!.besieged;
+  const sortie = inSiegeRegion && armySide(state, to) !== attacker;
+  const assault = inSiegeRegion && !sortie;
+  // Political reaction lands on the army actually attacked: the box in an assault, the
+  // besieger standing in the open field in a sortie.
   for (const n of nationsWithUnits(state, to)) if (!assault) onArmyAttacked(state, n, to);
   if (assault) for (const n of Object.keys(box!.units) as Nation[]) if ((box!.units[n]!.regular + box!.units[n]!.elite) > 0) onArmyAttacked(state, n, to);
   const pc: PendingCombat = {
     attacker, defender, from, to, round: 0,
-    fortified: dReg.settlement === 'City' || dReg.settlement === 'Fortification' || dReg.settlement === 'Stronghold',
+    // A sortie forfeits the Stronghold's protection — "both Armies scoring hits on a
+    // '5' or higher" (p.32) — so it is explicitly NOT fortified.
+    fortified: !sortie && (dReg.settlement === 'City' || dReg.settlement === 'Fortification' || dReg.settlement === 'Stronghold'),
     step: 'attackerCard', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0,
     defDicePenalty: opts.defenderDicePenalty,
-    atkUnits0: unitCount(state, from), defUnits0: assault ? forceUnitCount(box!) : unitCount(state, to),
+    atkUnits0: sortie ? forceUnitCount(box!) : unitCount(state, from),
+    defUnits0: assault ? forceUnitCount(box!) : unitCount(state, to),
   };
-  if (assault) {
+  if (sortie) {
+    // A field battle, not a siege battle: no 6-to-hit, no round cap, and the besieging
+    // defender may retreat as usual. `boxed` just says whose figures are in the box.
+    pc.boxed = attacker;
+  } else if (assault) {
     pc.siege = true; pc.siegeRoundsLeft = opts.siegeRounds ?? 1; pc.boxed = defender; pc.fpCardLock = !!opts.fpCardLock;
   } else if (opts.siegeRounds && box) {
     // Grond / The Fighting Uruk-hai force a multi-round assault on a besieged Stronghold.
@@ -372,13 +421,14 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   // Split off the rearguard (explicit + forced not-At-War units) before the battle —
   // never for an assault (from===to; the besieger assaults with its whole force).
   if (!assault) {
-    const rg = fullRearguard(state, from, attacker, opts.rearguard);
+    // A sortie splits its rearguard out of the siege box and leaves it in the Stronghold.
+    const rg = fullRearguard(state, from, attacker, opts.rearguard, sortie ? box : undefined);
     const rgHasFigure = Object.values(rg.units).some((u) => u.regular + u.elite > 0) || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
-    if (rgHasFigure) pc.rearguard = stashRearguard(state, from, rg);
+    if (rgHasFigure) pc.rearguard = stashRearguard(state, from, rg, sortie ? box : undefined);
   }
-  pc.atkUnits0 = unitCount(state, from); // attacking force after the rearguard is held aside
+  pc.atkUnits0 = atkCount(state, pc); // attacking force after the rearguard is held aside
   state.pendingCombat = pc;
-  log(state, null, 'combat', `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`);
+  log(state, null, 'combat', `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${sortie ? ' (sortie)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`);
 }
 
 function retreatRegion(state: GameState, pc: PendingCombat): RegionId | null {
@@ -475,9 +525,10 @@ function finishCombat(state: GameState, advance: boolean): void {
   const pc = state.pendingCombat!;
   const r = state.regions[pc.to]!, box = r.siegeBox;
   const assault = pc.boxed === pc.defender && !!box; // besieger (in the region) storms the box
-  // Losses snapshot BEFORE any move. Besieger is in pc.from; boxed defenders in the box.
-  const atkSurv = unitCount(state, pc.from);
-  const defSurv = assault ? forceUnitCount(box!) : unitCount(state, pc.to);
+  const sortie = pc.boxed === pc.attacker && !!box;  // boxed garrison attacks the besiegers (p.32)
+  // Losses snapshot BEFORE any move, read from whichever side sits in the box.
+  const atkSurv = atkCount(state, pc);
+  const defSurv = defCount(state, pc);
   const name = REGIONS[pc.to]!.name ?? pc.to;
   const side = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
   // A wipe-out takes no ground. RAW p.32 ("Capturing a Settlement") gives the two
@@ -491,7 +542,36 @@ function finishCombat(state: GameState, advance: boolean): void {
   // Set when a relieving Army has earned the right to march into the freed region
   // (asked once the battle is fully wrapped up — see the end of this function).
   let reliefAdvance: { from: RegionId; to: RegionId; owner: Side } | null = null;
-  if (assault) {
+  if (sortie) {
+    // The rearguard never left the Stronghold (p.32), so put it back BEFORE judging
+    // whether the Stronghold stands undefended — a surviving rearguard still defends it.
+    if (pc.rearguard) restoreRearguardInto(box!, pc.rearguard);
+    const garrison = forceUnitCount(box!);
+    if (defSurv === 0 && garrison > 0) {
+      // Besiegers destroyed or retreated: the siege is over and the garrison returns to
+      // the open field. p.32: a winning sortie "cannot advance outside of the region" —
+      // it is already in its own region, so there is simply nothing further to move.
+      liftSiege(state, pc.to);
+      outcome = `The sortie from ${name} breaks the siege`;
+    } else if (garrison === 0 && defSurv > 0) {
+      // Every unit defending the Stronghold is gone and the besieger still holds the
+      // region — p.32's second capture trigger, from the DEFENDER's side of this battle.
+      delete r.siegeBox; r.besieged = false;
+      captured = true; captureIfEnemySettlement(state, pc.to, pc.defender, true);
+      outcome = `The sortie from ${name} is destroyed — ${side(pc.defender)} take the Stronghold`;
+    } else if (garrison === 0 && defSurv === 0) {
+      delete r.siegeBox; r.besieged = false;
+      outcome = `Both Armies are destroyed at ${name}`;
+    } else if (atkSurv === 0) {
+      // The sortieing force died but a rearguard still holds the Stronghold, so the
+      // Settlement does not fall — p.32 needs ALL its defenders eliminated.
+      outcome = `The sortie from ${name} is destroyed — the Stronghold holds`;
+    } else {
+      // The attacker ceased: RAW moves the sortie back into the Stronghold. It never
+      // left the box in this model, so the siege simply carries on.
+      outcome = `The sortie from ${name} withdraws into the Stronghold`;
+    }
+  } else if (assault) {
     if (advance && defSurv === 0 && atkSurv > 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
       captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker, true);
       outcome = `${side(pc.attacker)} storm ${name}`;
@@ -526,7 +606,7 @@ function finishCombat(state: GameState, advance: boolean): void {
   // advance is still to be answered it must therefore stay held aside — restoring it
   // into `from` now would let advanceInto sweep it along. resolveRelieveAdvance puts it
   // back once the advance has (or hasn't) happened, matching the field battle's ordering.
-  if (pc.rearguard && !reliefAdvance) restoreRearguard(state, pc.from, pc.rearguard);
+  if (pc.rearguard && !reliefAdvance && !sortie) restoreRearguard(state, pc.from, pc.rearguard);
   state.lastBattle = {
     seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
     atkLosses: Math.max(0, (pc.atkUnits0 ?? atkSurv) - atkSurv), defLosses: Math.max(0, (pc.defUnits0 ?? defSurv) - defSurv),
@@ -582,7 +662,7 @@ export function combatStep(state: GameState): void {
     // outcome. Skipping this guard for that one transition is what makes hits
     // simultaneous rather than attacker-first-resolved (a defender used to survive
     // a mutual wipe because pc.atkHits were silently discarded).
-    if (pc.step !== 'defenderCasualties' && (unitCount(state, pc.from) === 0 || unitCount(state, pc.to) === 0)) { finishCombat(state, true); return; }
+    if (pc.step !== 'defenderCasualties' && (atkCount(state, pc) === 0 || defCount(state, pc) === 0)) { finishCombat(state, true); return; }
     // The White Rider: once per battle, if Gandalf the White is in the FP Army and the
     // Shadow has Nazgûl Leadership to negate, ask the FP whether to forfeit his Leadership.
     if (!pc.whiteRiderAsked && whiteRiderApplicable(state, pc)) {
@@ -656,12 +736,15 @@ export function combatStep(state: GameState): void {
         // resolve in initiative order before the normal roll; either can end the
         // battle (a retreat empties a region, a pre-attack can wipe one).
         if (resolvePreCombat(state, pc, aMods, dMods)) return; // paused: owner is choosing the pre-combat retreat destination
-        if (unitCount(state, pc.from) === 0 || unitCount(state, pc.to) === 0) { finishCombat(state, true); return; }
+        if (atkCount(state, pc) === 0 || defCount(state, pc) === 0) { finishCombat(state, true); return; }
         // Stronghold gives the attacker a 6-to-hit: the first round of a field
-        // battle, and EVERY round of a siege assault.
+        // battle, and EVERY round of a siege assault. A sortie forfeits the
+        // Stronghold's protection entirely (p.32: "both Armies scoring hits on a
+        // '5' or higher"), which `fortified: false` already encodes.
         const atkTarget = pc.fortified && (pc.siege || pc.round === 0) ? 6 : 5;
         const aRoll: CombatRoll = { dice: [], rerolls: [], target: atkTarget };
-        const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, pc.whiteRiderForfeit, aRoll);
+        const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, pc.whiteRiderForfeit, aRoll,
+          pc.boxed === pc.attacker ? state.regions[pc.from]!.siegeBox : undefined);
         // Help Unlooked For: cap the defender's dice (min 1) via the existing maxDiceEnemy mod.
         const defEnemyMods = pc.defDicePenalty
           ? { ...aMods, maxDiceEnemy: Math.max(1, Math.min(5, forceUnitCount(defForce(state, pc))) - pc.defDicePenalty) }
@@ -676,7 +759,7 @@ export function combatStep(state: GameState): void {
           (enemyHits >= (m.cancelHitsMinEnemyHits ?? 1) ? (m.cancelHits ?? 0) : 0) + (m.sacrificeLeaderToCancelHit ?? 0);
         const dCancel = cancelFor(dMods, atkHits);
         const aCancel = cancelFor(aMods, defHits);
-        if ((aMods.sacrificeLeaderToCancelHit ?? 0) > 0 && defHits > 0) state.regions[pc.from]!.leaders = Math.max(0, state.regions[pc.from]!.leaders - 1);
+        if ((aMods.sacrificeLeaderToCancelHit ?? 0) > 0 && defHits > 0) { const af = atkForce(state, pc); af.leaders = Math.max(0, af.leaders - 1); }
         if ((dMods.sacrificeLeaderToCancelHit ?? 0) > 0 && atkHits > 0) { const df = defForce(state, pc); df.leaders = Math.max(0, df.leaders - 1); }
         let atk = Math.max(0, atkHits - dCancel);
         let def = Math.max(0, defHits - aCancel);
@@ -687,8 +770,10 @@ export function combatStep(state: GameState): void {
         if (dMods.bonusHitIfOutscore && d0 > a0) def += dMods.bonusHitIfOutscore;
         // Enemy-figure eliminations (Blade of Westernesse / Fateful Strike): the
         // attacker's card targets the defender's army (pc.to), and vice versa.
-        atk = applyCombatEliminations(state, pc.to, aMods, atk);
-        def = applyCombatEliminations(state, pc.from, dMods, def);
+        // (Force-keyed, not region-keyed: when either side is boxed the region's figures
+        // belong to its opponent, so the region form used to strike the caster's OWN army.)
+        atk = applyCombatEliminations(state, defForce(state, pc), pc.to, aMods, atk);
+        def = applyCombatEliminations(state, atkForce(state, pc), pc.from, dMods, def);
         pc.atkHits = atk; pc.defHits = def;
         // Announce the round's dice PUBLICLY so both players can audit the resolution
         // (player report: "the log should display the combat dice rolls").
@@ -708,11 +793,12 @@ export function combatStep(state: GameState): void {
       }
       case 'attackerCasualties': {
         if (pc.defHits > 0) {
-          if (meaningfulCasualty(state, pc.from, pc.defHits)) {
-            state.pendingChoice = { owner: pc.attacker, kind: 'combatCasualties', data: { region: pc.from, side: pc.attacker, hits: pc.defHits, next: 'defenderCasualties' } };
+          const boxedAtk = pc.boxed === pc.attacker; // sortie: the attacker's figures are in the box
+          if (meaningfulForceCasualty(atkForce(state, pc), pc.defHits)) {
+            state.pendingChoice = { owner: pc.attacker, kind: 'combatCasualties', data: { region: pc.from, side: pc.attacker, hits: pc.defHits, next: 'defenderCasualties', boxed: boxedAtk } };
             return;
           }
-          applyCasualties(state, pc.from, pc.attacker, pc.defHits, 'regularsFirst');
+          applyForceCasualties(state, atkForce(state, pc), pc.attacker, pc.defHits, 'regularsFirst');
         }
         pc.step = 'defenderCasualties'; continue;
       }
@@ -737,7 +823,7 @@ export function combatStep(state: GameState): void {
         // the assault's rounds (the attacker can't be made to continue past them).
         if (forceUnitCount(defForce(state, pc)) === 0) { finishCombat(state, true); return; }
         pc.siegeRoundsLeft = (pc.siegeRoundsLeft ?? 1) - 1;
-        if (pc.siegeRoundsLeft > 0 && unitCount(state, pc.from) > 0) { pc.round += 1; pc.step = 'attackerCard'; continue; }
+        if (pc.siegeRoundsLeft > 0 && atkCount(state, pc) > 0) { pc.round += 1; pc.step = 'attackerCard'; continue; }
         // Out of rounds: the attacker MAY extend the assault one more round by
         // reducing one of his Elite units to a Regular (rulebook p.32) — a real
         // choice, not an auto-decline (player report).
@@ -745,7 +831,7 @@ export function combatStep(state: GameState): void {
         finishCombat(state, false); return; // the siege holds; attacker remains besieging
       }
       case 'continueDecision': {
-        if (unitCount(state, pc.to) === 0 || unitCount(state, pc.from) === 0) { finishCombat(state, true); return; }
+        if (defCount(state, pc) === 0 || atkCount(state, pc) === 0) { finishCombat(state, true); return; }
         state.pendingChoice = { owner: pc.attacker, kind: 'combatContinue' };
         return;
       }
@@ -974,6 +1060,10 @@ export function attackTargets(state: GameState, side: Side): Array<[RegionId, Re
   const out: Array<[RegionId, RegionId]> = [];
   const enemy = other(side);
   for (const from of Object.keys(state.regions)) {
+    // SORTIE (p.32): a besieged garrison may attack the besiegers in its own region,
+    // fighting a field battle out of the Stronghold.
+    const sb = sortieForce(state, from, side);
+    if (sb && hasAtWarUnitInForce(state, sb, side) && !(side === 'shadow' && shadowBarredFromRegion(state, from))) out.push([from, from]);
     if (armySide(state, from) !== side || !hasAtWarUnit(state, from, side)) continue;
     // Every adjacent enemy army is a target (an army may face several); no cap.
     for (const to of REGIONS[from]!.adjacency) if (armySide(state, to) === enemy && !(side === 'shadow' && shadowBarredFromRegion(state, to))) out.push([from, to]);
@@ -985,9 +1075,11 @@ export function attackTargets(state: GameState, side: Side): Array<[RegionId, Re
   return out;
 }
 function hasAtWarUnit(state: GameState, id: RegionId, side: Side): boolean {
-  const r = state.regions[id]!;
-  for (const n of Object.keys(r.units) as Nation[]) {
-    if (sideOfNation(n) === side && (r.units[n]!.regular + r.units[n]!.elite) > 0 && state.nations[n].step === 0) return true;
+  return hasAtWarUnitInForce(state, state.regions[id]!, side);
+}
+function hasAtWarUnitInForce(state: GameState, f: Force, side: Side): boolean {
+  for (const n of Object.keys(f.units) as Nation[]) {
+    if (sideOfNation(n) === side && (f.units[n]!.regular + f.units[n]!.elite) > 0 && state.nations[n].step === 0) return true;
   }
   return false;
 }

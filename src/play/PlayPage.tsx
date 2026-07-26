@@ -13,6 +13,7 @@ import { HandStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal } from './DecisionModal';
 import { MovePicker } from './MovePicker';
+import { sortieForce } from '../engine/combat';
 import { DiceTray } from './DiceTray';
 import { HuntPopup } from './HuntPopup';
 import { BattlePopup } from './BattlePopup';
@@ -461,7 +462,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       </div>
       {moveDraft && (
         <div style={{ display: peekBoard ? 'none' : 'contents' }}>
-          <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view}
+          <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view} you={me}
             onConfirm={(a) => { setMoveDraft(null); void submit(a); }} onCancel={() => setMoveDraft(null)} />
         </div>
       )}
@@ -491,7 +492,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             {moveMenu.options.map((o, i) => (
               <button key={i} onClick={() => beginMove(moveMenu.region, o)}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
-                {o.kind === 'army' ? 'The army' : o.kind === 'assault' ? '⚔ Assault the besieged Stronghold' : o.kind === 'muster' ? '🛡 Muster here' : o.kind === 'chargroup' ? `All Companions together (${o.chars.map(charName).join(', ')})` : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
+                {o.kind === 'army' ? 'The army' : o.kind === 'assault' ? (sortieForce(g.view!, moveMenu!.region, me) ? '⚔ Sortie against the besiegers' : '⚔ Assault the besieged Stronghold') : o.kind === 'muster' ? '🛡 Muster here' : o.kind === 'chargroup' ? `All Companions together (${o.chars.map(charName).join(', ')})` : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
               </button>
             ))}
             <button onClick={() => setMoveMenu(null)} style={{ marginTop: 6, padding: '5px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>

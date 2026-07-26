@@ -356,9 +356,33 @@ gets swept along (p.28). Covered by `scripts/probe-relief-advance.mjs`.
 the field battle's advance — partial commitment is available before the battle via the
 rearguard split (p.28).
 
-**Still not modelled:** the **sortie** (p.32 — a besieged army attacking the besiegers),
-and retreating into siege *mid-battle* (p.31 lets the defender choose before every combat
-round; the `siegeWithdraw` choice is offered once, pre-battle).
+**Sortie (p.32) — modelled.** The besieged garrison spends an Action die for battle and
+attacks the besiegers in its own region. Like an assault this is `from === to`, but with
+the roles mirrored: the **attacker** is boxed, so `startBattle` distinguishes the two by
+who is acting (`armySide(to) !== attacker` ⇒ sortie) and sets `pc.boxed = attacker`.
+`atkForce`/`atkCount` read the attacker from the box, the mirror of `defForce`/`defCount`.
+It is a **field battle, not a siege battle**: `fortified: false`, so both sides hit on 5+
+(p.32), there is no round cap, and the besieging defender may retreat as usual. The
+rearguard is split out of, and restored into, the **siege box** — "left behind in the
+Stronghold" (p.32). Outcomes:
+- besiegers destroyed or retreated → the siege is broken and the garrison returns to the
+  open field. A winning sortie "cannot advance outside of the region" — it is already in
+  its own region, so nothing further moves;
+- the sortie force wiped with the besieger still in the region → **the Stronghold falls**
+  (p.32's second capture trigger, read from the defender's side of this battle) — but only
+  if no rearguard survives, since p.32 needs *all* its defenders eliminated;
+- the attacker ceases → RAW moves the sortie back inside; it never left the box in this
+  model, so the siege simply carries on.
+
+Covered by `scripts/probe-sortie.mjs`. The heuristic AI is offered sorties (~300 times per
+40 games) but effectively never takes one: measured over those games the garrison is
+stronger than the besieger in ~1% of opportunities and never by the 2× margin the AI
+requires — sallying out of a Stronghold into a larger army forfeits the 6-to-hit defence
+and loses the Settlement outright if the garrison dies. That is a strategic judgement, not
+a gap; the path is exercised by the probe and by a sortie-biased random soak.
+
+**Still not modelled:** retreating into siege *mid-battle* (p.31 lets the defender choose
+before every combat round; the `siegeWithdraw` choice is offered once, pre-battle).
 
 ### Capturing a settlement (p.32)
 Captured when an enemy army enters a region with a City / Town / unoccupied

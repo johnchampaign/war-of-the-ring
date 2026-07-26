@@ -6,18 +6,23 @@ import { useState } from 'react';
 import type { GameState, Nation, Side } from '../engine/types';
 import type { MoveSel, WotrAction } from '../adapter/wotrAction';
 import { characterSide, sideOfNation } from '../engine/data';
+import { sortieForce } from '../engine/combat';
 import { charName } from './charInfo';
 import mapData from '../../assets/map.json';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 
-export function MovePicker({ from, to, kind, view, onConfirm, onCancel }: {
-  from: string; to: string; kind: 'moveArmy' | 'armyMove2' | 'attack'; view: GameState;
+export function MovePicker({ from, to, kind, view, you, onConfirm, onCancel }: {
+  from: string; to: string; kind: 'moveArmy' | 'armyMove2' | 'attack'; view: GameState; you: Side;
   onConfirm: (a: WotrAction) => void; onCancel: () => void;
 }) {
   const attackMode = kind === 'attack';
-  const verb = attackMode ? 'Attack' : 'Move';
-  const r = view.regions[from];
+  // SORTIE (p.32): our Army is the besieged garrison in the siege box, NOT the region —
+  // the region holds the besieger we're attacking. Everything the picker offers (units,
+  // Leaders, the rearguard left behind in the Stronghold) must come from the box.
+  const sortieBox = attackMode && from === to ? sortieForce(view, from, you) : null;
+  const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : 'Move';
+  const r = sortieBox ?? view.regions[from];
   const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
   // Only the MOVING army's OWN Characters can travel with it — never an enemy Companion
   // who happens to share the region (e.g. one who separated into a besieged Stronghold).

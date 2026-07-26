@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
+import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
@@ -879,11 +879,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'attack': {
       requirePhase(state, 'actionResolution');
-      if (armySide(state, action.from) !== actor) throw new Error('No attacking army');
+      // A SORTIE (p.32) attacks out of the siege box, so the actor's Army is the box
+      // rather than the region — the region holds the besieger being attacked.
+      const sortieBox = sortieForce(state, action.from, actor);
+      if (!sortieBox && armySide(state, action.from) !== actor) throw new Error('No attacking army');
       if (actor === 'shadow' && shadowBarredFromRegion(state, action.to)) throw new Error('Region protected from Shadow');
       // An Army die attacks any army; a Character die may attack with ONE army that
       // contains a Leader/Nazgûl/Character (rulebook p.28).
-      const src = state.regions[action.from]!;
+      const src = sortieBox ?? state.regions[action.from]!;
       const leaderArmy = src.leaders > 0 || src.nazgul > 0 || src.characters.length > 0;
       const faces = new Set(state.dice[actor]);
       const hasArmyDie = faces.has('army') || faces.has('armyMuster') || (actor === 'fp' && faces.has('will'))

@@ -14,7 +14,8 @@ import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf } from '../engine/data';
-import { unitCount, STACKING_LIMIT } from '../engine/armies';
+import { unitCount, forceUnitCount, STACKING_LIMIT } from '../engine/armies';
+import { sortieForce } from '../engine/combat';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
 
@@ -138,6 +139,10 @@ function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): 
  *  units as a rearguard, so there's nothing to add (and no double-counting). */
 function maybeAttackRearguard(state: GameState, actor: Side, action: WotrAction): WotrAction {
   if (action.kind !== 'attack' || action.rearguard) return action;
+  // from === to is an assault or a sortie: the region's units belong to the OTHER side of
+  // that battle, so a rearguard built from them would be nonsense. (RAW does let a sortie
+  // leave a rearguard in the Stronghold — the AI just declines to, an AI-strength gap.)
+  if (action.from === action.to) return action;
   const from = action.from, to = action.to, def = REGIONS[from];
   if (!def?.settlement || def.vp <= 0 || settlementCtrl(state, from) !== actor) return action;
   const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
@@ -221,6 +226,17 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       return passiveFp && fs.corruption < 6 ? 40 : 12;
     }
     case 'attack': {
+      // SORTIE (p.32): we're the boxed garrison attacking the besiegers, so from === to
+      // and the REGION's units are theirs, not ours — unitCount(a.from) would measure the
+      // enemy. Sallying out forfeits the Stronghold's 6-to-hit protection, and if the
+      // whole garrison dies the Stronghold falls outright, so only go when clearly
+      // stronger; breaking the siege is worth the Stronghold's VP.
+      const sortieBox = sortieForce(state, a.from, actor);
+      if (sortieBox) {
+        const mine = forceUnitCount(sortieBox), theirs = unitCount(state, a.to);
+        if (theirs === 0 || mine < theirs * 2) return -60;
+        return (mine - theirs) * 8 + REGIONS[a.to]!.vp * 20 + 10;
+      }
       const fromU = unitCount(state, a.from), toU = unitCount(state, a.to);
       if (fromU < toU) return -50;                                     // don't attack uphill
       // Fortified targets (City first round, Stronghold siege every round) mean the
