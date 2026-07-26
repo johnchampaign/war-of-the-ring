@@ -381,8 +381,28 @@ requires — sallying out of a Stronghold into a larger army forfeits the 6-to-h
 and loses the Settlement outright if the garrison dies. That is a strategic judgement, not
 a gap; the path is exercised by the probe and by a sortie-biased random soak.
 
-**Still not modelled:** retreating into siege *mid-battle* (p.31 lets the defender choose
-before every combat round; the `siegeWithdraw` choice is offered once, pre-battle).
+**Retreating into a siege, every round (p.31) — modelled.** "Before every combat round the
+defender must choose to either fight a field battle or retreat into a siege," and an Army
+defending a region containing a friendly Stronghold "may retreat into the Stronghold itself
+at the beginning of **any** Combat round." The offer is therefore inserted by `combatStep`
+ahead of each round's `attackerCard` step (`strongholdWithdrawAvailable`), not once at
+battle start, and `pc.siegeWithdrawAsked` latches it **per round** — declining in round 0
+does not waive the choice in round 1. Withdrawing mid-battle behaves exactly as it does
+pre-battle (garrison to the box, capped at 5; besieger advances into the open field; siege
+established; battle over), and `lastBattle` now records the rounds actually fought and both
+sides' real losses instead of hard-coded zeros. Correctly withheld where RAW forbids it: a
+besieged Army cannot retreat (assault), a sortie is already a siege battle, and the
+Stronghold must be the *defender's*. Covered by `scripts/probe-siege-withdraw.mjs`.
+
+**Deviation:** on withdrawal the besieger *always* advances into the vacated region. RAW
+p.31 makes it optional ("who **may** immediately advance"; the siege is established "if the
+attacking Army chooses to advance"), so declining — leaving the garrison boxed with no
+besieger, hence no siege — is not offered. Pre-existing, unchanged by the per-round work.
+
+**Still not modelled:** the Level-0 Character leave-behind (p.31: "if the retreating Army
+contains a Character of Level 0, that Character is left behind in the region") — this
+applies to retreats generally, including the withdraw-into-siege, and no retreat path
+implements it.
 
 ### Capturing a settlement (p.32)
 Captured when an enemy army enters a region with a City / Town / unoccupied

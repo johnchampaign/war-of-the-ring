@@ -216,6 +216,10 @@ export interface PendingCombat {
   siege?: boolean;
   /** Rounds remaining in this siege assault (1 normally; 3 via Grond / Uruk-hai). */
   siegeRoundsLeft?: number;
+  /** The round whose retreat-into-siege offer the defender has already answered. RAW
+   *  p.31 puts that choice before EVERY combat round, so this is a per-round latch,
+   *  not a once-per-battle flag. */
+  siegeWithdrawAsked?: number;
   /** Grond / The Fighting Uruk-hai: the FP may not play a Combat card in the first
    *  siege round unless a Companion is in the besieged Stronghold. */
   fpCardLock?: boolean;

@@ -371,13 +371,27 @@ function capSiegeBox(state: GameState, id: RegionId): void {
   }
 }
 
+/** RAW p.31: "before every combat round, the defender must choose to either fight a
+ *  field battle or retreat into a siege" — an Army defending a region containing a
+ *  FRIENDLY Stronghold may fall back into it "at the beginning of any Combat round",
+ *  not merely the first. Unavailable once the battle is already a siege battle: a
+ *  besieged Army cannot retreat (p.31), and in an assault or a sortie one side is
+ *  already boxed. */
+function strongholdWithdrawAvailable(state: GameState, pc: PendingCombat): boolean {
+  if (pc.boxed || pc.siege) return false;                       // assault / sortie / forced multi-round assault
+  const r = state.regions[pc.to]!;
+  if (r.besieged || r.siegeBox) return false;                   // already under siege
+  if (REGIONS[pc.to]!.settlement !== 'Stronghold') return false;
+  if (settlementController(state, pc.to) !== pc.defender) return false; // must be THEIR Stronghold
+  return unitCount(state, pc.to) > 0;                           // somebody left to fall back
+}
+
 /** Begin a battle: political reactions, then set up the sub-machine. The driver
  *  (combatStep, run from advance) takes it from here. */
 export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId,
   opts: { siegeRounds?: number; fpCardLock?: boolean; defenderDicePenalty?: number; rearguard?: MoveSelection } = {}): void {
   const dReg = REGIONS[to]!;
   const defender = other(attacker);
-  const isStronghold = dReg.settlement === 'Stronghold';
   const box = state.regions[to]!.siegeBox;
   // ASSAULT: the besieger occupies the besieged region (from===to) and attacks the
   // boxed defenders. RELIEF (from≠to into a besieged region) is a normal field
@@ -415,9 +429,10 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
     // `boxed` MUST be set with `siege`, or defForce() resolves the assault against the
     // besieger's own units in the region and the battle ends after a round or two.
     pc.siege = true; pc.siegeRoundsLeft = opts.siegeRounds; pc.boxed = defender; pc.fpCardLock = !!opts.fpCardLock;
-  } else if (isStronghold && settlementController(state, to) === defender) {
-    pc.step = 'siegeWithdraw'; // the defender may withdraw into the siege instead of a field battle
   }
+  // NB the retreat-into-siege offer is NOT set up here: RAW p.31 puts it before EVERY
+  // combat round, so combatStep inserts it ahead of each round's 'attackerCard' step
+  // (see strongholdWithdrawAvailable) rather than only at battle start.
   // Split off the rearguard (explicit + forced not-At-War units) before the battle —
   // never for an assault (from===to; the besieger assaults with its whole force).
   if (!assault) {
@@ -678,6 +693,13 @@ export function combatStep(state: GameState): void {
     }
     switch (pc.step) {
       case 'attackerCard': {
+        // p.31 asks the Stronghold's defender "field battle or retreat into a siege?"
+        // at the START of every round — including the first — so the offer is inserted
+        // here rather than once at battle start. The latch is per-round: declining in
+        // round 0 does not waive the choice in round 1.
+        if (pc.siegeWithdrawAsked !== pc.round && strongholdWithdrawAvailable(state, pc)) {
+          pc.step = 'siegeWithdraw'; continue;
+        }
         if (hasPlayableCombatCard(state, pc.attacker)) { state.pendingChoice = { owner: pc.attacker, kind: 'combatCard' }; return; }
         pc.step = 'defenderCard'; continue;
       }
@@ -889,17 +911,25 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
     log(state, null, 'combat', `${pc.defender} withdraws into the siege at ${pc.to}; ${pc.attacker} besieges`);
     // The rearguard rejoins `from`; record the siege as established; resume the turn.
     if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
+    // `pc.round` is 0-based and counts the rounds ALREADY fought, so it is exactly the
+    // round count for a mid-battle withdrawal (0 when they fall back before fighting).
+    // Both sides can have real losses by then, so neither total is hard-coded any more.
     state.lastBattle = {
-      seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: 0,
-      atkLosses: 0, defLosses: Math.max(0, (pc.defUnits0 ?? 0) - forceUnitCount(r.siegeBox)), captured: false, siege: true,
-      outcome: `${pc.defender === 'fp' ? 'Free Peoples' : 'Shadow'} withdraw into the siege at ${REGIONS[pc.to]!.name ?? pc.to}`,
+      seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
+      atkLosses: Math.max(0, (pc.atkUnits0 ?? 0) - unitCount(state, pc.to)), // the besieger has just moved from -> to
+      defLosses: Math.max(0, (pc.defUnits0 ?? 0) - forceUnitCount(r.siegeBox)), captured: false, siege: true,
+      outcome: `${pc.defender === 'fp' ? 'Free Peoples' : 'Shadow'} withdraw into the siege at ${REGIONS[pc.to]!.name ?? pc.to}`
+        + (pc.round > 0 ? ` after ${pc.round} round${pc.round === 1 ? '' : 's'}` : ''),
     };
     const opp = other(pc.attacker);
     state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;
     state.pendingCombat = null;
     return;
   }
-  pc.step = 'attackerCard'; // fight in the open
+  // Fight in the open THIS round. The latch is per-round, so p.31 offers the choice
+  // again at the start of the next one.
+  pc.siegeWithdrawAsked = pc.round;
+  pc.step = 'attackerCard';
 }
 export function resolveContinue(state: GameState, cont: boolean): void {
   state.pendingChoice = null;
