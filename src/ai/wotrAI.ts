@@ -467,6 +467,25 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const press = !!pc && !!box && unitCount(state, pc.from) >= garrison + 2;
       return legal.find((a) => a.kind === 'siegeExtend' && a.extend === press) ?? legal[0]!;
     }
+    case 'combatCardCost': {
+      // Sizing a variable-cost combat card. Forfeiting Nazgûl Leadership (Dread and
+      // Despair) costs re-roll dice we may not be using, so spend freely; self-inflicted
+      // hits (Relentless Assault, Onslaught) cost real units, so only buy them when the
+      // army is big enough that a couple of losses will not decide the battle.
+      const d = state.pendingChoice!.data as { kind: 'selfHits' | 'nazgulLeadership'; min: number; max: number; postCasualty?: boolean };
+      const me: Side = state.pendingChoice!.owner;
+      const mine = pc ? unitCount(state, me === pc.attacker ? pc.from : pc.to) : 0;
+      let want: number;
+      if (d.kind === 'nazgulLeadership') {
+        want = d.max;                                  // the forfeit buys enemy dice off; take it all
+      } else if (d.postCasualty) {
+        want = mine >= 6 ? d.max : mine >= 4 ? 1 : 0;  // Onslaught trades our units for 4+ dice
+      } else {
+        want = mine >= 5 ? d.max : mine >= 3 ? 1 : 0;  // Relentless Assault buys +1 per hit
+      }
+      want = Math.max(d.min, Math.min(d.max, want));
+      return legal.find((a2) => a2.kind === 'combatCardCost' && a2.amount === want) ?? legal[0]!;
+    }
     case 'relieveAdvance': {
       // Reliever: march into the Stronghold we just freed, so the two forces defend as
       // one behind its walls — but not if the combined stack would breach the 10-unit

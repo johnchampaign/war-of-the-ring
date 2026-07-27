@@ -180,7 +180,12 @@ export interface PendingChoice {
 // retreat decision; `step` is where to resume.
 export type CombatStep =
   | 'attackerCard' | 'defenderCard'
+  // Cards whose SIZE the owner chooses ("inflict up to two hits on your own units",
+  // "forfeit one or more points of Nazgul Leadership") pause here to be paid for.
+  | 'cardCost'
   | 'beginRound' | 'attackerCasualties' | 'defenderCasualties'
+  // Onslaught alone is paid AFTER casualties, then rolls its counter-attack.
+  | 'onslaught'
   | 'continueDecision' | 'retreatDecision'
   | 'siegeWithdraw' | 'siegeAdvance';
 
@@ -195,6 +200,11 @@ export interface PendingCombat {
   /** Combat cards chosen at battle start (applied in round 0), or null. */
   attackerCard: string | null;
   defenderCard: string | null;
+  /** How much the side chose to pay for a variable-size combat card THIS round
+   *  (self-inflicted hits, or points of Nazgul Leadership forfeited). `undefined`
+   *  means "not asked yet"; both reset when the round's cards are cleared. */
+  atkCardCost?: number;
+  defCardCost?: number;
   /** Hits scored this round (attacker's hits land on the defender, vice versa). */
   atkHits: number;
   defHits: number;

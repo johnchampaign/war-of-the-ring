@@ -12,7 +12,7 @@ import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, liftSiegeIfAbandoned, mergeForceInto, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
-import { combatModsFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods } from './combatCards';
+import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods, type VariableCost } from './combatCards';
 import { log } from './log';
 
 // Safety backstop only — a real field battle terminates when the attacker ceases
@@ -380,6 +380,45 @@ function capSiegeBox(state: GameState, id: RegionId): void {
   }
 }
 
+/** How much a side could actually pay for its variable-cost card right now: the card's
+ *  own cap, limited by what that side has to spend. Self-hits cannot exceed the units
+ *  present (spending your last unit would wipe your own army mid-round); a Nazgûl
+ *  Leadership forfeit cannot exceed the Leadership you have. */
+function costRange(state: GameState, pc: PendingCombat, side: Side, vc: VariableCost): { min: number; max: number } {
+  const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
+  const have = vc.kind === 'selfHits'
+    ? Math.max(0, forceUnitCount(own) - 1)          // never self-annihilate
+    : forceLeadership(state, own, side);
+  const max = Math.min(vc.cap, have);
+  return { min: Math.min(vc.min, max), max };
+}
+
+/** The card `side` played this round, if it has a cost of the given timing that has not
+ *  been paid yet. */
+function unpaidCost(state: GameState, pc: PendingCombat, side: Side, timing: VariableCost['timing']):
+  { card: string; vc: VariableCost; range: { min: number; max: number } } | null {
+  const card = side === pc.attacker ? pc.attackerCard : pc.defenderCard;
+  const paid = side === pc.attacker ? pc.atkCardCost : pc.defCardCost;
+  if (!card || paid !== undefined) return null;
+  const vc = variableCostFor(card);
+  if (!vc || vc.timing !== timing) return null;
+  const range = costRange(state, pc, side, vc);
+  return { card, vc, range };
+}
+
+/** Charge the chosen cost. Self-hits are applied to the payer's own Force; a Leadership
+ *  forfeit is charged through ownLeadershipPenalty at roll time, so nothing to do here. */
+function payCardCost(state: GameState, pc: PendingCombat, side: Side, vc: VariableCost, amount: number): void {
+  if (amount <= 0) return;
+  if (vc.kind === 'selfHits') {
+    const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
+    applyForceCasualties(state, own, side, amount, 'regularsFirst');
+    log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} inflict ${amount} hit${amount === 1 ? '' : 's'} on their own units to power the card`);
+  } else {
+    log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} forfeit ${amount} point${amount === 1 ? '' : 's'} of Nazgûl Leadership`);
+  }
+}
+
 /** RAW p.31: "before every combat round, the defender must choose to either fight a
  *  field battle or retreat into a siege" — an Army defending a region containing a
  *  FRIENDLY Stronghold may fall back into it "at the beginning of any Combat round",
@@ -720,6 +759,24 @@ export function combatStep(state: GameState): void {
       }
       case 'defenderCard': {
         if (hasPlayableCombatCard(state, pc.defender)) { state.pendingChoice = { owner: pc.defender, kind: 'combatCard' }; return; }
+        pc.step = 'cardCost'; continue;
+      }
+      case 'cardCost': {
+        // "Up to two hits against your units", "forfeit one or more points of Nazgûl
+        // Leadership" — the owner sizes the card before the roll. Attacker first, so the
+        // order matches the rest of the round. A side with nothing to spend is charged 0
+        // rather than prompted with a single dead option.
+        for (const side of [pc.attacker, pc.defender]) {
+          const due = unpaidCost(state, pc, side, 'preRoll');
+          if (!due) continue;
+          if (due.range.max <= 0) {
+            if (side === pc.attacker) pc.atkCardCost = 0; else pc.defCardCost = 0;
+            continue;
+          }
+          state.pendingChoice = { owner: side, kind: 'combatCardCost',
+            data: { card: due.card, kind: due.vc.kind, min: due.range.min, max: due.range.max } };
+          return;
+        }
         pc.step = 'beginRound'; continue;
       }
       case 'beginRound': {
@@ -744,8 +801,8 @@ export function combatStep(state: GameState): void {
         const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
         // Each side's combat card (if any) applies THIS round, then is spent —
         // a fresh card may be played next round (rules-spec §7, p.29).
-        const aCtx = { ownCharacters: atkForce(state, pc).characters };
-        const dCtx = { ownCharacters: defForce(state, pc).characters };
+        const aCtx = { ownCharacters: atkForce(state, pc).characters, cost: pc.atkCardCost };
+        const dCtx = { ownCharacters: defForce(state, pc).characters, cost: pc.defCardCost };
         let aMods = pc.attackerCard ? (combatModsFor(pc.attackerCard, aCtx) ?? EMPTY_MODS) : EMPTY_MODS;
         let dMods = pc.defenderCard ? (combatModsFor(pc.defenderCard, dCtx) ?? EMPTY_MODS) : EMPTY_MODS;
         // Cancels resolve in initiative order (lower first; tie -> defender). A
@@ -829,6 +886,7 @@ export function combatStep(state: GameState): void {
         log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk)}; defender ${fmt(dRoll, defHits, def)}`,
           { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
         pc.attackerCard = null; pc.defenderCard = null;
+        pc.atkCardCost = undefined; pc.defCardCost = undefined; // costs are per-round, like the cards
         pc.step = 'attackerCasualties'; continue;
       }
       case 'attackerCasualties': {
@@ -846,10 +904,28 @@ export function combatStep(state: GameState): void {
         if (pc.atkHits > 0) {
           const boxedDef = pc.boxed === pc.defender;
           if (meaningfulForceCasualty(defForce(state, pc), pc.atkHits)) {
-            state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: pc.atkHits, next: pc.siege ? 'siegeAdvance' : 'continueDecision', boxed: boxedDef } };
+            state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: pc.atkHits, next: 'onslaught', boxed: boxedDef } };
             return;
           }
           applyForceCasualties(state, defForce(state, pc), pc.defender, pc.atkHits, 'regularsFirst');
+        }
+        pc.step = 'onslaught'; continue;
+      }
+      case 'onslaught': {
+        // "AFTER removing casualties from the Combat roll and Leader re-roll, you may
+        // inflict and apply up to four additional hits against your units. Roll one die
+        // for each hit you inflicted … and score one hit against the enemy on each
+        // result of 4+." Its own step because it is the only card paid after casualties.
+        for (const side of [pc.attacker, pc.defender]) {
+          const due = unpaidCost(state, pc, side, 'postCasualty');
+          if (!due) continue;
+          if (due.range.max <= 0) {
+            if (side === pc.attacker) pc.atkCardCost = 0; else pc.defCardCost = 0;
+            continue;
+          }
+          state.pendingChoice = { owner: side, kind: 'combatCardCost',
+            data: { card: due.card, kind: due.vc.kind, min: due.range.min, max: due.range.max, postCasualty: true } };
+          return;
         }
         pc.step = pc.siege ? 'siegeAdvance' : 'continueDecision'; continue;
       }
@@ -912,6 +988,34 @@ export function resolveSiegeExtend(state: GameState, extend: boolean): void {
   pc.round += 1;
   pc.step = 'attackerCard'; // advance() re-drives the battle sub-machine
 }
+/** Resolve a variable-size combat card's cost: charge it, and for Onslaught roll the
+ *  counter-attack it buys (one die per self-inflicted hit, a hit on 4+) and apply those
+ *  hits to the enemy. The casualty allocation for BOTH sides of this exchange is
+ *  auto-resolved Regulars-first — a documented deviation, matching the other
+ *  card-driven eliminations. */
+export function resolveCombatCardCost(state: GameState, amount: number): void {
+  const pc = state.pendingCombat!;
+  const d = state.pendingChoice!.data as { card: string; kind: VariableCost['kind']; min: number; max: number; postCasualty?: boolean };
+  const side = state.pendingChoice!.owner;
+  state.pendingChoice = null;
+  const paid = Math.max(d.min, Math.min(d.max, Math.floor(amount)));
+  if (side === pc.attacker) pc.atkCardCost = paid; else pc.defCardCost = paid;
+  const vc = variableCostFor(d.card)!;
+  payCardCost(state, pc, side, vc, paid);
+
+  if (d.postCasualty && paid > 0) {
+    // Onslaught's counter-attack. Hits on 4+, not the 5+ of a normal Combat roll.
+    const dice: number[] = [];
+    let hits = 0;
+    withRng(state, (rng) => { for (let i = 0; i < paid; i++) { const r = rng.rollDie(6); dice.push(r); if (r >= 4) hits++; } });
+    const enemy = other(side);
+    const target = side === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
+    log(state, null, 'combat', `Onslaught counter-attack: [${dice.join(' ')}] on 4+ → ${hits} hit${hits === 1 ? '' : 's'}`);
+    if (hits > 0) applyForceCasualties(state, target, enemy, hits, 'regularsFirst');
+  }
+  // Re-enter the same step so the OTHER side's cost (if any) is asked before moving on.
+}
+
 /** Resolve the defender's siege-withdraw choice: retreat into the Stronghold (the
  *  region becomes besieged, no battle this action) or stand and fight a field battle. */
 export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void {

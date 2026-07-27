@@ -98,7 +98,7 @@ const BY_TITLE: Record<string, CombatMods> = {
   // "Both Armies add N to all dice on their Combat roll and Leader re-roll"
   'Deadly Strife': { rollBonus: 2, rerollBonus: 2, symmetricBonus: true },
   'Desperate Battle': { rollBonus: 1, rerollBonus: 1, symmetricBonus: true },
-  'Relentless Assault': { rollBonus: 1 }, // self-inflicted-hits cost is a choice — unmodelled (D5)
+  'Relentless Assault': {}, // sized by the self-hits the owner chooses to inflict (VARIABLE_COST)
   // weaken the enemy
   'Daylight': { maxDiceEnemy: 3 },
   'Brave Stand': { maxDiceEnemy: 3 },
@@ -106,7 +106,7 @@ const BY_TITLE: Record<string, CombatMods> = {
   'Advantageous Position': { enemyRollPenalty: 1 },
   // Forfeit 1 Nazgûl Leadership → the enemy rolls 1 fewer COMBAT die (not a worse
   // to-hit). Forfeiting more than one point is a choice — unmodelled (D5).
-  'Dread and Despair': { enemyDiceReduction: 1, ownLeadershipPenalty: 1 },
+  'Dread and Despair': {}, // sized by the Nazgûl Leadership the owner forfeits (VARIABLE_COST)
   'Confusion': { enemyRollPenalty: 1 },
   'Foul Stench': { negateEnemyRerollIfNazgulDominant: true }, // RAW gates it on Leadership (see the field)
   // cancel one enemy Companion's Leadership + abilities for the round
@@ -117,7 +117,7 @@ const BY_TITLE: Record<string, CombatMods> = {
   'Charge': { extraAttackDice: 3 },
   'Sudden Strike': { extraAttackDice: 3 },
   'We Come to Kill': { extraAttackDice: 3 },
-  'Onslaught': { extraAttackDice: 4 },
+  'Onslaught': {}, // resolved as its own post-casualty step, not a roll modifier (VARIABLE_COST)
   // extra hits
   'No Quarter': { bonusHitsIfAny: 1 },
   'Nameless Wood': { bonusHitsIfAny: 2 },
@@ -176,7 +176,47 @@ export function describeCombatMods(mods: CombatMods): string {
 /** What the card's owner has in the battle, for the few effects whose size depends on
  *  it. Optional: callers that only want to know whether a card HAS an effect (the AI's
  *  card valuation, `hasCombatEffect`) can omit it and get the baseline. */
-export interface CombatModContext { ownCharacters?: readonly string[] }
+export interface CombatModContext {
+  ownCharacters?: readonly string[];
+  /** What the owner chose to pay for a variable-size card this round. */
+  cost?: number;
+}
+
+/** Cards whose effect is sized by a cost the OWNER chooses when playing them.
+ *  RAW wording, and why each is here rather than a flat entry in BY_TITLE:
+ *   - Relentless Assault: "you may inflict and apply UP TO TWO hits against your
+ *     units. Add 1 to all dice on your Combat roll FOR EACH hit you inflicted."
+ *   - Dread and Despair: "forfeit ONE OR MORE points of Nazgûl Leadership. …the
+ *     Free Peoples player rolls one Combat die less (to a minimum of one) FOR EVERY
+ *     point you have chosen to forfeit."
+ *   - Onslaught: "AFTER removing casualties…, you may inflict and apply UP TO FOUR
+ *     additional hits against your units. Roll one die for each hit you inflicted…
+ *     and score one hit against the enemy on each result of 4+."
+ *  All three used to grant their benefit for free at a fixed size. */
+export interface VariableCost {
+  /** What is spent: the owner's own Army units, or points of Nazgûl Leadership. */
+  kind: 'selfHits' | 'nazgulLeadership';
+  /** When the owner is asked. Onslaught is the only post-casualty one. */
+  timing: 'preRoll' | 'postCasualty';
+  /** Most that may be spent by the card's own text (further capped by what the
+   *  owner actually has). */
+  cap: number;
+  /** Least that may be spent. "One or more" is mandatory once the card is played;
+   *  "you may" allows zero. */
+  min: number;
+}
+
+const VARIABLE_COST: Record<string, VariableCost> = {
+  'Relentless Assault': { kind: 'selfHits', timing: 'preRoll', cap: 2, min: 0 },
+  'Dread and Despair': { kind: 'nazgulLeadership', timing: 'preRoll', cap: 99, min: 1 },
+  'Onslaught': { kind: 'selfHits', timing: 'postCasualty', cap: 4, min: 0 },
+};
+
+/** The variable cost of the card, or null when its size is fixed. */
+export function variableCostFor(cardId: string): VariableCost | null {
+  const title = EVENT_BY_ID[cardId]?.combat?.title;
+  return title ? (VARIABLE_COST[title] ?? null) : null;
+}
 
 export function combatModsFor(cardId: string, ctx?: CombatModContext): CombatMods | null {
   const title = EVENT_BY_ID[cardId]?.combat?.title;
@@ -191,6 +231,11 @@ export function combatModsFor(cardId: string, ctx?: CombatModContext): CombatMod
   if (title === 'Andúril' && ctx?.ownCharacters?.includes('aragorn')) {
     return { ...base, guaranteedHits: 2, ownLeadershipPenalty: 2 };
   }
+  // Variable-size cards: the mods ARE the cost the owner paid. Until it is chosen the
+  // card does nothing, so an unanswered prompt can never leak a free effect.
+  const cost = ctx?.cost ?? 0;
+  if (title === 'Relentless Assault') return cost > 0 ? { ...base, rollBonus: cost } : base;
+  if (title === 'Dread and Despair') return cost > 0 ? { ...base, enemyDiceReduction: cost, ownLeadershipPenalty: cost } : base;
   return base;
 }
 export const hasCombatEffect = (cardId: string): boolean => combatModsFor(cardId) !== null;
