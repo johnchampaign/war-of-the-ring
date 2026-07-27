@@ -1,0 +1,4 @@
+# The repo is text-only. Pin LF in the index and the working tree so a
+# checkout on Windows (core.autocrlf=true) can't report every file as
+# modified when the same clone is next opened on Linux.
+* text=auto eol=lf

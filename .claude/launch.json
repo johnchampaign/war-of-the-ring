@@ -3,14 +3,14 @@
   "configurations": [
     {
       "name": "wotr-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "npm run dev"],
       "port": 5173
     },
     {
       "name": "wotr-preview",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "preview", "--", "--port", "4173"],
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "npm run preview -- --port 4173"],
       "port": 4173
     }
   ]
