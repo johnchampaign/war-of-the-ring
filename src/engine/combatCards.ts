@@ -33,6 +33,11 @@ export interface CombatMods {
   cancelEnemyCard?: boolean;
   /** Negate the enemy's Leader re-roll. */
   negateEnemyReroll?: boolean;
+  /** Negate it ONLY when the Shadow's Nazgûl Leadership equals or exceeds the total
+   *  Free Peoples Leadership — Foul Stench states that as a condition, not a cost, and
+   *  it used to be applied unconditionally. Evaluated at roll time in rollHits, where
+   *  both Forces are known. */
+  negateEnemyRerollIfNazgulDominant?: boolean;
   /** Cancel N hits the owner would take this round. */
   cancelHits?: number;
   /** `cancelHits` only applies if the ENEMY scored at least this many hits this
@@ -89,7 +94,7 @@ const BY_TITLE: Record<string, CombatMods> = {
   'They Are Terrible': { rerollBonus: 1, ownLeadershipPenalty: 1 }, // Leader re-roll ONLY
   // forfeit a Companion's Leadership to turn one miss into a hit
   'Mighty Attack': { guaranteedHits: 1, ownLeadershipPenalty: 1 },
-  'Andúril': { guaranteedHits: 1, ownLeadershipPenalty: 1 }, // Strider's forfeit; Aragorn's 2-hit option is a choice (D5)
+  'Andúril': { guaranteedHits: 1, ownLeadershipPenalty: 1 }, // Strider's rating; upgraded to Aragorn's 2 in combatModsFor
   // "Both Armies add N to all dice on their Combat roll and Leader re-roll"
   'Deadly Strife': { rollBonus: 2, rerollBonus: 2, symmetricBonus: true },
   'Desperate Battle': { rollBonus: 1, rerollBonus: 1, symmetricBonus: true },
@@ -103,7 +108,7 @@ const BY_TITLE: Record<string, CombatMods> = {
   // to-hit). Forfeiting more than one point is a choice — unmodelled (D5).
   'Dread and Despair': { enemyDiceReduction: 1, ownLeadershipPenalty: 1 },
   'Confusion': { enemyRollPenalty: 1 },
-  'Foul Stench': { negateEnemyReroll: true },
+  'Foul Stench': { negateEnemyRerollIfNazgulDominant: true }, // RAW gates it on Leadership (see the field)
   // cancel one enemy Companion's Leadership + abilities for the round
   'Words of Power': { enemyLeadershipPenalty: 1, enemyCaptainCancel: true },
   // eliminate an FP Leader / Companion when the Leader re-roll scores a hit
@@ -168,9 +173,25 @@ export function describeCombatMods(mods: CombatMods): string {
 }
 
 /** The combat mods for a card id, or null if its combat half isn't modelled. */
-export function combatModsFor(cardId: string): CombatMods | null {
+/** What the card's owner has in the battle, for the few effects whose size depends on
+ *  it. Optional: callers that only want to know whether a card HAS an effect (the AI's
+ *  card valuation, `hasCombatEffect`) can omit it and get the baseline. */
+export interface CombatModContext { ownCharacters?: readonly string[] }
+
+export function combatModsFor(cardId: string, ctx?: CombatModContext): CombatMods | null {
   const title = EVENT_BY_ID[cardId]?.combat?.title;
-  return title ? (BY_TITLE[title] ?? null) : null;
+  if (!title) return null;
+  const base = BY_TITLE[title];
+  if (!base) return null;
+  // Andúril: "forfeit Strider's Leadership to change one missed die to a hit, OR
+  // forfeit Aragorn's Leadership to change UP TO TWO." Which one you have decides it —
+  // there is no real choice, because forfeiting Aragorn costs his full Leadership (2)
+  // whether you convert one die or two, so converting two is never worse. The table
+  // holds Strider's numbers; upgrade them when Aragorn is the one in the battle.
+  if (title === 'Andúril' && ctx?.ownCharacters?.includes('aragorn')) {
+    return { ...base, guaranteedHits: 2, ownLeadershipPenalty: 2 };
+  }
+  return base;
 }
 export const hasCombatEffect = (cardId: string): boolean => combatModsFor(cardId) !== null;
 export const EMPTY_MODS: CombatMods = {};

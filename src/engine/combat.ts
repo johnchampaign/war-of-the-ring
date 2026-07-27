@@ -63,7 +63,8 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
  *  re-rolls, and the to-hit target so the UI can colour the hits. */
 export interface CombatRoll { dice: number[]; rerolls: number[]; target: number; rerollTarget?: number }
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
-  baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll, force?: Force): number {
+  baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll, force?: Force,
+  enemyForce?: Force): number {
   // `force` (a siege box) overrides where this side's figures are read from — used
   // for the boxed DEFENDER in a siege assault (they're in to.siegeBox, not the region).
   const own: Force = force ?? state.regions[ownRegion]!;
@@ -91,7 +92,15 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     leadVal = Math.max(0, leadVal - (side === 'shadow' ? nazgulLead : 1));
   }
   const lead = Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0) - (enemyMods.enemyLeadershipPenalty ?? 0));
-  const allowReroll = !enemyMods.negateEnemyReroll;
+  // Foul Stench cancels the FP Leader re-roll only "if the Nazgûl Leadership equals or
+  // exceeds the total Free Peoples Leadership" (p. card text). `side` here is the side
+  // ROLLING, so this fires while the FP rolls and the Shadow holds the card.
+  let conditionalNegate = false;
+  if (enemyMods.negateEnemyRerollIfNazgulDominant && side === 'fp') {
+    const shadow = enemyForce ?? state.regions[enemyRegion]!;
+    conditionalNegate = forceLeadership(state, shadow, 'shadow') >= forceLeadership(state, own, 'fp');
+  }
+  const allowReroll = !enemyMods.negateEnemyReroll && !conditionalNegate;
   if (roll) { roll.dice = []; roll.rerolls = []; roll.target = target; roll.rerollTarget = rerollTarget; }
   let hits = withRng(state, (rng) => {
     let h = 0, failed = 0;
@@ -735,8 +744,10 @@ export function combatStep(state: GameState): void {
         const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
         // Each side's combat card (if any) applies THIS round, then is spent —
         // a fresh card may be played next round (rules-spec §7, p.29).
-        let aMods = pc.attackerCard ? (combatModsFor(pc.attackerCard) ?? EMPTY_MODS) : EMPTY_MODS;
-        let dMods = pc.defenderCard ? (combatModsFor(pc.defenderCard) ?? EMPTY_MODS) : EMPTY_MODS;
+        const aCtx = { ownCharacters: atkForce(state, pc).characters };
+        const dCtx = { ownCharacters: defForce(state, pc).characters };
+        let aMods = pc.attackerCard ? (combatModsFor(pc.attackerCard, aCtx) ?? EMPTY_MODS) : EMPTY_MODS;
+        let dMods = pc.defenderCard ? (combatModsFor(pc.defenderCard, dCtx) ?? EMPTY_MODS) : EMPTY_MODS;
         // Cancels resolve in initiative order (lower first; tie -> defender). A
         // cancel removes the opponent's card only if it resolves first — the
         // attacker (never the tie-winner) needs strictly lower initiative; the
@@ -772,13 +783,14 @@ export function combatStep(state: GameState): void {
         const atkTarget = (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
         const aRoll: CombatRoll = { dice: [], rerolls: [], target: atkTarget };
         const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, pc.whiteRiderForfeit, aRoll,
-          pc.boxed === pc.attacker ? state.regions[pc.from]!.siegeBox : undefined);
+          pc.boxed === pc.attacker ? state.regions[pc.from]!.siegeBox : undefined, defForce(state, pc));
         // Help Unlooked For: cap the defender's dice (min 1) via the existing maxDiceEnemy mod.
         const defEnemyMods = pc.defDicePenalty
           ? { ...aMods, maxDiceEnemy: Math.max(1, Math.min(5, forceUnitCount(defForce(state, pc))) - pc.defDicePenalty) }
           : aMods;
         const dRoll: CombatRoll = { dice: [], rerolls: [], target: 5 };
-        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit, dRoll, pc.boxed === pc.defender ? state.regions[pc.to]!.siegeBox : undefined);
+        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit, dRoll,
+          pc.boxed === pc.defender ? state.regions[pc.to]!.siegeBox : undefined, atkForce(state, pc));
         pc.atkRoll = aRoll; pc.defRoll = dRoll;
         // Hit cancellation: Shield-wall, plus Heroic Death's sacrifice-a-Leader.
         // Shield-wall only fires "if your opponent scored two or more hits", so a
