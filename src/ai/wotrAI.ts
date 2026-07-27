@@ -467,6 +467,11 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const press = !!pc && !!box && unitCount(state, pc.from) >= garrison + 2;
       return legal.find((a) => a.kind === 'siegeExtend' && a.extend === press) ?? legal[0]!;
     }
+    case 'besiegerAdvance': {
+      // Advancing is what turns a repelled attack into a siege — decline and the
+      // garrison simply walks back out and nothing was gained. Always advance.
+      return legal.find((a2) => a2.kind === 'besiegerAdvance' && a2.advance) ?? legal[0]!;
+    }
     case 'combatCardCost': {
       // Sizing a variable-cost combat card. Forfeiting Nazgûl Leadership (Dread and
       // Despair) costs re-roll dice we may not be using, so spend freely; self-inflicted

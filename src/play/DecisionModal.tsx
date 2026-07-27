@@ -35,6 +35,7 @@ const CHOICE_TITLE: Record<string, string> = {
   siegeExtend: 'Press the assault? (reduce one Elite to a Regular for another round)',
   relieveAdvance: 'The siege is broken — advance your Army into the region?',
   combatCardCost: 'How much will you pay for this card?',
+  besiegerAdvance: 'They have fallen back inside — advance and lay siege?',
   whiteRider: 'The White Rider — forfeit Gandalf’s Leadership to negate all Nazgûl Leadership?',
   balrog: 'Balrog of Moria — discard it to draw an extra Hunt tile?',
   crebain: 'Flocks of Crebain — discard for +1 to all Hunt dice this roll?',

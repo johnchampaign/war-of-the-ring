@@ -69,6 +69,7 @@ export type WotrAction =
   | { kind: 'siegeWithdraw'; withdraw: boolean } // defender: withdraw into the siege or fight
   | { kind: 'siegeExtend'; extend: boolean } // attacker: reduce an Elite to press the assault another round (p.32)
   | { kind: 'relieveAdvance'; advance: boolean } // reliever: march into the region whose siege it just broke (p.31, p.32)
+  | { kind: 'besiegerAdvance'; advance: boolean } // attacker: advance into the region a defender just vacated, establishing the siege (p.31)
   | { kind: 'combatCardCost'; amount: number } // size a variable-cost combat card (self-hits / Nazgûl Leadership forfeited)
   | { kind: 'whiteRider'; forfeit: boolean } // FP: forfeit Gandalf the White's Leadership to negate Nazgûl Leadership
   | { kind: 'balrog'; use: boolean } // Shadow: discard Balrog of Moria to draw an extra Hunt tile

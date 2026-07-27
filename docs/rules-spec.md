@@ -406,15 +406,24 @@ sides' real losses instead of hard-coded zeros. Correctly withheld where RAW for
 besieged Army cannot retreat (assault), a sortie is already a siege battle, and the
 Stronghold must be the *defender's*. Covered by `scripts/probe-siege-withdraw.mjs`.
 
-**Deviation:** on withdrawal the besieger *always* advances into the vacated region. RAW
-p.31 makes it optional ("who **may** immediately advance"; the siege is established "if the
-attacking Army chooses to advance"), so declining — leaving the garrison boxed with no
-besieger, hence no siege — is not offered. Pre-existing, unchanged by the per-round work.
+**The besieger's advance is the attacker's call (p.31) — modelled.** "The region around
+the Stronghold is left open to the enemy, who **may** immediately advance into the region.
+**If** the attacking Army chooses to advance, the Stronghold is now considered under siege
+and the battle is over." Withdrawing therefore boxes the garrison and pauses on a
+`besiegerAdvance` PendingChoice. Advancing establishes the siege as before; **declining**
+leaves nobody besieging, so per p.32 ("if no Army units are left behind, the Stronghold is
+no longer under siege") the garrison merges straight back onto the open field and the
+battle ends with the ground unchanged. The 5-unit garrison cap is applied only once the
+advance happens — it bites when a Stronghold "comes under siege", and until then there is
+no siege to cap.
 
-**Still not modelled:** the Level-0 Character leave-behind (p.31: "if the retreating Army
-contains a Character of Level 0, that Character is left behind in the region") — this
-applies to retreats generally, including the withdraw-into-siege, and no retreat path
-implements it.
+**Level-0 Characters are left behind on a retreat (p.31) — modelled.** "If the retreating
+Army contains a Character of Level 0, that Character is left behind in the region."
+`moveStack` takes a `retreat` flag and filters `levelOf(c) === 0` on the four retreat
+paths (pre-combat retreat x2, and the two retreat-destination resolvers), leaving the
+besieger's advance unaffected. Level 0 is **Saruman and Gollum**, so this subsumes the
+Saruman-specific "never leaves Orthanc" filter on retreats while stating the actual rule
+rather than one figure's name.
 
 ### Capturing a settlement (p.32)
 Captured when an enemy army enters a region with a City / Town / unoccupied

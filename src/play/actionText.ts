@@ -86,6 +86,7 @@ export function describeAction(a: WotrAction): string {
     case 'siegeWithdraw': return a.withdraw ? 'Withdraw into the siege' : 'Fight in the open';
     case 'siegeExtend': return a.extend ? 'Press the assault (reduce an Elite)' : 'Cease the assault (siege holds)';
     case 'relieveAdvance': return a.advance ? 'Advance into the freed region' : 'Hold position';
+    case 'besiegerAdvance': return a.advance ? 'Advance and lay siege' : 'Stay put (no siege)';
     case 'combatCardCost': return a.amount === 0 ? 'Pay nothing' : `Pay ${a.amount}`;
     case 'whiteRider': return a.forfeit ? 'Forfeit Gandalf’s Leadership (negate Nazgûl)' : 'Keep Gandalf’s Leadership';
     case 'balrog': return a.use ? 'Discard Balrog of Moria — draw an extra Hunt tile' : 'Don’t use the Balrog';
@@ -155,7 +156,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
+const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);
 
 /** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)

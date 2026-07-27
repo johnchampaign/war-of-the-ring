@@ -22,7 +22,8 @@ project's `docs/new-game-playbook.md` once; this file is the game-specific brief
 - `src/adapter/wotrAdapter.ts` is the **only** engine-side file that imports
   `digital-boardgame-framework`. It implements the `GameAdapter`
   (`applyAction`/`tryApplyAction`/`currentActor`/`legalActions`/`viewFor`/
-  `result`, `schemaVersion: 1`, throwing `migrate()`).
+  `result`, `schemaVersion: 2`, throwing `migrate()`). The local-save compatibility
+  check (`src/online/localSave.ts`) keys off this number, so keep it accurate.
 - `src/adapter/redact.ts` (`viewFor`) must hide, per seat: the **Fellowship's
   hidden position**, the opponent's **event-card hand**, the **Hunt-tile bag**,
   and the **RNG state**; the turn log is **default-deny** (public kinds + the

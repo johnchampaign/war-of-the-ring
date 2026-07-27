@@ -105,7 +105,18 @@ const boxCount = (state, id) => (state.regions[id].siegeBox ? forceUnitCount(sta
   check('offered at the start of round 2', s.pendingChoice?.kind === 'siegeWithdraw');
   const res = wotrAdapter.tryApplyAction(s, { kind: 'siegeWithdraw', withdraw: true }, 'fp');
   check('withdraw accepted', res.ok, res.ok ? '' : res.error);
-  const after = res.ok ? res.state : s;
+  const mid = res.ok ? res.state : s;
+  // p.31 leaves the region "open to the enemy, WHO MAY immediately advance" — the siege
+  // exists only if the attacker takes it, so the withdrawal pauses on that call.
+  check('the attacker is asked whether to advance', mid.pendingChoice?.kind === 'besiegerAdvance',
+    `kind=${mid.pendingChoice?.kind}`);
+  check('the ATTACKER owns that call', mid.pendingChoice?.owner === 'shadow');
+  check('garrison is already boxed', boxCount(mid, to) === 3, `box has ${boxCount(mid, to)}`);
+  check('but no siege until they advance', mid.regions[to].besieged === false);
+
+  const adv = wotrAdapter.tryApplyAction(mid, { kind: 'besiegerAdvance', advance: true }, 'shadow');
+  check('advancing accepted', adv.ok, adv.ok ? '' : adv.error);
+  const after = adv.ok ? adv.state : mid;
   check('garrison is in the siege box', boxCount(after, to) === 3, `box has ${boxCount(after, to)}`);
   check('region flagged besieged', after.regions[to].besieged === true);
   check('besieger occupies the open field', unitCount(after, to) === 4, `${to} has ${unitCount(after, to)}`);
@@ -113,6 +124,27 @@ const boxCount = (state, id) => (state.regions[id].siegeBox ? forceUnitCount(sta
   check('battle is over', after.pendingCombat === null);
   check('rounds fought recorded, not 0', after.lastBattle?.rounds === 2, `rounds=${after.lastBattle?.rounds}`);
   check('nothing captured — the garrison still holds it', after.lastBattle?.captured === false);
+  console.log(`  outcome: "${after.lastBattle?.outcome}"`);
+}
+
+// --- 3b. the attacker DECLINES to advance: no siege forms ------------------------
+{
+  console.log('\n=== the attacker declines to advance (p.31 "may") ===');
+  const { state, to, from } = strongholdSetup({ defenders: 3, attackers: 4 });
+  startBattle(state, 'shadow', from, to);
+  combatStep(state);
+  const res = wotrAdapter.tryApplyAction(state, { kind: 'siegeWithdraw', withdraw: true }, 'fp');
+  const mid = res.ok ? res.state : state;
+  const dec = wotrAdapter.tryApplyAction(mid, { kind: 'besiegerAdvance', advance: false }, 'shadow');
+  check('declining accepted', dec.ok, dec.ok ? '' : dec.error);
+  const after = dec.ok ? dec.state : mid;
+  // No besieger in the region means no siege (p.32), so the garrison comes back out.
+  check('no siege was established', after.regions[to].besieged === false);
+  check('the box is gone', after.regions[to].siegeBox == null);
+  check('the garrison is back in the open field', unitCount(after, to) === 3, `${to} has ${unitCount(after, to)}`);
+  check('the attacker stayed put', unitCount(after, from) === 4, `${from} has ${unitCount(after, from)}`);
+  check('battle is over', after.pendingCombat === null);
+  check('recorded as no siege', after.lastBattle?.siege === false, `siege=${after.lastBattle?.siege}`);
   console.log(`  outcome: "${after.lastBattle?.outcome}"`);
 }
 

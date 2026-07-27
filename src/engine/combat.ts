@@ -528,7 +528,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
         return true; // pause; resolvePreCombatRetreat resumes
       }
       const dest = dests[0] ?? null;
-      if (dest) { moveStack(state, own, dest, ef.side); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
+      if (dest) { moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
     } else if (ef.mods.preCombatAttackDice) {
       if (unitCount(state, enemy) === 0) continue;
       const dice = ef.mods.preCombatAttackDice;
@@ -558,7 +558,7 @@ export function resolvePreCombatRetreat(state: GameState, region: RegionId): voi
   const side = armySide(state, from);
   const dests = freeAdjacentRegions(state, from, side!);
   const dest = dests.includes(region) ? region : dests[0];
-  if (dest) { moveStack(state, from, dest, side!); log(state, null, 'combat', `${side} retreats ${from}→${dest} before combat`); }
+  if (dest) { moveStack(state, from, dest, side!, true, true); log(state, null, 'combat', `${side} retreats ${from}→${dest} before combat`); }
 }
 
 /** Move the whole army at `from` into `to` (defender gone), capturing. */
@@ -1023,11 +1023,52 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
   state.pendingChoice = null;
   if (withdraw) {
     const r = state.regions[pc.to]!;
-    // RAW: the defenders withdraw into the siege box; the BESIEGER advances out of
-    // `from` into the region's open field (it now occupies the besieged region).
+    // RAW p.31: the defenders go into the Stronghold Box, and "the region around the
+    // Stronghold is left open to the enemy, WHO MAY immediately advance into the
+    // region. IF the attacking Army chooses to advance, the Stronghold is now
+    // considered under siege and the battle is over." So the advance — and with it
+    // whether a siege exists at all — is the attacker's call, not automatic.
     r.siegeBox = { units: r.units, leaders: r.leaders, nazgul: r.nazgul, characters: r.characters };
     r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = [];
-    capSiegeBox(state, pc.to); // a besieged Stronghold's garrison is at most 5 (rulebook p.31)
+    // NB the 5-unit garrison cap is NOT applied yet: it bites when a Stronghold "comes
+    // under siege", and no siege exists until the besieger actually advances.
+    state.pendingChoice = { owner: pc.attacker, kind: 'besiegerAdvance' };
+    return;
+  }
+  // Fight in the open THIS round. The latch is per-round, so p.31 offers the choice
+  // again at the start of the next one.
+  pc.siegeWithdrawAsked = pc.round;
+  pc.step = 'attackerCard';
+}
+
+/** Resolve the attacker's "advance into the vacated region?" call after a defender has
+ *  retreated into the Stronghold (p.31). Advancing establishes the siege and ends the
+ *  battle; declining leaves nobody besieging, so per p.32 ("if no Army units are left
+ *  behind, the Stronghold is no longer under siege") the garrison simply comes back out
+ *  and the battle ends with the ground unchanged. */
+export function resolveBesiegerAdvance(state: GameState, advance: boolean): void {
+  const pc = state.pendingCombat!;
+  const r = state.regions[pc.to]!;
+  state.pendingChoice = null;
+  if (!advance) {
+    // No besieger, no siege: the garrison returns to the open field it just left.
+    if (r.siegeBox) mergeForceInto(state, pc.to, r.siegeBox);
+    delete r.siegeBox; r.besieged = false;
+    log(state, null, 'combat', `${pc.defender} fall back into ${REGIONS[pc.to]!.name ?? pc.to}, but ${pc.attacker} does not advance — no siege`);
+    if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
+    state.lastBattle = {
+      seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
+      atkLosses: Math.max(0, (pc.atkUnits0 ?? 0) - unitCount(state, pc.from)),
+      defLosses: Math.max(0, (pc.defUnits0 ?? 0) - unitCount(state, pc.to)), captured: false, siege: false,
+      outcome: `${pc.attacker === 'fp' ? 'Free Peoples' : 'Shadow'} decline to besiege ${REGIONS[pc.to]!.name ?? pc.to}`,
+    };
+    const opp0 = other(pc.attacker);
+    state.currentPlayer = state.dice[opp0].length > 0 ? opp0 : pc.attacker;
+    state.pendingCombat = null;
+    return;
+  }
+  {
+    capSiegeBox(state, pc.to); // NOW it comes under siege — garrison capped at 5 (p.31)
     moveStack(state, pc.from, pc.to, pc.attacker, false); // besieger occupies the open field (NO capture — the boxed garrison holds the Settlement)
     r.besieged = true;
     log(state, null, 'combat', `${pc.defender} withdraws into the siege at ${pc.to}; ${pc.attacker} besieges`);
@@ -1039,19 +1080,14 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
     state.lastBattle = {
       seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
       atkLosses: Math.max(0, (pc.atkUnits0 ?? 0) - unitCount(state, pc.to)), // the besieger has just moved from -> to
-      defLosses: Math.max(0, (pc.defUnits0 ?? 0) - forceUnitCount(r.siegeBox)), captured: false, siege: true,
+      defLosses: Math.max(0, (pc.defUnits0 ?? 0) - (r.siegeBox ? forceUnitCount(r.siegeBox) : 0)), captured: false, siege: true,
       outcome: `${pc.defender === 'fp' ? 'Free Peoples' : 'Shadow'} withdraw into the siege at ${REGIONS[pc.to]!.name ?? pc.to}`
         + (pc.round > 0 ? ` after ${pc.round} round${pc.round === 1 ? '' : 's'}` : ''),
     };
     const opp = other(pc.attacker);
     state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;
     state.pendingCombat = null;
-    return;
   }
-  // Fight in the open THIS round. The latch is per-round, so p.31 offers the choice
-  // again at the start of the next one.
-  pc.siegeWithdrawAsked = pc.round;
-  pc.step = 'attackerCard';
 }
 export function resolveContinue(state: GameState, cont: boolean): void {
   state.pendingChoice = null;
@@ -1063,7 +1099,7 @@ export function resolveRetreat(state: GameState, retreat: boolean): void {
   state.pendingChoice = null;
   if (retreat) {
     const dests = freeAdjacentRegions(state, pc.to, pc.defender);
-    if (dests.length === 1) { moveStack(state, pc.to, dests[0]!, pc.defender); finishCombat(state, true); return; }
+    if (dests.length === 1) { moveStack(state, pc.to, dests[0]!, pc.defender, true, true); finishCombat(state, true); return; }
     if (dests.length > 1) { state.pendingChoice = { owner: pc.defender, kind: 'retreatTo' }; return; } // defender picks where
     // none available -> stand
   }
@@ -1077,7 +1113,7 @@ export function resolveRetreatTo(state: GameState, region: RegionId): void {
   state.pendingChoice = null;
   const dests = freeAdjacentRegions(state, pc.to, pc.defender);
   const dest = dests.includes(region) ? region : dests[0];
-  if (dest) { moveStack(state, pc.to, dest, pc.defender); finishCombat(state, true); return; }
+  if (dest) { moveStack(state, pc.to, dest, pc.defender, true, true); finishCombat(state, true); return; }
   pc.round += 1; pc.step = 'attackerCard'; // shouldn't happen; stand as a fallback
 }
 
@@ -1090,15 +1126,20 @@ export const retreatDestinations = (state: GameState): RegionId[] => {
  *  (p.32: "captured when an enemy Army enters" — any movement counts; player
  *  report: a Shadow army retreated into Pelargir without taking it). The one
  *  NON-capturing use is siege entry, where the boxed garrison still holds. */
-function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side, capture = true): void {
+function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side, capture = true, retreat = false): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
   for (const n of Object.keys(src.units) as Nation[]) {
     const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
   }
   // Only the moving side's Characters travel; an enemy Character stranded in the
-  // region stays behind (it never belonged to this Army). Saruman never leaves Orthanc.
-  const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
+  // region stays behind (it never belonged to this Army). Saruman never leaves Orthanc
+  // (character card). On a RETREAT there is a further rule — p.31, Special Exceptions:
+  // "If the retreating Army contains a Character of Level 0, that Character is left
+  // behind in the region." Level 0 is Saruman and Gollum, so this subsumes the Saruman
+  // case on retreats and states the actual rule rather than one figure's name.
+  const movingChars = src.characters.filter((c) =>
+    characterSide(c) === side && c !== 'saruman' && !(retreat && levelOf(c) === 0));
   dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
   src.units = {}; src.leaders = 0; src.nazgul = 0;
   src.characters = src.characters.filter((c) => !movingChars.includes(c));

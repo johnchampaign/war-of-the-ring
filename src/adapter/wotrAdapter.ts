@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
+import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
@@ -149,6 +149,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'siegeExtend', extend: true }, { kind: 'siegeExtend', extend: false }];
       case 'relieveAdvance':
         return [{ kind: 'relieveAdvance', advance: true }, { kind: 'relieveAdvance', advance: false }];
+      case 'besiegerAdvance':
+        return [{ kind: 'besiegerAdvance', advance: true }, { kind: 'besiegerAdvance', advance: false }];
       case 'combatCardCost': {
         const d = state.pendingChoice.data as { min: number; max: number };
         const acts: WotrAction[] = [];
@@ -937,6 +939,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'siegeWithdraw', actor); resolveSiegeWithdraw(state, action.withdraw); break;
     case 'siegeExtend':
       requireChoice(state, 'siegeExtend', actor); resolveSiegeExtend(state, action.extend); break;
+    case 'besiegerAdvance':
+      requireChoice(state, 'besiegerAdvance', actor); resolveBesiegerAdvance(state, action.advance); break;
     case 'combatCardCost': {
       requireChoice(state, 'combatCardCost', actor);
       resolveCombatCardCost(state, action.amount);
