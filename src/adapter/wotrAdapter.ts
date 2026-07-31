@@ -1072,8 +1072,32 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
   for (const e of state.log) {
     if (e.seq > seqBefore && e.actor === undefined) e.actor = actor;
   }
+  enforceStackingLimit(state);
   checkRingVictory(state);
   advance(state);
+}
+
+/** No region may hold more than 10 Army units "at the end of any action" (rulebook
+ *  p.26), and the controlling player chooses which excess figures return to
+ *  reinforcements. Voluntary Army moves already ask via afterMove, but an Army can be
+ *  pushed over the limit involuntarily too — most often by RETREATING into a region
+ *  that already holds a friendly Army (p.31), and also by card-driven army moves and
+ *  by a lifting siege putting its garrison back on the field. None of those routed
+ *  through afterMove, so the over-stacked Army simply survived and went on to attack
+ *  at full strength (player report: "sometimes enemy attacks with way more than 10
+ *  units"). This end-of-action sweep is the backstop for every such path — including
+ *  ones added later — and raises the same removeExcess prompt rather than silently
+ *  picking the casualties. It no-ops while another choice is outstanding: that one is
+ *  answered first and the sweep runs again on the next dispatch. */
+function enforceStackingLimit(state: GameState): void {
+  if (state.pendingChoice || state.winner) return;
+  for (const id of Object.keys(state.regions) as RegionId[]) {
+    if (overStack(state, id) === 0) continue;
+    const owner = armySide(state, id);
+    if (!owner) continue; // units define the owner; no units means nothing to over-stack
+    state.pendingChoice = { owner, kind: 'removeExcess', data: { region: id, next: { kind: 'none' } } };
+    return; // one region at a time; the next dispatch catches any others
+  }
 }
 
 function requirePhase(state: GameState, phase: GameState['phase']): void {

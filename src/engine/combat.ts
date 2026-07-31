@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, liftSiegeIfAbandoned, mergeForceInto, type Force, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods, type VariableCost } from './combatCards';
@@ -571,8 +571,8 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
   // Only the attacker's own Characters advance; an enemy Character in `from` stays.
   // Saruman never leaves Orthanc (character card), so he holds even on an advance.
   const movingChars = src.characters.filter((c) => characterSide(c) === attacker && c !== 'saruman');
-  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
-  src.units = {}; src.leaders = 0; src.nazgul = 0;
+  moveOwnLeaders(attacker, src, dst); dst.characters.push(...movingChars);
+  src.units = {};
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   captureIfEnemySettlement(state, to, attacker, true); // a post-battle capture is an attack (Wormtongue)
   // If the advancing army was besieging `from`, vacating its field lifts that siege
@@ -1140,8 +1140,8 @@ function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side, c
   // case on retreats and states the actual rule rather than one figure's name.
   const movingChars = src.characters.filter((c) =>
     characterSide(c) === side && c !== 'saruman' && !(retreat && levelOf(c) === 0));
-  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
-  src.units = {}; src.leaders = 0; src.nazgul = 0;
+  moveOwnLeaders(side, src, dst); dst.characters.push(...movingChars);
+  src.units = {};
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   if (capture) captureIfEnemySettlement(state, to, side);
 }

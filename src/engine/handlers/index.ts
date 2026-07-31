@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount } from '../armies';
+import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
@@ -72,8 +72,8 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   // region stays behind. Saruman never leaves Orthanc (character card) — a card-
   // driven army move (Shadows Gather etc.) previously carried him out (report).
   const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
-  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
-  src.units = {}; src.leaders = 0; src.nazgul = 0;
+  moveOwnLeaders(side, src, dst); dst.characters.push(...movingChars);
+  src.units = {};
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   for (const c of movingChars) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to; // keep the roster index honest
   captureIfEnemySettlement(state, to, side);

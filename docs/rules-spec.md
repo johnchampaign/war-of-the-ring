@@ -32,6 +32,25 @@ base game, 2-player (Free Peoples = **FP**, Shadow = **SH**). Expansions and
 - **Army** = all friendly Army units + Leaders + Characters in one region (p.8,
   p.26). May mix nations. **Stacking limit 10** Army units per region (5 if
   besieged inside a Stronghold) (p.8, p.26, p.31).
+  p.26 enforces the limit as an **end-of-action** obligation: "If, at the end of any
+  action (for example, after moving or mustering troops), more than 10 units are in
+  the same region, the excess units must be removed from the game by the controlling
+  player" (they return to reinforcements and may re-enter later). Mustering and
+  voluntary Army moves ask up front (`recruit`, `afterMove`), but an Army can also be
+  pushed over involuntarily — chiefly by **retreating** (p.31) into a region that
+  already holds a friendly Army, and also by card-driven moves and a lifting siege
+  returning its garrison to the field. `enforceStackingLimit` in the adapter is the
+  backstop for all of them: it runs at the end of every dispatched action and raises
+  the same `removeExcess` prompt, so the controlling player still chooses the figures
+  rather than the engine picking. Without it over-stacked Armies survived and attacked
+  at full strength (player report: "sometimes enemy attacks with way more than 10
+  units"). Regression-tested in `scripts/probe-stacking-leaders-victory.mjs`.
+  **Open question (not yet decided):** p.27's army-movement list also says "After
+  moving an Army into a region, you can not exceed the stacking limit of 10 units,"
+  which reads as making an over-stacking *voluntary merge* illegal outright rather
+  than legal-then-trimmed. The engine currently takes the p.26 reading for moves
+  (allow, then prompt to remove). Both readings end at ≤10 units, so neither produces
+  the reported bug; the difference is only whether the mover loses figures.
 
 ### Unit / leader / character taxonomy
 - **Army units**: Regular or Elite, per nation (counts p.7). Elite can be
@@ -582,6 +601,15 @@ override the end-of-turn (Military) ones.
 VP from control: enemy City = 1, enemy Stronghold = 2 (p.44). The SH military
 threshold is higher (10) because SH is the aggressor; conditions 3/4 only fire in
 phase 6.
+
+The tie rule is p.44 verbatim — "lower-numbered Victory conditions take precedence
+over higher-numbered Victory conditions, if two or more are achieved on the same
+turn" — so when **both** military thresholds are met at the same Victory Check the
+**Shadow** takes it (condition 3 beats condition 4). `checkMilitaryVictory` tests
+the two in that order for exactly this reason; do not reorder them. It once read the
+other way and handed those games to the FP (player report: Shadow reached 11 VP the
+turn the FP reached 4 and still lost). Regression-tested in
+`scripts/probe-stacking-leaders-victory.mjs`.
 
 ---
 

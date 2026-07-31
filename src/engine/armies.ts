@@ -22,6 +22,23 @@ export function forceUnitCount(f: Force): number {
   return n;
 }
 
+/** The Leader figures that belong to a side: FP Leaders for the Free Peoples,
+ *  Nazgûl for the Shadow. */
+type LeaderPool = { leaders: number; nazgul: number };
+
+/** Move only the Leaders/Nazgûl belonging to `side` between two Forces, leaving the
+ *  enemy's behind. Leaders and Nazgûl are NOT Army units, so a region holding only
+ *  Nazgûl is still "free" and a Free Peoples Army may legally march in — but it must
+ *  not carry them off when it leaves again. Every whole-stack mover (army move,
+ *  post-battle advance, retreat, card-driven move) previously merged both pools
+ *  wholesale, which let Nazgûl ride along inside Free Peoples Armies and, mirrored,
+ *  stranded FP Leaders inside Shadow ones (player report: "in some cases Nazgûl can
+ *  be moved as part of Free Peoples armies"). */
+export function moveOwnLeaders(side: Side, src: LeaderPool, dst: LeaderPool): void {
+  if (side === 'fp') { dst.leaders += src.leaders; src.leaders = 0; }
+  else { dst.nazgul += src.nazgul; src.nazgul = 0; }
+}
+
 /** The side whose Army occupies a region, or null if no Army units. (A region
  *  never holds both sides' Army units.) */
 export function armySide(state: GameState, id: RegionId): Side | null {
@@ -209,6 +226,10 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   // rather than rejecting the whole move, so he simply holds.
   const chars = (sel.characters ?? []).filter((c) => c !== 'saruman');
   if (movingLeaders < 0 || movingLeaders > src.leaders || movingNazgul < 0 || movingNazgul > src.nazgul) return false;
+  // A split may only take the mover's OWN Leader figures: FP Leaders for the Free
+  // Peoples, Nazgûl for the Shadow. Without this an FP split could name the Nazgûl
+  // sharing its region and march off with them (see moveOwnLeaders).
+  if (side === 'fp' ? movingNazgul > 0 : movingLeaders > 0) return false;
   for (const c of chars) if (!src.characters.includes(c) || characterSide(c) !== side) return false;
   // Only the moving Nations matter for the not-At-War border rule.
   const dn = REGIONS[to]!.nation;
@@ -252,8 +273,8 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
   // region (e.g. a stranded Companion under a Shadow Army) stays put. Saruman never
   // leaves Orthanc (character card: "Saruman cannot leave Orthanc"), so he holds too.
   const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
-  dst.leaders += src.leaders; dst.nazgul += src.nazgul; dst.characters.push(...movingChars);
-  src.units = {}; src.leaders = 0; src.nazgul = 0;
+  moveOwnLeaders(side, src, dst); dst.characters.push(...movingChars);
+  src.units = {};
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   // Capture an undefended enemy Settlement.
   captureIfEnemySettlement(state, to, side);
