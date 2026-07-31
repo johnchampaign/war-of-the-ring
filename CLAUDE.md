@@ -9,8 +9,9 @@ project's `docs/new-game-playbook.md` once; this file is the game-specific brief
 
 - **Game:** War of the Ring, 2nd Edition (Ares Games), **base game only**,
   **2-player** (Free Peoples vs Shadow). Expansions and 3–4 player rules are
-  deferred. The full plan lives at
-  `C:\Users\johnc\.claude\plans\linear-wobbling-beaver.md`.
+  deferred. (This used to cite a plan doc on the old Windows box; that file did
+  not survive the move to Linux, so `docs/rules-spec.md` plus this brief are the
+  authority now.)
 - **Closest prior port:** Star Wars Rebellion (`../Star Wars Rebellion`) — same
   asymmetric-2-player-with-hidden-info shape. Mirror its
   `src/engine → src/adapter → src/online → functions/api` structure.
