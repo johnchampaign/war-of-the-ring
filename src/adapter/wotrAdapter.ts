@@ -12,7 +12,7 @@ import { extraHunt } from '../engine/hunt';
 import { log } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
-  recruitNazgul, canRecruitNazgul, overStack, removeStackUnit,
+  recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders,
 } from '../engine/armies';
 import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
@@ -401,10 +401,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       } else if (faces.has('character')) {
         // Character die: move OR attack with one army containing THIS side's own
         // Leader/Nazgûl/Character (not an enemy Companion sharing the region).
-        // Saruman can't leave Orthanc, so he can't satisfy a Character-die move.
-        const leaderArmy = (from: string) => { const r = state.regions[from]!; return (actor === 'fp' ? r.leaders > 0 : r.nazgul > 0) || r.characters.some((c) => characterSide(c) === actor && c !== 'saruman'); };
-        for (const [from, to] of moveTargets(state, actor)) if (leaderArmy(from)) acts.push({ kind: 'moveArmy', from, to });
-        for (const [from, to] of attackTargets(state, actor)) if (leaderArmy(from)) acts.push({ kind: 'attack', from, to });
+        // Saruman can't leave Orthanc, so he satisfies an attack (whose units stay
+        // put) but not a move; Isengard Elites are Leaders while he is in play.
+        const leaderArmy = (from: string, forAttack: boolean) => charDieLeaders(state, state.regions[from]!, actor, forAttack) > 0;
+        for (const [from, to] of moveTargets(state, actor)) if (leaderArmy(from, false)) acts.push({ kind: 'moveArmy', from, to });
+        for (const [from, to] of attackTargets(state, actor)) if (leaderArmy(from, true)) acts.push({ kind: 'attack', from, to });
       }
       // Companion political abilities: any Action die advances their Nation.
       if (actor === 'fp' && state.dice.fp.length > 0) acts.push(...companionMusterOptions(state));
@@ -834,7 +835,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Only the ACTOR's own Leader/Nazgûl/Character makes a Character-die move legal —
       // NOT an enemy Companion who happens to share the region (e.g. one who separated
       // into a Stronghold this Army holds). (FP use Leaders; Shadow use Nazgûl.)
-      const leaderArmy = (actor === 'fp' ? src.leaders > 0 : src.nazgul > 0) || src.characters.some((c) => characterSide(c) === actor && c !== 'saruman'); // Saruman can't leave Orthanc
+      const leaderArmy = charDieLeaders(state, src, actor, false) > 0; // Saruman can't leave Orthanc, so he never leads a move
       let viaArmyDie = false;
       if (action.die && consumeDie(state, actor, action.die)) viaArmyDie = action.die !== 'character';
       else if (consumeArmyDie(state, actor)) viaArmyDie = true;
@@ -895,7 +896,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // An Army die attacks any army; a Character die may attack with ONE army that
       // contains a Leader/Nazgûl/Character (rulebook p.28).
       const src = sortieBox ?? state.regions[action.from]!;
-      const leaderArmy = src.leaders > 0 || src.nazgul > 0 || src.characters.length > 0;
+      // Same test legalActions used to offer the attack, so the two can't disagree:
+      // the actor's OWN Leaders/Characters (Saruman included — the attackers stay put)
+      // plus Isengard Elites-as-Leaders while Saruman is in play.
+      const leaderArmy = charDieLeaders(state, src, actor, true) > 0;
       const faces = new Set(state.dice[actor]);
       const hasArmyDie = faces.has('army') || faces.has('armyMuster') || (actor === 'fp' && faces.has('will'))
         || (actor === 'shadow' && faces.has('muster') && mouthMessengerAvailable(state));

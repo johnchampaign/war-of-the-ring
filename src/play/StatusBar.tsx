@@ -1,7 +1,7 @@
 // Top status bar: turn / phase / seat, victory points, the Ring track, dice.
 import { useState } from 'react';
 import type { GameState } from '../engine/types';
-import { charName, charDef } from './charInfo';
+import { charName, charDef, isMinion } from './charInfo';
 import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, EVENT_BY_ID, type HuntTileDef } from '../engine/data';
 import eventCards from '../../assets/event-cards.json';
 
@@ -128,6 +128,41 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
   );
 }
 
+// Characters removed from play — eliminated Companions and Minions (player report,
+// twice: "would it be possible for lost companions/minions to be listed somewhere for
+// confirmation/reference purposes?"). Casualties are open information on the tabletop:
+// the figure comes off the board where both players can see it.
+function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const ids = view.characters?.eliminated ?? [];
+  if (ids.length === 0) return null;
+  return (
+    <span style={{ position: 'relative' }}>
+      <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9b0a8' }}
+        title="Companions and Minions eliminated so far (out of the game) — hover a name for its card">
+        ☠ Fallen {ids.length} {open ? '▴' : '▾'}
+      </button>
+      {open && (
+        <div style={roster} onMouseLeave={() => onHoverChar?.(null)}>
+          {ids.map((id) => {
+            const d = charDef(id);
+            const shadow = isMinion(id);
+            return (
+              <div key={id} onMouseEnter={() => onHoverChar?.(id)}
+                style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
+                <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SH' : 'FP'}</span>
+                <span style={{ fontWeight: 600, color: '#c9bfae', textDecoration: 'line-through' }}>{charName(id)}</span>
+                {d && <span style={{ color: '#8d8677', fontSize: 11 }}>Lvl {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Lead ${d.leadership}` : ''}</span>}
+              </div>
+            );
+          })}
+          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Eliminated figures never return · hover a name for its card</div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 // Browsable discard piles (player report: "no way to see the discarded or used
 // cards"). Played/discarded cards are open information; hand-limit discards are
 // face down — shown as type-only. Newest first. Hover a name for the card.
@@ -201,6 +236,7 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { v
         style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span></span>
       <FellowshipRoster guide={fs.guide} companions={fs.companions} onHoverChar={onHoverChar} />
       <OnMapRoster view={view} onHoverChar={onHoverChar} />
+      <FallenRoster view={view} onHoverChar={onHoverChar} />
       <span style={pill} title="Shadow dice in the Hunt Box (allocated + Eyes). FP dice added this turn (from moving the Fellowship) each add +1 to every Hunt die.">
         Hunt box {view.hunt.box}{view.hunt.fpDiceInBox ? ` · +${view.hunt.fpDiceInBox} FP` : ''}
       </span>

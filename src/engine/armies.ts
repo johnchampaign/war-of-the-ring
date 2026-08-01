@@ -22,6 +22,31 @@ export function forceUnitCount(f: Force): number {
   return n;
 }
 
+/** Saruman's "Servants of the White Hand": while he is in play, "each Isengard Elite
+ *  unit is considered to be a Leader as well as an Army unit for ALL movement and
+ *  combat purposes" (card text). So an Isengard Elite is a Leader for the
+ *  Character-die army action too, not just for the Leader re-roll. */
+export const whiteHandActive = (state: Pick<GameState, 'characters'>): boolean =>
+  state.characters.entered.includes('saruman') && !state.characters.eliminated.includes('saruman');
+
+/** Loose Force shape — a region, a siege box, or a rearguard/move selection. */
+type FigureSet = { units: Partial<Record<string, { regular?: number; elite?: number }>>; leaders: number; nazgul: number; characters: string[] };
+
+/** How many figures in `f` satisfy the Character-die requirement that the Army
+ *  "contain at least one Leader or Character" (p.28).
+ *
+ *  `forAttack` matters for Saruman only: he can never leave Orthanc, so he cannot be
+ *  the figure that joins a Character-die MOVE — but an attack is different, because
+ *  "attacking units do not actually move into the region they are attacking" (p.28),
+ *  so a Character present in the attacking Army leads it whether he can march or not.
+ *  (Player report: an Orthanc army with Saruman and two Isengard Elites was refused a
+ *  Character-die attack. The Elites alone are Leaders, so it was refusable twice over.) */
+export function charDieLeaders(state: Pick<GameState, 'characters'>, f: FigureSet, side: Side, forAttack: boolean): number {
+  const chars = f.characters.filter((c) => characterSide(c) === side && (forAttack || c !== 'saruman'));
+  const whiteHand = side === 'shadow' && whiteHandActive(state) ? (f.units.isengard?.elite ?? 0) : 0;
+  return (side === 'fp' ? f.leaders : f.nazgul) + chars.length + whiteHand;
+}
+
 /** The Leader figures that belong to a side: FP Leaders for the Free Peoples,
  *  Nazgûl for the Shadow. */
 type LeaderPool = { leaders: number; nazgul: number };
@@ -241,8 +266,10 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   const remainingUnits = unitCount(state, from) - movingUnits;
   if (side === 'fp' && remainingUnits === 0 && src.leaders - movingLeaders > 0) return false;
   // A Character-die move that splits must take ≥1 Leader/Nazgûl/Character with the
-  // movers (a Nazgûl is the Shadow's Leader — same rule as the whole-army move).
-  if (viaCharacterDie && movingLeaders === 0 && movingNazgul === 0 && chars.length === 0) return false;
+  // movers (a Nazgûl is the Shadow's Leader — same rule as the whole-army move; a
+  // moving Isengard Elite is a Leader too while Saruman is in play).
+  const movingSel = { units: sel.units ?? {}, leaders: movingLeaders, nazgul: movingNazgul, characters: chars };
+  if (viaCharacterDie && charDieLeaders(state, movingSel, side, false) < 1) return false;
   // Apply.
   for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
     const have = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };

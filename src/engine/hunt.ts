@@ -9,7 +9,7 @@
 // Still deferred: "play on the table" damage-cancel cards (Axe & Bow, Mithril
 // Coat — they land with the on-table event-handler increment).
 import type { GameState } from './types';
-import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, EVENT_BY_ID, type HuntTileDef } from './data';
+import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, characterDef, EVENT_BY_ID, type HuntTileDef } from './data';
 import { fellowshipDieSkipsHuntBox, wornWithSorrowActive } from './persistent';
 import { withRng } from './rng';
 import { settlementController, armySide } from './armies';
@@ -282,7 +282,7 @@ function huntRoll(state: GameState, level: number, bonus: number, rerolls: numbe
     return { successes: hits, dice: faces, rerollDice: rfaces };
   });
   state.hunt.lastRoll = { level, bonus, dice, rerolls: rerollDice, successes, mordor: false };
-  log(state, null, 'hunt', `Hunt roll: ${level} die${level === 1 ? '' : 'ce'}${bonus ? ` (+${bonus})` : ''} [${dice.join(',')}]${rerollDice.length ? ` re-roll [${rerollDice.join(',')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`,
+  log(state, null, 'hunt', `Hunt roll: ${level} ${level === 1 ? 'die' : 'dice'}${bonus ? ` (+${bonus})` : ''} [${dice.join(',')}]${rerollDice.length ? ` re-roll [${rerollDice.join(',')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`,
     { level, bonus, dice, rerolls: rerollDice, successes });
   if (successes >= 1) { beginHuntDraw(state, successes, false); return; }
   // A miss: record it so the player still SEES the roll (dice + box bonus) and knows
@@ -408,13 +408,23 @@ function eliminateCompanionInline(state: GameState, id: string): number {
   if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
   if (wornWithSorrowActive(state)) discardFpCharacterCard(state); // Worn with Sorrow and Toil
   // Reassign Guide: highest-Level remaining Companion, else Gollum.
+  const oldGuide = fs.guide;
   if (!fs.companions.includes(fs.guide)) {
     fs.guide = fs.companions.length
       ? fs.companions.reduce((b, c) => (levelOf(c) > levelOf(b) ? c : b), fs.companions[0]!)
       : 'gollum';
   }
-  return levelOf(id);
+  // Name the casualty. The log used to say only "damage N pending (FP decision)" and
+  // then go quiet, so the sacrifice was invisible (player report: "it doesn't say what
+  // the FP decision was — I assume Gandalf was sacrificed because he wasn't there
+  // anymore"). Companion casualties are open information, so this is a public entry.
+  const level = levelOf(id);
+  log(state, null, 'hunt', `${charLabel(id)} is eliminated to absorb ${level} Hunt damage`
+    + (fs.guide !== oldGuide ? ` — ${charLabel(fs.guide)} becomes the Guide` : ''));
+  return level;
 }
+/** Card name for a character id, for log entries ("Gandalf the Grey", not "gandalf-grey"). */
+const charLabel = (id: string): string => characterDef(id)?.name ?? id;
 
 /** Worn with Sorrow and Toil: discard one FP Character Event card — randomly from
  *  the hand (it's hidden), else from the table if the hand has none. */

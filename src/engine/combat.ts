@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, type Force, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods, type VariableCost } from './combatCards';
@@ -309,11 +309,11 @@ export function attackError(state: GameState, from: RegionId, side: Side, explic
   const rgHasFigure = rgUnits > 0 || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
   if (rgHasFigure && rgUnits < 1) return 'A rearguard must contain at least one unit';
   // Only the attacker's OWN Leaders/Characters satisfy a Character-die attack — never
-  // an enemy Character sharing the region, and never Saruman (who can't leave Orthanc,
-  // so he can't be the figure that lets the army advance).
-  const ownChars = r.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
-  const rgOwnChars = rg.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
-  if (viaCharacterDie && (r.leaders - rg.leaders) + (r.nazgul - rg.nazgul) + (ownChars.length - rgOwnChars.length) < 1) {
+  // an enemy Character sharing the region. Saruman DOES count here (unlike a move):
+  // the attacking units never leave their region (p.28), so his "cannot leave Orthanc"
+  // is no obstacle — and while he is in play each Isengard Elite is a Leader in its
+  // own right ("Servants of the White Hand").
+  if (viaCharacterDie && charDieLeaders(state, r, side, true) - charDieLeaders(state, rg, side, true) < 1) {
     return 'A Character-die attack must include a Leader or Character';
   }
   return null;

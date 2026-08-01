@@ -276,6 +276,20 @@ cards may recruit even in not-yet-At-War nations or besieged Strongholds
 - **Army die**: move up to **2 different** armies one region each (can't move the
   same army twice). **Character die**: move **1** army that contains ≥1
   Leader/Character.
+- Who counts as that Leader/Character is ONE shared test, `charDieLeaders`
+  (`armies.ts`), used by `legalActions`, both apply paths, `attackError`,
+  `moveArmySplit` and the UI die-face hint — they must never disagree, or the UI
+  offers an action the engine then refuses (the soak catches it as
+  "illegal-accepted"). It counts the actor's **own** Leaders/Nazgûl/Characters
+  (never an enemy Companion sharing the region) plus, while Saruman is in play,
+  **each Isengard Elite** — "Servants of the White Hand: each Isengard Elite unit
+  is considered to be a Leader as well as an Army unit for all movement and combat
+  purposes." **Saruman himself counts for an attack but not for a move:** he can
+  never leave Orthanc, so he cannot be the figure that joins a Character-die move,
+  but "attacking units do not actually move into the region they are attacking"
+  (p.28), so he leads an attack out of Orthanc perfectly well. (Player report: an
+  Orthanc army with Saruman and two Isengard Elites was refused a Character-die
+  attack — wrong on both counts. `scripts/probe-character-die-attack.mjs`.)
 - Destination must be **free for movement** (no enemy army; enemy-controlled
   settlement OK if no enemy army). Moving through an enemy-controlled settlement
   **captures** it (p.28). Stacking checked after all sub-moves (p.28).
