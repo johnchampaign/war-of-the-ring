@@ -121,8 +121,13 @@ function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): 
     if (u.regular || u.elite) units[n] = u;
   }
   const move: MoveSel = { units };
-  if (r.leaders) move.leaders = r.leaders;
-  if (r.nazgul) move.nazgul = r.nazgul;
+  // Only the mover's OWN Leader figures: FP Leaders for the Free Peoples, Nazgûl for
+  // the Shadow. Packing both pools named the ENEMY's figures whenever any were sharing
+  // the region (a lone Nazgûl under an FP Army, a stranded FP Leader under a Shadow
+  // one), which moveArmySplit now refuses outright — the garrison split would simply
+  // fail and the AI would march the whole stack out, the very thing it is avoiding.
+  if (actor === 'fp' && r.leaders) move.leaders = r.leaders;
+  if (actor === 'shadow' && r.nazgul) move.nazgul = r.nazgul;
   // Only the MOVING side's own characters travel with the army — never the enemy's
   // (e.g. FP Companions who separated into a besieged Shadow Stronghold this Army holds).
   const mine = r.characters.filter((c) => (actor === 'shadow') === SHADOW_CHARS.has(c) && c !== 'saruman'); // Saruman can't leave Orthanc
