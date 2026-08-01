@@ -209,18 +209,40 @@ function undefendedVP(state: GameState, id: RegionId, actor: Side, reach = 2): b
   return enemyNear(state, id, actor === 'fp' ? 'shadow' : 'fp', reach);
 }
 
-/** BFS distance between two regions over adjacency (Infinity if unreachable). */
+/** BFS distance between two regions over adjacency (Infinity if unreachable).
+ *  Memoised: region adjacency is a static property of the map, never of the game
+ *  state, so a pair's distance is fixed for the whole process. Without the cache the
+ *  per-army targeting below would re-walk the map on every candidate action. */
+const distMemo = new Map<string, number>();
 function dist(from: RegionId, to: RegionId): number {
   if (from === to) return 0;
-  const seen = new Set([from]); let frontier = [from], d = 0;
-  while (frontier.length) {
+  const key = `${from}>${to}`;
+  const hit = distMemo.get(key);
+  if (hit !== undefined) return hit;
+  const seen = new Set([from]); let frontier = [from], d = 0, found = Infinity;
+  outer: while (frontier.length) {
     d++; const next: RegionId[] = [];
     for (const r of frontier) for (const a of REGIONS[r]?.adjacency ?? []) {
-      if (seen.has(a)) continue; if (a === to) return d; seen.add(a); next.push(a);
+      if (seen.has(a)) continue;
+      if (a === to) { found = d; break outer; }
+      seen.add(a); next.push(a);
     }
     frontier = next;
   }
-  return Infinity;
+  distMemo.set(key, found);
+  return found;
+}
+
+/** How close the enemy is to their Military victory, 0..1. The thresholds are
+ *  asymmetric (p.44): the Free Peoples win on 4 VP, the Shadow on 10. Used to make
+ *  defence urgent once the enemy is genuinely closing — a player reported the Shadow
+ *  "needs to recognize a free people military push. i was able to get 8 victory points
+ *  as free people. that cant happen." At 0 this multiplies out to exactly the
+ *  previously-measured weights, so early-game behaviour is unchanged. */
+function enemyPressure(state: GameState, actor: Side): number {
+  const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
+  const need = enemy === 'fp' ? 4 : 10;
+  return Math.max(0, Math.min(1, (state.victoryPoints?.[enemy] ?? 0) / need));
 }
 
 /** The enemy Settlement (vp>0) worth marching on: nearest to one of our armies,
@@ -372,7 +394,10 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
   // cover it. Weighted above the march-toward-the-target term, because losing a
   // Stronghold hands the enemy 2 VP outright while a slightly slower advance costs
   // nothing so concrete.
-  if (undefendedVP(state, a.region, actor)) s += (REGIONS[a.region]!.vp ?? 0) * 20 + 30;
+  // Scaled by how close the enemy is to their VP threshold: with the board quiet this
+  // is exactly the weight measured when the term was introduced, but once they are
+  // genuinely closing, covering our own Settlements outranks pressing the attack.
+  if (undefendedVP(state, a.region, actor)) s += ((REGIONS[a.region]!.vp ?? 0) * 20 + 30) * (1 + 1.5 * enemyPressure(state, actor));
   return s;
 }
 
@@ -386,7 +411,7 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // Re-garrison one of our own VP Settlements that is sitting empty within an enemy's
   // reach. Scored BELOW the equivalent capture so the AI still prefers taking ground to
   // sitting on it — this is meant to stop free walk-ins, not to turn the AI turtle.
-  if (undefendedVP(state, to, actor)) s += REGIONS[to]!.vp * 18 + 12;
+  if (undefendedVP(state, to, actor)) s += (REGIONS[to]!.vp * 18 + 12) * (1 + 1.5 * enemyPressure(state, actor));
   if (target) { s += -(dist(to, target) - dist(from, target)) * 12; if (to === target) s += 30; }         // march
   // Never march units into a stack that's already full: anything over the 10-unit
   // limit is removed (lost to reinforcements). Penalise per lost unit so the AI
