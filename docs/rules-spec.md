@@ -214,6 +214,24 @@ die already showing an Eye.
   *Cruel Weather* = move the Fellowship to an adjacent region; *Corsairs of Umbar*;
   *Shadows Gather*). Minor approximations are noted per card (Corsairs' "coastal"
   set; Shadows Gather's path-traversal reduced to distance).
+  *Corsairs of Umbar* follows its card text: moving onto a Free Peoples Army **starts
+  a battle** (`startBattle` from Umbar, advancing on a win via the normal End of
+  Battle rules) rather than merging, and the attack **cannot be ceased**
+  (`PendingCombat.noCease` skips the continue/cease decision; the card's "unless the
+  Free Peoples Army was already under siege" arm is inherent — a besieged region's
+  open field holds the besieger, so the move is a plain merge with fellow besiegers).
+  The stacking check applies only when merging with a friendly Army.
+  Cards whose text reads "…containing a Settlement" (Éomer Son of Éomund, Many Kings)
+  and the Hunt-condition cards reading "a Free Peoples Settlement" (Orc Patrol /
+  Isildur's Bane / Foul Thing / Candles of Corpses) use `isSettlementRegion`, which
+  excludes **Fortifications** (Osgiliath, Fords of Isen) — a Fortification is not a
+  Settlement (p.10).
+  "Play if"/"Play on the table if" preconditions gate play (`canPlay`) for *The Last
+  Battle*, *Denethor's Folly*, and *The Palantír of Orthanc* like every other
+  precondition card — previously they could be played with the condition unmet and
+  `pruneTableCards` discarded them for no effect on the next transition (two player
+  reports: the FP AI wasted The Last Battle; a player wasted the Palantír before
+  mustering Saruman).
   **Multi-target cards** (`EventHandler.repeat = N`, e.g. *The Shadow Lengthens* = 2,
   *The Shadow is Moving* = 4) re-prompt the same `eventTarget` choice up to N times:
   the choice persists (`data.left`/`data.applied`), `targets(state, side, applied)`
@@ -299,6 +317,16 @@ cards may recruit even in not-yet-At-War nations or besieged Strongholds
   multi-region event moves (p.27). Splitting allowed (leave rearguard); a
   Character-die move that splits must keep ≥1 Leader/Character with the movers
   (p.27).
+- **Engine hygiene — moves never carry enemy units.** Every whole-army mover
+  (`moveArmy`, card moves via `moveAllUnits`, post-battle `advanceInto`, retreats
+  via `moveStack`) moves only the acting side's Nations. No legal play puts both
+  sides' units in one region's open field (a besieged garrison lives in the siege
+  box), but a card bug once merged two Armies (Corsairs of Umbar) and subsequent
+  moves then dragged the enemy's units along ("Gondor stole my Southron Army"
+  report). Belt-and-braces: `sweepStrandedUnits` (armies.ts, run from `advance()`
+  after every action) repairs any already-mixed region — the Army `armySide`
+  recognizes stays, the stranded side's units leave the board the way casualties
+  do (Shadow to reinforcements, FP removed), logged as a state repair.
 
 ---
 

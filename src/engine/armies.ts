@@ -290,18 +290,21 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
 export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: Side): boolean {
   if (!canMoveArmy(state, from, to, side)) return false;
   const src = state.regions[from]!, dst = state.regions[to]!;
-  // Merge units, leaders, nazgûl, characters.
+  // Merge units, leaders, nazgûl, characters. Only THIS side's Nations move — if
+  // enemy units ever illegally share the region (a card bug once merged two Armies),
+  // a whole-army move must not carry them off (report: "Gondor stole my Southron Army").
   for (const nation of Object.keys(src.units) as Nation[]) {
+    if (sideOfNation(nation) !== side) continue;
     const u = src.units[nation]!;
     const d = dst.units[nation] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; dst.units[nation] = d;
+    delete src.units[nation];
   }
   // Only THIS side's Characters move with its Army; an enemy Character sharing the
   // region (e.g. a stranded Companion under a Shadow Army) stays put. Saruman never
   // leaves Orthanc (character card: "Saruman cannot leave Orthanc"), so he holds too.
   const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
   moveOwnLeaders(side, src, dst); dst.characters.push(...movingChars);
-  src.units = {};
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   // Capture an undefended enemy Settlement.
   captureIfEnemySettlement(state, to, side);
@@ -312,6 +315,38 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
   if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
   log(state, null, 'army', `Moved army ${from} -> ${to}`);
   return true;
+}
+
+/** State repair: no legal play ever leaves units of BOTH sides in one region's
+ *  open field (a besieged garrison lives in the siege box, never in `units`) —
+ *  such a mix can only come from a bug (Corsairs of Umbar once merged an attack
+ *  instead of fighting it, and whole-army moves then dragged the enemy's units
+ *  along). Run from advance() after every action: the Army the engine already
+ *  treats as the region's owner (armySide) stays; the stranded side's units leave
+ *  the board the same way casualties do (Shadow units back to reinforcements, FP
+ *  units removed), so an already-corrupted save heals on its next action. */
+export function sweepStrandedUnits(state: GameState): void {
+  for (const id of Object.keys(state.regions)) {
+    const r = state.regions[id]!;
+    const owner = armySide(state, id);
+    if (!owner) continue;
+    for (const n of Object.keys(r.units) as Nation[]) {
+      const u = r.units[n]!;
+      if (sideOfNation(n) === owner || u.regular + u.elite === 0) continue;
+      if (sideOfNation(n) === 'shadow') {
+        state.reinforcements[n].regular += u.regular;
+        state.reinforcements[n].elite += u.elite;
+      }
+      log(state, null, 'army', `${u.regular + u.elite} stranded ${n} unit(s) in ${id} leave the board (state repair)`);
+      delete r.units[n];
+    }
+    // FP Leaders can never stand without FP units (p.26) — if the sweep (or the bug
+    // it repairs) left them alone under a Shadow Army, they are removed as well.
+    if (owner === 'shadow' && r.leaders > 0) {
+      log(state, null, 'army', `${r.leaders} stranded Free Peoples Leader(s) in ${id} are removed (state repair)`);
+      r.leaders = 0;
+    }
+  }
 }
 
 /** Units over the 10-unit stacking limit in a (non-besieged) region — these must

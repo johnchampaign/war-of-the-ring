@@ -437,7 +437,7 @@ function strongholdWithdrawAvailable(state: GameState, pc: PendingCombat): boole
 /** Begin a battle: political reactions, then set up the sub-machine. The driver
  *  (combatStep, run from advance) takes it from here. */
 export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId,
-  opts: { siegeRounds?: number; fpCardLock?: boolean; defenderDicePenalty?: number; rearguard?: MoveSelection } = {}): void {
+  opts: { siegeRounds?: number; fpCardLock?: boolean; defenderDicePenalty?: number; rearguard?: MoveSelection; noCease?: boolean } = {}): void {
   const dReg = REGIONS[to]!;
   const defender = other(attacker);
   const box = state.regions[to]!.siegeBox;
@@ -467,6 +467,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
     fortified: !sortie && (dReg.settlement === 'City' || dReg.settlement === 'Fortification'),
     step: 'attackerCard', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0,
     defDicePenalty: opts.defenderDicePenalty,
+    noCease: opts.noCease,
     atkUnits0: sortie ? forceUnitCount(box!) : unitCount(state, from),
     defUnits0: assault ? forceUnitCount(box!) : unitCount(state, to),
   };
@@ -564,15 +565,17 @@ export function resolvePreCombatRetreat(state: GameState, region: RegionId): voi
 /** Move the whole army at `from` into `to` (defender gone), capturing. */
 function advanceInto(state: GameState, attacker: Side, from: RegionId, to: RegionId): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
+  // Only the attacker's Nations advance (defensive side filter — see moveStack).
   for (const n of Object.keys(src.units) as Nation[]) {
+    if (sideOfNation(n) !== attacker) continue;
     const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
+    delete src.units[n];
   }
   // Only the attacker's own Characters advance; an enemy Character in `from` stays.
   // Saruman never leaves Orthanc (character card), so he holds even on an advance.
   const movingChars = src.characters.filter((c) => characterSide(c) === attacker && c !== 'saruman');
   moveOwnLeaders(attacker, src, dst); dst.characters.push(...movingChars);
-  src.units = {};
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   captureIfEnemySettlement(state, to, attacker, true); // a post-battle capture is an attack (Wormtongue)
   // If the advancing army was besieging `from`, vacating its field lifts that siege
@@ -948,6 +951,8 @@ export function combatStep(state: GameState): void {
       }
       case 'continueDecision': {
         if (defCount(state, pc) === 0 || atkCount(state, pc) === 0) { finishCombat(state, true); return; }
+        // Corsairs of Umbar: the attacker "cannot cease the attack" — press on.
+        if (pc.noCease) { pc.step = 'retreatDecision'; continue; }
         state.pendingChoice = { owner: pc.attacker, kind: 'combatContinue' };
         return;
       }
@@ -1128,9 +1133,13 @@ export const retreatDestinations = (state: GameState): RegionId[] => {
  *  NON-capturing use is siege entry, where the boxed garrison still holds. */
 function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side, capture = true, retreat = false): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
+  // Only `side`'s Nations travel — enemy units illegally sharing the region (a
+  // corrupted state) must not be carried along by a retreat or advance.
   for (const n of Object.keys(src.units) as Nation[]) {
+    if (sideOfNation(n) !== side) continue;
     const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
+    delete src.units[n];
   }
   // Only the moving side's Characters travel; an enemy Character stranded in the
   // region stays behind (it never belonged to this Army). Saruman never leaves Orthanc
@@ -1141,7 +1150,6 @@ function moveStack(state: GameState, from: RegionId, to: RegionId, side: Side, c
   const movingChars = src.characters.filter((c) =>
     characterSide(c) === side && c !== 'saruman' && !(retreat && levelOf(c) === 0));
   moveOwnLeaders(side, src, dst); dst.characters.push(...movingChars);
-  src.units = {};
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   if (capture) captureIfEnemySettlement(state, to, side);
 }

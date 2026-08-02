@@ -11,7 +11,7 @@ import { applyCasualties, startBattle, queueOrApplyEventCasualties } from '../co
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
-import { REGIONS, levelOf, characterSide, EVENT_BY_ID } from '../data';
+import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations } from '../fellowship';
 import { moveCharacter, characterDestinations } from '../charMove';
 import { log, notify } from '../log';
@@ -64,16 +64,20 @@ function regionDist(from: string, to: string): number {
  *  for `side` (default Shadow). */
 function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow'): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
+  // Only `side`'s Nations travel — if enemy units ever share the region (an illegal
+  // state a card bug once produced), a card-driven move must not kidnap them (report:
+  // "Gondor has stolen my Southron Army").
   for (const n of Object.keys(src.units) as Nation[]) {
+    if (sideOfNation(n) !== side) continue;
     const u = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
     d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
+    delete src.units[n];
   }
   // Only this side's Characters move with its Army; an enemy Character sharing the
   // region stays behind. Saruman never leaves Orthanc (character card) — a card-
   // driven army move (Shadows Gather etc.) previously carried him out (report).
   const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
   moveOwnLeaders(side, src, dst); dst.characters.push(...movingChars);
-  src.units = {};
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   for (const c of movingChars) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to; // keep the roster index honest
   captureIfEnemySettlement(state, to, side);
@@ -103,6 +107,14 @@ function placeForce(state: GameState, nation: Nation, region: string, opts: { re
     if (k > 0) { state.regions[region]!.leaders += k; pool.leader = (pool.leader ?? 0) - k; }
   }
 }
+/** A region containing a true Settlement — Town, City, or Stronghold. A
+ *  Fortification (Osgiliath, Fords of Isen) is NOT a Settlement (rulebook p.10),
+ *  so card text reading "…containing a Settlement" must exclude it (player report:
+ *  Éomer's reinforcements were placed at the Fords of Isen). */
+const isSettlementRegion = (region: string): boolean => {
+  const s = REGIONS[region]?.settlement;
+  return !!s && s !== 'Fortification';
+};
 /** A region an event may recruit into: not controlled or occupied by the enemy. */
 const recruitable = (state: GameState, side: Side, region: string): boolean => {
   const enemy: Side = side === 'fp' ? 'shadow' : 'fp';
@@ -268,7 +280,7 @@ for (const [id, nation] of fpRecruits) {
 register('sh-char-08', { // Candles of Corpses: +1 corruption per die 4+ (6 if Gollum guides)
   // Precondition (shared with Orc Patrol / Isildur's Bane / Foul Thing, sh-char-05/06/07):
   // "Play if the Fellowship is not in a region containing a Free Peoples Settlement."
-  canPlay: (state) => { const loc = state.fellowship.location; return !(REGIONS[loc]!.settlement && settlementController(state, loc) === 'fp'); },
+  canPlay: (state) => { const loc = state.fellowship.location; return !(isSettlementRegion(loc) && settlementController(state, loc) === 'fp'); },
   apply(state) {
     const t = isGollumGuide(state) ? 6 : 4;
     const c = withRng(state, (rng) => { let n = 0; for (let i = 0; i < 3; i++) if (rng.rollDie(6) >= t) n++; return n; });
@@ -349,7 +361,13 @@ function placeChoiceCard(nation: Nation, regions: (s: GameState) => string[], op
     },
     applyTarget: (s, _side, t) => {
       if (!t.region || !t.figure) return;
+      const before = unitCount(s, t.region);
       placeForce(s, nation, t.region, { regular: t.figure === 'regular' ? 1 : 0, elite: t.figure === 'elite' ? 1 : 0, leader: opts.leader ? 1 : 0 });
+      // Log the placement (previously silent — a player report had to guess where
+      // Éomer's reinforcements landed). Same public format as a Muster recruit.
+      if (unitCount(s, t.region) > before) {
+        log(s, null, 'muster', `Recruited ${t.figure === 'elite' ? '0R/1E' : '1R/0E'}${opts.leader ? ' + Leader' : ''} ${nation} in ${t.region}`);
+      }
     },
   };
 }
@@ -366,7 +384,7 @@ const cirdans = placeChoiceCard('elves', (s) => COASTAL.filter((r) => armySide(s
 register('fp-str-13', { ...cirdans, canPlay: (s, side) => isAtWar(s, 'elves') && cirdans.canPlay!(s, side) });
 // Riders of Théoden / Éomer: 1 Rohan unit (Regular OR Elite) + a Rohan Leader.
 register('fp-str-16', placeChoiceCard('rohan', ridersRegions, { leader: true }));
-register('fp-str-23', placeChoiceCard('rohan', (s) => ROHAN_REGIONS.filter((r) => REGIONS[r]!.settlement && recruitable(s, 'fp', r)), { leader: true }));
+register('fp-str-23', placeChoiceCard('rohan', (s) => ROHAN_REGIONS.filter((r) => isSettlementRegion(r) && recruitable(s, 'fp', r)), { leader: true }));
 // Half-orcs and Goblin-men / Olog-hai: 1 Isengard / Sauron unit (Regular OR Elite)
 // in a region with a Shadow Army.
 const shadowArmyRegionIds = (s: GameState): string[] => regionsWithShadowArmy(s).map((t) => t.region!);
@@ -416,7 +434,7 @@ function rageTargets(s: GameState): EventTarget[] {
   return [...adj].filter((r) => recruitable(s, 'shadow', r)).map((region) => ({ region }));
 }
 function seSettlements(s: GameState): string[] {
-  return Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'southrons' && REGIONS[id]!.settlement && recruitable(s, 'shadow', id));
+  return Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'southrons' && isSettlementRegion(id) && recruitable(s, 'shadow', id));
 }
 
 // --- Interactive movement cards (the player picks a target after playing) -----
@@ -427,14 +445,27 @@ register('sh-char-10', {
   applyTarget(state, _side, t) { state.fellowship.location = t.region!; log(state, null, 'event', `Cruel Weather moves the Fellowship to ${t.region}`); },
 });
 // Corsairs of Umbar: move the Umbar Army to a Gondor coastal region (coastal set
-// approximated; merges, checking the stacking limit).
+// approximated). Card text: "If there is a Free Peoples Army in the region, a battle
+// starts" (the attack can't be ceased) — it previously just merged the two Armies
+// into one region with no battle (report: Pelargir "is not attacked", and the mixed
+// stack then moved as one). The stacking check applies only when merging with a
+// friendly Army; an attack advances via the normal end-of-battle rules.
 const GONDOR_COASTAL = ['anfalas', 'dol-amroth', 'pelargir', 'lossarnach', 'osgiliath'];
 register('sh-str-10', {
   canPlay: (state) => isAtWar(state, 'southrons') && armySide(state, 'umbar') === 'shadow',
   targets: (state) => GONDOR_COASTAL
-    .filter((to) => unitCount(state, 'umbar') + unitCount(state, to) <= STACKING_LIMIT)
+    .filter((to) => armySide(state, to) === 'fp'
+      || unitCount(state, 'umbar') + unitCount(state, to) <= STACKING_LIMIT)
     .map((to) => ({ from: 'umbar', to })),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}`); },
+  applyTarget(state, _side, t) {
+    if (armySide(state, t.to!) === 'fp') {
+      log(state, null, 'event', `Corsairs of Umbar: the Umbar Army attacks ${t.to}`);
+      startBattle(state, 'shadow', t.from!, t.to!, { noCease: true });
+    } else {
+      moveAllUnits(state, t.from!, t.to!);
+      log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}`);
+    }
+  },
 });
 // Shadows Gather: move one Shadow Army ≤3 regions, ending where another Shadow
 // Army stands (not besieged). (Path-free-traversal nuance simplified to distance.)
@@ -813,7 +844,7 @@ register('sh-char-19', {
 // --- Shadow: extra Hunt cards (draw a tile; skip Eye / FP-special) -----------
 const fellowshipInFpSettlement = (state: GameState): boolean => {
   const loc = state.fellowship.location;
-  return !!REGIONS[loc]!.settlement && settlementController(state, loc) === 'fp';
+  return isSettlementRegion(loc) && settlementController(state, loc) === 'fp';
 };
 for (const id of ['sh-char-05', 'sh-char-06', 'sh-char-07']) { // Orc Patrol / Isildur's Bane / Foul Thing
   register(id, {
@@ -889,7 +920,21 @@ register('fp-char-08', { // Wizard's Staff — Gandalf the Grey in the Fellowshi
 // --- Persistent "while in play" cards: played to the table; their ongoing rule
 //     change is enforced at the relevant seam via src/engine/persistent.ts. The
 //     handler applies only the immediate part and lets the card persist. ---------
-register('fp-str-01', { onTable: true, apply() { /* The Last Battle — see hunt.ts (fpDiceInBox) */ } });
+register('fp-str-01', { // The Last Battle — see hunt.ts (fpDiceInBox)
+  onTable: true,
+  // Printed precondition: "Play on the table if Aragorn is with a Free Peoples Army
+  // in a region outside of a Free Peoples Nation." Without this gate the card could
+  // be played any time and pruneTableCards swept it straight to the discard pile
+  // (player report: the FP AI "played it, condition unmet, discarded"). Mirrors the
+  // TABLE_CONDITIONS check in persistent.ts.
+  canPlay: (state) => {
+    const r = state.characters.inPlay['aragorn'];
+    if (!r || armySide(state, r) !== 'fp') return false;
+    const n = REGIONS[r]?.nation;
+    return !n || sideOfNation(n) !== 'fp';
+  },
+  apply() { /* persists on the table */ },
+});
 register('fp-str-02', { // A Power too Great — advance Elves; bar Shadow from Lórien/Rivendell/Grey Havens
   onTable: true,
   apply(state) { advancePolitical(state, 'elves', 1); log(state, null, 'event', 'A Power too Great: Elves advance; Shadow barred from Lórien/Rivendell/Grey Havens'); },
@@ -899,7 +944,10 @@ register('fp-str-03', { // The Power of Tom Bombadil — advance North; bar Shad
   apply(state) { advancePolitical(state, 'north', 1); log(state, null, 'event', 'The Power of Tom Bombadil: North advances; Shadow barred from the Old Forest/Shire/Buckland'); },
 });
 register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see politics.ts (advanceableNations) */ } });
-register('sh-char-21', { onTable: true, apply() { /* The Palantír of Orthanc — bonus draw, see wotrAdapter playEvent */ } });
+// Palantír of Orthanc: printed precondition "Play on the table if Saruman is in play"
+// — ungated, a Saruman-less play was legal and the card went straight to the discard
+// (player report: "played it before mustering Saruman; it was discarded").
+register('sh-char-21', { onTable: true, canPlay: (state) => inPlay(state, 'saruman'), apply() { /* The Palantír of Orthanc — bonus draw, see wotrAdapter playEvent */ } });
 register('sh-char-15', { onTable: true, apply() { /* Worn with Sorrow and Toil — see hunt.ts (companion casualty) */ } });
 register('sh-char-22', { onTable: true, canPlay: (state) => inPlay(state, 'saruman'), apply() { /* Wormtongue — play if Saruman is in play; see politics.ts (activateNation) */ } });
 register('sh-char-16', { onTable: true, apply() { /* Flocks of Crebain — +1 Hunt dice, see hunt.ts resolveHunt */ } });
@@ -1083,6 +1131,9 @@ register('sh-str-02', { // The Fighting Uruk-hai — Saruman in play + an Isenga
 });
 register('sh-str-03', { // Denethor's Folly — eliminate an FP Leader in Minas Tirith; bar FP Combat cards there
   onTable: true,
+  // Printed precondition: "Play on the table if Minas Tirith is under siege by a
+  // Shadow Army" — same missing gate as The Last Battle / Palantír of Orthanc.
+  canPlay: (state) => !!state.regions['minas-tirith']?.besieged,
   apply(state) {
     const mt = state.regions['minas-tirith']!;
     if (mt.leaders > 0) { mt.leaders -= 1; log(state, null, 'event', "Denethor's Folly: an FP Leader in Minas Tirith is eliminated"); }

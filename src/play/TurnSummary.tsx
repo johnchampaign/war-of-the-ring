@@ -20,7 +20,7 @@ function DieChip({ face }: { face: string }) {
   return <span style={{ background: f.bg, color: '#fff', borderRadius: 4, padding: '0 5px', fontSize: 9, fontWeight: 700, flexShrink: 0, alignSelf: 'flex-start', marginTop: 1 }}>{f.label}</span>;
 }
 
-export function TurnSummary({ view, yourTurn, you }: { view: GameState; yourTurn: boolean; you: Side | null }) {
+export function TurnSummary({ view, yourTurn, you, onOpenLog }: { view: GameState; yourTurn: boolean; you: Side | null; onOpenLog?: () => void }) {
   const [dismissed, setDismissed] = useState(-1);
   // A logged card play the player tapped to enlarge — so they can read the card the
   // opponent (or AI) just played, including its "Play if…" legality, full-screen.
@@ -53,7 +53,12 @@ export function TurnSummary({ view, yourTurn, you }: { view: GameState; yourTurn
               </li>
             ))}
           </ul>
-          <button style={btn} onClick={dismiss}>Continue</button>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            {/* "Skip the middleman and just bring up the log" (player report) — jump
+                straight to the full game log from the recap. */}
+            {onOpenLog && <button style={{ ...btn, marginLeft: 0 }} onClick={() => { dismiss(); onOpenLog(); }}>📜 Full log</button>}
+            <button style={{ ...btn, marginLeft: 0 }} onClick={dismiss}>Continue</button>
+          </div>
         </div>
       </div>
       {/* Rendered outside the recap backdrop so closing the enlarged card doesn't also

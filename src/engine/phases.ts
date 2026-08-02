@@ -12,7 +12,7 @@ import { poolSize, rollPool } from './dice';
 import { checkMilitaryVictory, checkRingVictory } from './victory';
 import { combatStep } from './combat';
 import { pruneTableCards } from './persistent';
-import { armySide } from './armies';
+import { armySide, sweepStrandedUnits } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { log } from './log';
 
@@ -94,6 +94,7 @@ function sweepTableCards(state: GameState): void {
 /** Run automatic phases; stop at the next phase that needs a player decision. */
 export function advance(state: GameState): void {
   sweepTableCards(state);
+  sweepStrandedUnits(state); // repair any illegal mixed-side region (see armies.ts)
   for (;;) {
     if (state.winner) { state.phase = 'gameOver'; return; }
     if (state.pendingChoice) return;              // await the choice owner

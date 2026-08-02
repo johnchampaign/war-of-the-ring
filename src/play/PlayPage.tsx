@@ -535,7 +535,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <HuntPopup view={g.view} />
       <BattlePopup view={g.view} />
       <NoticePopup view={g.view} />
-      <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} />
+      <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} onOpenLog={() => setLogOpen(true)} />
       {g.gameOver && g.ranked && (
         <p style={{ margin: '8px 12px', fontSize: 14, color: g.ranked.recorded ? '#6c6' : '#caa' }}>
           {g.ranked.recorded

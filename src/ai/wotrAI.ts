@@ -72,12 +72,28 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // even vs a random Shadow because it never healed — it just rushed to Mordor.
     const declares = legal.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' }> => a.kind === 'declareFellowship');
     const closestToMordor = (cands: typeof declares) => cands.reduce((best, a) => (dist(a.target, 'morannon') < dist(best.target, 'morannon') ? a : best), cands[0]!);
+    // A declared position feeds the Hunt: ending in a region with a Shadow
+    // Stronghold, a Shadow Army, or Nazgûl grants the Shadow a failed-die re-roll
+    // on every Hunt there (huntRerollSources). Never declare into one (player
+    // report: the AI declared in Moria and handed the Shadow a free re-roll).
+    const noRerolls = (t: RegionId): boolean => {
+      const r = state.regions[t]!;
+      return !(REGIONS[t]!.settlement === 'Stronghold' && settlementCtrl(state, t) === 'shadow')
+        && !armyHere(state, t, 'shadow')
+        && r.nazgul === 0 && !r.characters.includes('witch-king');
+    };
     if (declares.length && state.fellowship.progress >= 2) {
       if (state.fellowship.corruption >= 4) {
-        const heals = declares.filter((a) => isHealSettlement(state, a.target));
+        const heals = declares.filter((a) => isHealSettlement(state, a.target) && noRerolls(a.target));
         if (heals.length) return closestToMordor(heals);
       }
-      return closestToMordor(declares);
+      // A plain push-declare reveals the Fellowship for little gain when only a
+      // region or two has been banked — hold out for real distance (player report:
+      // declaring at Progress 3 was a free gift to the Hunt).
+      if (state.fellowship.progress >= 4) {
+        const safe = declares.filter((a) => noRerolls(a.target));
+        if (safe.length) return closestToMordor(safe);
+      }
     }
     return legal.find((a) => a.kind === 'skipFellowshipPhase') ?? legal[0]!;
   }
