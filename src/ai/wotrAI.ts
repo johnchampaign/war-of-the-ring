@@ -14,8 +14,9 @@ import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf } from '../engine/data';
-import { unitCount, forceUnitCount, STACKING_LIMIT } from '../engine/armies';
+import { unitCount, forceUnitCount, STACKING_LIMIT, charDieLeaders } from '../engine/armies';
 import { sortieForce } from '../engine/combat';
+import { MORDOR_ENTRANCES } from '../engine/fellowship';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
 
@@ -75,8 +76,14 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // A declared position feeds the Hunt: ending in a region with a Shadow
     // Stronghold, a Shadow Army, or Nazgûl grants the Shadow a failed-die re-roll
     // on every Hunt there (huntRerollSources). Never declare into one (player
-    // report: the AI declared in Moria and handed the Shadow a free re-roll).
+    // report: the AI declared in Moria and handed the Shadow a free re-roll) —
+    // EXCEPT the two Mordor entrances: entering Mordor requires the declared
+    // figure to stand at Morannon / Minas Morgul (both Shadow Strongholds), so a
+    // blanket ban walled the AI out of Mordor entirely (a 2000-game A/B showed
+    // Ring wins dropping 685→533). At the gates, the re-roll is the price of
+    // the endgame and is always worth paying.
     const noRerolls = (t: RegionId): boolean => {
+      if (MORDOR_ENTRANCES.includes(t)) return true;
       const r = state.regions[t]!;
       return !(REGIONS[t]!.settlement === 'Stronghold' && settlementCtrl(state, t) === 'shadow')
         && !armyHere(state, t, 'shadow')
@@ -124,31 +131,52 @@ function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): 
   const r = state.regions[from];
   if (unitCount(state, from) < 2) return action;                                // need ≥2: leave 1, move ≥1
   const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
-  const garN = nations.find((n) => r.units[n]!.regular > 0) ?? nations.find((n) => r.units[n]!.elite > 0);
-  if (!garN) return action;
-  const useReg = r.units[garN]!.regular > 0;
-  const units: NonNullable<MoveSel['units']> = {};
-  for (const n of nations) {
-    const reg = r.units[n]!.regular - (n === garN && useReg ? 1 : 0);
-    const eli = r.units[n]!.elite - (n === garN && !useReg ? 1 : 0);
-    const u: { regular?: number; elite?: number } = {};
-    if (reg > 0) u.regular = reg;
-    if (eli > 0) u.elite = eli;
-    if (u.regular || u.elite) units[n] = u;
-  }
-  const move: MoveSel = { units };
   // Only the mover's OWN Leader figures: FP Leaders for the Free Peoples, Nazgûl for
   // the Shadow. Packing both pools named the ENEMY's figures whenever any were sharing
   // the region (a lone Nazgûl under an FP Army, a stranded FP Leader under a Shadow
   // one), which moveArmySplit now refuses outright — the garrison split would simply
   // fail and the AI would march the whole stack out, the very thing it is avoiding.
-  if (actor === 'fp' && r.leaders) move.leaders = r.leaders;
-  if (actor === 'shadow' && r.nazgul) move.nazgul = r.nazgul;
   // Only the MOVING side's own characters travel with the army — never the enemy's
   // (e.g. FP Companions who separated into a besieged Shadow Stronghold this Army holds).
   const mine = r.characters.filter((c) => (actor === 'shadow') === SHADOW_CHARS.has(c) && c !== 'saruman'); // Saruman can't leave Orthanc
-  if (mine.length) move.characters = mine;
-  return { kind: 'moveArmy', from, to: action.to, move };
+  const buildSplit = (garN: Nation, useReg: boolean): MoveSel => {
+    const units: NonNullable<MoveSel['units']> = {};
+    for (const n of nations) {
+      const reg = r.units[n]!.regular - (n === garN && useReg ? 1 : 0);
+      const eli = r.units[n]!.elite - (n === garN && !useReg ? 1 : 0);
+      const u: { regular?: number; elite?: number } = {};
+      if (reg > 0) u.regular = reg;
+      if (eli > 0) u.elite = eli;
+      if (u.regular || u.elite) units[n] = u;
+    }
+    const move: MoveSel = { units };
+    if (actor === 'fp' && r.leaders) move.leaders = r.leaders;
+    if (actor === 'shadow' && r.nazgul) move.nazgul = r.nazgul;
+    if (mine.length) move.characters = mine;
+    return move;
+  };
+  // With no Army-type die left the adapter will spend a CHARACTER die, and a
+  // Character-die split must keep a Leader/Nazgûl/Character among the MOVERS
+  // (moveArmySplit refuses otherwise). Garrisoning the army's only qualifying
+  // figure — an Isengard Elite while Saruman is in play — built exactly such an
+  // illegal split (the 2000-game soak caught 3 refusals: e.g. Minas Tirith held
+  // by {Isengard 1E, Southrons 3E} garrisoned the Isengard Elite and marched the
+  // leaderless Southrons). Try each garrison candidate (Regulars first, as
+  // before) and take the first whose movers stay legal; if none do, march the
+  // whole stack rather than propose an action the engine must refuse.
+  const armyDieLeft = state.dice[actor].some((f) => f === 'army' || f === 'armyMuster' || f === 'will');
+  const candidates: Array<{ n: Nation; useReg: boolean }> = [
+    ...nations.filter((n) => r.units[n]!.regular > 0).map((n) => ({ n, useReg: true })),
+    ...nations.filter((n) => r.units[n]!.elite > 0).map((n) => ({ n, useReg: false })),
+  ];
+  for (const c of candidates) {
+    const move = buildSplit(c.n, c.useReg);
+    const sel = { units: move.units ?? {}, leaders: move.leaders ?? 0, nazgul: move.nazgul ?? 0, characters: move.characters ?? [] };
+    if (armyDieLeft || charDieLeaders(state, sel, actor, false) >= 1) {
+      return { kind: 'moveArmy', from, to: action.to, move };
+    }
+  }
+  return action;
 }
 
 /** Leave a one-unit rearguard on an attack so a decisive win (which forces the
