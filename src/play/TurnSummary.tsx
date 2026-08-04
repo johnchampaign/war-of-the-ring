@@ -20,7 +20,7 @@ function DieChip({ face }: { face: string }) {
   return <span style={{ background: f.bg, color: '#fff', borderRadius: 4, padding: '0 5px', fontSize: 9, fontWeight: 700, flexShrink: 0, alignSelf: 'flex-start', marginTop: 1 }}>{f.label}</span>;
 }
 
-export function TurnSummary({ view, yourTurn, you, onOpenLog }: { view: GameState; yourTurn: boolean; you: Side | null; onOpenLog?: () => void }) {
+export function TurnSummary({ view, yourTurn, you, onOpenLog, hold }: { view: GameState; yourTurn: boolean; you: Side | null; onOpenLog?: () => void; hold?: boolean }) {
   const [dismissed, setDismissed] = useState(-1);
   // A logged card play the player tapped to enlarge — so they can read the card the
   // opponent (or AI) just played, including its "Play if…" legality, full-screen.
@@ -29,8 +29,17 @@ export function TurnSummary({ view, yourTurn, you, onOpenLog }: { view: GameStat
   const start = (view as unknown as { oppLogStart?: number }).oppLogStart;
   const items = (typeof start === 'number' && view.log.length > start) ? view.log.slice(start) : [];
 
-  // Show only on the viewer's turn, once per new block, never over a live decision.
-  if (!yourTurn || items.length === 0 || start === dismissed || view.pendingChoice || view.pendingCombat) return null;
+  const opp: Side | null = you === 'fp' ? 'shadow' : you === 'shadow' ? 'fp' : null;
+  // Only the entries the OPPONENT actually caused count as "actions they took".
+  // Entries with no actor are the game's own bookkeeping (the Action roll, the
+  // Fellowship-phase transitions, an on-table card falling off) — they belong in
+  // the log, not in a modal announcing what the opponent did. Popping "Shadow took
+  // 1 action" for the dice roll alone read as the Shadow having stolen the first
+  // action of the round (player report, after entering Mordor).
+  const oppActions = opp ? items.filter((e) => e.actor === opp) : items;
+  // Show only on the viewer's turn, once per new block, never over a live decision,
+  // and never on top of a result popup the player hasn't acknowledged yet (`hold`).
+  if (!yourTurn || oppActions.length === 0 || start === dismissed || view.pendingChoice || view.pendingCombat || hold) return null;
   const dismiss = () => setDismissed(start!);
   const oppName = you === 'fp' ? 'Shadow' : you === 'shadow' ? 'Free Peoples' : 'the opponent';
 
@@ -39,7 +48,7 @@ export function TurnSummary({ view, yourTurn, you, onOpenLog }: { view: GameStat
       <div style={backdrop} onClick={dismiss}>
         <div style={card} onClick={(e) => e.stopPropagation()}>
           <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>
-            While you waited, {oppName} took {items.length} action{items.length === 1 ? '' : 's'}
+            While you waited, {oppName} took {oppActions.length} action{oppActions.length === 1 ? '' : 's'}
           </div>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, textAlign: 'left', maxHeight: '55vh', overflowY: 'auto' }}>
             {items.map((e, i) => (

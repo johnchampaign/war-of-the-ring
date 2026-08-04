@@ -614,7 +614,15 @@ Captured settlements can't muster or advance the political track (p.32).
 - Companions can **never** separate on the Mordor Track; anything that would
   separate eliminates instead (p.43).
 - Completing all 5 Mordor steps reaches the **Crack of Doom** → FP wins (if
-  Corruption < 12) (p.43, p.44).
+  Corruption < 12) (p.43, p.44). The step **draws its tile first**: the track
+  advances, then that tile's damage is assigned (a real FP choice — Corruption or a
+  Companion casualty), and only then is victory checked. A tile that takes the
+  Ring-bearers to 12 on that very step wins the game for the **Shadow** (condition
+  1 beats condition 2, §13). The engine therefore holds the Ring-victory check
+  while a Hunt-resolution choice is open; declaring the win the instant the track
+  hit step 5 stranded the damage prompt behind the game-over screen (player report)
+  and could never lose to that 12th Corruption. Regression-tested in
+  `scripts/probe-mordor-final-step.mjs`.
 
 ---
 

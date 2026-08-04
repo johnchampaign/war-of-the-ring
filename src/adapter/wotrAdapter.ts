@@ -15,7 +15,7 @@ import {
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders,
 } from '../engine/armies';
 import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
-import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain } from '../engine/hunt';
+import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
 import { canBringMinion, entryRegions, bringMinion, MINION_IDS } from '../engine/minions';
@@ -1077,7 +1077,16 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     if (e.seq > seqBefore && e.actor === undefined) e.actor = actor;
   }
   enforceStackingLimit(state);
-  checkRingVictory(state);
+  // Ring victory is checked at the END of a Hunt, never in the middle of one. The
+  // step onto the last space of the Mordor Track draws its tile FIRST, and that
+  // tile's damage is the Free Peoples player's choice to assign — so the win can't
+  // be declared while a Hunt-resolution prompt is still open. Two things went wrong
+  // when it was: the damage prompt was stranded behind the game-over screen and
+  // never rendered (player report), and — because Corruption 12 is Victory
+  // condition 1 and the Ring's destruction only condition 2 (p.44) — a final tile
+  // that took the Ring-bearers to 12 should hand the game to the SHADOW, but the FP
+  // had already been declared the winner.
+  if (!huntResolutionPending(state)) checkRingVictory(state);
   advance(state);
 }
 

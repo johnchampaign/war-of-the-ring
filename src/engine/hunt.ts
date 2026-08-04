@@ -29,6 +29,15 @@ export function beginReveal(state: GameState): void {
   }
 }
 
+/** PendingChoice kinds that are steps of a Hunt still being resolved — the tile is
+ *  drawn but its damage/reveal has not landed yet. Nothing may read the Fellowship's
+ *  final state (Corruption, victory) until these clear, and the UI's Hunt result
+ *  popup stays down while one is up (the DecisionModal is showing the same Hunt). */
+export const HUNT_RESOLUTION_CHOICES: ReadonlySet<string> = new Set(['huntDamage', 'huntPreventDraw', 'huntRedraw', 'crebain']);
+/** True while a Hunt is mid-resolution (see HUNT_RESOLUTION_CHOICES). */
+export const huntResolutionPending = (state: GameState): boolean =>
+  !!state.pendingChoice && HUNT_RESOLUTION_CHOICES.has(state.pendingChoice.kind);
+
 type TileRef = { std: number } | { spec: string };
 
 /** Draw one tile from the active Hunt Pool — standard tiles (indices) PLUS any

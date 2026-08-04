@@ -2,7 +2,6 @@
 // effect"). Pops once when a battle finishes (seq-tracked, like the HuntPopup),
 // showing the final round's dice for each side (hits in gold), each side's losses,
 // and the result. Combat is public info, so it shows for both players.
-import { useState } from 'react';
 import type { GameState, Side } from '../engine/types';
 import mapData from '../../assets/map.json';
 
@@ -38,14 +37,18 @@ function RollRow({ label, roll, color }: { label: string; roll?: { dice: number[
   );
 }
 
-export function BattlePopup({ view }: { view: GameState }) {
+/** Is there a battle result the player hasn't clicked through yet? (PlayPage holds
+ *  the cursor so the opponent's recap can wait for it.) */
+export const battleResultPending = (view: GameState, seen: number): boolean =>
+  !!view.lastBattle && view.lastBattle.seq > seen && !view.pendingChoice && !view.pendingCombat;
+
+export function BattlePopup({ view, seen, onSeen }: { view: GameState; seen: number; onSeen: (seq: number) => void }) {
   const b = view.lastBattle;
-  const [seen, setSeen] = useState(0);
   // Wait until the battle is fully resolved and no other prompt is up.
-  if (!b || b.seq <= seen || view.pendingChoice || view.pendingCombat) return null;
+  if (!b || !battleResultPending(view, seen)) return null;
 
   return (
-    <div style={backdrop} onClick={() => setSeen(b.seq)}>
+    <div style={backdrop} onClick={() => onSeen(b.seq)}>
       <div style={card} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 6 }}>
           ⚔ {b.siege ? 'Siege' : 'Battle'} — {b.rounds} round{b.rounds === 1 ? '' : 's'}
@@ -66,7 +69,7 @@ export function BattlePopup({ view }: { view: GameState }) {
           background: b.captured ? '#5a1f1f' : '#1d3320', color: b.captured ? '#ffb3b3' : '#bfe6bf' }}>
           {b.outcome}
         </div>
-        <button style={btn} onClick={() => setSeen(b.seq)}>OK</button>
+        <button style={btn} onClick={() => onSeen(b.seq)}>OK</button>
       </div>
     </div>
   );

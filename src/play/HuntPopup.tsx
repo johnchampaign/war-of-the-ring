@@ -2,25 +2,29 @@
 // the result: how many dice were in the Hunt Box, the actual die faces rolled (and
 // any re-rolls), how many successes, and every tile drawn (including 0/blank).
 // The engine records draws in hunt.draws (each with an incrementing seq and the
-// roll that produced it); this tracks the highest seq shown so each new hunt pops
-// exactly once. Hunt-damage CHOICES are handled by the DecisionModal; this waits
+// roll that produced it); the highest seq shown is tracked by PlayPage (so the
+// opponent's "while you waited" recap can wait for this result to be acknowledged
+// — report: an unsuccessful Hunt was buried by the AI recap the instant it
+// resolved). Hunt-damage CHOICES are handled by the DecisionModal; this waits
 // until no choice is pending.
-import { useState } from 'react';
 import type { GameState } from '../engine/types';
+import { huntResolutionPending } from '../engine/hunt';
 import { RollLine, CorruptionLine, HuntTileFace } from './huntView';
 
-export function HuntPopup({ view }: { view: GameState }) {
+/** Is there a Hunt result the player hasn't clicked through yet? Suppressed only
+ *  while a hunt-RESOLUTION choice is open (the DecisionModal shows that with its own
+ *  Hunt context). For other pending choices — notably the reveal-and-move prompt a
+ *  catch triggers — the result still shows, so the player sees the dice and the tile
+ *  that caught them before placing the figure. */
+export const huntResultPending = (view: GameState, seen: number): boolean =>
+  (view.hunt.draws ?? []).some((d) => d.seq > seen) && !huntResolutionPending(view);
+
+export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: number; onSeen: (seq: number) => void }) {
   const draws = view.hunt.draws ?? [];
-  const [seen, setSeen] = useState(0);
   const fresh = draws.filter((d) => d.seq > seen);
-  // Suppress only while a hunt-RESOLUTION choice is open (the DecisionModal shows
-  // that with its own Hunt context). For other pending choices — notably the
-  // reveal-and-move prompt that a catch triggers — still show the result, so the
-  // player sees the dice and the tile that caught them before placing the figure.
-  const HUNT_RESOLUTION_CHOICES = new Set(['huntDamage', 'huntPreventDraw', 'huntRedraw', 'crebain']);
-  if (fresh.length === 0 || (view.pendingChoice && HUNT_RESOLUTION_CHOICES.has(view.pendingChoice.kind))) return null;
+  if (!huntResultPending(view, seen)) return null;
   const maxSeq = Math.max(...fresh.map((d) => d.seq));
-  const dismiss = () => setSeen(maxSeq);
+  const dismiss = () => onSeen(maxSeq);
   const roll = fresh.find((d) => d.roll)?.roll;
   // A drawn tile revealed the Fellowship — call it out loudly. The reveal is shown
   // either once it's flipped, or while the reveal-and-move prompt is still pending

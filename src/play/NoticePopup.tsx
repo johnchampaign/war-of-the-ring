@@ -1,17 +1,20 @@
 // Informational popup for transient game notices (e.g. a Companion rousing a Nation
 // to war). The engine records notices in state.notices, each with an incrementing
-// seq; this tracks the highest seq shown so each notice pops exactly once. Waits
-// until no decision is pending so it never sits over a choice modal.
-import { useState } from 'react';
+// seq; PlayPage tracks the highest seq shown (so the opponent's recap can wait for
+// this to be acknowledged) and each notice pops exactly once. Waits until no
+// decision is pending so it never sits over a choice modal.
 import type { GameState } from '../engine/types';
 
-export function NoticePopup({ view }: { view: GameState }) {
+/** Is there a notice the player hasn't clicked through yet? */
+export const noticePending = (view: GameState, seen: number): boolean =>
+  (view.notices ?? []).some((n) => n.seq > seen) && !view.pendingChoice && !view.pendingCombat;
+
+export function NoticePopup({ view, seen, onSeen }: { view: GameState; seen: number; onSeen: (seq: number) => void }) {
   const notices = view.notices ?? [];
-  const [seen, setSeen] = useState(0);
   const fresh = notices.filter((n) => n.seq > seen);
-  if (fresh.length === 0 || view.pendingChoice || view.pendingCombat) return null;
+  if (!noticePending(view, seen)) return null;
   const maxSeq = Math.max(...fresh.map((n) => n.seq));
-  const dismiss = () => setSeen(maxSeq);
+  const dismiss = () => onSeen(maxSeq);
 
   return (
     <div style={backdrop} onClick={dismiss}>

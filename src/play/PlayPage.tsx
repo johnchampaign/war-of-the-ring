@@ -15,9 +15,9 @@ import { DecisionModal } from './DecisionModal';
 import { MovePicker } from './MovePicker';
 import { sortieForce } from '../engine/combat';
 import { DiceTray } from './DiceTray';
-import { HuntPopup } from './HuntPopup';
-import { BattlePopup } from './BattlePopup';
-import { NoticePopup } from './NoticePopup';
+import { HuntPopup, huntResultPending } from './HuntPopup';
+import { BattlePopup, battleResultPending } from './BattlePopup';
+import { NoticePopup, noticePending } from './NoticePopup';
 import { TurnSummary } from './TurnSummary';
 import { LogPanel } from './LogPanel';
 import { GameOverUpload, UploadLogButton } from './GameOverUpload';
@@ -112,6 +112,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // in 2-player and requires an explicit confirm vs the AI.
   const [undoConfirm, setUndoConfirm] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  // "Already clicked through" cursors for the three result popups (Hunt, battle,
+  // notice). They live here, not inside each popup, so the opponent's "while you
+  // waited" recap can WAIT for a result you haven't acknowledged: an unsuccessful
+  // Hunt resolves with no prompt, the AI plays on immediately, and its recap used to
+  // land on top of the Hunt result the moment it appeared (player report).
+  const [huntSeen, setHuntSeen] = useState(0);
+  const [battleSeen, setBattleSeen] = useState(0);
+  const [noticeSeen, setNoticeSeen] = useState(0);
   const [logsUploaded, setLogsUploaded] = useState(false); // shared by the Upload button + end-game prompt
   // "Peek the board": temporarily hide a blocking choice modal (combat/hunt decision,
   // move picker) so you can study the board, then click again to return to the choice.
@@ -305,6 +313,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
+
+  // A result of YOUR OWN (Hunt tile, battle outcome, roused Nation) still waiting to
+  // be clicked through — the opponent recap holds until it is.
+  const resultPending = huntResultPending(g.view, huntSeen) || battleResultPending(g.view, battleSeen) || noticePending(g.view, noticeSeen);
 
   // Army moves/attacks AND independent-character (Nazgûl/Companion) moves are done on
   // the board; combat/hunt decisions go to the modal. Keep them out of the button list.
@@ -532,10 +544,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           {peekBoard ? '↩ Back to choice' : '👁 Peek board'}
         </button>
       )}
-      <HuntPopup view={g.view} />
-      <BattlePopup view={g.view} />
-      <NoticePopup view={g.view} />
-      <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} onOpenLog={() => setLogOpen(true)} />
+      <HuntPopup view={g.view} seen={huntSeen} onSeen={setHuntSeen} />
+      <BattlePopup view={g.view} seen={battleSeen} onSeen={setBattleSeen} />
+      <NoticePopup view={g.view} seen={noticeSeen} onSeen={setNoticeSeen} />
+      <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} onOpenLog={() => setLogOpen(true)} hold={resultPending} />
       {g.gameOver && g.ranked && (
         <p style={{ margin: '8px 12px', fontSize: 14, color: g.ranked.recorded ? '#6c6' : '#caa' }}>
           {g.ranked.recorded
