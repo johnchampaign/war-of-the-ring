@@ -56,7 +56,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const activeDie = die && (g.view?.dice[me] ?? []).includes(die) ? die : null;
   const charDieOk = !activeDie || activeDie === 'character' || activeDie === 'will';
   const [selected, setSelected] = useState<RegionId | null>(null);
-  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' | 'armyMove2' } | null>(null);
+  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' | 'armyMove2' | 'eventMove'; base?: WotrAction } | null>(null);
   // Board-driven independent-character (Nazgûl / Minion / Companion) move in progress.
   // `group` (Companions only): move several together — range = highest Level (p.24).
   const [charPick, setCharPick] = useState<{ from: RegionId; char: string; group?: string[] } | null>(null);
@@ -380,6 +380,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // hook here would violate the Rules of Hooks (crashes the page on the first render).
   const onPanelAction = (a: WotrAction) => {
     if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2' }); return; }
+    // A card-granted Army MOVE (Shadows Gather, The Shadow Lengthens, Corsairs…)
+    // routes through the split picker — p.28 allows splitting the Army before a
+    // card move (player report: "it did not ask if I wanted to move the ENTIRE
+    // army"). Card ATTACKS stay whole (the rearguard flow is the attack action's).
+    if (a.kind === 'eventTarget' && a.from && a.to && !a.done && a.mode !== 'attack') {
+      setMoveDraft({ from: a.from, to: a.to, kind: 'eventMove', base: a }); return;
+    }
     void submit(a);
   };
 
@@ -474,7 +481,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       </div>
       {moveDraft && (
         <div style={{ display: peekBoard ? 'none' : 'contents' }}>
-          <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view} you={me}
+          <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view} you={me} base={moveDraft.base}
             onConfirm={(a) => { setMoveDraft(null); void submit(a); }} onCancel={() => setMoveDraft(null)} />
         </div>
       )}

@@ -60,10 +60,16 @@ function regionDist(from: string, to: string): number {
     layer = next; }
   return Infinity;
 }
-/** Move a whole Army (units + Leaders + Nazgûl + characters) from→to, capturing
- *  for `side` (default Shadow). */
-function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow'): void {
+type CardMoveSel = { units?: Partial<Record<Nation, { regular?: number; elite?: number }>>; leaders?: number; nazgul?: number; characters?: string[] };
+/** Move an Army (units + Leaders + Nazgûl + characters) from→to, capturing for
+ *  `side` (default Shadow). With `sel`, only the selected figures move — p.28,
+ *  "Using an Event Card to Move Armies": "it is possible to split the Army before
+ *  moving" (deviation D15, now closed). The selection is sanitized against the
+ *  region (clamped to available own-side figures); if no unit survives the clamp
+ *  the WHOLE Army moves, so a malformed selection degrades to the old behavior. */
+function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
+  if (sel && moveSelectedUnits(state, from, to, side, sel)) return;
   // Only `side`'s Nations travel — if enemy units ever share the region (an illegal
   // state a card bug once produced), a card-driven move must not kidnap them (report:
   // "Gondor has stolen my Southron Army").
@@ -81,6 +87,46 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   for (const c of movingChars) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to; // keep the roster index honest
   captureIfEnemySettlement(state, to, side);
+}
+/** The split half of moveAllUnits: apply a sanitized subset selection. Returns
+ *  false when the clamped selection moves no unit (caller falls back to the whole
+ *  Army). Mirrors moveArmySplit's apply rules minus adjacency (card moves may
+ *  cross several regions): own-side Nations only, own Leader pool only, own
+ *  Characters only (never Saruman), and FP Leaders are never stranded unitless. */
+function moveSelectedUnits(state: GameState, from: string, to: string, side: Side, sel: CardMoveSel): boolean {
+  const src = state.regions[from]!, dst = state.regions[to]!;
+  const take: Array<[Nation, number, number]> = [];
+  let moved = 0;
+  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
+    if (sideOfNation(n) !== side) continue;
+    const have = src.units[n]; if (!have) continue;
+    const mr = Math.max(0, Math.min(u.regular ?? 0, have.regular));
+    const me = Math.max(0, Math.min(u.elite ?? 0, have.elite));
+    if (mr + me > 0) { take.push([n, mr, me]); moved += mr + me; }
+  }
+  if (moved === 0) return false;
+  for (const [n, mr, me] of take) {
+    const have = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
+    have.regular -= mr; have.elite -= me; d.regular += mr; d.elite += me; dst.units[n] = d;
+    if (have.regular === 0 && have.elite === 0) delete src.units[n];
+  }
+  const ownUnitsLeft = (Object.keys(src.units) as Nation[])
+    .some((n) => sideOfNation(n) === side && (src.units[n]!.regular + src.units[n]!.elite) > 0);
+  if (side === 'fp') {
+    // FP Leaders can never be in a region with no combat units (p.26): a full
+    // vacate takes them all, regardless of the selection.
+    const ml = ownUnitsLeft ? Math.max(0, Math.min(sel.leaders ?? 0, src.leaders)) : src.leaders;
+    src.leaders -= ml; dst.leaders += ml;
+  } else {
+    const mn = Math.max(0, Math.min(sel.nazgul ?? 0, src.nazgul));
+    src.nazgul -= mn; dst.nazgul += mn;
+  }
+  const movingChars = (sel.characters ?? []).filter((c) => src.characters.includes(c) && characterSide(c) === side && c !== 'saruman');
+  dst.characters.push(...movingChars);
+  src.characters = src.characters.filter((c) => !movingChars.includes(c));
+  for (const c of movingChars) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
+  captureIfEnemySettlement(state, to, side);
+  return true;
 }
 /** Force-place units into a region (a card that recruits in a NAMED region,
  *  bypassing the settlement/control checks recruit() applies). Capped by
@@ -456,14 +502,16 @@ register('sh-str-10', {
   targets: (state) => GONDOR_COASTAL
     .filter((to) => armySide(state, to) === 'fp'
       || unitCount(state, 'umbar') + unitCount(state, to) <= STACKING_LIMIT)
-    .map((to) => ({ from: 'umbar', to })),
+    // Tag enemy-held destinations as attacks so the UI doesn't offer the p.28
+    // split picker for what resolves as a battle (applyTarget re-checks armySide).
+    .map((to): EventTarget => ({ from: 'umbar', to, mode: armySide(state, to) === 'fp' ? 'attack' : 'move' })),
   applyTarget(state, _side, t) {
     if (armySide(state, t.to!) === 'fp') {
       log(state, null, 'event', `Corsairs of Umbar: the Umbar Army attacks ${t.to}`);
       startBattle(state, 'shadow', t.from!, t.to!, { noCease: true });
     } else {
-      moveAllUnits(state, t.from!, t.to!);
-      log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}`);
+      moveAllUnits(state, t.from!, t.to!, 'shadow', t.move);
+      log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}${t.move ? ' (split)' : ''}`);
     }
   },
 });
@@ -484,7 +532,7 @@ function shadowsGatherMoves(state: GameState): Array<{ from: string; to: string 
 register('sh-str-07', {
   canPlay: (state) => shadowsGatherMoves(state).length > 0,
   targets: shadowsGatherMoves,
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 // The Shadow Lengthens: move TWO (different) Shadow Armies up to two regions each,
 // every move ending where another Shadow Army stands (not besieged). `applied`
@@ -507,7 +555,7 @@ register('sh-str-08', {
   repeat: 2,
   canPlay: (state) => shadowLengthensMoves(state).length > 0,
   targets: (state, _side, applied) => shadowLengthensMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `The Shadow Lengthens: ${t.from} → ${t.to}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move); log(state, null, 'event', `The Shadow Lengthens: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 // The Shadow is Moving (all Shadow Nations At War): move up to four DIFFERENT Shadow
 // Armies one region each (to an adjacent region free for movement, merges allowed).
@@ -527,7 +575,7 @@ register('sh-str-09', {
   repeat: 4,
   canPlay: (state) => allAtWar(state, SHADOW_NATIONS) && shadowMovingMoves(state).length > 0,
   targets: (state, _side, applied) => shadowMovingMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `The Shadow is Moving: ${t.from} → ${t.to}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move); log(state, null, 'event', `The Shadow is Moving: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 
 // Dead Men of Dunharrow: move Strider/Aragorn (+ Companions in the same region)
@@ -621,7 +669,7 @@ const wosesMoves = (state: GameState): Array<{ from: string; to: string }> => {
 register('fp-str-11', {
   canPlay: (state) => isAtWar(state, 'rohan') && wosesMoves(state).length > 0,
   targets: (state) => wosesMoves(state),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp'); log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp', t.move); log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
 });
 // Through a Day and a Night: move an FP Army containing a Companion up to 2 regions.
 function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {
@@ -639,7 +687,7 @@ function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {
 register('fp-str-12', {
   canPlay: (state) => dayNightMoves(state).length > 0,
   targets: dayNightMoves,
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp'); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp', t.move); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 
 // --- Recruit / muster cards in named or chosen regions -----------------------
@@ -988,7 +1036,13 @@ function nazgulArmyActions(state: GameState, allowAttack: boolean, exclude: Set<
 }
 function applyNazgulArmyAction(state: GameState, t: EventTarget): void {
   if (t.mode === 'attack') { startBattle(state, 'shadow', t.from!, t.to!); log(state, null, 'event', `Nazgûl-led attack ${t.from} → ${t.to}`); }
-  else { moveAllUnits(state, t.from!, t.to!); log(state, null, 'event', `Nazgûl-led Army moves ${t.from} → ${t.to}`); }
+  else {
+    // A split of a Nazgûl-led Army must keep the card's qualifying figure with the
+    // movers — force ≥1 Nazgûl into the selection (clamped to what's there).
+    const sel = t.move ? { ...t.move, nazgul: Math.max(1, t.move.nazgul ?? 0) } : undefined;
+    moveAllUnits(state, t.from!, t.to!, 'shadow', sel);
+    log(state, null, 'event', `Nazgûl-led Army moves ${t.from} → ${t.to}${sel ? ' (split)' : ''}`);
+  }
 }
 
 register('sh-char-23', { // The Ringwraiths Are Abroad

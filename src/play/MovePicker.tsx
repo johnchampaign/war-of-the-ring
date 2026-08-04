@@ -12,8 +12,11 @@ import mapData from '../../assets/map.json';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 
-export function MovePicker({ from, to, kind, view, you, onConfirm, onCancel }: {
-  from: string; to: string; kind: 'moveArmy' | 'armyMove2' | 'attack'; view: GameState; you: Side;
+export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCancel }: {
+  from: string; to: string; kind: 'moveArmy' | 'armyMove2' | 'attack' | 'eventMove'; view: GameState; you: Side;
+  /** For kind 'eventMove': the eventTarget action this picker decorates with a split
+   *  selection (p.28 — an Army moved by an Event card may be split before moving). */
+  base?: WotrAction;
   onConfirm: (a: WotrAction) => void; onCancel: () => void;
 }) {
   const attackMode = kind === 'attack';
@@ -68,8 +71,9 @@ export function MovePicker({ from, to, kind, view, you, onConfirm, onCancel }: {
   };
   const make = (split: boolean): WotrAction =>
     kind === 'attack' ? { kind: 'attack', from, to, rearguard: split ? buildRearguard() : undefined }
-      : kind === 'armyMove2' ? { kind: 'armyMove2', from, to, move: split ? buildSel() : undefined }
-        : { kind: 'moveArmy', from, to, move: split ? buildSel() : undefined };
+      : kind === 'eventMove' ? { ...(base as Extract<WotrAction, { kind: 'eventTarget' }>), move: split ? buildSel() : undefined }
+        : kind === 'armyMove2' ? { kind: 'armyMove2', from, to, move: split ? buildSel() : undefined }
+          : { kind: 'moveArmy', from, to, move: split ? buildSel() : undefined };
 
   const Step = ({ label, val, max, set }: { label: string; val: number; max: number; set: (v: number) => void }) => (
     <div style={row}>

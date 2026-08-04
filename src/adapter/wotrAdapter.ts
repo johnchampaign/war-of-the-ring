@@ -622,7 +622,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
-        const target: EventTarget = { from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye };
+        const target: EventTarget = { from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye, move: action.move };
         h.applyTarget(state, actor, target, data.applied);
         data.applied.push(target);
         data.left -= 1;
