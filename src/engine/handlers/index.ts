@@ -851,8 +851,10 @@ for (const id of ['sh-char-05', 'sh-char-06', 'sh-char-07']) { // Orc Patrol / I
     canPlay: (state) => !fellowshipInFpSettlement(state),
     // Name the card in the FP's damage prompt (a no-roll tile draw is otherwise
     // indistinguishable from a normal Hunt — player report). Isildur's Bane
-    // additionally bars all damage reduction ("may not be reduced in any way").
-    apply(state) { extraHunt(state, { source: EVENT_BY_ID[id]?.name ?? id, noReduce: id === 'sh-char-06' }); },
+    // additionally bars all damage reduction ("may not be reduced in any way");
+    // Foul Thing from the Deep forces a RANDOM Companion casualty first (card text;
+    // player report: it resolved as a plain extra Hunt).
+    apply(state) { extraHunt(state, { source: EVENT_BY_ID[id]?.name ?? id, noReduce: id === 'sh-char-06', forceRandomCasualty: id === 'sh-char-07' }); },
   });
 }
 

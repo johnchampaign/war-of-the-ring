@@ -75,32 +75,33 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     const closestToMordor = (cands: typeof declares) => cands.reduce((best, a) => (dist(a.target, 'morannon') < dist(best.target, 'morannon') ? a : best), cands[0]!);
     // A declared position feeds the Hunt: ending in a region with a Shadow
     // Stronghold, a Shadow Army, or Nazgûl grants the Shadow a failed-die re-roll
-    // on every Hunt there (huntRerollSources). Never declare into one (player
-    // report: the AI declared in Moria and handed the Shadow a free re-roll) —
-    // EXCEPT the two Mordor entrances: entering Mordor requires the declared
-    // figure to stand at Morannon / Minas Morgul (both Shadow Strongholds), so a
-    // blanket ban walled the AI out of Mordor entirely (a 2000-game A/B showed
-    // Ring wins dropping 685→533). At the gates, the re-roll is the price of
-    // the endgame and is always worth paying.
+    // on every Hunt there (huntRerollSources) — never end a heal-declare in one
+    // (player report: the AI declared in Moria and handed the Shadow a re-roll).
     const noRerolls = (t: RegionId): boolean => {
-      if (MORDOR_ENTRANCES.includes(t)) return true;
       const r = state.regions[t]!;
       return !(REGIONS[t]!.settlement === 'Stronghold' && settlementCtrl(state, t) === 'shadow')
         && !armyHere(state, t, 'shadow')
         && r.nazgul === 0 && !r.characters.includes('witch-king');
     };
-    if (declares.length && state.fellowship.progress >= 2) {
-      if (state.fellowship.corruption >= 4) {
-        const heals = declares.filter((a) => isHealSettlement(state, a.target) && noRerolls(a.target));
-        if (heals.length) return closestToMordor(heals);
-      }
-      // A plain push-declare reveals the Fellowship for little gain when only a
-      // region or two has been banked — hold out for real distance (player report:
-      // declaring at Progress 3 was a free gift to the Hunt).
-      if (state.fellowship.progress >= 4) {
-        const safe = declares.filter((a) => noRerolls(a.target));
-        if (safe.length) return closestToMordor(safe);
-      }
+    if (declares.length && state.fellowship.progress >= 2 && state.fellowship.corruption >= 4) {
+      const heals = declares.filter((a) => isHealSettlement(state, a.target) && noRerolls(a.target));
+      if (heals.length) return closestToMordor(heals);
+    }
+    // The entrances (Morannon / Minas Morgul) are always worth declaring at —
+    // entering Mordor requires the declared figure to stand there.
+    const entries = declares.filter((a) => MORDOR_ENTRANCES.includes(a.target));
+    if (entries.length) return closestToMordor(entries);
+    // Mid-journey declares are held to a high bar: a full bank (Progress 4+), a
+    // safe target, AND ≥3 regions actually gained toward Morannon — a short hop
+    // (Old Ford, player report) gifts the Shadow its "Play if the Fellowship is
+    // not in a FP Settlement…" cards and burns Progress that also extends
+    // separated-Companion movement. But declaring NEVER mid-journey tested worse
+    // (2000-game A/B: corruption deaths 318→519, FP 46.9%→43.7% — the figure sat
+    // too far back and the Ring died in transit), so distance-buying declares stay.
+    if (state.fellowship.progress >= 4) {
+      const here = dist(state.fellowship.location, 'morannon');
+      const gains = declares.filter((a) => noRerolls(a.target) && here - dist(a.target, 'morannon') >= 3);
+      if (gains.length) return closestToMordor(gains);
     }
     return legal.find((a) => a.kind === 'skipFellowshipPhase') ?? legal[0]!;
   }
@@ -354,7 +355,12 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       }
       return (fromU - toU) * 8 + REGIONS[a.to]!.vp * 25 + 25;
     }
-    case 'bringUpgrade': return 70; // Aragorn / Gandalf the White: +1 FP die
+    // Aragorn / Gandalf the White: +1 FP Action die, permanently — worth more than
+    // any single action, so it outranks even the Fellowship push (72 at Corruption
+    // 0), which previously stole the Will die whenever it was the last one left
+    // (player feedback: "your two Prime Directives should be getting GtW and
+    // Aragorn out ASAP for the extra dice").
+    case 'bringUpgrade': return 90;
     case 'bringMinion': return 55 - (target ? Math.min(10, dist(a.region, target)) : 0); // +1 die and a strong leader — placed toward the front
     case 'recruitUnit': return recruitScore(state, actor, a, target); // build the war stacks WHERE THEY MATTER
     case 'moveArmy': return armyMoveScore(state, actor, a.from, a.to, target);
@@ -732,7 +738,10 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
     if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;
     if (a.to) return 30 - (target ? dist(a.to, target) : 0);          // move toward the target
-    if (a.region) return 20 - (target ? dist(a.region, target) : 0);
+    // Recruit placements: same region, Regular-or-Elite — take the Elite (two
+    // player reports: Riders of Rohan / Dain's Ironfoot Guard mustered Regulars).
+    // A half-point tiebreak, so WHERE to recruit still outranks WHAT to recruit.
+    if (a.region) return 20 - (target ? dist(a.region, target) : 0) + (a.figure === 'elite' ? 0.5 : 0);
     return 10;
   };
   return ets.reduce((best, a) => (score(a) > score(best) ? a : best), ets[0]!);

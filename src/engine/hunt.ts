@@ -96,7 +96,7 @@ function huntRerolls(state: GameState): number {
  *  otherwise applies directly. Reveal is applied with the resolution. `opts.source`
  *  names the Event card that caused a no-roll draw (shown in the FP's damage prompt);
  *  `opts.noReduce` bars the damage-reduction options (Isildur's Bane). */
-export type HuntOpts = { noReduce?: boolean; source?: string };
+export type HuntOpts = { noReduce?: boolean; forceRandomCasualty?: boolean; source?: string };
 function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, opts: HuntOpts = {}): void {
   const fs = state.fellowship;
   let damage = 0;
@@ -116,6 +116,19 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
 
   if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) beginReveal(state); return; }
   if (damage === 0) { if (reveal) beginReveal(state); return; }
+
+  // Foul Thing from the Deep: "the Free Peoples player must reduce Hunt Damage (if
+  // any) by eliminating a random Companion (unless there are no Companions in the
+  // Fellowship) before using the Ring" — the first reduction is FORCED and random,
+  // not the FP's choice (player report: the card resolved as a plain extra Hunt).
+  // Any damage left after the casualty resolves normally.
+  if (opts.forceRandomCasualty && state.fellowship.companions.length > 0) {
+    const victim = withRng(state, (rng) => rng.pick(fs.companions));
+    const level = eliminateCompanionInline(state, victim);
+    log(state, null, 'hunt', `${opts.source ?? 'Hunt'}: a random Companion is eliminated — ${victim} (damage ${damage} − ${level})`);
+    damage = Math.max(0, damage - level);
+    if (damage === 0) { if (reveal) beginReveal(state); return; }
+  }
 
   // Isildur's Bane: "Hunt damage may not be reduced in any way before using the
   // Ring" — ruled (per playtester Samuel Carey, confirming the community ruling) as
