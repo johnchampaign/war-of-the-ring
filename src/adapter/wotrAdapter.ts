@@ -20,7 +20,7 @@ import { advancePolitical, advanceableNations, isAtWar } from '../engine/politic
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
 import { canBringMinion, entryRegions, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
-import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide } from '../engine/data';
+import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide, playFacesFor } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, type EventTarget } from '../engine/handlers/registry';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
@@ -360,18 +360,19 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         if (state.cards[actor].draw.character.length) acts.push({ kind: 'drawEvent', deck: 'character' });
         if (state.cards[actor].draw.strategy.length) acts.push({ kind: 'drawEvent', deck: 'strategy' });
       }
-      // Playing an Event card (rulebook p.22): an Event/Will die plays ANY card; a
-      // Character die plays a Character-deck card; an Army/Muster die plays a
-      // Strategy-deck (Army/Muster) card.
-      {
-        const evtDie = faces.has('event') || hasWill;
-        const charDie = faces.has('character');
-        const stratDie = faces.has('army') || faces.has('muster') || faces.has('armyMuster');
-        for (const cardId of state.cards[actor].hand) {
-          const deck = EVENT_BY_ID[cardId]?.deck;
-          const byType = (deck === 'Character' && charDie) || (deck === 'Strategy' && stratDie);
-          if ((evtDie || byType) && canPlayCard(state, cardId, actor)) acts.push({ kind: 'playEvent', cardId });
-        }
+      // Playing an Event card (rulebook p.21-22): an Event/Will die plays ANY card;
+      // otherwise the die must match the icon printed on the card — a Character die
+      // plays a Character Event card, an Army die an Army Event card, a Muster die a
+      // Muster Event card (the Army/Muster face covers either of those two). Player
+      // report 1w592n: the Army-vs-Muster split inside the Strategy decks used to be
+      // ignored, so a Muster-icon card was playable with an Army die and vice versa.
+      for (const cardId of state.cards[actor].hand) {
+        const playable = playFacesFor(cardId).some((f) => faces.has(f))
+          // The Mouth of Sauron's Messenger: a Muster die may act as an Army die once
+          // a turn, which extends to playing an Army-icon Event card.
+          || (actor === 'shadow' && faces.has('muster') && mouthMessengerAvailable(state)
+            && playFacesFor(cardId).includes('army'));
+        if (playable && canPlayCard(state, cardId, actor)) acts.push({ kind: 'playEvent', cardId });
       }
       // The Ents Awake: FP may play one Character Event without an Action die.
       if (actor === 'fp' && state.flags.fpFreeCharEventThisTurn && !(faces.has('event') || hasWill)) {
@@ -576,16 +577,21 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!h || !canPlayCard(state, action.cardId, actor)) throw new Error('Card not playable');
       // The Ents Awake free play: an FP Character Event costs no die (consumes the flag).
       const freePlay = actor === 'fp' && state.flags.fpFreeCharEventThisTurn && EVENT_BY_ID[action.cardId]!.deck === 'Character';
-      // Which dice can pay for this card: its type die (Character / Army-Muster),
-      // plus the Event (Palantír) and Will wildcards (rulebook p.22). The type die is
-      // preferred so the scarce Event die is saved unless the player picks it.
-      const playDeck = EVENT_BY_ID[action.cardId]?.deck;
-      const playFaces: DieFace[] = playDeck === 'Character'
-        ? ['character', 'event', 'will']
-        : ['army', 'armyMuster', 'muster', 'event', 'will'];
+      // Which dice can pay for this card: the die whose icon the card prints
+      // (Character / Army / Muster, the Army/Muster face covering the latter two),
+      // plus the Event (Palantír) and Will wildcards (rulebook p.21-22). The icon die
+      // is preferred so the scarce Event die is saved unless the player picks it.
+      const playFaces = playFacesFor(action.cardId);
       let playedWithFace: DieFace | null = null;
       if (freePlay) state.flags.fpFreeCharEventThisTurn = false;
-      else if (!(playedWithFace = consumePreferred(state, actor, playFaces, action.die))) throw new Error('No usable die to play this card');
+      else if (!(playedWithFace = consumePreferred(state, actor, playFaces, action.die))) {
+        // The Mouth of Sauron's Messenger: spend a Muster die as an Army die (once a
+        // turn) to play an Army-icon card when no Army die is left.
+        if (actor === 'shadow' && playFaces.includes('army') && mouthMessengerAvailable(state) && consumeDie(state, 'shadow', 'muster')) {
+          state.flags.mouthMusterUsedThisTurn = true;
+          playedWithFace = 'muster';
+        } else throw new Error('No usable die to play this card');
+      }
       // Gandalf the Grey's Guide draw triggers ONLY when an Event die paid for the
       // card ("After you use an Event Action die result to play an Event card…"). A
       // Will of the West used as an Event result counts; the card's own type die

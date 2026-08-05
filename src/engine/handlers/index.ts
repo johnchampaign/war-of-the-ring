@@ -9,7 +9,7 @@ import { register, type EventTarget, type EventHandler } from './registry';
 import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
-import { extraHunt, drawHuntTileNumber, challengeOfTheKing } from '../hunt';
+import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations } from '../fellowship';
@@ -1381,23 +1381,30 @@ const anyNazgul = (state: GameState): string | null => {
   for (const id of Object.keys(state.regions)) if (state.regions[id]!.nazgul > 0) return id;
   return null;
 };
-function nazgulCanReachFellowship(state: GameState): boolean {
-  const dest = state.fellowship.location;
-  const def = REGIONS[dest]!;
-  // Nazgûl can't enter an FP-controlled Stronghold unless it's besieged.
-  if (def.settlement === 'Stronghold' && settlementController(state, dest) === 'fp' && !state.regions[dest]!.besieged) return false;
-  return state.fellowship.mordor === null && anyNazgul(state) !== null;
-}
+// Both Nazgûl cards print ONE condition — "Play if the Fellowship is on step 1 or
+// higher on the Fellowship Track" — and nothing else. The reveal/Hunt half is an
+// EFFECT, not a requirement: "it can happen that the effects of an Event card cannot
+// be fully applied. In this case, the card can still be played, and its effects are
+// applied to the maximum extent possible" (p.22). So the only extra guard is that
+// there is a Nazgûl to move at all. (Report 3i1v1v: the card was additionally gated on
+// the Nazgûl being able to REACH the Fellowship, which blocked the very common play of
+// using it purely to reposition the Nazgûl.)
+const nazgulOnMap = (state: GameState): boolean => anyNazgul(state) !== null;
 // Nazgûl Search — move any/all Nazgûl; if one is then with the Fellowship, reveal it.
 register('sh-char-09', {
   ...moveNazgulCard((state) => {
     const loc = state.fellowship.location;
     if (state.fellowship.hidden && (state.regions[loc]!.nazgul > 0 || state.regions[loc]!.characters.includes('witch-king'))) {
-      state.fellowship.hidden = false;
       log(state, null, 'event', 'Nazgûl Search reveals the Fellowship');
+      // A reveal is never just a flag flip: the Free Peoples must move the figure up
+      // to its Progress and reset Progress to 0 (p.39). beginReveal raises that
+      // choice — it survives because finalize runs after the resolver clears the
+      // card's own pending choice. (Report 3k733e: the Fellowship stayed put with its
+      // Progress intact when this card revealed it.)
+      beginReveal(state);
     }
   }),
-  canPlay: (state) => state.fellowship.progress >= 1 && state.fellowship.hidden && nazgulCanReachFellowship(state),
+  canPlay: (state) => state.fellowship.progress >= 1 && nazgulOnMap(state),
 });
 // The Nazgûl Strike! — move any/all Nazgûl; if one is then with the Fellowship, roll
 // for the Hunt. (The "discard an FP table card instead" option remains simplified to
@@ -1410,7 +1417,7 @@ register('sh-char-08b', {
       extraHunt(state);
     }
   }),
-  canPlay: (state) => state.fellowship.progress >= 1 && nazgulCanReachFellowship(state),
+  canPlay: (state) => state.fellowship.progress >= 1 && nazgulOnMap(state),
 });
 
 // Return to Valinor: each non-besieged Elven Stronghold with Elven units takes a

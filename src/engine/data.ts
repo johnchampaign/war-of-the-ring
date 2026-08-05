@@ -5,7 +5,7 @@ import mapRaw from '../../assets/map.json';
 import charsRaw from '../../assets/characters.json';
 import huntRaw from '../../assets/hunt-tiles.json';
 import eventsRaw from '../../assets/event-cards.json';
-import type { Nation, Side, Deck } from './types';
+import type { Nation, Side, Deck, DieFace } from './types';
 
 // --- Map / regions / nations --------------------------------------------
 export interface RegionDef {
@@ -118,6 +118,12 @@ export interface EventCardDef {
   // Usually a single number; a few cards (e.g. sh-str-07/08) print a RANGE like
   // "3-5", kept verbatim as a string. null only if genuinely unread.
   initiative: number | string | null;
+  // The die face printed in the card's upper corner — the non-Event die that can play
+  // it (rulebook p.21-22: a Character die plays a Character Event card, an Army die an
+  // Army Event card, a Muster die a Muster Event card). An Event/Palantír die plays any
+  // card regardless. Set for all 96 base cards by scripts/merge-play-via.mjs; null only
+  // if a future card were added without the icon read.
+  playableVia: 'character' | 'army' | 'muster' | null;
   precondition: string | null;
   eventText: string;
   discardCondition?: string;
@@ -128,6 +134,22 @@ export const EVENT_CARDS: EventCardDef[] = eventsData.cards;
 export const EVENT_BY_ID: Record<string, EventCardDef> = Object.fromEntries(
   EVENT_CARDS.map((c) => [c.id, c]),
 );
+/** The Action-die faces that can play `cardId` (rulebook p.21-22), most-specific
+ *  first so the scarce Event/Palantír die is spent last: the card's own printed icon
+ *  (Character / Army / Muster), then the Army/Muster face when the icon is Army or
+ *  Muster, then Event, then Will of the West (Free Peoples only — it may become any
+ *  other result). Cards whose icon is unknown fall back to the old deck-wide
+ *  approximation. Does NOT include the Mouth of Sauron's once-a-turn Muster→Army
+ *  substitution; that lives in the adapter with the rest of his ability. */
+export function playFacesFor(cardId: string): DieFace[] {
+  const via = EVENT_BY_ID[cardId]?.playableVia
+    ?? (EVENT_BY_ID[cardId]?.deck === 'Character' ? 'character' : null);
+  if (via === 'character') return ['character', 'event', 'will'];
+  if (via === 'army') return ['army', 'armyMuster', 'event', 'will'];
+  if (via === 'muster') return ['muster', 'armyMuster', 'event', 'will'];
+  return ['army', 'armyMuster', 'muster', 'event', 'will']; // unknown icon: any Strategy die
+}
+
 export function deckOf(side: Side, deck: Deck): string[] {
   const s = side === 'fp' ? 'FreePeoples' : 'Shadow';
   const d = deck === 'character' ? 'Character' : 'Strategy';

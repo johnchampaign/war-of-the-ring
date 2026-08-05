@@ -150,7 +150,7 @@ function CardPreview({ id, bottom }: { id: string; bottom?: boolean }) {
   const text = (
     <div style={{ overflowY: 'auto', minWidth: 0, flex: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-        <CardTypeBadge deck={def?.deck} />
+        <CardTypeBadge deck={def?.deck} via={def?.playableVia} />
         <span style={{ fontSize: 11, color: '#ccb', textTransform: 'uppercase' }}>{def?.side} · init {def?.initiative ?? '–'}</span>
       </div>
       <div style={{ fontSize: 16, fontWeight: 700, margin: '2px 0 6px' }}>{def?.name ?? id}</div>

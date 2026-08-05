@@ -14,7 +14,7 @@
       "7 cards had a null initiative — the TTS source extraction couldn't read these corner values. Restored from the physical cards / card art: fp-char-11/15/16 = 0 (photo-confirmed) and sh-str-09/12 = 0 (the 'resolve-first' value, e.g. the 'Daring Defiance' cancel card); sh-str-07 (Shadows Gather) and sh-str-08 (The Shadow Lengthens) carry the combat card 'Mumakil', whose initiative the card-text reference prints as '3-5' (kept verbatim as a string). Per the rulebook (Mumakil is its named example): a Combat card with multiple different-timing effects has ONE initiative number per effect — here 3 ('Add 1 to all dice', resolved early) and 5 ('score one additional hit' after the re-roll). It is NOT a single variable initiative. Faithful per-effect initiative modelling belongs to the combat-card (D5) fidelity pass."
     ],
     "textSource": "Read verbatim from the base-game card scans (crop_event_cards.py crops); merged by merge-event-text.mjs. eventText/precondition/discardCondition/combat are card-accurate.",
-    "playableViaNote": "playableVia (the upper-right play-via icon, i.e. which non-Event Action die can play the card) is NOT yet captured per-card — pending a focused corner-icon read. Any card is always playable with an Event/Palantir die regardless.",
+    "playableViaNote": "playableVia is the die face printed in the card's upper corner — the non-Event die that can play it (rulebook p.21-22). Transcribed from the Almanac card index by merge-play-via.mjs; every card is ALSO playable with an Event/Palantir die (and, for the Free Peoples, a Will of the West).",
     "filled": 96,
     "missingText": []
   },
@@ -33,7 +33,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "It Is a Gift",
         "precondition": "Play if the defending Army is in the same region as the Fellowship.",
@@ -56,7 +56,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "It Is a Gift",
         "precondition": "Play if the defending Army is in the same region as the Fellowship.",
@@ -79,7 +79,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "It Is a Gift",
         "precondition": "Play if the defending Army is in the same region as the Fellowship.",
@@ -102,7 +102,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "It Is a Gift",
         "precondition": "Play if the defending Army is in the same region as the Fellowship.",
@@ -126,7 +126,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Blade of Westernesse",
         "precondition": "Play if a Hobbit is in the battle.",
@@ -149,7 +149,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Mighty Attack",
         "precondition": "Play if a Companion is in the battle.",
@@ -173,7 +173,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Mighty Attack",
         "precondition": "Play if a Companion is in the battle.",
@@ -197,7 +197,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Servant of the Secret Fire",
         "precondition": "Play if Gandalf is in the battle.",
@@ -221,7 +221,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Andúril",
         "precondition": "Play if Strider/Aragorn is in the battle.",
@@ -244,7 +244,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Heroic Death",
         "precondition": "Play if a Free Peoples Leader or a Companion is in the battle.",
@@ -268,7 +268,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Daring Defiance",
         "precondition": "Play if a Companion is in the battle.",
@@ -291,7 +291,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Fateful Strike",
         "precondition": "Play if a Free Peoples Leader or a Companion is in the battle.",
@@ -314,7 +314,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Heroic Death",
         "precondition": "Play if a Free Peoples Leader or a Companion is in the battle.",
@@ -337,7 +337,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Sudden Strike",
         "precondition": "Play if a Free Peoples Leader or a Companion is in the battle.",
@@ -360,7 +360,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Daring Defiance",
         "precondition": "Play if a Companion is in the battle.",
@@ -383,7 +383,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Daring Defiance",
         "precondition": "Play if a Companion is in the battle.",
@@ -406,7 +406,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Brave Stand",
         "precondition": "Play if a Companion is in the battle.",
@@ -429,7 +429,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Heroic Death",
         "precondition": "Play if a Free Peoples Leader or a Companion is in the battle.",
@@ -452,7 +452,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Ents' Rage",
         "precondition": "Play if the defending Army is in a Rohan region, Fangorn or Orthanc.",
@@ -475,7 +475,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Huorn-dark",
         "precondition": "Play if the defending Army is in a Rohan region, Fangorn or Orthanc.",
@@ -498,7 +498,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Nameless Wood",
         "precondition": "Play if the defending Army is in a Rohan region, Fangorn or Orthanc.",
@@ -521,7 +521,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Sudden Strike",
         "precondition": "Play if a Free Peoples Leader or a Companion is in the battle.",
@@ -544,7 +544,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Brave Stand",
         "precondition": "Play if a Companion is in the battle.",
@@ -567,7 +567,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Brave Stand",
         "precondition": "Play if a Companion is in the battle.",
@@ -590,7 +590,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Daylight",
         "precondition": null,
@@ -614,7 +614,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "No Quarter",
         "precondition": null,
@@ -638,7 +638,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Advantageous Position",
         "precondition": "Play if the defending Army is inside the borders of a Free Peoples Nation.",
@@ -662,7 +662,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Advantageous Position",
         "precondition": "Play if the defending Army is inside the borders of a Free Peoples Nation.",
@@ -685,7 +685,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Scouts",
         "precondition": "Play if the Free Peoples Army is defending in a field battle.",
@@ -708,7 +708,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Shield-wall",
         "precondition": null,
@@ -731,7 +731,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Shield-wall",
         "precondition": null,
@@ -755,7 +755,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Confusion",
         "precondition": null,
@@ -778,7 +778,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Scouts",
         "precondition": "Play if the Free Peoples Army is defending in a field battle.",
@@ -801,7 +801,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "No Quarter",
         "precondition": null,
@@ -824,7 +824,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Sudden Strike",
         "precondition": "Play if a Free Peoples Leader or a Companion is in the battle.",
@@ -847,7 +847,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Confusion",
         "precondition": null,
@@ -870,7 +870,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Charge",
         "precondition": "Play if a Free Peoples Elite unit is in the battle.",
@@ -894,7 +894,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Charge",
         "precondition": "Play if a Free Peoples Elite unit is in the battle.",
@@ -917,7 +917,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Daylight",
         "precondition": null,
@@ -940,7 +940,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Daylight",
         "precondition": null,
@@ -964,7 +964,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Scouts",
         "precondition": "Play if the Free Peoples Army is defending in a field battle.",
@@ -987,7 +987,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Shield-wall",
         "precondition": null,
@@ -1010,7 +1010,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Shield-wall",
         "precondition": null,
@@ -1033,7 +1033,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Advantageous Position",
         "precondition": "Play if the defending Army is inside the borders of a Free Peoples Nation.",
@@ -1056,7 +1056,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Advantageous Position",
         "precondition": "Play if the defending Army is inside the borders of a Free Peoples Nation.",
@@ -1079,7 +1079,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Valour",
         "precondition": "Play if a Free Peoples Elite unit is in the battle.",
@@ -1103,7 +1103,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Valour",
         "precondition": "Play if a Free Peoples Elite unit is in the battle.",
@@ -1127,7 +1127,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Valour",
         "precondition": "Play if a Free Peoples Elite unit is in the battle.",
@@ -1150,7 +1150,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "One for the Dark Lord",
         "precondition": "Play if the defending Army is in the same region as the Fellowship.",
@@ -1173,7 +1173,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "One for the Dark Lord",
         "precondition": "Play if the defending Army is in the same region as the Fellowship.",
@@ -1196,7 +1196,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "One for the Dark Lord",
         "precondition": "Play if the defending Army is in the same region as the Fellowship.",
@@ -1219,7 +1219,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "One for the Dark Lord",
         "precondition": "Play if the defending Army is in the same region as the Fellowship.",
@@ -1242,7 +1242,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Cruel as Death",
         "precondition": "Play if the total Nazgûl Leadership is 2 or more.",
@@ -1265,7 +1265,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Cruel as Death",
         "precondition": "Play if the total Nazgûl Leadership is 2 or more.",
@@ -1288,7 +1288,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "They Are Terrible",
         "precondition": "Play if the total Nazgûl Leadership is 1 or more.",
@@ -1311,7 +1311,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Dread and Despair",
         "precondition": "Play if the total Nazgûl Leadership is 1 or more.",
@@ -1335,7 +1335,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Black Breath",
         "precondition": "Play if a Nazgûl is in the battle.",
@@ -1359,7 +1359,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Foul Stench",
         "precondition": "Play if the total Nazgûl Leadership is 1 or more.",
@@ -1382,7 +1382,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Cruel as Death",
         "precondition": "Play if the total Nazgûl Leadership is 2 or more.",
@@ -1405,7 +1405,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Black Breath",
         "precondition": "Play if a Nazgûl is in the battle.",
@@ -1428,7 +1428,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "They Are Terrible",
         "precondition": "Play if the total Nazgûl Leadership is 1 or more.",
@@ -1451,7 +1451,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Dread and Despair",
         "precondition": "Play if the total Nazgûl Leadership is 1 or more.",
@@ -1474,7 +1474,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Words of Power",
         "precondition": "Play if a Nazgûl is in the battle.",
@@ -1498,7 +1498,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "They Are Terrible",
         "precondition": "Play if the total Nazgûl Leadership is 1 or more.",
@@ -1522,7 +1522,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Durin's Bane",
         "precondition": "Play if the defending Army is within two regions of Moria.",
@@ -1545,7 +1545,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Words of Power",
         "precondition": "Play if a Nazgûl is in the battle.",
@@ -1568,7 +1568,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Devilry of Orthanc",
         "precondition": "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
@@ -1591,7 +1591,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Dread and Despair",
         "precondition": "Play if the total Nazgûl Leadership is 1 or more.",
@@ -1614,7 +1614,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Cruel as Death",
         "precondition": "Play if the total Nazgûl Leadership is 2 or more.",
@@ -1639,7 +1639,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Foul Stench",
         "precondition": "Play if the total Nazgûl Leadership is 1 or more.",
@@ -1663,7 +1663,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Words of Power",
         "precondition": "Play if a Nazgûl is in the battle.",
@@ -1686,7 +1686,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "character",
       "combat": {
         "title": "Foul Stench",
         "precondition": "Play if the total Nazgûl Leadership is 1 or more.",
@@ -1709,7 +1709,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Deadly Strife",
         "precondition": null,
@@ -1732,7 +1732,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Onslaught",
         "precondition": null,
@@ -1755,7 +1755,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Devilry of Orthanc",
         "precondition": "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
@@ -1779,7 +1779,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Relentless Assault",
         "precondition": null,
@@ -1802,7 +1802,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Devilry of Orthanc",
         "precondition": "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
@@ -1826,7 +1826,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Great Host",
         "precondition": null,
@@ -1849,7 +1849,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Mûmakil",
         "precondition": "Play if a Southrons & Easterlings Elite unit is in the battle.",
@@ -1873,7 +1873,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Mûmakil",
         "precondition": "Play if a Southrons & Easterlings Elite unit is in the battle.",
@@ -1897,7 +1897,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Swarm of Bats",
         "precondition": null,
@@ -1920,7 +1920,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "Deadly Strife",
         "precondition": null,
@@ -1943,7 +1943,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Relentless Assault",
         "precondition": null,
@@ -1966,7 +1966,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Swarm of Bats",
         "precondition": null,
@@ -1989,7 +1989,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "We Come to Kill",
         "precondition": "Play if a Shadow Elite unit is in the battle.",
@@ -2012,7 +2012,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "We Come to Kill",
         "precondition": "Play if a Shadow Elite unit is in the battle.",
@@ -2035,7 +2035,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "army",
       "combat": {
         "title": "We Come to Kill",
         "precondition": "Play if a Shadow Elite unit is in the battle.",
@@ -2059,7 +2059,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Great Host",
         "precondition": null,
@@ -2082,7 +2082,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Great Host",
         "precondition": null,
@@ -2105,7 +2105,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Relentless Assault",
         "precondition": null,
@@ -2128,7 +2128,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Onslaught",
         "precondition": null,
@@ -2151,7 +2151,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Onslaught",
         "precondition": null,
@@ -2174,7 +2174,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Deadly Strife",
         "precondition": null,
@@ -2198,7 +2198,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Desperate Battle",
         "precondition": null,
@@ -2221,7 +2221,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Desperate Battle",
         "precondition": null,
@@ -2244,7 +2244,7 @@
         0.111111,
         0.2
       ],
-      "playableVia": null,
+      "playableVia": "muster",
       "combat": {
         "title": "Desperate Battle",
         "precondition": null,
