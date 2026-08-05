@@ -27,7 +27,7 @@ Entry shape:
 | `roll` | action-dice roll at turn start | `{ fp: DieFace[], shadow: DieFace[], eyes: number, huntBox: number }` |
 | `pass` | a player passes their action | — |
 | `event` | event-card play/draw/discard and card effects | — |
-| `combat` | battle declaration, combat cards, round dice, casualties, eliminations, outcome | round dice: `{ round, region, attacker: { dice, rerolls, target, hits }, defender: { … } }`; battle end: `{ from, to, attacker, rounds, atkLosses, defLosses, captured, siege, outcome }` |
+| `combat` | battle declaration, combat cards, round dice, casualties, eliminations, outcome | declaration: `{ from, to, attacker, attackerForce, defenderForce, siege, sortie }` — each force as `"2R, 5E, Saruman (5 dice, Leadership 5)"`, read after the rearguard split so it names the force that actually fights (armies are public, and players asked to be able to audit a battle's dice and re-rolls); round dice: `{ round, region, attacker: { dice, rerolls, target, hits }, defender: { … } }`; battle end: `{ from, to, attacker, rounds, atkLosses, defLosses, captured, siege, outcome }` |
 | `hunt` | hunt rolls, tile draws, hunt damage / corruption | hunt roll: `{ level, bonus, dice: number[], rerolls: number[], successes }` |
 | `fellowship` | fellowship movement, hiding, guide changes, companion separation | — |
 | `army` | army movement / attacks-adjacent moves | — |

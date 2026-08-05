@@ -359,6 +359,15 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
    modifiers — p.30.)
 3. **Leader re-roll**: re-roll failed dice up to **Leadership** (= # Leaders/
    Nazgûl + Character Leadership ratings), max 5; same hit number (p.30).
+   The allowance is `min(Leadership, misses)` **fixed before any re-roll die is
+   thrown** — it is not re-derived as the re-rolls land. `rollHits` once wrote it as
+   the `for` condition while the body decremented the miss count on each successful
+   re-roll, so every re-roll that HIT silently consumed one of the re-rolls still
+   owed (player report: 3 misses with ample Leadership got only 2 re-roll dice).
+   Regression-tested in `scripts/probe-leader-reroll.mjs`, which also asserts the
+   sample actually contains re-rolls that hit — otherwise it would pass vacuously.
+   Note Leadership counts each **Isengard Elite** while Saruman is in play
+   ("Servants of the White Hand"), so an Orthanc stack is often at the cap of 5.
 4. **Remove casualties**: per hit, opponent removes 1 Regular **or** reduces 1
    Elite→Regular (replacement); for every 2 hits may instead remove 1 Elite (p.30).
    Attacker chooses his removals first (p.30). FP casualties are permanent &

@@ -7,7 +7,7 @@
 // (a card's initiative only matters when both sides' effects collide — see D5)
 // and a few intricate per-effect cards (e.g. Mûmakil's two timings).
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
-import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide } from './data';
+import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef } from './data';
 import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
@@ -105,7 +105,13 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   let hits = withRng(state, (rng) => {
     let h = 0, failed = 0;
     for (let i = 0; i < count; i++) { const d = rng.rollDie(6); roll?.dice.push(d); if (d === 6 || (d !== 1 && d >= target)) h++; else failed++; }
-    if (allowReroll) for (let i = 0; i < Math.min(lead, failed); i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; failed--; } }
+    // The re-roll ALLOWANCE is fixed before any die is thrown (p.30: re-roll one die
+    // per Leadership point, up to the number of misses). It must not be the loop
+    // condition — `failed--` below mutates it, so a re-roll that HIT used to steal a
+    // re-roll die from the ones still owed (player report: 3 misses with Leadership
+    // 5 got only 2 re-rolls, because the first re-roll hit).
+    const rerollDice = allowReroll ? Math.min(lead, failed) : 0;
+    for (let i = 0; i < rerollDice; i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; failed--; } }
     for (let i = 0; i < (ownMods.extraAttackDice ?? 0); i++) { const d = rng.rollDie(6); if (d >= 5) h++; } // extra attack hits on 5+
     // Mighty Attack: turn up to N still-missed dice into hits.
     h += Math.min(ownMods.guaranteedHits ?? 0, failed);
@@ -496,11 +502,38 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   }
   pc.atkUnits0 = atkCount(state, pc); // attacking force after the rearguard is held aside
   state.pendingCombat = pc;
-  log(state, null, 'combat', `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${sortie ? ' (sortie)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`);
+  // Name BOTH forces as they stand at the first roll (player report: "I always lose
+  // track of the original forces and they're not listed in the log… that way the
+  // resolution could be checked for accuracy"). Read after the rearguard split, so
+  // the attacker shown is the force that actually fights.
+  const atkDesc = describeForce(state, atkForce(state, pc), attacker);
+  const defDesc = describeForce(state, defForce(state, pc), defender);
+  log(state, null, 'combat',
+    `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${sortie ? ' (sortie)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`
+    + ` — attacker ${atkDesc} vs defender ${defDesc}`,
+    { from, to, attacker, attackerForce: atkDesc, defenderForce: defDesc, siege: !!pc.siege, sortie });
 }
 
 function retreatRegion(state: GameState, pc: PendingCombat): RegionId | null {
   return freeAdjacentFor(state, pc.to, pc.defender);
+}
+
+/** A Force's composition for the battle log — "2R, 5E, Saruman (Leadership 5)".
+ *  Armies on the board are open information, so this is a public log line. Players
+ *  asked for it so a battle's resolution can be checked against the rules: the
+ *  Leadership total is exactly what sets the Leader re-roll count (p.30), and the
+ *  unit count sets the Combat dice (both capped at 5). */
+function describeForce(state: GameState, f: Force, side: Side): string {
+  let reg = 0, eli = 0;
+  for (const n of Object.keys(f.units) as Nation[]) { const u = f.units[n]!; reg += u.regular; eli += u.elite; }
+  const parts: string[] = [];
+  if (reg) parts.push(`${reg}R`);
+  if (eli) parts.push(`${eli}E`);
+  const figs = side === 'fp' ? f.leaders : f.nazgul;
+  if (figs) parts.push(`${figs}${side === 'fp' ? 'L' : ' Nazgûl'}`);
+  for (const c of f.characters) if (characterSide(c) === side) parts.push(characterDef(c)?.name ?? c);
+  if (!parts.length) return 'empty';
+  return `${parts.join(', ')} (${Math.min(5, forceUnitCount(f))} dice, Leadership ${forceLeadership(state, f, side)})`;
 }
 
 /** Resolve pre-combat-timing card effects (Scouts retreat, Durin's Bane special

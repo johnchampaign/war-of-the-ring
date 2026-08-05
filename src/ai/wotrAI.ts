@@ -116,8 +116,21 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
   return maybeAttackRearguard(state, actor, maybeSplitGarrison(state, actor, best)); // hold a threatened origin
 }
 
+/** Is `from` a VP Settlement of ours that a departing Army must not simply abandon?
+ *  ONE shared test: `maybeSplitGarrison` uses it to leave a garrison behind, and
+ *  `armyMoveScore` uses it to price the move — they must never disagree, or the score
+ *  charges for abandoning ground the split actually holds (or vice versa). The reach
+ *  is deliberately wider than one region's march: the Shadow closes fast, and a
+ *  Stronghold left open two moves away is a free capture (player report: "they
+ *  abandoned Minas Tirith to hold….nothing"). */
+function garrisonWorthy(state: GameState, actor: Side, from: RegionId): boolean {
+  const def = REGIONS[from];
+  if (!def?.settlement || def.vp <= 0 || settlementCtrl(state, from) !== actor) return false;
+  return enemyNear(state, from, actor === 'fp' ? 'shadow' : 'fp', 4);
+}
+
 /** Split a chosen whole-army move so it leaves a one-unit garrison behind when the
- *  origin is a VP Settlement we control with an enemy army adjacent — otherwise
+ *  origin is a VP Settlement we control with an enemy army within reach — otherwise
  *  vacating it hands the enemy a free capture. Conservative: only plain moveArmy
  *  (never weakens an attack), only when the stack can spare a unit, and the split
  *  is always legal where the whole move was (it moves a strict subset to the same
@@ -125,10 +138,8 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
  *  Elite) holds. */
 function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): WotrAction {
   if (action.kind !== 'moveArmy' || action.move) return action;
-  const from = action.from, def = REGIONS[from];
-  if (!def?.settlement || def.vp <= 0 || settlementCtrl(state, from) !== actor) return action;
-  const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
-  if (!enemyNear(state, from, enemy, 2)) return action; // not threatened within a turn's march
+  const from = action.from;
+  if (!garrisonWorthy(state, actor, from)) return action;
   const r = state.regions[from];
   if (unitCount(state, from) < 2) return action;                                // need ≥2: leave 1, move ≥1
   const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
@@ -325,6 +336,11 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'hideFellowship': return 85;                                  // must hide to keep moving
     case 'separateCompanion': {                                        // rouse a passive nation
       const passiveFp = (['dwarves', 'gondor', 'north', 'rohan'] as Nation[]).some((n) => state.nations[n].step > 0 && !state.nations[n].active);
+      // Every Companion who leaves is one less body to absorb Hunt damage (p.42), so
+      // the Fellowship keeps a core of four. Without this the AI stripped it turn
+      // after turn while any Nation stayed passive (player report: "they take a bunch
+      // of guys out of the fellowship… it doesn't help the cause").
+      if (fs.companions.length <= 4) return 2;
       return passiveFp && fs.corruption < 6 ? 40 : 12;
     }
     case 'attack': {
@@ -462,6 +478,16 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // reach. Scored BELOW the equivalent capture so the AI still prefers taking ground to
   // sitting on it — this is meant to stop free walk-ins, not to turn the AI turtle.
   if (undefendedVP(state, to, actor)) s += (REGIONS[to]!.vp * 18 + 12) * (1 + 1.5 * enemyPressure(state, actor));
+  // VACATING a VP Settlement we hold is a cost, not a free move — the score used to
+  // weigh only the destination, so a whole-army march out of a Stronghold read as
+  // pure profit and the AI walked away from ground it was winning on (player report:
+  // "they abandoned Minas Tirith to hold….nothing"). Charged only when the region is
+  // ACTUALLY left open: a stack of 2+ keeps the Settlement via the garrison split
+  // (same `garrisonWorthy` test, so score and split can't disagree), while a lone
+  // unit marching off really does hand it over.
+  if (garrisonWorthy(state, actor, from) && unitCount(state, from) < 2) {
+    s -= (REGIONS[from]!.vp * 14 + 10) * (1 + 1.5 * enemyPressure(state, actor));
+  }
   if (target) { s += -(dist(to, target) - dist(from, target)) * 12; if (to === target) s += 30; }         // march
   // Never march units into a stack that's already full: anything over the 10-unit
   // limit is removed (lost to reinforcements). Penalise per lost unit so the AI
@@ -496,7 +522,20 @@ function elvenRingScore(state: GameState, actor: Side, a: Extract<WotrAction, { 
 function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction, { kind: 'moveCharacter' }>): number {
   const fs = state.fellowship;
   if (actor === 'shadow' && a.char === 'nazgul') return (!fs.hidden && a.to === fs.location) ? 42 : 6;
-  return 4; // separated Companions / Minions: situational
+  if (actor === 'shadow') return 4; // Minions: situational
+  // A separated Companion used to score a flat 4 for every destination, so it never
+  // went anywhere worth going and simply stood where it was dropped (player report:
+  // the FP "take a bunch of guys out of the fellowship anddddd forgot about them").
+  // Give the two things a loose Companion is actually FOR real weight:
+  const def = REGIONS[a.to]!;
+  //  1. walking into a friendly City/Stronghold of a Nation that is not yet At War
+  //     rouses it (activateNation on entry) — the whole point of separating.
+  if ((def.settlement === 'City' || def.settlement === 'Stronghold')
+    && !!def.nation && FP.has(def.nation) && settlementCtrl(state, a.to) !== 'shadow'
+    && state.nations[def.nation]!.step > 0) return 34;
+  //  2. joining one of our Armies adds its Leadership to every battle it fights.
+  if (armyHere(state, a.to, 'fp')) return 18;
+  return 4;
 }
 
 function combatCardValue(m: CombatMods | null): number {
