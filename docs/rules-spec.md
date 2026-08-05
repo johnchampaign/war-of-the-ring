@@ -175,7 +175,7 @@ die already showing an Eye.
   `scripts/merge-play-via.mjs` from the Almanac's card index; `playFacesFor`
   (`engine/data.ts`) turns it into the die faces that can pay. All 48 Character-deck
   cards print the **Character** icon; the Strategy decks split **Army** (19) and
-  **Muster** (27). The Army/Muster face covers either of the latter two, an Event die
+  **Muster** (29). The Army/Muster face covers either of the latter two, an Event die
   covers everything, a Will of the West covers everything for the FP, and the Mouth of
   Sauron's Messenger lets a Muster die pay for an Army-icon card once a turn. The icon
   die is spent in preference to the scarce Event die.
