@@ -154,16 +154,23 @@ function CardPreview({ id, bottom }: { id: string; bottom?: boolean }) {
         <span style={{ fontSize: 11, color: '#ccb', textTransform: 'uppercase' }}>{def?.side} · init {def?.initiative ?? '–'}</span>
       </div>
       <div style={{ fontSize: 16, fontWeight: 700, margin: '2px 0 6px' }}>{def?.name ?? id}</div>
+      {/* The "Play if…" requirement, on HOVER — it used to appear only in the
+          click-to-enlarge view (player report: "I'm really missing seeing the
+          conditions to play the card; I can only see them after clicking"). */}
+      {def?.precondition && <p style={{ fontSize: 12, margin: '4px 0', lineHeight: 1.35, ...req }}>{def.precondition}</p>}
       {def?.eventText && <p style={{ fontSize: 13, margin: '4px 0', lineHeight: 1.35 }}><b>Event:</b> {def.eventText}</p>}
-      {def?.combat?.title && <p style={{ fontSize: 13, margin: '4px 0', lineHeight: 1.35 }}><b>Combat — {def.combat.title}:</b> {def.combat.text}</p>}
+      {def?.combat?.title && <p style={{ fontSize: 13, margin: '4px 0', lineHeight: 1.35 }}><b>Combat — {def.combat.title}:</b>{' '}
+        {def.combat.precondition && <span style={req}>[{def.combat.precondition}] </span>}{def.combat.text}</p>}
     </div>
   );
   if (bottom) {
-    // Enlarged area: show just the card image, as large as fits. Only when the art
-    // hasn't been downloaded do we fall back to the transcribed text in its place.
+    // Enlarged area: the card image as large as fits, with the transcribed text
+    // (conditions first) beside it in the otherwise-empty width — the art alone is
+    // too small here to read the "Play if…" line off.
     return art
-      ? <div style={{ height: '100%', padding: 8, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <img src={art} alt={def?.name ?? id} style={{ maxHeight: '100%', maxWidth: '100%', borderRadius: 8 }} />
+      ? <div style={{ height: '100%', padding: 8, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img src={art} alt={def?.name ?? id} style={{ maxHeight: '100%', maxWidth: '55%', borderRadius: 8, flexShrink: 0 }} />
+          <div style={{ ...info, maxHeight: '100%', overflowY: 'auto', flex: 1, minWidth: 0 }}>{text}</div>
         </div>
       : <div style={{ height: '100%', overflowY: 'auto', padding: 8, boxSizing: 'border-box' }}>{text}</div>;
   }
@@ -213,3 +220,6 @@ const panel: React.CSSProperties = { borderTop: '1px solid #2a2418', padding: 8,
 const bottomPanel: React.CSSProperties = { height: '100%', fontFamily: 'system-ui', color: '#e9e1cc', display: 'flex', overflow: 'hidden', background: '#14110b' };
 const hint: React.CSSProperties = { color: '#776', fontSize: 12, fontStyle: 'italic', padding: '12px 4px' };
 const info: React.CSSProperties = { padding: '6px 2px', display: 'flex', flexDirection: 'column', gap: 2 };
+// Play requirement ("Play if…") — amber italic, distinct from the effect text
+// (same treatment as the click-to-enlarge view).
+const req: React.CSSProperties = { color: '#d8b48c', fontStyle: 'italic' };

@@ -470,11 +470,28 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             </div>
             {/* The enlarge/inspect area — fills the whole right side of the lower area
                 (enlarged cards & board territories). The Report / Log buttons float over it. */}
-            <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418' }}>
+            <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418', minHeight: 0 }}>
               {/* Blank while the Log pop-up is open: otherwise a lingering hover
                   shows here, dimmed behind the pop-up backdrop, beside the pop-up's
-                  own bright preview — the "doubled (and flickering) card" report. */}
-              <HoverPreview hover={logOpen ? null : hover} view={g.view} bottom />
+                  own bright preview — the "doubled (and flickering) card" report.
+                  With nothing hovered this space used to hold only a one-line hint, so
+                  the game log lives here instead — visible without opening the pop-up
+                  (player report: "I have to click Log to see what my opponent did").
+                  NB: no onHoverCard here — a hover preview would replace the log under
+                  the cursor and re-enter/leave in a loop (the old flicker report). The
+                  pop-up keeps card-hover. */}
+              {!logOpen && hover
+                ? <HoverPreview hover={hover} view={g.view} bottom />
+                : (
+                  <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, background: '#14110b' }}>
+                    <div style={{ fontSize: 10, color: '#776', fontStyle: 'italic', padding: '4px 8px 0', flexShrink: 0 }}>
+                      Hover a card, a region, or the Guide to inspect it here.
+                    </div>
+                    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                      <LogPanel view={g.view} />
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
         </div>
