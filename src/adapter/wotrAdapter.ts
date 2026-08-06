@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
+import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
@@ -138,8 +138,14 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return acts;
       }
       case 'combatCasualties':
-      case 'valinorCasualties': // Return to Valinor: FP chooses how the Elves absorb the losses
-      case 'eventCasualties': // direct-damage Event cards: the owner chooses how the Army absorbs the losses
+      case 'eventCasualties': {
+        // One hit at a time (p.30). A legacy pending choice saved before this became
+        // per-casualty has no options to enumerate; fall back to the batch plan so an
+        // in-flight game can still be finished.
+        const opts = pendingCasualtyOptions(state).map((o) => ({ kind: 'casualtyStep' as const, step: o.step, nation: o.nation }));
+        return opts.length ? opts : [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
+      }
+      case 'valinorCasualties': // Return to Valinor spreads one plan over several regions
         return [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
       case 'combatContinue':
         return [{ kind: 'combatContinue', cont: true }, { kind: 'combatContinue', cont: false }];
@@ -404,7 +410,16 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // Leader/Nazgûl/Character (not an enemy Companion sharing the region).
         // Saruman can't leave Orthanc, so he satisfies an attack (whose units stay
         // put) but not a move; Isengard Elites are Leaders while he is in play.
-        const leaderArmy = (from: string, forAttack: boolean) => charDieLeaders(state, state.regions[from]!, actor, forAttack) > 0;
+        // A SORTIE attacks out of the siege box, so the attacking force is the BOX,
+        // not the region — the region holds the besieger. Reading the region here
+        // measured the ENEMY's Leaders: legalActions offered a Character-die sortie
+        // that applyAction then refused with "No Army die" (its own leaderArmy is
+        // sortie-aware), which the soak caught as an illegal-accepted. Mirror the
+        // apply path exactly, or the two disagree again.
+        const leaderArmy = (from: string, forAttack: boolean) => {
+          const src = (forAttack ? sortieForce(state, from, actor) : null) ?? state.regions[from]!;
+          return charDieLeaders(state, src, actor, forAttack) > 0;
+        };
         for (const [from, to] of moveTargets(state, actor)) if (leaderArmy(from, false)) acts.push({ kind: 'moveArmy', from, to });
         for (const [from, to] of attackTargets(state, actor)) if (leaderArmy(from, true)) acts.push({ kind: 'attack', from, to });
       }
@@ -931,6 +946,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
           pc.sorcererDeck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
         }
       }
+      break;
+    }
+    case 'casualtyStep': {
+      const k = state.pendingChoice?.kind;
+      if (k !== 'combatCasualties' && k !== 'eventCasualties') throw new Error('No casualty choice pending');
+      if (state.pendingChoice!.owner !== actor) throw new Error('Not your casualty choice');
+      resolveCasualtyStep(state, action.step, action.nation);
       break;
     }
     case 'chooseCasualties':

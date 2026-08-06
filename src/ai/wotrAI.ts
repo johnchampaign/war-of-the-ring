@@ -597,9 +597,22 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       }
       return legal.find((a) => a.kind === 'huntDamage' && a.mode === 'corruption') ?? legal[0]!;
     }
-    case 'combatCasualties': // keep Elites (strength): remove Regulars first
+    case 'combatCasualties': // keep Elites (strength): spend Regulars first
+    case 'eventCasualties': { // direct-damage Event card: same preference
+      // Casualties are now allocated one hit at a time (p.30). Keep the old policy —
+      // Elites are worth more than Regulars, so shed a Regular whenever one is left,
+      // and only then reduce an Elite. Never take the two-hits-for-one-Elite option:
+      // it costs an extra hit AND the unit, which is only ever worth it for a human
+      // playing around a siege requirement.
+      const steps = legal.filter((a) => a.kind === 'casualtyStep') as Extract<WotrAction, { kind: 'casualtyStep' }>[];
+      if (steps.length) {
+        return steps.find((a) => a.step === 'removeRegular')
+          ?? steps.find((a) => a.step === 'reduceElite')
+          ?? steps[0]!;
+      }
+      return legal.find((a) => a.kind === 'chooseCasualties' && a.plan === 'regularsFirst') ?? legal[0]!;
+    }
     case 'valinorCasualties': // Return to Valinor: keep Elves' Elites → remove Regulars first
-    case 'eventCasualties': // direct-damage Event card: keep our Elites → remove Regulars first
       return legal.find((a) => a.kind === 'chooseCasualties' && a.plan === 'regularsFirst') ?? legal[0]!;
     case 'combatContinue': {
       const cont = !!pc && unitCount(state, pc.from) >= unitCount(state, pc.to);

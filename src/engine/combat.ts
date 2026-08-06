@@ -166,18 +166,64 @@ function applyCombatEliminations(state: GameState, e: Force, enemy: RegionId, mo
   return hits;
 }
 
-/** A casualty plan changes the outcome only when both Regulars and Elites are
- *  present — only then do we prompt; otherwise removal is auto. */
-function meaningfulCasualty(state: GameState, id: RegionId, hits: number): boolean {
-  return meaningfulForceCasualty(state.regions[id]!, hits);
+// --- Per-casualty allocation (rulebook p.30) ---------------------------------
+// "For each hit, remove one Regular, OR replace one Elite with a Regular.
+//  Alternatively, for every TWO hits, you may remove one Elite."
+// This used to be a single regularsFirst/elitesFirst PLAN applied to the whole
+// batch, which cannot express the mixed allocations the rules allow — a besieged
+// {3R,3E} taking 3 hits could only become {3E} (siege kept, 3 dice) or {6R} (5
+// dice, no Elite left to press the assault), never the 1R+1E the player wanted
+// (player report). Each hit is now its own choice, and the "two hits for one
+// Elite" option exists at all for the first time.
+export type CasualtyStepKind = 'removeRegular' | 'reduceElite' | 'removeElite';
+export interface CasualtyOption { step: CasualtyStepKind; nation: Nation; cost: number }
+
+/** Every legal way to absorb the next hit(s) from this Force. The nation is part of
+ *  the choice: which Nation loses a figure is the owner's call (p.30), and it matters
+ *  (a Nation's pool, and whether its Elites survive to press a siege). */
+export function casualtyOptions(f: Force, hits: number): CasualtyOption[] {
+  const out: CasualtyOption[] = [];
+  if (hits <= 0) return out;
+  for (const n of Object.keys(f.units) as Nation[]) {
+    const u = f.units[n]; if (!u) continue;
+    if (u.regular > 0) out.push({ step: 'removeRegular', nation: n, cost: 1 });
+    if (u.elite > 0) out.push({ step: 'reduceElite', nation: n, cost: 1 });
+    if (u.elite > 0 && hits >= 2) out.push({ step: 'removeElite', nation: n, cost: 2 });
+  }
+  return out;
 }
-/** A casualty choice is meaningful only when the Force has both Regulars AND Elites
- *  to choose between (else the loss is forced). Works on a region or a siege box. */
+
+/** Apply ONE allocation. Returns the hits it consumed (0 if it was illegal).
+ *  Shadow figures recycle to reinforcements; FP losses are permanent (p.30). */
+function applyCasualtyOption(state: GameState, f: Force, side: Side, opt: CasualtyOption): number {
+  const u = f.units[opt.nation]; if (!u) return 0;
+  if (opt.step === 'removeRegular' && u.regular > 0) {
+    u.regular -= 1; if (side === 'shadow') state.reinforcements[opt.nation].regular += 1;
+  } else if (opt.step === 'reduceElite' && u.elite > 0) {
+    u.elite -= 1; u.regular += 1; if (side === 'shadow') state.reinforcements[opt.nation].elite += 1;
+  } else if (opt.step === 'removeElite' && u.elite > 0) {
+    u.elite -= 1; if (side === 'shadow') state.reinforcements[opt.nation].elite += 1;
+  } else return 0;
+  if (u.regular === 0 && u.elite === 0) delete f.units[opt.nation];
+  return opt.cost;
+}
+
+/** Absorb every hit whose allocation is FORCED (exactly one legal option), so the
+ *  player is never asked to "choose" a non-choice. Returns the hits still open. */
+function absorbForced(state: GameState, f: Force, side: Side, hits: number): number {
+  let left = hits;
+  for (;;) {
+    const opts = casualtyOptions(f, left);
+    if (left <= 0 || opts.length !== 1) return left;
+    const spent = applyCasualtyOption(state, f, side, opts[0]!);
+    if (spent <= 0) return left; // defensive: never spin
+    left -= spent;
+  }
+}
+
+/** True when the owner still has a real decision to make about these hits. */
 function meaningfulForceCasualty(f: Force, hits: number): boolean {
-  if (hits <= 0) return false;
-  let reg = 0, el = 0;
-  for (const u of Object.values(f.units)) { reg += u!.regular; el += u!.elite; }
-  return reg > 0 && el > 0;
+  return casualtyOptions(f, hits).length > 1;
 }
 
 /** Apply `hits` steps to a region's army. regularsFirst removes Regulars before
@@ -201,21 +247,66 @@ function applyForceCasualties(state: GameState, f: Force, side: Side, hits: numb
       else { const n = nations[0]!; f.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
     }
   }
-  if (forceUnitCount(f) === 0) {
-    // The Army is destroyed. Per rulebook p.30, every Character that was part of it
-    // is permanently removed from play — Companions AND Shadow Minions (Saruman,
-    // the Witch-king, the Mouth of Sauron). Record each elimination so its bonus
-    // Action die is lost (dice.poolSize reads entered && !eliminated) and the on-map
-    // roster / inPlay stops listing it. Without this a besieged Saruman survived the
-    // fall of Orthanc and kept his die (player report). Idempotent with the event-
-    // casualty follow-up (The Ents Awake), which re-checks `eliminated` before adding.
-    for (const c of f.characters) {
-      if (!state.characters.eliminated.includes(c)) state.characters.eliminated.push(c);
-      delete state.characters.inPlay[c];
-    }
-    if (f.characters.length) log(state, null, 'combat', `${f.characters.join(', ')} eliminated with the destroyed Army`);
-    f.leaders = 0; f.nazgul = 0; f.characters = [];
+  finishForceCasualties(state, f);
+}
+
+/** Run once the last hit has landed: if the Army is gone, its Leaders/Nazgûl and
+ *  Characters go with it. Per rulebook p.30 every Character that was part of a
+ *  destroyed Army is permanently removed — Companions AND Shadow Minions (Saruman,
+ *  the Witch-king, the Mouth of Sauron). Recording the elimination is what drops the
+ *  bonus Action die (dice.poolSize reads entered && !eliminated) and clears the
+ *  on-map roster; without it a besieged Saruman survived the fall of Orthanc and kept
+ *  his die (player report). Idempotent — the event-casualty follow-up (The Ents
+ *  Awake) re-checks `eliminated` — so the per-hit path may call it after each step. */
+function finishForceCasualties(state: GameState, f: Force): void {
+  if (forceUnitCount(f) !== 0) return;
+  for (const c of f.characters) {
+    if (!state.characters.eliminated.includes(c)) state.characters.eliminated.push(c);
+    delete state.characters.inPlay[c];
   }
+  if (f.characters.length) log(state, null, 'combat', `${f.characters.join(', ')} eliminated with the destroyed Army`);
+  f.leaders = 0; f.nazgul = 0; f.characters = [];
+}
+
+/** The Force a pending casualty choice is allocating from (region, or the siege box
+ *  when the side taking the hits is the boxed one). */
+function pendingCasualtyForce(state: GameState): Force | null {
+  const ch = state.pendingChoice;
+  if (!ch || (ch.kind !== 'combatCasualties' && ch.kind !== 'eventCasualties')) return null;
+  const d = ch.data as { region: RegionId; boxed?: boolean };
+  const box = state.regions[d.region]?.siegeBox;
+  return (ch.kind === 'combatCasualties' && d.boxed && box) ? box : state.regions[d.region] ?? null;
+}
+
+/** The allocations currently on offer (for the adapter's legalActions). */
+export function pendingCasualtyOptions(state: GameState): CasualtyOption[] {
+  const f = pendingCasualtyForce(state);
+  if (!f) return [];
+  const d = state.pendingChoice!.data as { hits: number };
+  return casualtyOptions(f, d.hits);
+}
+
+/** Apply ONE chosen allocation, then either re-prompt for the next hit or finish
+ *  (advancing the battle sub-machine / running the event follow-up). Forced
+ *  allocations in between are absorbed silently. */
+export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, nation: Nation): void {
+  const ch = state.pendingChoice!;
+  const isEvent = ch.kind === 'eventCasualties';
+  const d = ch.data as { region: RegionId; side: Side; hits: number; next?: PendingCombat['step']; boxed?: boolean; then?: CasualtyThen | null };
+  const f = pendingCasualtyForce(state)!;
+  const opts = casualtyOptions(f, d.hits);
+  const chosen = opts.find((o) => o.step === step && o.nation === nation) ?? opts[0];
+  let left = d.hits;
+  if (chosen) left -= applyCasualtyOption(state, f, d.side, chosen);
+  left = absorbForced(state, f, d.side, left);
+  if (meaningfulForceCasualty(f, left)) {
+    state.pendingChoice = { ...ch, data: { ...d, hits: left } };
+    return;
+  }
+  finishForceCasualties(state, f);
+  state.pendingChoice = null;
+  if (isEvent) runCasualtyThen(state, d.then ?? null);
+  else state.pendingCombat!.step = d.next!;
 }
 
 // --- Event-inflicted casualties: the OWNER chooses absorption -----------------
@@ -244,11 +335,13 @@ function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
  *  the follow-up immediately. */
 export function queueOrApplyEventCasualties(state: GameState, side: Side, region: RegionId, hits: number, then?: CasualtyThen): void {
   if (hits <= 0) { runCasualtyThen(state, then); return; }
-  if (meaningfulForceCasualty(state.regions[region]!, hits)) {
-    state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits, then: then ?? null } };
+  const f = state.regions[region]!;
+  const left = absorbForced(state, f, side, hits); // forced losses need no prompt
+  if (meaningfulForceCasualty(f, left)) {
+    state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits: left, then: then ?? null } };
     return;
   }
-  applyCasualties(state, region, side, hits, 'regularsFirst');
+  finishForceCasualties(state, f);
   runCasualtyThen(state, then);
 }
 
@@ -928,22 +1021,27 @@ export function combatStep(state: GameState): void {
       case 'attackerCasualties': {
         if (pc.defHits > 0) {
           const boxedAtk = pc.boxed === pc.attacker; // sortie: the attacker's figures are in the box
-          if (meaningfulForceCasualty(atkForce(state, pc), pc.defHits)) {
-            state.pendingChoice = { owner: pc.attacker, kind: 'combatCasualties', data: { region: pc.from, side: pc.attacker, hits: pc.defHits, next: 'defenderCasualties', boxed: boxedAtk } };
+          const f = atkForce(state, pc);
+          // Forced hits land silently; the owner is asked only about the rest (p.30).
+          const left = absorbForced(state, f, pc.attacker, pc.defHits);
+          if (meaningfulForceCasualty(f, left)) {
+            state.pendingChoice = { owner: pc.attacker, kind: 'combatCasualties', data: { region: pc.from, side: pc.attacker, hits: left, next: 'defenderCasualties', boxed: boxedAtk } };
             return;
           }
-          applyForceCasualties(state, atkForce(state, pc), pc.attacker, pc.defHits, 'regularsFirst');
+          finishForceCasualties(state, f);
         }
         pc.step = 'defenderCasualties'; continue;
       }
       case 'defenderCasualties': {
         if (pc.atkHits > 0) {
           const boxedDef = pc.boxed === pc.defender;
-          if (meaningfulForceCasualty(defForce(state, pc), pc.atkHits)) {
-            state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: pc.atkHits, next: 'onslaught', boxed: boxedDef } };
+          const f = defForce(state, pc);
+          const left = absorbForced(state, f, pc.defender, pc.atkHits);
+          if (meaningfulForceCasualty(f, left)) {
+            state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: left, next: 'onslaught', boxed: boxedDef } };
             return;
           }
-          applyForceCasualties(state, defForce(state, pc), pc.defender, pc.atkHits, 'regularsFirst');
+          finishForceCasualties(state, f);
         }
         pc.step = 'onslaught'; continue;
       }

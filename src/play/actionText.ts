@@ -79,6 +79,12 @@ export function describeAction(a: WotrAction): string {
     case 'pass': return 'Pass';
     case 'playCombatCard': return a.cardId ? `Combat card: ${cardName(a.cardId)}` : 'No combat card';
     case 'chooseCasualties': return a.plan === 'regularsFirst' ? 'Lose Regulars first' : 'Reduce Elites first';
+    case 'casualtyStep': {
+      const n = a.nation.charAt(0).toUpperCase() + a.nation.slice(1);
+      if (a.step === 'removeRegular') return `Lose a ${n} Regular`;
+      if (a.step === 'reduceElite') return `Reduce a ${n} Elite to a Regular`;
+      return `Remove a ${n} Elite (costs 2 hits)`;
+    }
     case 'combatContinue': return a.cont ? 'Continue the attack' : 'Cease the attack';
     case 'combatRetreat': return a.retreat ? 'Retreat' : 'Stand and fight';
     case 'retreatTo': return `Retreat to ${rName(a.region)}`;
@@ -158,7 +164,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
+const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'casualtyStep', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);
 
 /** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)

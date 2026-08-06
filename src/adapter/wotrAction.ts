@@ -61,7 +61,10 @@ export type WotrAction =
   | { kind: 'pass' }             // yield to opponent, no die spent
   // Interactive combat sub-machine (resolving a PendingChoice).
   | { kind: 'playCombatCard'; cardId: string | null } // play a combat card (or none)
-  | { kind: 'chooseCasualties'; plan: 'regularsFirst' | 'elitesFirst' }
+  | { kind: 'chooseCasualties'; plan: 'regularsFirst' | 'elitesFirst' } // batch plan — Return to Valinor (multi-region), and legacy saves
+  // One casualty at a time (p.30): remove a Regular, reduce an Elite to a Regular
+  // (1 hit each), or spend TWO hits to remove an Elite outright.
+  | { kind: 'casualtyStep'; step: 'removeRegular' | 'reduceElite' | 'removeElite'; nation: Nation }
   | { kind: 'combatContinue'; cont: boolean }  // attacker: continue or cease
   | { kind: 'combatRetreat'; retreat: boolean } // defender: retreat or stand
   | { kind: 'retreatTo'; region: RegionId }     // defender: chosen retreat destination
