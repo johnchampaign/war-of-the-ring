@@ -1,6 +1,13 @@
 // Top-level play screen: drives the game through the framework useGame hook over
 // a GameClientApi (local hotseat or online HTTP). Renders the redacted view; it
 // never owns rules and never drives the opponent.
+//
+// DIE_BEARING (below): the action kinds that let the player NAME the die being
+// spent. The tray's selection used to be advisory only — it filtered which actions
+// were OFFERED but was never sent, so the engine re-picked by its own preference
+// order and could spend a different die than the one clicked. That is how a
+// Character-die army move became an ARMY-die move, which then offered the Army
+// die's second move (player report: "I only get 1 move when using a [C]", p.27).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGame, ChatPanel } from 'digital-boardgame-framework/client';
 import type { GameClientApi } from '../online/gameClient';
@@ -45,12 +52,19 @@ const dieAllowsAction = (a: WotrAction, view: GameState, you: Side, die: DieFace
   return opts.length === 0 || opts.includes(die);
 };
 
+/** Action kinds that accept an explicit `die` — see the header note. */
+const DIE_BEARING = new Set<WotrAction['kind']>([
+  'moveFellowship', 'hideFellowship', 'separateCompanion', 'companionMuster', 'sarumanMuster',
+  'drawEvent', 'playEvent', 'diplomaticAction', 'recruitUnit', 'bringMinion',
+  'moveArmy', 'attack', 'moveCharacter',
+]);
+
 export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: () => void }) {
   // Realtime move push when available (online); polling fallback otherwise.
   const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
   // Die-first turn flow (Ira #8): pick one of your dice → only that die's actions show
   // (in the panel AND on the board). null = no filter (every legal action visible).
-  const [die, setDie] = useState<DieFace | null>(null);
+  const [die, setDie] = useState<DieFace | null>(null); // the die face the player selected in the tray
   const me: Side = g.you === 'shadow' ? 'shadow' : 'fp';
   // Drop a stale selection (die spent / new round) so we never filter to a die you no longer have.
   const activeDie = die && (g.view?.dice[me] ?? []).includes(die) ? die : null;
@@ -104,8 +118,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const submit = useCallback(async (a: WotrAction) => {
     if (inFlight.current) return;
     inFlight.current = true;
-    try { await g.submit(a); setDie(null); } finally { inFlight.current = false; }
-  }, [g]);
+    // Name the die the player actually picked (see DIE_BEARING).
+    const withDie = (activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die)
+      ? { ...a, die: activeDie } as WotrAction
+      : a;
+    try { await g.submit(withDie); setDie(null); } finally { inFlight.current = false; }
+  }, [g, activeDie]);
 
   // Undo (local hotseat / vs-AI only — the online client has no undo()). A
   // foreknowledge undo (one that crosses a dice roll / card draw) is blocked outright
@@ -120,6 +138,22 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [huntSeen, setHuntSeen] = useState(0);
   const [battleSeen, setBattleSeen] = useState(0);
   const [noticeSeen, setNoticeSeen] = useState(0);
+  // These markers live in component state, so a RELOAD resets them to 0 while the
+  // engine still carries its retained history (hunt.draws keeps the last 16). Every
+  // old entry then counted as unseen and the popups replayed the whole backlog at
+  // once — player report: after reloading, "7 tiles drawn from the bag" showing a
+  // previous turn's Hunt tiles and a Foul Thing draw. These popups announce what JUST
+  // happened (the Hunt-tile browser is the history view), so on the first view we
+  // receive, everything already recorded counts as seen.
+  const primedSeen = useRef(false);
+  useEffect(() => {
+    if (primedSeen.current || !g.view) return;
+    primedSeen.current = true;
+    const maxSeq = (xs: Array<{ seq: number }> | undefined) => (xs ?? []).reduce((m, x) => Math.max(m, x.seq), 0);
+    setHuntSeen(maxSeq(g.view.hunt?.draws));
+    setBattleSeen(g.view.lastBattle?.seq ?? 0);
+    setNoticeSeen(maxSeq(g.view.notices));
+  }, [g.view]);
   const [logsUploaded, setLogsUploaded] = useState(false); // shared by the Upload button + end-game prompt
   // "Peek the board": temporarily hide a blocking choice modal (combat/hunt decision,
   // move picker) so you can study the board, then click again to return to the choice.

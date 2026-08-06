@@ -63,7 +63,14 @@ export function BattlePopup({ view, seen, onSeen }: { view: GameState; seen: num
           <RollRow label="Defender" roll={b.defRoll} color="#7fb6e6" />
         </div>
         <div style={{ fontSize: 13, margin: '8px 0', color: '#cbbf9a' }}>
-          Losses — Attacker: <b style={{ color: b.atkLosses ? '#e88' : '#9a9' }}>{b.atkLosses}</b> · Defender: <b style={{ color: b.defLosses ? '#e88' : '#9a9' }}>{b.defLosses}</b>
+          {/* UNITS REMOVED, which is not the same as hits scored: an Elite absorbs a
+              hit by being reduced to a Regular and stays on the board (p.30). A player
+              compared these against the log's hit counts and read the difference as a
+              bug, so the label now says what is being counted. */}
+          <span title="Units removed from the board. An Elite absorbing a hit is reduced to a Regular and is NOT removed, so this can be lower than the hits scored.">
+            Units lost — Attacker: <b style={{ color: b.atkLosses ? '#e88' : '#9a9' }}>{b.atkLosses}</b> · Defender: <b style={{ color: b.defLosses ? '#e88' : '#9a9' }}>{b.defLosses}</b>
+            <span style={{ color: '#776', fontSize: 11 }}> (an Elite reduced to a Regular is not a loss)</span>
+          </span>
         </div>
         <div style={{ fontSize: 14, fontWeight: 700, padding: '6px 8px', borderRadius: 8, textAlign: 'center',
           background: b.captured ? '#5a1f1f' : '#1d3320', color: b.captured ? '#ffb3b3' : '#bfe6bf' }}>

@@ -1553,7 +1553,13 @@ register('fp-str-05', {
 
 // --- The Red Arrow: advance Rohan + recruit a Rohan unit (R or E) & Leader in Edoras ----
 register('fp-str-09', recruitChoiceCard('fp', [{ nation: 'rohan', region: 'edoras' }], {
-  canPlay: (state) => state.nations.gondor.active,
+  // Printed precondition is "Gondor is active", but an explicit canPlay REPLACES
+  // recruitChoiceCard's default "some slot is recruitable" guard, so the card could be
+  // played with Rohan already At War and Edoras captured — advancing nothing and
+  // recruiting nowhere (player report). Effects still apply "to the max extent
+  // possible" (p.22), so a partial effect is fine; only a wholly empty play is barred.
+  canPlay: (state) => state.nations.gondor.active
+    && (state.nations.rohan.step > 0 || recruitable(state, 'fp', 'edoras')),
   apply: (state) => advancePolitical(state, 'rohan', 1),
   leaders: [{ nation: 'rohan', region: 'edoras' }],
 }));
