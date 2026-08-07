@@ -62,13 +62,20 @@ function board() {
   check('Gondor units arrive', (state.regions['lossarnach'].units.gondor?.regular ?? 0) >= 2);
   check('the Southron Army stays put', (state.regions['pelargir'].units.southrons?.regular ?? 0) === 3, JSON.stringify(state.regions['pelargir'].units));
 
-  console.log('\n=== sweepStrandedUnits repairs an already-corrupted region ===');
+  // The sweep REPORTS a mixed region; it must never DELETE. It used to remove the
+  // 'stranded' side, and that destroyed three real Dwarven units when a siege-lift
+  // merged a garrison under an enemy Army (root cause fixed in liftSiegeIfAbandoned).
+  // Deleting is irreversible — FP units never come back — so a suspected engine bug
+  // must not be 'repaired' by throwing pieces off the board.
+  console.log('\n=== sweepStrandedUnits REPORTS a mixed region without deleting ===');
   const s2 = board();
   s2.regions['pelargir'].units = { gondor: { regular: 2, elite: 0 }, southrons: { regular: 3, elite: 1 } };
   const poolR = s2.reinforcements.southrons.regular, poolE = s2.reinforcements.southrons.elite;
+  const logs0 = s2.log.length;
   sweepStrandedUnits(s2);
-  check('the stranded Shadow units leave the region', !s2.regions['pelargir'].units.southrons, JSON.stringify(s2.regions['pelargir'].units));
-  check('they return to reinforcements', s2.reinforcements.southrons.regular === poolR + 3 && s2.reinforcements.southrons.elite === poolE + 1);
+  check('the units are LEFT ON THE BOARD', (s2.regions['pelargir'].units.southrons?.regular ?? 0) === 3, JSON.stringify(s2.regions['pelargir'].units));
+  check('nothing is silently recycled', s2.reinforcements.southrons.regular === poolR && s2.reinforcements.southrons.elite === poolE);
+  check('the anomaly is logged for a report', s2.log.slice(logs0).some((e) => e.msg.includes('share pelargir')), s2.log.slice(logs0).map((e) => e.msg).join(' | ') || '(no new log)');
   check('the owning Army is untouched', (s2.regions['pelargir'].units.gondor?.regular ?? 0) === 2);
   check('a clean board sweeps to no change', (() => { const s3 = board(); const j = JSON.stringify(s3.regions); sweepStrandedUnits(s3); return JSON.stringify(s3.regions) === j; })());
 }

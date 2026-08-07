@@ -333,12 +333,13 @@ export function sweepStrandedUnits(state: GameState): void {
     for (const n of Object.keys(r.units) as Nation[]) {
       const u = r.units[n]!;
       if (sideOfNation(n) === owner || u.regular + u.elite === 0) continue;
-      if (sideOfNation(n) === 'shadow') {
-        state.reinforcements[n].regular += u.regular;
-        state.reinforcements[n].elite += u.elite;
-      }
-      log(state, null, 'army', `${u.regular + u.elite} stranded ${n} unit(s) in ${id} leave the board (state repair)`);
-      delete r.units[n];
+      // DO NOT delete: this sweep exists to repair a corrupted save, but a mixed
+      // region can also be a legitimate engine bug in progress, and deleting is
+      // irreversible — FP units never come back. It once destroyed three real
+      // Dwarven units when a siege-lift merged a garrison under an enemy army
+      // (fixed in liftSiegeIfAbandoned). Report it and leave the board alone; the
+      // movers all filter by side now, so a mix can no longer spread.
+      log(state, null, 'army', `⚠ ${u.regular + u.elite} ${n} unit(s) share ${id} with an enemy Army — this should be impossible; please report it`);
     }
     // FP Leaders can never stand without FP units (p.26) — if the sweep (or the bug
     // it repairs) left them alone under a Shadow Army, they are removed as well.
@@ -417,7 +418,17 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
 export function liftSiegeIfAbandoned(state: GameState, id: RegionId): void {
   const r = state.regions[id]!;
   if (!r.besieged || !r.siegeBox) return;
-  const garrison = settlementController(state, id); // the boxed defenders' side
+  // Read the garrison's side from the BOX ITSELF, never from who controls the
+  // Settlement: control flips when a Stronghold is captured, and inferring from it
+  // then gets besieger/garrison exactly backwards — the box was merged into a field
+  // still held by the enemy, producing a region with BOTH sides' units (soak: a
+  // Dwarven garrison merged under a Shadow army in Erebor).
+  let garrison: Side | null = null;
+  for (const n of Object.keys(r.siegeBox.units) as Nation[]) {
+    const u = r.siegeBox.units[n]!;
+    if (u.regular + u.elite > 0) { garrison = sideOfNation(n); break; }
+  }
+  if (garrison === null) { delete r.siegeBox; r.besieged = false; return; } // empty box: nothing to return
   const besieger: Side = garrison === 'fp' ? 'shadow' : 'fp';
   if (armySide(state, id) === besieger) return; // besieger still holds the field — siege continues
   mergeForceInto(state, id, r.siegeBox);
