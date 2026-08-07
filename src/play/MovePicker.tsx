@@ -33,11 +33,19 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   // Saruman can never leave Orthanc (character card) — he may fight from it (attack
   // mode; the advance holds him) but is never offered as a mover.
   const myChars = r.characters.filter((c) => characterSide(c) === armySide && (attackMode || c !== 'saruman'));
+  // Only the MOVING side's own Leader figures are on offer: FP Leaders for the Free
+  // Peoples, Nazgûl for the Shadow. Nazgûl are not Army units, so a region holding
+  // them is still "free" and a Free Peoples Army may sit there — the picker used to
+  // show that region's Nazgûl as movable (player report), and moving one produced a
+  // selection the engine flatly refuses (moveArmySplit: a split may only take its own
+  // Leader figures). Same in mirror for FP Leaders under a Shadow Army.
+  const maxLeaders = armySide === 'fp' ? r.leaders : 0;
+  const maxNazgul = armySide === 'shadow' ? r.nazgul : 0;
   // Default selection = the whole Army (so an unchanged picker is a normal move).
   const [reg, setReg] = useState<Record<string, number>>(() => Object.fromEntries(nations.map((n) => [n, r.units[n]!.regular])));
   const [eli, setEli] = useState<Record<string, number>>(() => Object.fromEntries(nations.map((n) => [n, r.units[n]!.elite])));
-  const [leaders, setLeaders] = useState(r.leaders);
-  const [nazgul, setNazgul] = useState(r.nazgul);
+  const [leaders, setLeaders] = useState(maxLeaders);
+  const [nazgul, setNazgul] = useState(maxNazgul);
   const [chars, setChars] = useState<Set<string>>(() => new Set(myChars));
 
   const totalUnits = nations.reduce((s, n) => s + (reg[n] ?? 0) + (eli[n] ?? 0), 0);
@@ -47,7 +55,7 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   const destUnits = !attackMode ? Object.values(view.regions[to]?.units ?? {}).reduce((s, u) => s + u!.regular + u!.elite, 0) : 0;
   const overAll = Math.max(0, destUnits + armyUnits - 10);
   const overSel = Math.max(0, destUnits + totalUnits - 10);
-  const isWhole = totalUnits === armyUnits && leaders === r.leaders && nazgul === r.nazgul && chars.size === myChars.length;
+  const isWhole = totalUnits === armyUnits && leaders === maxLeaders && nazgul === maxNazgul && chars.size === myChars.length;
 
   const buildSel = (): MoveSel => {
     const units: MoveSel['units'] = {};
@@ -63,8 +71,10 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
     const units: MoveSel['units'] = {};
     for (const n of nations) { const rr = r.units[n]!.regular - (reg[n] ?? 0), re = r.units[n]!.elite - (eli[n] ?? 0); const u: { regular?: number; elite?: number } = {}; if (rr) u.regular = rr; if (re) u.elite = re; if (u.regular || u.elite) units[n] = u; }
     const rg: MoveSel = { units };
-    if (r.leaders - leaders) rg.leaders = r.leaders - leaders;
-    if (r.nazgul - nazgul) rg.nazgul = r.nazgul - nazgul;
+    // The rearguard is what OUR army leaves behind — never the enemy figures standing
+    // in the same region, which were never ours to hold back (see maxLeaders/maxNazgul).
+    if (maxLeaders - leaders) rg.leaders = maxLeaders - leaders;
+    if (maxNazgul - nazgul) rg.nazgul = maxNazgul - nazgul;
     const left = myChars.filter((c) => !chars.has(c));
     if (left.length) rg.characters = left;
     return rg;
@@ -105,8 +115,8 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
             {r.units[n]!.elite > 0 && <Step label="Elites" val={eli[n] ?? 0} max={r.units[n]!.elite} set={(v) => setEli({ ...eli, [n]: v })} />}
           </div>
         ))}
-        {r.leaders > 0 && <Step label="Leaders" val={leaders} max={r.leaders} set={setLeaders} />}
-        {r.nazgul > 0 && <Step label="Nazgûl" val={nazgul} max={r.nazgul} set={setNazgul} />}
+        {maxLeaders > 0 && <Step label="Leaders" val={leaders} max={maxLeaders} set={setLeaders} />}
+        {maxNazgul > 0 && <Step label="Nazgûl" val={nazgul} max={maxNazgul} set={setNazgul} />}
         {myChars.map((c) => (
           <label key={c} style={{ ...row, cursor: 'pointer' }}>
             <input type="checkbox" checked={chars.has(c)} onChange={(e) => { const s = new Set(chars); e.target.checked ? s.add(c) : s.delete(c); setChars(s); }} />

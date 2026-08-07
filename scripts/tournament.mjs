@@ -41,7 +41,18 @@ const armyUnitTotal = (s) => {
 };
 const MOVE_KINDS = new Set(['moveArmy', 'armyMove2', 'removeExcess']);
 
-let stalls = 0, illegals = 0, timeouts = 0, leaks = 0, vanished = 0;
+// p.26: a Free Peoples Leader can never stand in a region without FP Army units. The
+// movers and the muster refuse it, but any effect that removes the region's LAST FP unit
+// used to leave the Leaders there — found here first, as a Stormcrow loss at seed 313
+// (it renders as a phantom Army badge over an empty region). Guarded permanently.
+const FP_NATION = new Set(['dwarves', 'elves', 'gondor', 'north', 'rohan']);
+const hasFpUnits = (f) => Object.entries(f?.units ?? {}).some(([n, u]) => FP_NATION.has(n) && u.regular + u.elite > 0);
+const strandedLeaderRegion = (s) => Object.keys(s.regions).find((id) => {
+  const r = s.regions[id];
+  return r.leaders > 0 && !hasFpUnits(r) && !hasFpUnits(r.siegeBox);
+}) ?? null;
+
+let stalls = 0, illegals = 0, timeouts = 0, leaks = 0, vanished = 0, stranded = 0;
 const wins = { fp: 0, shadow: 0 };
 const reasons = {};
 const turnCounts = [];
@@ -70,6 +81,8 @@ for (let game = 0; game < GAMES; game++) {
       if (after !== before) { vanished++; console.error(`  UNIT VANISHED (${before}->${after}) on ${JSON.stringify(action)} [game ${game} seed ${seed}]`); break; }
     }
     actions++;
+    const lone = strandedLeaderRegion(state);
+    if (lone) { stranded++; console.error(`  STRANDED FP LEADER in ${lone} on ${JSON.stringify(action)} [game ${game} seed ${seed}]`); break; }
 
     // Periodic codec round-trip + redaction leak check.
     if (actions % 50 === 0) {
@@ -94,8 +107,8 @@ console.log(`Games: ${GAMES} (FP=${CTRL.fp}, Shadow=${CTRL.shadow})`);
 console.log(`  winners: FP ${wins.fp}, Shadow ${wins.shadow}`);
 console.log(`  win reasons: ${JSON.stringify(reasons)}`);
 console.log(`  turns: min ${turnCounts[0] ?? '-'}, median ${med}, avg ${avg.toFixed(1)}, max ${turnCounts.at(-1) ?? '-'}`);
-console.log(`  stalls: ${stalls}, illegal-accepted: ${illegals}, timeouts: ${timeouts}, view-leaks: ${leaks}, vanished-units: ${vanished}`);
+console.log(`  stalls: ${stalls}, illegal-accepted: ${illegals}, timeouts: ${timeouts}, view-leaks: ${leaks}, vanished-units: ${vanished}, stranded-leaders: ${stranded}`);
 
-const ok = stalls === 0 && illegals === 0 && timeouts === 0 && leaks === 0 && vanished === 0 && (wins.fp + wins.shadow) === GAMES;
+const ok = stalls === 0 && illegals === 0 && timeouts === 0 && leaks === 0 && vanished === 0 && stranded === 0 && (wins.fp + wins.shadow) === GAMES;
 console.log(ok ? '\nsoak OK — all games terminated cleanly' : '\nSOAK FAILED');
 process.exit(ok ? 0 : 1);

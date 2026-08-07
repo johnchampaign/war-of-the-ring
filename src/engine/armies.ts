@@ -335,6 +335,22 @@ export function sweepStrandedUnits(state: GameState): void {
   for (const id of Object.keys(state.regions)) {
     const r = state.regions[id]!;
     const owner = armySide(state, id);
+    // "Free Peoples Leaders can never be in a region without Free Peoples Army units"
+    // (p.26) — a Leader left alone is removed. The movement and muster paths all refuse
+    // to create that state, but any effect that REMOVES the region's last Free Peoples
+    // unit leaves the Leaders standing: Stormcrow's "lose one unit of that Nation" was
+    // caught doing exactly this in the soak, and every sibling card loss has the same
+    // shape. On the map a lone Leader draws a Free Peoples Army badge over a region the
+    // inspector correctly reports as empty — the player report "an army is displayed on
+    // the map, but hovering says it's a free region without the army".
+    // The old check ran only under a SHADOW Army, and the `!owner` guard below skipped
+    // EMPTY regions entirely, which is the very case that renders as a phantom Army.
+    // A besieged garrison keeps its Leaders in the siege box, so check there too before
+    // removing any — the box is where a besieged Nation's Leaders legitimately live.
+    if (r.leaders > 0 && owner !== 'fp' && !forceHasFpUnits(r.siegeBox)) {
+      log(state, null, 'army', `${r.leaders} stranded Free Peoples Leader(s) in ${id} are removed — a Leader can never be alone (p.26)`);
+      r.leaders = 0;
+    }
     if (!owner) continue;
     for (const n of Object.keys(r.units) as Nation[]) {
       const u = r.units[n]!;
@@ -347,13 +363,17 @@ export function sweepStrandedUnits(state: GameState): void {
       // movers all filter by side now, so a mix can no longer spread.
       log(state, null, 'army', `⚠ ${u.regular + u.elite} ${n} unit(s) share ${id} with an enemy Army — this should be impossible; please report it`);
     }
-    // FP Leaders can never stand without FP units (p.26) — if the sweep (or the bug
-    // it repairs) left them alone under a Shadow Army, they are removed as well.
-    if (owner === 'shadow' && r.leaders > 0) {
-      log(state, null, 'army', `${r.leaders} stranded Free Peoples Leader(s) in ${id} are removed (state repair)`);
-      r.leaders = 0;
-    }
   }
+}
+
+/** Does this Force (a siege box, possibly absent) hold any Free Peoples Army units? */
+function forceHasFpUnits(f: Force | undefined): boolean {
+  if (!f) return false;
+  for (const n of Object.keys(f.units) as Nation[]) {
+    const u = f.units[n]!;
+    if (sideOfNation(n) === 'fp' && u.regular + u.elite > 0) return true;
+  }
+  return false;
 }
 
 /** Units over the 10-unit stacking limit in a (non-besieged) region — these must

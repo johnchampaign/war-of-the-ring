@@ -115,6 +115,24 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Guard against a rapid double-click submitting a now-stale action (e.g. clicking
   // a combat decision twice before the re-render): drop submits while one is in flight.
   const inFlight = useRef(false);
+  // Visible "working…" state for the same window. Submitting is never instant — online
+  // it is a round trip plus the server AI's whole turn, and locally the AI's turn runs
+  // right inside submit — and until it lands the screen looks completely unchanged
+  // (player report: "after you click the action there's delay but nothing happens on
+  // the screen"). The local AI's turn is SYNCHRONOUS, so setting the flag is not enough
+  // on its own: without yielding, the browser never gets a frame to paint the indicator
+  // before the work blocks the main thread. `paint()` waits for one (double rAF — the
+  // second callback runs after the first frame has been committed).
+  const [busy, setBusy] = useState(false);
+  const paint = () => new Promise<void>((res) => {
+    // A hidden/backgrounded tab does not composite, so its rAF callbacks never run.
+    // Waiting on them alone would strand the move forever (caught in verification —
+    // the click registered, the indicator appeared, and the turn never resolved), so
+    // the timer is the floor: whichever fires first releases the submit.
+    if (typeof document !== 'undefined' && document.hidden) { res(); return; }
+    const t = setTimeout(res, 80);
+    requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(t); res(); }));
+  });
   const submit = useCallback(async (a: WotrAction) => {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -122,7 +140,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const withDie = (activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die)
       ? { ...a, die: activeDie } as WotrAction
       : a;
-    try { await g.submit(withDie); setDie(null); } finally { inFlight.current = false; }
+    setBusy(true);
+    await paint();
+    try { await g.submit(withDie); setDie(null); } finally { inFlight.current = false; setBusy(false); }
   }, [g, activeDie]);
 
   // Undo (local hotseat / vs-AI only — the online client has no undo()). A
@@ -166,8 +186,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     setUndoConfirm(false);
     if (inFlight.current) return;
     inFlight.current = true;
+    setBusy(true);
+    await paint();
     try { await client.undo?.(); await g.refresh(); setSelected(null); setCharPick(null); setMoveMenu(null); setMoveDraft(null); setBlockMsg(null); setDie(null); }
-    finally { inFlight.current = false; }
+    finally { inFlight.current = false; setBusy(false); }
   }, [client, g]);
 
   // Chat is online-only (a remote opponent to talk to); the hotseat client omits
@@ -426,6 +448,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
+      {busy && <BusyOverlay />}
       {g.error && <div style={{ background: '#7a1f1f', color: '#fff', padding: 6, fontFamily: 'system-ui', fontSize: 13 }}>⚠ {g.error.message}</div>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Board column sized to the crop's width at full available height, so the
@@ -684,6 +707,23 @@ function NazgulCountPicker({ pick, onConfirm, onCancel }: {
           <button onClick={() => onConfirm(n)} style={{ flex: 1, padding: '8px 12px', fontSize: 14, fontWeight: 700, background: '#4a5a3a', color: '#f0e9d8', border: '1px solid #6a7', borderRadius: 6, cursor: 'pointer' }}>Move {n}</button>
           <button onClick={onCancel} style={{ padding: '8px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// "Working…" indicator for the window between clicking an action and the board coming
+// back — the network round trip online, or the AI taking its whole turn. It sits over
+// the top of the screen and swallows clicks, so a second click can't queue up behind
+// the first (which `inFlight` already drops silently, with nothing on screen to explain
+// why). Deliberately small and translucent: the board stays readable underneath.
+function BusyOverlay() {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, cursor: 'progress', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'rgba(8,6,3,0.12)' }}>
+      <style>{'@keyframes wotr-spin{to{transform:rotate(360deg)}}'}</style>
+      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, background: '#1c1710e6', color: '#e9e1cc', fontFamily: 'system-ui', fontSize: 13, padding: '8px 14px', borderRadius: 20, border: '1px solid #5a4a2a', boxShadow: '0 4px 18px #000a' }}>
+        <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid #5a4a2a', borderTopColor: '#e6b85a', animation: 'wotr-spin 0.8s linear infinite', display: 'inline-block' }} />
+        Resolving your move…
       </div>
     </div>
   );
