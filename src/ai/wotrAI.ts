@@ -314,7 +314,11 @@ function campaignTarget(state: GameState, actor: Side): RegionId | null {
     if (def.vp <= 0 || settlementCtrl(state, id) !== enemy) continue;
     const d = myArmies.reduce((m, a) => Math.min(m, dist(a, id)), Infinity);
     if (d === Infinity) continue;
-    const s = def.vp * 4 - d;
+    // An enemy Settlement standing EMPTY is a walk-in: VP for no battle and no
+    // losses. Rank it above a defended one of the same worth so the AI actually
+    // takes the opening rather than massing next to it (player report: six armies
+    // sat in Lórien while Dol Guldur and Moria stood undefended).
+    const s = def.vp * 4 - d + (armyHere(state, id, enemy) ? 0 : def.vp * 3);
     if (s > bestScore) { bestScore = s; best = id; }
   }
   targetCache.set(state, best);
@@ -341,6 +345,13 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // after turn while any Nation stayed passive (player report: "they take a bunch
       // of guys out of the fellowship… it doesn't help the cause").
       if (fs.companions.length <= 4) return 2;
+      // At the gates of Mordor a Companion is worth far more INSIDE the Fellowship:
+      // the Mordor Track's Hunt is relentless and Companions are the bodies that
+      // absorb it (p.42). Separation is impossible once on the Track (beginSeparation
+      // refuses), so what a player sees as "it separated everyone as soon as they got
+      // to Mordor" is the AI emptying the Fellowship on the doorstep — the worst
+      // possible moment (player report).
+      if (fs.mordor !== null || MORDOR_ENTRANCES.includes(fs.location)) return 1;
       return passiveFp && fs.corruption < 6 ? 40 : 12;
     }
     case 'attack': {
@@ -488,7 +499,14 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   if (garrisonWorthy(state, actor, from) && unitCount(state, from) < 2) {
     s -= (REGIONS[from]!.vp * 14 + 10) * (1 + 1.5 * enemyPressure(state, actor));
   }
-  if (target) { s += -(dist(to, target) - dist(from, target)) * 12; if (to === target) s += 30; }         // march
+  // March toward the campaign target — and press harder when that target is standing
+  // OPEN, so closing on a free capture outweighs the odds and ends the AI's habit of
+  // parking next to an undefended Stronghold (player reports of both sides going quiet).
+  if (target) {
+    const open = settlementCtrl(state, target) === enemy && !armyHere(state, target, enemy);
+    s += -(dist(to, target) - dist(from, target)) * (open ? 20 : 12);
+    if (to === target) s += 30;
+  }
   // Never march units into a stack that's already full: anything over the 10-unit
   // limit is removed (lost to reinforcements). Penalise per lost unit so the AI
   // would rather not move than over-stack and bleed its own army (player report).
@@ -557,9 +575,19 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // Nearest reachable friendly City/Stronghold whose Nation isn't yet At War
       // (rousing it is the point); otherwise stay at the Fellowship's region (moves[0]),
       // matching the old auto-separate — don't scatter the Companion uselessly.
-      // Only consider PLACEMENT moves (those with a target); the AI places the
-      // separated Companion immediately rather than building a travelling group.
       const moves = legal.filter((a) => a.kind === 'separateMove' && a.target != null) as Extract<WotrAction, { kind: 'separateMove' }>[];
+      // RAW p.39: ONE action separates a whole GROUP. The AI used to ignore the
+      // group-add options (companion set, no target) and place a single Companion,
+      // so sending two to the same place cost two Character dice (player report:
+      // Merry, then Pippin, both to the Woodland Realm). Add a travelling companion
+      // while the Fellowship can still spare one — four must remain to absorb Hunt
+      // damage, the same core the separateCompanion score protects.
+      const adds = legal.filter((a) => a.kind === 'separateMove' && a.companion && a.target == null) as Extract<WotrAction, { kind: 'separateMove' }>[];
+      if (adds.length && state.fellowship.companions.length > 4) {
+        // Send the LOWEST-Level companion along: high-Level Companions are worth more
+        // in the Fellowship (they absorb more Hunt damage) and as separate agents.
+        return adds.reduce((best, a) => (levelOf(a.companion!) < levelOf(best.companion!) ? a : best), adds[0]!);
+      }
       const settle = moves.find((a) => { const d = REGIONS[a.target!]!; return (d.settlement === 'City' || d.settlement === 'Stronghold') && !!d.nation && state.nations[d.nation as Nation]?.step > 0; });
       return settle ?? moves[0] ?? legal[0]!;
     }
