@@ -1228,7 +1228,11 @@ function recruitTargets(state: GameState, side: Side): WotrAction[] {
       if (pool.regular >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 1, elite: 0, then: 'regular' });
       if (pool.elite >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 1 });
       // Shadow's "Leader" is a Nazgûl, mustered separately (below) at Sauron Strongholds.
-      if (side === 'fp' && fpLead >= 1) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 0, leader: 1, then: 'leader' });
+      // A lone FP Leader may not be mustered into a region with no Free Peoples Army
+      // units (p.26) — offering it here while recruit() refuses it would be an
+      // offered-then-refused action (player report: "leaders can be recruited in
+      // regions without units").
+      if (side === 'fp' && fpLead >= 1 && unitCount(state, id) > 0) out.push({ kind: 'recruitUnit', nation, region: id, regular: 0, elite: 0, leader: 1, then: 'leader' });
     }
   }
   // Shadow Nazgûl muster (Sauron Strongholds): up to 2 Nazgûl — offered at EVERY
@@ -1262,7 +1266,13 @@ function recruitSecondTargets(state: GameState, side: Side, _figure: 'regular' |
       // Offer EVERY eligible Settlement of the Nation (other than the first), so the
       // second figure has the same placement freedom as the first (report: the 2nd
       // recruit was limited to one spot per Nation).
-      for (const r of recruitRegions(state, side, nation, 6)) if (r !== first) out.push({ kind: 'recruitSecond', nation, region: r, figure });
+      // A lone FP Leader needs Free Peoples units in the region (p.26) — the same
+      // gate as the first figure, or the second step offers what recruit() refuses.
+      for (const r of recruitRegions(state, side, nation, 6)) {
+        if (r === first) continue;
+        if (figure === 'leader' && side === 'fp' && unitCount(state, r) === 0) continue;
+        out.push({ kind: 'recruitSecond', nation, region: r, figure });
+      }
       if (out.length >= 48) break;
     }
   }

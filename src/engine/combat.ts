@@ -51,9 +51,6 @@ function freeAdjacentRegions(state: GameState, regionId: RegionId, side: Side): 
   return REGIONS[regionId]!.adjacency.filter((adj) => freeForMovement(state, adj, side));
 }
 /** The first such region, or null (used for "can retreat?" / pre-combat retreats). */
-function freeAdjacentFor(state: GameState, regionId: RegionId, side: Side): RegionId | null {
-  return freeAdjacentRegions(state, regionId, side)[0] ?? null;
-}
 const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
   (Object.keys(state.regions[id]!.units) as Nation[]).filter((n) => (state.regions[id]!.units[n]!.regular + state.regions[id]!.units[n]!.elite) > 0);
 
@@ -608,7 +605,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
 }
 
 function retreatRegion(state: GameState, pc: PendingCombat): RegionId | null {
-  return freeAdjacentFor(state, pc.to, pc.defender);
+  return retreatOptions(state, pc)[0] ?? null; // same exclusions as the offer (p.31)
 }
 
 /** A Force's composition for the battle log — "2R, 5E, Saruman (Leadership 5)".
@@ -1234,7 +1231,7 @@ export function resolveRetreat(state: GameState, retreat: boolean): void {
   const pc = state.pendingCombat!;
   state.pendingChoice = null;
   if (retreat) {
-    const dests = freeAdjacentRegions(state, pc.to, pc.defender);
+    const dests = retreatOptions(state, pc);
     if (dests.length === 1) { moveStack(state, pc.to, dests[0]!, pc.defender, true, true); finishCombat(state, true); return; }
     if (dests.length > 1) { state.pendingChoice = { owner: pc.defender, kind: 'retreatTo' }; return; } // defender picks where
     // none available -> stand
@@ -1247,16 +1244,26 @@ export function resolveRetreat(state: GameState, retreat: boolean): void {
 export function resolveRetreatTo(state: GameState, region: RegionId): void {
   const pc = state.pendingCombat!;
   state.pendingChoice = null;
-  const dests = freeAdjacentRegions(state, pc.to, pc.defender);
+  const dests = retreatOptions(state, pc);
   const dest = dests.includes(region) ? region : dests[0];
   if (dest) { moveStack(state, pc.to, dest, pc.defender, true, true); finishCombat(state, true); return; }
   pc.round += 1; pc.step = 'attackerCard'; // shouldn't happen; stand as a fallback
 }
 
+/** Free regions the defender may retreat into (for the 'retreatTo' choice). A
+ *  retreat never runs INTO the attack (p.31): the region the attackers came from is
+ *  excluded explicitly. In practice the attacking Army stays there for the battle's
+ *  duration, so `freeForMovement` already rules it out — but a player reported a
+ *  retreat onto the attack's origin, and the guarantee should not rest on the
+ *  attacker happening to still have units on the square. */
+function retreatOptions(state: GameState, pc: PendingCombat): RegionId[] {
+  return freeAdjacentRegions(state, pc.to, pc.defender).filter((r) => r !== pc.from);
+}
+
 /** Free regions the defender may retreat into (for the 'retreatTo' choice). */
 export const retreatDestinations = (state: GameState): RegionId[] => {
   const pc = state.pendingCombat;
-  return pc ? freeAdjacentRegions(state, pc.to, pc.defender) : [];
+  return pc ? retreatOptions(state, pc) : [];
 };
 /** `capture`: a retreat that ENTERS an undefended enemy Settlement captures it
  *  (p.32: "captured when an enemy Army enters" — any movement counts; player

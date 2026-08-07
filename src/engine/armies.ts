@@ -127,6 +127,12 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
   const leader = opts.leader ?? 0;
   if (regular > pool.regular || elite > pool.elite || leader > (pool.leader ?? 0)) return false;
   if (unitCount(state, id) + regular + elite > STACKING_LIMIT) return false;
+  // "Free Peoples Leaders can never be in a region without Free Peoples Army units"
+  // (p.26). The movement paths enforce this (moveArmySplit, moveSelectedUnits) but
+  // the MUSTER path did not, so a Leader could be recruited alone into an empty
+  // friendly Settlement (player report). Nazgûl are NOT restricted this way — the
+  // rule names Free Peoples Leaders — so this gate is FP-only.
+  if (side === 'fp' && leader > 0 && unitCount(state, id) + regular + elite === 0) return false;
   pool.regular -= regular; pool.elite -= elite;
   const r = state.regions[id]!;
   const u: ArmyUnits = r.units[nation] ?? { regular: 0, elite: 0 };
