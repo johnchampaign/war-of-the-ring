@@ -652,7 +652,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
         return true; // pause; resolvePreCombatRetreat resumes
       }
       const dest = dests[0] ?? null;
-      if (dest) { moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
+      if (dest) { noteWithdrawal(state, pc, ef.side); moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
     } else if (ef.mods.preCombatAttackDice) {
       if (unitCount(state, enemy) === 0) continue;
       const dice = ef.mods.preCombatAttackDice;
@@ -682,7 +682,7 @@ export function resolvePreCombatRetreat(state: GameState, region: RegionId): voi
   const side = armySide(state, from);
   const dests = freeAdjacentRegions(state, from, side!);
   const dest = dests.includes(region) ? region : dests[0];
-  if (dest) { moveStack(state, from, dest, side!, true, true); log(state, null, 'combat', `${side} retreats ${from}→${dest} before combat`); }
+  if (dest) { noteWithdrawal(state, pc, side!); moveStack(state, from, dest, side!, true, true); log(state, null, 'combat', `${side} retreats ${from}→${dest} before combat`); }
 }
 
 /** Move the whole army at `from` into `to` (defender gone), capturing. */
@@ -724,6 +724,13 @@ function finishCombat(state: GameState, advance: boolean): void {
   // Losses snapshot BEFORE any move, read from whichever side sits in the box.
   const atkSurv = atkCount(state, pc);
   const defSurv = defCount(state, pc);
+  // Survivors for the LOSS TALLY include anyone who marched away alive. `*Surv` is
+  // what still stands on the battlefield and stays the basis for who took the ground;
+  // `*Alive` is what the side still owns, and only that may be diffed against the
+  // start count. A retreat empties the region without killing a single figure.
+  const atkAlive = atkSurv + (pc.atkWithdrew ?? 0);
+  const defAlive = defSurv + (pc.defWithdrew ?? 0);
+  const retreated = (pc.atkWithdrew ?? 0) > 0 || (pc.defWithdrew ?? 0) > 0;
   const name = REGIONS[pc.to]!.name ?? pc.to;
   const side = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
   // A wipe-out takes no ground. RAW p.32 ("Capturing a Settlement") gives the two
@@ -732,7 +739,9 @@ function finishCombat(state: GameState, advance: boolean): void {
   // eliminated "and the besieging Army still has at least one unit remaining in the
   // region". A mutual wipe therefore captures nothing — it just ends the battle,
   // and (p.31) ends any siege, since an Army was completely eliminated.
-  const mutualWipe = atkSurv === 0 && defSurv === 0;
+  // An Army that WITHDREW is not a wipe: an empty region either side of a retreat
+  // means "marched off", not "destroyed", and must not be announced as a mutual kill.
+  const mutualWipe = atkSurv === 0 && defSurv === 0 && !retreated;
   let captured = false, outcome: string;
   // Set when a relieving Army has earned the right to march into the freed region
   // (asked once the battle is fully wrapped up — see the end of this function).
@@ -785,16 +794,23 @@ function finishCombat(state: GameState, advance: boolean): void {
     if (atkSurv > 0) reliefAdvance = { from: pc.from, to: pc.to, owner: pc.attacker };
   } else { // normal field battle
     captured = advance && defSurv === 0 && atkSurv > 0;
-    outcome = captured ? `${side(pc.attacker)} take ${name}`
+    // Say WHY the ground changed hands. "Free Peoples take Westemnet" alongside a
+    // loss tally reads as an annihilation; the defender marching off is a different
+    // story and the recap should tell it.
+    const took = (pc.defWithdrew ?? 0) > 0
+      ? `${side(pc.defender)} retreat — ${side(pc.attacker)} take ${name}`
+      : `${side(pc.attacker)} take ${name}`;
+    outcome = captured ? took
       : mutualWipe ? `Both Armies are destroyed at ${name}`
+      : (pc.atkWithdrew ?? 0) > 0 ? `${side(pc.attacker)} withdraw from ${name}`
       : pc.siege ? `The siege of ${name} holds` : `The attack on ${name} is repulsed`;
     if (advance && atkSurv > 0) { advanceInto(state, pc.attacker, pc.from, pc.to); r.besieged = false; }
     if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
   }
   log(state, null, 'combat', `battle at ${pc.to} ended — ${outcome}`, {
     from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
-    atkLosses: Math.max(0, (pc.atkUnits0 ?? atkSurv) - atkSurv),
-    defLosses: Math.max(0, (pc.defUnits0 ?? defSurv) - defSurv),
+    atkLosses: Math.max(0, (pc.atkUnits0 ?? atkAlive) - atkAlive),
+    defLosses: Math.max(0, (pc.defUnits0 ?? defAlive) - defAlive),
     captured, siege: !!pc.siege, outcome,
   });
   // The rearguard takes no part in the battle and never advances (p.28). When a relief
@@ -804,7 +820,7 @@ function finishCombat(state: GameState, advance: boolean): void {
   if (pc.rearguard && !reliefAdvance && !sortie) restoreRearguard(state, pc.from, pc.rearguard);
   state.lastBattle = {
     seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
-    atkLosses: Math.max(0, (pc.atkUnits0 ?? atkSurv) - atkSurv), defLosses: Math.max(0, (pc.defUnits0 ?? defSurv) - defSurv),
+    atkLosses: Math.max(0, (pc.atkUnits0 ?? atkAlive) - atkAlive), defLosses: Math.max(0, (pc.defUnits0 ?? defAlive) - defAlive),
     captured, siege: !!pc.siege, outcome, atkRoll: pc.atkRoll, defRoll: pc.defRoll,
   };
   const opp = other(pc.attacker);
@@ -1232,7 +1248,7 @@ export function resolveRetreat(state: GameState, retreat: boolean): void {
   state.pendingChoice = null;
   if (retreat) {
     const dests = retreatOptions(state, pc);
-    if (dests.length === 1) { moveStack(state, pc.to, dests[0]!, pc.defender, true, true); finishCombat(state, true); return; }
+    if (dests.length === 1) { noteWithdrawal(state, pc, pc.defender); moveStack(state, pc.to, dests[0]!, pc.defender, true, true); finishCombat(state, true); return; }
     if (dests.length > 1) { state.pendingChoice = { owner: pc.defender, kind: 'retreatTo' }; return; } // defender picks where
     // none available -> stand
   }
@@ -1246,8 +1262,18 @@ export function resolveRetreatTo(state: GameState, region: RegionId): void {
   state.pendingChoice = null;
   const dests = retreatOptions(state, pc);
   const dest = dests.includes(region) ? region : dests[0];
-  if (dest) { moveStack(state, pc.to, dest, pc.defender, true, true); finishCombat(state, true); return; }
+  if (dest) { noteWithdrawal(state, pc, pc.defender); moveStack(state, pc.to, dest, pc.defender, true, true); finishCombat(state, true); return; }
   pc.round += 1; pc.step = 'attackerCard'; // shouldn't happen; stand as a fallback
+}
+
+/** Book an Army out of the battle ALIVE (a retreat, or a Scouts pre-combat
+ *  withdrawal) so finishCombat's end-of-battle tally counts casualties rather than
+ *  everyone who marched away. Call it BEFORE the stack moves — it reads the force
+ *  that is about to leave. */
+function noteWithdrawal(state: GameState, pc: PendingCombat, who: Side): void {
+  const n = who === pc.attacker ? atkCount(state, pc) : defCount(state, pc);
+  if (who === pc.attacker) pc.atkWithdrew = (pc.atkWithdrew ?? 0) + n;
+  else pc.defWithdrew = (pc.defWithdrew ?? 0) + n;
 }
 
 /** Free regions the defender may retreat into (for the 'retreatTo' choice). A

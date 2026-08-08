@@ -394,6 +394,18 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
 5. **Cease or retreat**: attacker may **cease** (survivors stay); else defender
    may **retreat** to an adjacent free region (p.30). Eliminating all Army units
    also removes that army's Leaders/Characters (p.30).
+   **A retreat is not a casualty.** `finishCombat` reports each side's losses by
+   diffing its unit count at battle start against what is still standing in the
+   battle region — so an Army that marched off alive was booked as annihilated
+   (player report: "if the defender army retreats, the prompt says the defender
+   lost all units, instead of actual losses from the dice rolls" — 4 Regulars, 2
+   killed, recap said 4). `pc.atkWithdrew` / `pc.defWithdrew` now record figures
+   that leave the battlefield alive — by retreat here, or by a **pre-combat
+   withdrawal** (*Scouts*), which had the same flaw — and the tally credits them
+   back. The same flag keeps an emptied region from being announced as a
+   wipe-out, and the outcome line names the retreat ("Shadow retreat — Free
+   Peoples take Westemnet") so a captured region plus a loss count no longer
+   reads as a massacre. `scripts/probe-retreat-losses.mjs`.
 
 - Modifiers from cards/abilities add to the die result (clamped by the 1-miss/
   6-hit rule). Card **initiative** (bottom number) breaks timing ties; lower

@@ -214,6 +214,13 @@ export interface PendingCombat {
   /** Unit counts at battle start, to report each side's losses when it ends. */
   atkUnits0?: number;
   defUnits0?: number;
+  /** Units that left the battlefield ALIVE — a retreat (p.31) or a pre-combat
+   *  withdrawal (Scouts). The end-of-battle tally diffs the start count against
+   *  what is still standing in the battle region, so without this a retreating
+   *  Army reads as annihilated (player report: "if the defender retreats, the
+   *  prompt says the defender lost all units, instead of actual losses"). */
+  atkWithdrew?: number;
+  defWithdrew?: number;
   /** RAW siege assault: the besieger occupies the region (`from`===`to`) and the
    *  DEFENDER's figures are in `to.siegeBox`. Set to the defender's side so combat
    *  reads/writes the boxed defender from the siege box instead of the region. */
