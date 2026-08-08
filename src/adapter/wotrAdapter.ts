@@ -1079,6 +1079,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'skipDie':
       requirePhase(state, 'actionResolution');
       if (!consumeDie(state, actor, action.face)) throw new Error(`No ${action.face} die`);
+      // Discarding an unusable die left NO trace, so a turn spent doing it read as the
+      // game silently skipping the opponent (player report: "FP has 1 die [E] left; if
+      // they were passing, the log should mention it"). Passing is already logged; this
+      // is its quieter sibling and needs saying just as much. The dispatch tail stamps
+      // the die chip, so the message only has to name the act.
+      log(state, null, 'pass', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discard an unusable die`);
       passResolutionTurn(state, actor); break;
     case 'pass':
       requirePhase(state, 'actionResolution');

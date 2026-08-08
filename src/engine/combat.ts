@@ -640,7 +640,9 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
   for (const ef of effects) {
     const own = ef.side === pc.attacker ? pc.from : pc.to;
     const enemy = ef.side === pc.attacker ? pc.to : pc.from;
-    if (unitCount(state, own) === 0) continue; // owner already left/wiped by an earlier pre-effect
+    // The OWNER's force is likewise the box when the owner is the boxed side.
+    const ownForce = ef.side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
+    if (forceUnitCount(ownForce) === 0) continue; // owner already left/wiped by an earlier pre-effect
     if (ef.mods.retreatBeforeCombat) {
       const dests = freeAdjacentRegions(state, own, ef.side);
       // Let the owner CHOOSE the destination when there's more than one (rulebook:
@@ -654,10 +656,18 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       const dest = dests[0] ?? null;
       if (dest) { noteWithdrawal(state, pc, ef.side); moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
     } else if (ef.mods.preCombatAttackDice) {
-      if (unitCount(state, enemy) === 0) continue;
+      // Aim at the enemy FORCE, not the enemy REGION. In a siege assault (and a
+      // sortie) one side stands in the region while the other is in the siege box —
+      // and in an assault `pc.to === pc.from`, so reading the region pointed the
+      // pre-combat attack at the ATTACKER'S OWN army and the boxed garrison never
+      // took the hits (player report: a besieged Lórien garrison absorbed only 2 of
+      // 3 hits after Durin's Bane).
+      const foeSide: Side = ef.side === pc.attacker ? pc.defender : pc.attacker;
+      const foe = ef.side === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
+      if (forceUnitCount(foe) === 0) continue;
       const dice = ef.mods.preCombatAttackDice;
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) if (rng.rollDie(6) >= 4) h++; return h; });
-      if (hits > 0) { applyCasualties(state, enemy, armySide(state, enemy)!, hits, 'regularsFirst'); log(state, null, 'combat', `pre-combat attack scores ${hits} at ${enemy}`); }
+      if (hits > 0) { applyForceCasualties(state, foe, foeSide, hits, 'regularsFirst'); log(state, null, 'combat', `pre-combat attack scores ${hits} at ${enemy}`); }
     }
   }
   return false;
