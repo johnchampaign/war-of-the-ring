@@ -58,7 +58,11 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
  *  enemy's penalty mods. */
 /** A combat roll's faces, for the battle popup: the main dice, any leadership
  *  re-rolls, and the to-hit target so the UI can colour the hits. */
-export interface CombatRoll { dice: number[]; rerolls: number[]; target: number; rerollTarget?: number }
+export interface CombatRoll { dice: number[]; rerolls: number[]; target: number; rerollTarget?: number;
+  /** The extra attack's dice (Sudden Strike / Charge / We Come to Kill) and the hits
+   *  they scored — kept separate from the Combat roll so the log can show where the
+   *  hits actually came from. */
+  extra?: number[]; extraHits?: number }
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
   baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll, force?: Force,
   enemyForce?: Force): number {
@@ -109,7 +113,21 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     // 5 got only 2 re-rolls, because the first re-roll hit).
     const rerollDice = allowReroll ? Math.min(lead, failed) : 0;
     for (let i = 0; i < rerollDice; i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; failed--; } }
-    for (let i = 0; i < (ownMods.extraAttackDice ?? 0); i++) { const d = rng.rollDie(6); if (d >= 5) h++; } // extra attack hits on 5+
+    // The extra attack (Sudden Strike / Charge / We Come to Kill). Its size is read
+    // from the army — Leadership, or Elite units — capped at 5; it used to be a flat
+    // 3 for all three cards. Its dice are RECORDED, because rolling them invisibly
+    // made the hits look like they came from nowhere (player report: "the extra
+    // attack was never performed… the defender's hits weren't properly counted" —
+    // they were, from dice the log never showed).
+    let ownElites = 0;
+    for (const n of Object.keys(own.units) as Nation[]) ownElites += own.units[n]!.elite;
+    const extraDice = ownMods.extraAttackFrom === 'leadership' ? Math.min(5, lead)
+      : ownMods.extraAttackFrom === 'elites' ? Math.min(5, ownElites)
+      : (ownMods.extraAttackDice ?? 0);
+    const extraFaces: number[] = [];
+    let extraHits = 0;
+    for (let i = 0; i < extraDice; i++) { const d = rng.rollDie(6); extraFaces.push(d); if (d >= 5) { h++; extraHits++; } }
+    if (roll && extraFaces.length) { roll.extra = extraFaces; roll.extraHits = extraHits; }
     // Mighty Attack: turn up to N still-missed dice into hits.
     h += Math.min(ownMods.guaranteedHits ?? 0, failed);
     return h;
@@ -1033,7 +1051,10 @@ export function combatStep(state: GameState): void {
           `[${roll.dice.join(' ')}] on ${roll.target}+`
           // The re-roll can have its OWN to-hit (cards bonus the two rolls separately).
           + (roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]${roll.rerollTarget != null && roll.rerollTarget !== roll.target ? ` on ${roll.rerollTarget}+` : ''}` : '')
-          + ` → ${rolled} hit${rolled === 1 ? '' : 's'}`
+          // Name the extra attack's own dice, or its hits look like they came from
+          // nowhere (player report: a defender showing [1] re-roll [2] "scored" 2 hits).
+          + (roll.extra?.length ? ` + extra attack [${roll.extra.join(' ')}] on 5+ → ${roll.extraHits ?? 0} hit${(roll.extraHits ?? 0) === 1 ? '' : 's'}` : '')
+          + ` → ${rolled} hit${rolled === 1 ? '' : 's'} total`
           + (hits !== rolled ? ` (${hits} after card effects)` : '');
         log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk)}; defender ${fmt(dRoll, defHits, def)}`,
           { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });

@@ -25,6 +25,11 @@ export interface CombatMods {
   enemyDiceReduction?: number;
   /** Roll an extra attack of N dice (hits on 5+), added to the owner's hits. */
   extraAttackDice?: number;
+  /** The extra attack's dice are COUNTED FROM the owner's army, not fixed: 'leadership'
+   *  = Sudden Strike ("dice equal to your Leadership"), 'elites' = Charge / We Come to
+   *  Kill ("using only the … Elite units"). All three were hardcoded to 3, which a
+   *  player caught when a single Leader rolled three dice (report 2w424i0). Max 5. */
+  extraAttackFrom?: 'leadership' | 'elites';
   /** +N hits if the owner scored at least one hit. */
   bonusHitsIfAny?: number;
   /** +N hits if the owner has at least twice the enemy's units. */
@@ -114,9 +119,9 @@ const BY_TITLE: Record<string, CombatMods> = {
   // eliminate an FP Leader / Companion when the Leader re-roll scores a hit
   'Black Breath': { blackBreath: true },
   // extra attacks
-  'Charge': { extraAttackDice: 3 },
-  'Sudden Strike': { extraAttackDice: 3 },
-  'We Come to Kill': { extraAttackDice: 3 },
+  'Charge': { extraAttackFrom: 'elites' },
+  'Sudden Strike': { extraAttackFrom: 'leadership' },
+  'We Come to Kill': { extraAttackFrom: 'elites' },
   'Onslaught': {}, // resolved as its own post-casualty step, not a roll modifier (VARIABLE_COST)
   // extra hits
   'No Quarter': { bonusHitsIfAny: 1 },
@@ -158,7 +163,9 @@ export function describeCombatMods(mods: CombatMods): string {
   if (mods.negateEnemyReroll) p.push('cancels the enemy Leader re-roll');
   if (mods.cancelEnemyCard) p.push("cancels the enemy's Combat card");
   if (mods.preCombatAttackDice) p.push(`pre-combat attack: ${mods.preCombatAttackDice} dice, hits on 4+`);
-  if (mods.extraAttackDice) p.push(`extra attack: ${mods.extraAttackDice} dice, hits on 5+`);
+  if (mods.extraAttackFrom === 'leadership') p.push('extra attack: one die per point of Leadership (max 5), hits on 5+');
+  else if (mods.extraAttackFrom === 'elites') p.push('extra attack: one die per Elite unit (max 5), hits on 5+');
+  else if (mods.extraAttackDice) p.push(`extra attack: ${mods.extraAttackDice} dice, hits on 5+`);
   if (mods.guaranteedHits) p.push(`turns ${mods.guaranteedHits} miss into a hit`);
   if (mods.bonusHitsIfAny) p.push(`+${mods.bonusHitsIfAny} hit${mods.bonusHitsIfAny === 1 ? '' : 's'} if it scored any`);
   if (mods.bonusHitsIfOutnumber) p.push(`+${mods.bonusHitsIfOutnumber} hit if it outnumbers 2:1`);
