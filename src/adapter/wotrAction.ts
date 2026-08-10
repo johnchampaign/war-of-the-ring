@@ -71,6 +71,10 @@ export type WotrAction =
   | { kind: 'preCombatRetreat'; region: RegionId } // Scouts: chosen pre-combat retreat destination
   | { kind: 'siegeWithdraw'; withdraw: boolean } // defender: withdraw into the siege or fight
   | { kind: 'siegeExtend'; extend: boolean } // attacker: reduce an Elite to press the assault another round (p.32)
+  // End of Battle (p.31): the winner advanced its whole Army into the region it took
+  // and may now keep PART of it back in the region it attacked from. `back` names the
+  // figures that return; omitted = the whole Army stays forward.
+  | { kind: 'advanceHoldBack'; back?: MoveSel }
   | { kind: 'relieveAdvance'; advance: boolean } // reliever: march into the region whose siege it just broke (p.31, p.32)
   | { kind: 'besiegerAdvance'; advance: boolean } // attacker: advance into the region a defender just vacated, establishing the siege (p.31)
   | { kind: 'combatCardCost'; amount: number } // size a variable-cost combat card (self-hits / Nazgûl Leadership forfeited)

@@ -13,18 +13,22 @@ import mapData from '../../assets/map.json';
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 
 export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCancel }: {
-  from: string; to: string; kind: 'moveArmy' | 'armyMove2' | 'attack' | 'eventMove'; view: GameState; you: Side;
+  from: string; to: string; kind: 'moveArmy' | 'armyMove2' | 'attack' | 'eventMove' | 'holdBack'; view: GameState; you: Side;
   /** For kind 'eventMove': the eventTarget action this picker decorates with a split
    *  selection (p.28 — an Army moved by an Event card may be split before moving). */
   base?: WotrAction;
   onConfirm: (a: WotrAction) => void; onCancel: () => void;
 }) {
   const attackMode = kind === 'attack';
+  // Hold-back (p.31): the Army has ALREADY advanced into `from` (the captured region);
+  // the tick-boxes choose who STAYS forward, and everyone unticked marches back to
+  // `to` (the region attacked from) — the same inversion the attack rearguard uses.
+  const holdBackMode = kind === 'holdBack';
   // SORTIE (p.32): our Army is the besieged garrison in the siege box, NOT the region —
   // the region holds the besieger we're attacking. Everything the picker offers (units,
   // Leaders, the rearguard left behind in the Stronghold) must come from the box.
   const sortieBox = attackMode && from === to ? sortieForce(view, from, you) : null;
-  const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : 'Move';
+  const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : holdBackMode ? 'Keep forward' : 'Move';
   const r = sortieBox ?? view.regions[from];
   const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
   // Only the MOVING army's OWN Characters can travel with it — never an enemy Companion
@@ -80,7 +84,8 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
     return rg;
   };
   const make = (split: boolean): WotrAction =>
-    kind === 'attack' ? { kind: 'attack', from, to, rearguard: split ? buildRearguard() : undefined }
+    kind === 'holdBack' ? { kind: 'advanceHoldBack', back: split ? buildRearguard() : undefined }
+      : kind === 'attack' ? { kind: 'attack', from, to, rearguard: split ? buildRearguard() : undefined }
       : kind === 'eventMove' ? { ...(base as Extract<WotrAction, { kind: 'eventTarget' }>), move: split ? buildSel() : undefined }
         : kind === 'armyMove2' ? { kind: 'armyMove2', from, to, move: split ? buildSel() : undefined }
           : { kind: 'moveArmy', from, to, move: split ? buildSel() : undefined };

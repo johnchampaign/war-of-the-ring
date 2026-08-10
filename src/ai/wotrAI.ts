@@ -691,6 +691,11 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       want = Math.max(d.min, Math.min(d.max, want));
       return legal.find((a2) => a2.kind === 'combatCardCost' && a2.amount === want) ?? legal[0]!;
     }
+    case 'advanceHoldBack':
+      // Keep the whole Army forward — the ground was just taken and holding it is
+      // what wins the game. (Garrisoning the ORIGIN is maybeSplitGarrison's job, on
+      // the move that vacates it.)
+      return legal.find((a) => a.kind === 'advanceHoldBack') ?? legal[0]!;
     case 'relieveAdvance': {
       // Reliever: march into the Stronghold we just freed, so the two forces defend as
       // one behind its walls — but not if the combined stack would breach the 10-unit

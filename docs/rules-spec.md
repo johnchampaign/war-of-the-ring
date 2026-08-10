@@ -557,6 +557,24 @@ Place Settlement Control marker; advance VP track (+1 City, +2 Stronghold).
 Recapture by original owner removes the marker and reverses the VP (p.32, p.44).
 Captured settlements can't muster or advance the political track (p.32).
 
+### End of Battle (p.31) — advancing into the region you took
+"If the defending Army is eliminated or retreats, the attacker may immediately move
+**all or part** of the attacking Army into the embattled region." Modelled in two
+steps: `finishCombat` advances the WHOLE force (so the capture, the outcome text and
+any resulting siege resolve exactly as they always did), then raises an
+`advanceHoldBack` PendingChoice letting the winner send chosen figures back to the
+region it attacked from (`resolveAdvanceHoldBack`). Every "all or part" end state is
+reachable, without making the capture depend on an unanswered question.
+Offered only when it is a real decision — 2+ units forward
+(`advanceHoldBackAvailable`) — and **at least one unit always stays**: the ground was
+just taken, and a departing last unit would hand it straight back. The rearguard held
+aside for the battle (p.28) is restored to the origin as before and is never part of
+this choice. The UI reuses the split picker (tick who stays forward; the rest march
+back); the AI keeps everything forward, which is the old behaviour.
+**Deviation:** advancing NOTHING is not offered — "all or part" is read as at least
+one figure, and declining entirely would un-capture a Settlement the battle log has
+already reported as taken. `scripts/probe-advance-holdback.mjs`.
+
 ---
 
 ## 8. Politics (p.34–35)

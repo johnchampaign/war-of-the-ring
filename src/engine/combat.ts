@@ -786,6 +786,8 @@ function finishCombat(state: GameState, advance: boolean): void {
   // Set when a relieving Army has earned the right to march into the freed region
   // (asked once the battle is fully wrapped up — see the end of this function).
   let reliefAdvance: { from: RegionId; to: RegionId; owner: Side } | null = null;
+  // Set when a winning attacker has advanced and may keep part of the Army behind.
+  let holdBack: { from: RegionId; to: RegionId; owner: Side } | null = null;
   if (sortie) {
     // The rearguard never left the Stronghold (p.32), so put it back BEFORE judging
     // whether the Stronghold stands undefended — a surviving rearguard still defends it.
@@ -844,7 +846,14 @@ function finishCombat(state: GameState, advance: boolean): void {
       : mutualWipe ? `Both Armies are destroyed at ${name}`
       : (pc.atkWithdrew ?? 0) > 0 ? `${side(pc.attacker)} withdraw from ${name}`
       : pc.siege ? `The siege of ${name} holds` : `The attack on ${name} is repulsed`;
-    if (advance && atkSurv > 0) { advanceInto(state, pc.attacker, pc.from, pc.to); r.besieged = false; }
+    if (advance && atkSurv > 0) {
+      advanceInto(state, pc.attacker, pc.from, pc.to); r.besieged = false;
+      // p.31: the winner may move "all or part" of the Army in. We advance the whole
+      // force (so the capture, the outcome text and any resulting siege are settled
+      // exactly as before) and then offer to hold figures BACK — the same end states,
+      // reached without making the capture depend on an unanswered question.
+      holdBack = { from: pc.from, to: pc.to, owner: pc.attacker };
+    }
     if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
   }
   log(state, null, 'combat', `battle at ${pc.to} ended — ${outcome}`, {
@@ -873,6 +882,64 @@ function finishCombat(state: GameState, advance: boolean): void {
       owner: reliefAdvance.owner, kind: 'relieveAdvance',
       data: { from: reliefAdvance.from, to: reliefAdvance.to, rearguard: pc.rearguard ?? null },
     };
+  } else if (holdBack && advanceHoldBackAvailable(state, holdBack.to, holdBack.owner)) {
+    state.pendingChoice = { owner: holdBack.owner, kind: 'advanceHoldBack', data: { from: holdBack.from, to: holdBack.to } };
+  }
+}
+
+/** Is there anything to decide about holding part of an advanced Army back? Only when
+ *  it has 2+ units — at least one must stay in the captured region ("all or PART",
+ *  p.31, and a departing last unit would hand the ground straight back). */
+export function advanceHoldBackAvailable(state: GameState, to: RegionId, owner: Side): boolean {
+  const r = state.regions[to];
+  return !!r && armySide(state, to) === owner && unitCount(state, to) >= 2;
+}
+
+/** Move figures the winner chose NOT to keep forward back to the region it attacked
+ *  from (p.31 "all or part"). At least one unit must remain in the captured region, so
+ *  the selection is clamped; anything unselected simply stays where it advanced to. */
+export function resolveAdvanceHoldBack(state: GameState, back: MoveSelection | null): RegionId | null {
+  const d = state.pendingChoice!.data as { from: RegionId; to: RegionId };
+  const owner = state.pendingChoice!.owner;
+  state.pendingChoice = null;
+  if (!back) return null;
+  const src = state.regions[d.to]!;
+  // Never send the last unit back — the region was just taken and must stay held.
+  const keep = 1;
+  const sel: MoveSelection = { units: {}, leaders: 0, nazgul: 0, characters: back.characters ? [...back.characters] : [] };
+  let moved = 0;
+  const room = Math.max(0, unitCount(state, d.to) - keep);
+  for (const [n, u] of Object.entries(back.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
+    if (sideOfNation(n) !== owner) continue;
+    const have = src.units[n]; if (!have) continue;
+    let mr = Math.max(0, Math.min(u.regular ?? 0, have.regular));
+    let me = Math.max(0, Math.min(u.elite ?? 0, have.elite));
+    if (moved + mr + me > room) { const allow = Math.max(0, room - moved); mr = Math.min(mr, allow); me = Math.min(me, Math.max(0, allow - mr)); }
+    if (mr + me > 0) { sel.units![n] = { regular: mr, elite: me }; moved += mr + me; }
+  }
+  if (moved === 0) return null;
+  if (owner === 'fp') sel.leaders = Math.max(0, Math.min(back.leaders ?? 0, src.leaders));
+  else sel.nazgul = Math.max(0, Math.min(back.nazgul ?? 0, src.nazgul));
+  moveSelectedBack(state, d.to, d.from, owner, sel);
+  log(state, null, 'combat', `${owner === 'fp' ? 'Free Peoples' : 'Shadow'} keep ${moved} unit${moved === 1 ? '' : 's'} back in ${REGIONS[d.from]!.name ?? d.from}`);
+  return d.from;
+}
+
+/** Move a chosen subset between two regions we already control (the hold-back). */
+function moveSelectedBack(state: GameState, from: RegionId, to: RegionId, side: Side, sel: MoveSelection): void {
+  const src = state.regions[from]!, dst = state.regions[to]!;
+  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular: number; elite: number }][]) {
+    const have = src.units[n]; if (!have) continue;
+    const d = dst.units[n] ?? { regular: 0, elite: 0 };
+    have.regular -= u.regular; have.elite -= u.elite; d.regular += u.regular; d.elite += u.elite; dst.units[n] = d;
+    if (have.regular === 0 && have.elite === 0) delete src.units[n];
+  }
+  if (side === 'fp') { const k = Math.min(sel.leaders ?? 0, src.leaders); src.leaders -= k; dst.leaders += k; }
+  else { const k = Math.min(sel.nazgul ?? 0, src.nazgul); src.nazgul -= k; dst.nazgul += k; }
+  for (const c of sel.characters ?? []) {
+    if (c === 'saruman' || !src.characters.includes(c) || characterSide(c) !== side) continue;
+    src.characters.splice(src.characters.indexOf(c), 1); dst.characters.push(c);
+    if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
   }
 }
 
