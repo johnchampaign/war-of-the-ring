@@ -368,6 +368,18 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
    sample actually contains re-rolls that hit — otherwise it would pass vacuously.
    Note Leadership counts each **Isengard Elite** while Saruman is in play
    ("Servants of the White Hand"), so an Orthanc stack is often at the cap of 5.
+4a. **Automatic (dieless) hits** — *Great Host*'s "score one automatic hit" and the
+   "+1 if you scored any" family — are added after the roll and **recorded on the roll**
+   (`CombatRoll.auto`) so the log can name them: a line showing 4 hits behind 3 hits'
+   worth of dice reads as a miscount otherwise (player report). The 2:1 comparison is
+   made against the enemy **Force**, not the enemy region — in a siege the region holds
+   the besieger, so measuring it compared an army with itself.
+   **Deviation:** Great Host's text times the comparison *"after removing casualties
+   from the Combat roll and Leader re-roll"*; the engine evaluates it during the roll,
+   i.e. against pre-casualty counts. This is the conservative direction (casualties can
+   only thin the enemy and make 2:1 easier), so the engine grants the hit strictly less
+   often than RAW, never more.
+
 4. **Remove casualties**: per hit, opponent removes 1 Regular **or** reduces 1
    Elite→Regular (replacement); for every 2 hits may instead remove 1 Elite (p.30).
    Attacker chooses his removals first (p.30). FP casualties are permanent &

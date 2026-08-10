@@ -62,7 +62,10 @@ export interface CombatRoll { dice: number[]; rerolls: number[]; target: number;
   /** The extra attack's dice (Sudden Strike / Charge / We Come to Kill) and the hits
    *  they scored — kept separate from the Combat roll so the log can show where the
    *  hits actually came from. */
-  extra?: number[]; extraHits?: number }
+  extra?: number[]; extraHits?: number;
+  /** Automatic hits granted by a card with no die behind them (Great Host's 2:1
+   *  free hit, Shield Wall-style "+1 if you scored any"). */
+  auto?: number }
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
   baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll, force?: Force,
   enemyForce?: Force): number {
@@ -132,9 +135,18 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     h += Math.min(ownMods.guaranteedHits ?? 0, failed);
     return h;
   });
-  if ((ownMods.bonusHitsIfAny ?? 0) > 0 && hits > 0) hits += ownMods.bonusHitsIfAny!;
-  if ((ownMods.bonusHitsIfOutnumber ?? 0) > 0 && forceUnitCount(own) >= 2 * Math.max(1, unitCount(state, enemyRegion))) hits += ownMods.bonusHitsIfOutnumber!;
-  return hits;
+  // AUTOMATIC hits, which no die shows. Record them, or the line reads "[5 6 1 1 6]
+  // on 6+ re-roll [6 4 2] -> 4 hits" when the dice justify only three, and a player
+  // reasonably reports the count as broken (it was Great Host's free hit).
+  let auto = 0;
+  if ((ownMods.bonusHitsIfAny ?? 0) > 0 && hits > 0) auto += ownMods.bonusHitsIfAny!;
+  // Compare against the enemy FORCE, not the enemy region: in a siege the region
+  // holds the besieger, so measuring it compared an army with ITSELF (the same
+  // mistake that mis-aimed pre-combat attacks).
+  const foe = enemyForce ?? state.regions[enemyRegion]!;
+  if ((ownMods.bonusHitsIfOutnumber ?? 0) > 0 && forceUnitCount(own) >= 2 * Math.max(1, forceUnitCount(foe))) auto += ownMods.bonusHitsIfOutnumber!;
+  if (auto > 0 && roll) roll.auto = (roll.auto ?? 0) + auto;
+  return hits + auto;
 }
 
 const MINION_SET = new Set(['witch-king', 'saruman', 'mouth-of-sauron']);
@@ -1054,6 +1066,7 @@ export function combatStep(state: GameState): void {
           // Name the extra attack's own dice, or its hits look like they came from
           // nowhere (player report: a defender showing [1] re-roll [2] "scored" 2 hits).
           + (roll.extra?.length ? ` + extra attack [${roll.extra.join(' ')}] on 5+ → ${roll.extraHits ?? 0} hit${(roll.extraHits ?? 0) === 1 ? '' : 's'}` : '')
+          + (roll.auto ? ` + ${roll.auto} automatic hit${roll.auto === 1 ? '' : 's'} from the card` : '')
           + ` → ${rolled} hit${rolled === 1 ? '' : 's'} total`
           + (hits !== rolled ? ` (${hits} after card effects)` : '');
         log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk)}; defender ${fmt(dRoll, defHits, def)}`,
