@@ -331,11 +331,25 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'moveFellowship':
       // On the Mordor Track, NOT moving costs +1 Corruption/turn — push every turn.
       if (fs.mordor !== null) return fs.corruption >= 11 ? 40 : 95;
-      // Pre-Mordor each move triggers a Hunt. Push the ring hard while Corruption is
-      // low; as it climbs, ease off (spend the turn on pressure elsewhere) and rely on
-      // declare-to-heal (below) to bring Corruption back down so the push can resume.
-      // This adaptive push/heal/pivot rhythm — rather than rushing into every Hunt —
-      // is what lets the FP survive the Hunt race.
+      // Pre-Mordor each move triggers a Hunt, so the push eases as Corruption climbs
+      // and leans on declare-to-heal to bring it back down. But the old curve
+      // (72 - 9x, floor 8) fell off a cliff: by Corruption 5 the Fellowship move lost
+      // to almost any army action, so the FP banked no more Progress — and Progress is
+      // the ONLY way to reach a Mordor entrance and declare there. The Ring simply
+      // stopped moving (player report: "in the beginning it makes quite a lot of
+      // regions but then it drops the ball… it has no realistic chance to win
+      // non-military"). His diagnosis is right — past Corruption ~5 this score loses
+      // to almost any army action and the Fellowship stops banking the Progress that
+      // is the ONLY way to reach a Mordor entrance. But reweighting THIS action does
+      // not fix it. Two 2000-game A/Bs against the 48.3% / 671-Ring baseline:
+      //   78 - 4x, floor 38 : Ring 814, but Corruption deaths 330->1156, military wins
+      //                       999->30, FP 40.7% — the FP stops playing the board and
+      //                       just sprints into the Hunt.
+      //   72 - 9x, floor 25 : Ring 683 (+12, noise), Corruption 388, FP 46.7% — pays
+      //                       1.6 points for nothing.
+      // Left at the measured-best curve. The real gap is that the AI cannot PLAN the
+      // Mordor run (bank Progress, time heal-declares, spend Companions deliberately);
+      // it weighs one action at a time, and no single weight buys foresight.
       return Math.max(8, 72 - fs.corruption * 9);
     case 'hideFellowship': return 85;                                  // must hide to keep moving
     case 'separateCompanion': {                                        // rouse a passive nation
