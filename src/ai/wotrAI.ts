@@ -302,6 +302,22 @@ function dist(from: RegionId, to: RegionId): number {
  *  "needs to recognize a free people military push. i was able to get 8 victory points
  *  as free people. that cant happen." At 0 this multiplies out to exactly the
  *  previously-measured weights, so early-game behaviour is unchanged. */
+/** Is the Fellowship PARKED — sitting in an unconquered Free Peoples City/Stronghold
+ *  healing rather than advancing? p.39 lets it heal one Corruption there every turn,
+ *  so while it does, the Ring clock has stopped and the Shadow's military clock is the
+ *  only one still running: the answer is to press, hard.
+ *  Reads nothing hidden — the Fellowship figure's declared position and its Progress
+ *  are both on the board and public (see redact.ts), so this is the same read a human
+ *  Shadow makes. */
+function fellowshipStalled(state: GameState): boolean {
+  const fs = state.fellowship;
+  if (fs.mordor !== null) return false;            // on the Track the Ring clock runs fast
+  if (fs.progress >= 2) return false;              // it is travelling, not resting
+  const d = REGIONS[fs.location];
+  return !!d && (d.settlement === 'City' || d.settlement === 'Stronghold')
+    && !!d.nation && FP.has(d.nation) && settlementCtrl(state, fs.location) !== 'shadow';
+}
+
 function enemyPressure(state: GameState, actor: Side): number {
   const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
   const need = enemy === 'fp' ? 4 : 10;
@@ -528,7 +544,18 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
 function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: RegionId, target: RegionId | null): number {
   const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
   let s = actor === 'shadow' ? 16 : 8;
-  if (settlementCtrl(state, to) === enemy && !armyHere(state, to, enemy)) s += REGIONS[to]!.vp * 30 + 25; // capture
+  // While the Ring is parked the Shadow is racing an opponent who has stopped racing:
+  // lean into captures and marching, which is how a human punishes a resting Fellowship.
+  // MEASURED NEUTRAL in self-play (2000 games): Shadow military wins 609->617, FP
+  // 50.0%->49.7% — noise. Kept anyway, with the reason stated so it is not mistaken
+  // for a validated win: the condition is live (it fires on 5.0% of Shadow decisions,
+  // in 187 of 200 games), but self-play cannot really exercise it, because the FP AI
+  // leaves as soon as Corruption drops under 4 while a HUMAN parks for as long as the
+  // rest is worth it. Against a human this should bite considerably harder than the
+  // numbers here suggest. If a later measurement shows it doing nothing against human
+  // play either, delete it — an unearned multiplier is a liability.
+  const pressing = actor === 'shadow' && fellowshipStalled(state);
+  if (settlementCtrl(state, to) === enemy && !armyHere(state, to, enemy)) s += (REGIONS[to]!.vp * 30 + 25) * (pressing ? 1.4 : 1); // capture
   if (armyHere(state, to, actor)) s += 10;                                                                // concentrate
   // Re-garrison one of our own VP Settlements that is sitting empty within an enemy's
   // reach. Scored BELOW the equivalent capture so the AI still prefers taking ground to
@@ -549,7 +576,7 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // parking next to an undefended Stronghold (player reports of both sides going quiet).
   if (target) {
     const open = settlementCtrl(state, target) === enemy && !armyHere(state, target, enemy);
-    s += -(dist(to, target) - dist(from, target)) * (open ? 20 : 12);
+    s += -(dist(to, target) - dist(from, target)) * (open ? 20 : 12) * (pressing ? 1.5 : 1);
     if (to === target) s += 30;
   }
   // Never march units into a stack that's already full: anything over the 10-unit
