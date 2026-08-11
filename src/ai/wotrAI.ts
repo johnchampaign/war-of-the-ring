@@ -365,6 +365,22 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       //     whenever the box was empty, and 86% of games collapsed into a Ring race.
       //     The lesson repeats: anything that lifts this score's CEILING unbalances the
       //     game, because it competes globally against every other FP action.
+      //
+      //   Per-turn QUOTA (guarantee the Ring one die per turn at 82, then fall back to
+      //     the curve): tried and REVERTED, and it failed hardest of the three —
+      //     military wins 849->66, Corruption 390->847, FP 50.0%->54.5%, median 15->11
+      //     turns. The reasoning that it was safe ("only one die, so it cannot starve
+      //     the board") was simply wrong: one die EVERY turn, in a game that lasts
+      //     11-15 turns, is a large share of the FP's dice, and the game ends in a Ring
+      //     race before armies matter.
+      //
+      // Three attempts, one conclusion: every intervention that makes the Fellowship
+      // move MORE OFTEN collapses the game into a Ring race, whether it raises the
+      // ceiling, flattens the curve, or reserves a die. The heal fix (above) worked
+      // because it removed a DEADLOCK — it unsticks a specific frozen state without
+      // changing how often the Fellowship moves in a healthy game. The remaining gap is
+      // planning (bank Progress -> heal -> make the run), which no per-action number
+      // can express.
       return Math.max(8, 72 - fs.corruption * 9);
     case 'hideFellowship': return 85;                                  // must hide to keep moving
     case 'separateCompanion': {                                        // rouse a passive nation
