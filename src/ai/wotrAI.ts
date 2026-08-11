@@ -83,7 +83,14 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
         && !armyHere(state, t, 'shadow')
         && r.nazgul === 0 && !r.characters.includes('witch-king');
     };
-    if (declares.length && state.fellowship.progress >= 2 && state.fellowship.corruption >= 4) {
+    // NB no Progress requirement. Declaring IN PLACE at Progress 0 is legal precisely
+    // so a Fellowship sitting in a friendly City/Stronghold can rest and heal (p.39),
+    // and `declares` only ever contains targets already within Progress — so a
+    // progress>=2 gate here bought no safety and created a DEADLOCK: high Corruption
+    // stopped the pushing, Progress stayed at 0, the gate then refused the rest-heal,
+    // Corruption never came down and the Fellowship froze for good. Instrumented over
+    // 200 games: 249 legal rest-heals refused, in 50 of them (a quarter of all games).
+    if (declares.length && state.fellowship.corruption >= 4) {
       const heals = declares.filter((a) => isHealSettlement(state, a.target) && noRerolls(a.target));
       if (heals.length) return closestToMordor(heals);
     }
@@ -350,6 +357,14 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // Left at the measured-best curve. The real gap is that the AI cannot PLAN the
       // Mordor run (bank Progress, time heal-declares, spend Companions deliberately);
       // it weighs one action at a time, and no single weight buys foresight.
+      //   Hunt-box aware (free move on an empty box, ease as it fills): tried and
+      //     REVERTED. 2000 games on top of the heal fix — Ring 761->1071 but Corruption
+      //     658, military wins across both sides 849->271, FP 50.0%->56.1%, median 15
+      //     ->13 turns. Reading the box is sound (it is public, and an empty box really
+      //     does skip the roll), but rating a free move at 92 let the push dominate
+      //     whenever the box was empty, and 86% of games collapsed into a Ring race.
+      //     The lesson repeats: anything that lifts this score's CEILING unbalances the
+      //     game, because it competes globally against every other FP action.
       return Math.max(8, 72 - fs.corruption * 9);
     case 'hideFellowship': return 85;                                  // must hide to keep moving
     case 'separateCompanion': {                                        // rouse a passive nation
