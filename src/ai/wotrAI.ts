@@ -459,7 +459,14 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'sarumanMuster': return a.mode === 'recruit' ? 45 : 30;       // Voice of Saruman: a big Isengard build / Elite upgrade
     case 'useElvenRing': return elvenRingScore(state, actor, a);       // change a die's face (conservatively)
     case 'playEvent': {
-      if (actor === 'fp' && HEAL_EVENTS.has(a.cardId)) return fs.corruption >= 6 ? 95 : 25;
+      // A heal card at ZERO Corruption heals nothing — playing it burns a card and a
+      // die for literally no effect (player report: "why did they play a card that
+      // didn't do anything? they had no corruption"). 25 was low but still won the
+      // argmax on a quiet turn 1. Below every real option, so it is never chosen.
+      if (actor === 'fp' && HEAL_EVENTS.has(a.cardId)) {
+        if (fs.corruption === 0) return -5;
+        return fs.corruption >= 6 ? 95 : 25;
+      }
       if (actor === 'shadow' && CORRUPT_EVENTS.has(a.cardId)) return 70;
       // Wormtongue only LOCKS Rohan's activation — once Rohan is already active
       // (let alone At War) the table effect is moot, and the card's combat half
