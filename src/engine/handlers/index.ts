@@ -356,7 +356,10 @@ register('sh-char-18', {
 // Fixed-region Shadow recruit cards (named regions / counts).
 // A New Power is Rising: 2 Isengard Regulars in each Dunland (no choice) + 2 in Orthanc (R or E each).
 register('sh-str-16', recruitChoiceCard('shadow', [{ nation: 'isengard', region: 'orthanc' }, { nation: 'isengard', region: 'orthanc' }], {
-  canPlay: (s) => recruitable(s, 'shadow', 'orthanc') || recruitable(s, 'shadow', 'north-dunland') || recruitable(s, 'shadow', 'south-dunland'),
+  // Printed precondition: "Play if Saruman is in play" — it was missing, so the card
+  // could be played with Saruman still off the board (player report).
+  canPlay: (s) => inPlay(s, 'saruman')
+    && (recruitable(s, 'shadow', 'orthanc') || recruitable(s, 'shadow', 'north-dunland') || recruitable(s, 'shadow', 'south-dunland')),
   apply: (s) => { placeForce(s, 'isengard', 'north-dunland', { regular: 2 }); placeForce(s, 'isengard', 'south-dunland', { regular: 2 }); },
 }));
 register('sh-str-20', { // Orcs Multiplying Again: 3 Sauron Regulars in Dol Guldur + 3 in Mount Gundabad
@@ -434,14 +437,21 @@ register('fp-str-23', placeChoiceCard('rohan', (s) => ROHAN_REGIONS.filter((r) =
 // Half-orcs and Goblin-men / Olog-hai: 1 Isengard / Sauron unit (Regular OR Elite)
 // in a region with a Shadow Army.
 const shadowArmyRegionIds = (s: GameState): string[] => regionsWithShadowArmy(s).map((t) => t.region!);
-register('sh-str-13', placeChoiceCard('isengard', shadowArmyRegionIds));
-register('sh-str-14', placeChoiceCard('sauron', shadowArmyRegionIds));
+// Half-orcs and Goblin-men / Olog-hai: printed "Play if Isengard/Sauron is At War".
+// placeChoiceCard builds its own canPlay (is there anywhere to place?), which silently
+// dropped the At-War requirement — caught by scripts/audit-preconditions.mjs.
+const atWarGate = (h: EventHandler, nation: Nation): EventHandler => {
+  const inner = h.canPlay;
+  return { ...h, canPlay: (s, side) => isAtWar(s, nation) && (inner ? inner(s, side) : true) };
+};
+register('sh-str-13', atWarGate(placeChoiceCard('isengard', shadowArmyRegionIds), 'isengard'));
+register('sh-str-14', atWarGate(placeChoiceCard('sauron', shadowArmyRegionIds), 'sauron'));
 // Rage of the Dunlendings: recruit 2 Isengard Regulars in a free region adjacent to a
 // Dunland, then OPTIONALLY move up to 4 Isengard units there from N/S Dunland (RAW).
 const RAGE_SOURCES = ['north-dunland', 'south-dunland'];
 const rageHasIsengard = (s: GameState, d: string): boolean => ((s.regions[d]?.units.isengard?.regular ?? 0) + (s.regions[d]?.units.isengard?.elite ?? 0)) > 0;
 register('sh-str-11', {
-  canPlay: (s) => s.reinforcements.isengard.regular > 0 && rageTargets(s).length > 0,
+  canPlay: (s) => isAtWar(s, 'isengard') && s.reinforcements.isengard.regular > 0 && rageTargets(s).length > 0, // printed: Isengard At War
   repeat: 5, // 1 recruit + up to 4 consolidation moves
   targets: (s, _side, applied = []) => {
     if (applied.length === 0) return rageTargets(s); // choose the recruit region

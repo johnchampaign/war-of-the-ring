@@ -379,7 +379,14 @@ function forceHasFpUnits(f: Force | undefined): boolean {
 /** Units over the 10-unit stacking limit in a (non-besieged) region — these must
  *  be removed by the controlling player after a move/muster (rulebook p.26). */
 export function overStack(state: GameState, id: RegionId): number {
-  if (state.regions[id]!.besieged) return 0; // besieged garrison is a hard cap, never over-stacks
+  // A besieged region has TWO stacks and they are capped separately: the boxed
+  // GARRISON by the 5-unit siege limit (enforceSiegeCap), and the BESIEGER standing in
+  // the open field by the normal 10 (p.32 — the open field is an ordinary Army). This
+  // used to bail out for any besieged region, exempting the besieger entirely, so a
+  // besieging stack could grow past 10 and attack with 11+ units (player report: "the
+  // enemy attacked with 11 or more units… in every case those were sieges"). Note
+  // unitCount reads r.units, which during a siege IS the besieger — the garrison lives
+  // in r.siegeBox and is never counted here.
   return Math.max(0, unitCount(state, id) - STACKING_LIMIT);
 }
 
