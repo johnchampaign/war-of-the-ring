@@ -38,10 +38,17 @@ function runRecover(state: GameState): void {
 
 export function drawEventCards(state: GameState, side: Side): void {
   const p = state.cards[side];
+  const got: string[] = [];
   for (const deck of ['character', 'strategy'] as Deck[]) {
     const top = p.draw[deck].shift();
-    if (top) p.hand.push(top);
+    if (top) { p.hand.push(top); got.push(deck === 'character' ? 'Character' : 'Strategy'); }
   }
+  // One line per side, so a hand that grows is always traceable to something the log
+  // said (report 1y0753: a player could not account for the Free Peoples' card count).
+  const who = side === 'fp' ? 'Free Peoples' : 'Shadow';
+  log(state, null, 'event', got.length
+    ? `${who} draw ${got.length} Event card${got.length === 1 ? '' : 's'} at turn start (${got.join(' + ')})`
+    : `${who} cannot draw at turn start — both Event decks are empty`);
   // Over the 6-card limit is resolved by the player's CHOICE (enforceHandLimit), not
   // by silently trimming the oldest.
 }

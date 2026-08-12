@@ -14,7 +14,7 @@ import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations } from '../fellowship';
 import { moveCharacter, characterDestinations } from '../charMove';
-import { log, notify } from '../log';
+import { log, logCardDraw, notify } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 /** Roll min(5, count) dice; count hits on `target`+. */
@@ -49,6 +49,7 @@ function charRegion(state: GameState, id: string): string | null {
 function drawCard(state: GameState, side: Side, deck: 'character' | 'strategy'): void {
   const p = state.cards[side]; const top = p.draw[deck].shift();
   if (top) p.hand.push(top);
+  logCardDraw(state, side, deck, !!top, 'card text'); // the played card is named on the line above
   // Over-limit is resolved by the player's discard choice (engine enforceHandLimit).
 }
 /** Region-step distance (BFS), or Infinity. */

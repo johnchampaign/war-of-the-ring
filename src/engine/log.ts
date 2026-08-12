@@ -20,6 +20,20 @@ export function log(state: GameState, side: Side | null, kind: string, msg: stri
   }, LOG_CAP);
 }
 
+/** A card entering a hand, logged publicly — WHICH deck and WHY, never the card's
+ *  identity (that stays secret). Drawing used to be silent, so a hand that grew
+ *  mid-turn was unexplainable from the log: a player audited the Free Peoples' opening
+ *  hand, found it playing more cards than it had drawn, and neither he nor we could
+ *  reconstruct where they came from (report 1y0753: it was King Brand's Men, whose own
+ *  text draws a card). Every draw now says so. */
+export function logCardDraw(state: GameState, side: Side, deck: 'character' | 'strategy', drew: boolean, reason?: string): void {
+  const who = side === 'fp' ? 'Free Peoples' : 'Shadow';
+  const d = deck === 'character' ? 'Character' : 'Strategy';
+  log(state, null, 'event', drew
+    ? `${who} draw a ${d} Event card${reason ? ` (${reason})` : ''}`
+    : `${who} cannot draw — the ${d} deck is empty`);
+}
+
 /** Record a transient informational notice for the UI to pop once (public). */
 export function notify(state: GameState, msg: string): void {
   if (!state.notices) state.notices = [];

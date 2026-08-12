@@ -147,7 +147,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   } else {
     fs.corruption = Math.min(12, fs.corruption + damage);
     if (reveal) beginReveal(state);
-    log(state, null, 'hunt', `Hunt damage ${damage} -> Corruption ${fs.corruption}`);
+    log(state, null, 'hunt', `Hunt damage ${damage} -> Corruption ${fs.corruption}${opts.source ? ` — ${opts.source}` : ''}`);
   }
 }
 
@@ -236,7 +236,7 @@ export function extraHunt(state: GameState, opts: HuntOpts = {}): void {
   const { tile, ref } = drawTile(state);
   const isEye = tile.value === 'eye';
   const isFpSpecial = 'spec' in ref && ref.spec.startsWith('fp-');
-  if (isEye || isFpSpecial) { log(state, null, 'hunt', 'extra Hunt tile discarded (Eye / FP special)'); return; }
+  if (isEye || isFpSpecial) { log(state, null, 'hunt', `${opts.source ?? 'Extra Hunt'}: tile discarded (Eye / FP special)`); return; }
   applyHuntTile(state, tile, Math.min(5, state.hunt.box), opts);
 }
 

@@ -9,7 +9,7 @@ import {
 } from '../engine/phases';
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, MORDOR_INTERIOR } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
-import { log } from '../engine/log';
+import { log, logCardDraw } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders,
@@ -473,7 +473,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
 
   switch (action.kind) {
     case 'skipFellowshipPhase':
-      requirePhase(state, 'fellowship'); state.phase = 'huntAllocation'; break;
+      requirePhase(state, 'fellowship');
+      // Mark the phase boundary: a player reported a Hunt "during the Fellowship
+      // phase", and neither of us could tell from the log whether the phase was still
+      // open at the time (report 540i0x). Now it closes on the record.
+      log(state, null, 'fellowship', 'Free Peoples end the Fellowship phase');
+      state.phase = 'huntAllocation'; break;
     case 'changeGuide':
       requirePhase(state, 'fellowship');
       if (!setGuide(state, action.companion)) throw new Error('Not an eligible Guide');
@@ -510,6 +515,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const { min, max } = huntAllocationBounds(state);
       if (action.dice < min || action.dice > max) throw new Error(`allocateHunt ${action.dice} out of [${min},${max}]`);
       state.hunt.box = action.dice;
+      // Allocation is open information at the table, and saying it out loud settles
+      // "were those dice in the box already, or did the Shadow just put them there?"
+      // (report wg37yx) — the Hunt Box is emptied every turn in phase 1, so anything
+      // in it belongs to THIS turn.
+      log(state, null, 'hunt', `Shadow allocate ${action.dice} ${action.dice === 1 ? 'die' : 'dice'} to the Hunt Box`);
       state.phase = 'actionRoll';
       break;
     }
@@ -586,7 +596,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'drawEvent':
       requirePhase(state, 'actionResolution');
       if (!consumePreferred(state, actor, ['event', 'will'], action.die)) throw new Error('No Event die');
-      drawOne(state, actor, action.deck); passResolutionTurn(state, actor); break;
+      drawOne(state, actor, action.deck, 'Event die'); passResolutionTurn(state, actor); break;
     case 'playEvent': {
       requirePhase(state, 'actionResolution');
       const hand = state.cards[actor].hand;
@@ -707,17 +717,17 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'bonusDraw': {
       requireChoice(state, 'bonusDraw', actor); // Palantír of Orthanc bonus draw (or decline)
-      if (action.deck !== 'none') drawOne(state, actor, action.deck);
+      if (action.deck !== 'none') drawOne(state, actor, action.deck, 'Palantír of Orthanc');
       state.pendingChoice = null; break; // the turn already passed when the Event resolved
     }
     case 'guideDraw': {
       requireChoice(state, 'guideDraw', actor); // Gandalf the Grey Guide draw (or decline)
-      if (action.draw) drawOne(state, 'fp', (state.pendingChoice!.data as { deck: 'character' | 'strategy' }).deck);
+      if (action.draw) drawOne(state, 'fp', (state.pendingChoice!.data as { deck: 'character' | 'strategy' }).deck, 'Gandalf the Grey, Guide');
       state.pendingChoice = null; break;
     }
     case 'sorcererDraw': {
       requireChoice(state, 'sorcererDraw', actor); // Witch-king Sorcerer draw (or decline) — combat resumes via advance()
-      if (action.draw) drawOne(state, 'shadow', (state.pendingChoice!.data as { deck: 'character' | 'strategy' }).deck);
+      if (action.draw) drawOne(state, 'shadow', (state.pendingChoice!.data as { deck: 'character' | 'strategy' }).deck, 'the Witch-king, Sorcerer');
       state.pendingChoice = null; break;
     }
     case 'diplomaticAction': {
@@ -1008,7 +1018,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (action.use && i >= 0) {
         state.cards.shadow.table.splice(i, 1);
         state.cards.shadow.discard.character.push('sh-char-17');
-        extraHunt(state); // may set a huntDamage choice for the FP
+        // Say WHOSE doing this is. A player declared in Lórien, took 3 Corruption out
+        // of nowhere and reported a Hunt that "shouldn't have happened" — it was the
+        // Balrog firing on a path that ran through Moria, and nothing in the log said
+        // so (report wg37yx). The card is named here and on the Hunt line itself.
+        log(state, null, 'event', 'Shadow discard Balrog of Moria — the Fellowship passed through Moria: an extra Hunt tile');
+        state.log[state.log.length - 1]!.card = 'sh-char-17';
+        extraHunt(state, { source: 'Balrog of Moria' }); // may set a huntDamage choice for the FP
       }
       break; // Hunt Allocation phase was already set
     }
@@ -1079,7 +1095,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Strongholds' tiles defer — same as declaration; deviation log.)
       for (const r of traversed) {
         if (state.pendingChoice) break;
-        if (REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow') extraHunt(state);
+        if (REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow') {
+          extraHunt(state, { source: `revealed through ${REGIONS[r]!.name}` }); // name the Stronghold that caused it
+        }
       }
       break; // checkRingVictory + advance run at dispatch end
     }
@@ -1329,10 +1347,11 @@ function moveTargets(state: GameState, side: Side): Array<[string, string]> {
   return out;
 }
 
-function drawOne(state: GameState, side: Side, deck: 'character' | 'strategy'): void {
+function drawOne(state: GameState, side: Side, deck: 'character' | 'strategy', reason?: string): void {
   const p = state.cards[side];
   const top = p.draw[deck].shift();
   if (top) p.hand.push(top);
+  logCardDraw(state, side, deck, !!top, reason);
   // Over-limit is resolved by the player's discard choice (engine enforceHandLimit).
 }
 
@@ -1341,7 +1360,7 @@ function drawOne(state: GameState, side: Side, deck: 'character' | 'strategy'): 
  *  choice is already pending (rare chained effect), fall back to drawing automatically. */
 function guideEventDraw(state: GameState, actor: Side, deck: 'character' | 'strategy'): void {
   if (actor !== 'fp' || state.fellowship.guide !== 'gandalf-grey') return;
-  if (state.pendingChoice) { drawOne(state, 'fp', deck); return; }
+  if (state.pendingChoice) { drawOne(state, 'fp', deck, 'Gandalf the Grey, Guide'); return; }
   state.pendingChoice = { owner: 'fp', kind: 'guideDraw', data: { deck } };
 }
 
