@@ -434,13 +434,20 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // through the split picker too, so a second move can also be partial. NB: plain
   // function (NOT useCallback) — this is below the `if (!g.view) return` guard, so a
   // hook here would violate the Rules of Hooks (crashes the page on the first render).
-  const onPanelAction = (a: WotrAction) => {
-    // End of Battle: open the picker so the winner can leave part of the Army behind
-    // (p.31 "all or part"). Confirming without changing anything keeps everyone forward.
+  // End of Battle: open the picker so the winner can leave part of the Army behind
+  // (p.31 "all or part"). Confirming without changing anything keeps everyone forward.
+  // This choice arrives through the DECISION MODAL, so onDecisionAction below routes it
+  // too — sending it straight to submit left "Keep the whole Army forward" as the only
+  // button (player report).
+  const onDecisionAction = (a: WotrAction) => {
     if (a.kind === 'advanceHoldBack' && g.view?.pendingChoice?.kind === 'advanceHoldBack') {
       const d = g.view.pendingChoice.data as { from: RegionId; to: RegionId };
       setMoveDraft({ from: d.to, to: d.from, kind: 'holdBack' }); return;
     }
+    void submit(a);
+  };
+  const onPanelAction = (a: WotrAction) => {
+    if (a.kind === 'advanceHoldBack' && g.view?.pendingChoice?.kind === 'advanceHoldBack') { onDecisionAction(a); return; }
     if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2' }); return; }
     // A card-granted Army MOVE (Shadows Gather, The Shadow Lengthens, Corsairs…)
     // routes through the split picker — p.28 allows splitting the Army before a
@@ -617,7 +624,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         </div>
       )}
       <div style={{ display: peekBoard ? 'none' : 'contents' }}>
-        <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={submit} yourTurn={g.yourTurn}
+        {/* onDecisionAction, not submit: the End of Battle "keep figures back?" call is
+            a decision-modal choice, and routing it straight to submit meant its only
+            button was "Keep the whole Army forward" — the split picker was unreachable
+            (player report: "the only option presented was keep the whole army forward").
+            Every other decision falls through to submit unchanged. */}
+        <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={onDecisionAction} yourTurn={g.yourTurn}
           undo={undoCap?.canUndo ? { foreknowledge: !!undoCap.foreknowledge, onUndo: onUndoClick } : undefined} />
       </div>
       {/* Floating "Peek board" toggle (top-left) — shown whenever a blocking choice

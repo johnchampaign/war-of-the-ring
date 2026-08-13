@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders } from '../armies';
+import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -989,8 +989,11 @@ register('fp-str-01', { // The Last Battle — see hunt.ts (fpDiceInBox)
   // (player report: the FP AI "played it, condition unmet, discarded"). Mirrors the
   // TABLE_CONDITIONS check in persistent.ts.
   canPlay: (state) => {
-    const r = state.characters.inPlay['aragorn'];
-    if (!r || armySide(state, r) !== 'fp') return false;
+    // characterWithArmy, not armySide: Aragorn besieged inside a Stronghold is still
+    // "with a Free Peoples Army" even though the open field belongs to the besieger
+    // (player report: refused with Aragorn holding Minas Morgul under siege).
+    const r = characterWithArmy(state, 'aragorn', 'fp');
+    if (!r) return false;
     const n = REGIONS[r]?.nation;
     return !n || sideOfNation(n) !== 'fp';
   },

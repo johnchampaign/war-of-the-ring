@@ -25,9 +25,12 @@ function bare(seed = 2) {
   for (const r of Object.values(s.regions)) { r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = []; delete r.siegeBox; r.besieged = false; }
   return s;
 }
-/** Shadow takes an undefended Free Peoples Town, then is asked about holding back. */
-function won() {
-  const e = Object.entries(REGIONS).find(([, d]) => d.settlement === 'Town' && d.nation && sideOfNation(d.nation) === 'fp');
+/** Shadow beats a lone Free Peoples defender, then is asked about holding back.
+ *  `open: true` picks a region with NO Settlement, so nothing is captured and the
+ *  winner may legally bring the whole Army back (p.31's advance is optional). */
+function won(open = false) {
+  const e = Object.entries(REGIONS).find(([, d]) => (open ? !d.settlement : d.settlement === 'Town')
+    && d.nation && sideOfNation(d.nation) === 'fp' && d.adjacency.some((a) => REGIONS[a]));
   const [to, def] = e;
   const from = def.adjacency.find((a) => REGIONS[a]);
   const s = bare();
@@ -76,11 +79,12 @@ function won() {
 }
 
 {
-  console.log('\n=== the captured region is never left empty ===');
+  console.log('\n=== a captured Settlement is never left empty ===');
   const { s, from, to } = won();
   if (s.pendingCombat || s.pendingChoice?.kind !== 'advanceHoldBack') { console.log('  (skipped)'); }
   else {
     const fwd = units(s, to);
+    check('the advance did put the Settlement under our Control', s.regions[to].control === 'shadow');
     resolveAdvanceHoldBack(s, { units: { sauron: { regular: 99, elite: 0 } } }); // ask for everything
     check('at least one unit stays to hold the ground', units(s, to) >= 1, `${to}=${units(s, to)}`);
     check('conservation holds', units(s, from) + units(s, to) === fwd);
@@ -88,12 +92,36 @@ function won() {
 }
 
 {
-  console.log('\n=== a single-unit Army is not asked a question with one answer ===');
+  // p.31: "the attacker MAY immediately move all or part of the attacking Army into
+  // the embattled region" — so declining the advance outright is legal. The engine used
+  // to force one unit forward everywhere, and the picker's only button was "keep the
+  // whole Army forward" (player report: "my choice would've been to hold all of them
+  // back, but I didn't have that option").
+  console.log('\n=== an open region may be won and then left alone ===');
+  const { s, from, to } = won(true);
+  if (s.pendingCombat || s.pendingChoice?.kind !== 'advanceHoldBack') { console.log('  (skipped)'); }
+  else {
+    const fwd = units(s, to);
+    check('nothing was captured, so nothing must be held', s.regions[to].control !== 'shadow');
+    resolveAdvanceHoldBack(s, { units: { sauron: { regular: 99, elite: 0 } } }); // bring everyone back
+    check('the whole Army came back', units(s, from) === fwd, `${from}=${units(s, from)}`);
+    check('the won region is left empty', units(s, to) === 0, `${to}=${units(s, to)}`);
+  }
+}
+
+{
+  console.log('\n=== when a question has only one answer, it is not asked ===');
   const s = bare(5);
+  // A lone unit holding a Settlement it just captured has nowhere to go — no prompt.
   s.regions['moria'].units = { sauron: { regular: 1, elite: 0 } };
-  check('no hold-back offered for a lone unit', !advanceHoldBackAvailable(s, 'moria', 'shadow'));
+  s.regions['moria'].control = 'shadow';
+  check('no hold-back offered for a lone unit on captured ground', !advanceHoldBackAvailable(s, 'moria', 'shadow'));
   s.regions['moria'].units = { sauron: { regular: 2, elite: 0 } };
   check('offered once there are two', advanceHoldBackAvailable(s, 'moria', 'shadow'));
+  // On ground that was not captured, even a lone unit may decline the advance.
+  s.regions['moria'].units = { sauron: { regular: 1, elite: 0 } };
+  s.regions['moria'].control = null;
+  check('a lone unit may still decline to advance', advanceHoldBackAvailable(s, 'moria', 'shadow'));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

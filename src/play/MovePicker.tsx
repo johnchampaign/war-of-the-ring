@@ -24,6 +24,10 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   // the tick-boxes choose who STAYS forward, and everyone unticked marches back to
   // `to` (the region attacked from) — the same inversion the attack rearguard uses.
   const holdBackMode = kind === 'holdBack';
+  // A Settlement this advance put under our Control must keep a unit holding it; in
+  // any other region the winner may pull the whole Army back (mirrors the engine's
+  // holdBackMinimum).
+  const holdBackMustHold = holdBackMode && view.regions[from]?.control === you;
   // SORTIE (p.32): our Army is the besieged garrison in the siege box, NOT the region —
   // the region holds the besieger we're attacking. Everything the picker offers (units,
   // Leaders, the rearguard left behind in the Stronghold) must come from the box.
@@ -104,7 +108,9 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
       <div style={card} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 6px' }}>{verb} {rName(from)} → {rName(to)}</h3>
         <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
-          {attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.' : 'Choose what moves; the rest stays behind (split). Move all for a normal move.'}
+          {attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.'
+            : holdBackMode ? `Choose who stays in ${rName(from)}; everyone unticked marches back to ${rName(to)}.${holdBackMustHold ? ' At least one unit must hold the Settlement you just took.' : ' You may bring the whole Army back.'}`
+              : 'Choose what moves; the rest stays behind (split). Move all for a normal move.'}
         </div>
         {!attackMode && destUnits > 0 && (
           <div style={{ fontSize: 12, color: overAll || overSel ? '#f0d090' : '#9c9', marginBottom: 8 }}>
@@ -130,7 +136,10 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
         ))}
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
           <button style={primary} onClick={() => onConfirm(make(false))}>{verb} all</button>
-          <button style={primary} disabled={totalUnits < 1 || isWhole} onClick={() => onConfirm(make(true))}>{verb} selected</button>
+          {/* Hold-back: keeping NOBODY forward is a legal answer (p.31's advance is
+              optional) unless the advance captured the Settlement — every other picker
+              still needs at least one moving unit. */}
+          <button style={primary} disabled={(totalUnits < 1 && !(holdBackMode && !holdBackMustHold)) || isWhole} onClick={() => onConfirm(make(true))}>{verb} selected</button>
           <button style={ghost} onClick={onCancel}>Cancel</button>
         </div>
       </div>

@@ -887,13 +887,20 @@ function finishCombat(state: GameState, advance: boolean): void {
   }
 }
 
-/** Is there anything to decide about holding part of an advanced Army back? Only when
- *  it has 2+ units — at least one must stay in the captured region ("all or PART",
- *  p.31, and a departing last unit would hand the ground straight back). */
+/** Is there anything to decide about holding part of an advanced Army back? p.31: the
+ *  winner "may immediately move all or part of the attacking Army into the embattled
+ *  region" — so declining entirely is legal, and the whole force may stay put (player
+ *  report: the only offer was to keep everyone forward). The one exception is a
+ *  Settlement the advance just put a Control marker on: the capture is already applied,
+ *  and an empty captured Settlement is a different rules situation than never having
+ *  advanced — so one unit stays and holds it. */
 export function advanceHoldBackAvailable(state: GameState, to: RegionId, owner: Side): boolean {
   const r = state.regions[to];
-  return !!r && armySide(state, to) === owner && unitCount(state, to) >= 2;
+  return !!r && armySide(state, to) === owner && unitCount(state, to) >= holdBackMinimum(state, to, owner) + 1;
 }
+/** Units that must remain in the region the winner advanced into (see above). */
+const holdBackMinimum = (state: GameState, to: RegionId, owner: Side): number =>
+  state.regions[to]!.control === owner ? 1 : 0;
 
 /** Move figures the winner chose NOT to keep forward back to the region it attacked
  *  from (p.31 "all or part"). At least one unit must remain in the captured region, so
@@ -904,8 +911,11 @@ export function resolveAdvanceHoldBack(state: GameState, back: MoveSelection | n
   state.pendingChoice = null;
   if (!back) return null;
   const src = state.regions[d.to]!;
-  // Never send the last unit back — the region was just taken and must stay held.
-  const keep = 1;
+  // A Settlement this advance put under our Control keeps one unit to hold it;
+  // everywhere else the whole force may come back — p.31 makes the advance optional
+  // ("MAY move all or part"), and the reporter's case was exactly that: an open
+  // region they would rather not have occupied.
+  const keep = holdBackMinimum(state, d.to, owner);
   const sel: MoveSelection = { units: {}, leaders: 0, nazgul: 0, characters: back.characters ? [...back.characters] : [] };
   let moved = 0;
   const room = Math.max(0, unitCount(state, d.to) - keep);
@@ -920,6 +930,12 @@ export function resolveAdvanceHoldBack(state: GameState, back: MoveSelection | n
   if (moved === 0) return null;
   if (owner === 'fp') sel.leaders = Math.max(0, Math.min(back.leaders ?? 0, src.leaders));
   else sel.nazgul = Math.max(0, Math.min(back.nazgul ?? 0, src.nazgul));
+  // Pulling the whole Army back takes every Leader and Character with it — a Leader
+  // left in an empty region is illegal (p.26) and would just be swept off the board.
+  if (moved === unitCount(state, d.to)) {
+    if (owner === 'fp') sel.leaders = src.leaders; else sel.nazgul = src.nazgul;
+    for (const c of src.characters) if (characterSide(c) === owner && !sel.characters!.includes(c)) sel.characters!.push(c);
+  }
   moveSelectedBack(state, d.to, d.from, owner, sel);
   log(state, null, 'combat', `${owner === 'fp' ? 'Free Peoples' : 'Shadow'} keep ${moved} unit${moved === 1 ? '' : 's'} back in ${REGIONS[d.from]!.name ?? d.from}`);
   return d.from;

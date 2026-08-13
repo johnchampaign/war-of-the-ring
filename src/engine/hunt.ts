@@ -333,12 +333,16 @@ export function resolveCrebain(state: GameState, use: boolean): void {
 export function resolveMordorStep(state: GameState): void {
   const fs = state.fellowship;
   if (fs.mordor === null) return;
-  if (!fellowshipDieSkipsHuntBox(state)) state.hunt.fpDiceInBox += 1; // FP die enters the Hunt Box (unless "The Last Battle")
-  // Eye-tile damage on the Mordor Track = ALL dice in the Hunt Box, "including Free
-  // Peoples dice previously used" (p.43) — and the FP die for THIS move enters the
-  // box first. No 5-cap here: that cap is for rolled Hunt dice (p.41); in Mordor no
-  // roll happens. (Report: 2 Shadow dice + 1 FP die dealt 2 damage instead of 3.)
+  // Eye-tile damage on the Mordor Track = the dice in the Hunt Box, "including Free
+  // Peoples dice PREVIOUSLY used for moving the Fellowship during the same turn"
+  // (p.43). The Action die paying for THIS move is placed in the Hunt Box only after
+  // the Hunt is resolved (p.41 — a die already there gives the +1, and the rulebook's
+  // own example counts only earlier moves), so it must NOT count towards its own draw.
+  // (Report: 5 dice in the box dealt 6 damage; 2 dealt 3.) No 5-cap here: that cap is
+  // for rolled Hunt dice (p.41), and in Mordor no roll happens — so dice from earlier
+  // Fellowship moves this turn do add up. (Report: 2 Shadow + 1 FP die dealt 2, not 3.)
   const level = state.hunt.box + state.hunt.fpDiceInBox;
+  if (!fellowshipDieSkipsHuntBox(state)) state.hunt.fpDiceInBox += 1; // FP die enters the Hunt Box (unless "The Last Battle")
   // On the Mordor Track the tile is drawn automatically (no Hunt roll); record that.
   state.hunt.lastRoll = { level, bonus: 0, dice: [], rerolls: [], successes: level, mordor: true };
   beginHuntDraw(state, level, true);
@@ -356,13 +360,19 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
   log(state, null, 'hunt', `Hunt resolved; corruption ${fs.corruption}, hidden ${fs.hidden}`);
 }
 /** Re-prompt the huntDamage choice if damage remains AND the FP could still reduce it
- *  (a Companion to sacrifice or a reduction ability); otherwise finish. */
-function repromptOrFinish(state: GameState, damage: number, reveal: boolean): void {
+ *  (a Companion to sacrifice or a reduction ability); otherwise finish.
+ *  `casualty` marks that a Companion has already been eliminated for THIS Hunt —
+ *  p.42: "If the Free Peoples player takes a casualty, he must eliminate ONE
+ *  Companion… any excess damage must still be taken as Corruption", so no second
+ *  casualty is offered. Reduction abilities stay on the table, because p.42 also
+ *  says a newly appointed Guide "may be used immediately, if applicable". */
+function repromptOrFinish(state: GameState, damage: number, reveal: boolean, casualty = false): void {
   const fs = state.fellowship;
-  // Preserve the originating card's source across re-prompts.
-  const prev = (state.pendingChoice?.data ?? {}) as { source?: string };
-  if (damage > 0 && (fs.companions.length > 0 || huntReductionAvailable(state))) {
-    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, ...(prev.source ? { source: prev.source } : {}) } };
+  // Preserve the originating card's source (and any earlier casualty) across re-prompts.
+  const prev = (state.pendingChoice?.data ?? {}) as { source?: string; casualty?: boolean };
+  const spent = casualty || !!prev.casualty;
+  if (damage > 0 && ((!spent && fs.companions.length > 0) || huntReductionAvailable(state))) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, ...(spent ? { casualty: true } : {}), ...(prev.source ? { source: prev.source } : {}) } };
     return;
   }
   finishHunt(state, damage, reveal);
@@ -379,7 +389,7 @@ export function reduceHuntDamageBySeparate(state: GameState): void {
 /** Resolve the FP's Hunt-damage choice (PendingChoice 'huntDamage'). */
 export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide' | 'random' | 'reduceSeparate' | 'reduceReveal' | 'reduceCard', card?: string): void {
   const fs = state.fellowship;
-  const d = state.pendingChoice!.data as { damage: number; reveal: boolean };
+  const d = state.pendingChoice!.data as { damage: number; reveal: boolean; casualty?: boolean };
 
   // Gollum's active ability: reveal the Fellowship to reduce the damage by 1.
   // (Reveals in place mid-resolution — no figure-move/extra-Hunt here; minor deviation.)
@@ -407,15 +417,17 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
   // reduceHuntDamageBySeparate. It should not reach here.
 
   if (mode === 'corruption') { finishHunt(state, d.damage, d.reveal); return; } // take it all as Corruption
-  // guide / random: eliminate ONE Companion (its Level reduces the damage), then
-  // re-prompt so the FP may sacrifice MORE (stacking Levels) or take the rest as
-  // Corruption (rulebook p.42: "eliminate one or more Companions").
+  // guide / random: eliminate exactly ONE Companion for the whole Hunt (p.42 —
+  // "he must eliminate one Companion"; "any excess damage must still be taken as
+  // Corruption"). A second casualty is not a legal way to soak the remainder
+  // (player report: three Companions were spent on one tile).
+  if (d.casualty) throw new Error('Only one Companion may be eliminated per Hunt (p.42) — any remaining damage must be taken as Corruption.');
   if (fs.companions.length > 0) {
     const victim = mode === 'guide'
       ? (fs.companions.includes(fs.guide) ? fs.guide : fs.companions[0]!)
       : withRng(state, (rng) => rng.pick(fs.companions));
     const level = eliminateCompanionInline(state, victim);
-    repromptOrFinish(state, Math.max(0, d.damage - level), d.reveal);
+    repromptOrFinish(state, Math.max(0, d.damage - level), d.reveal, true);
   } else {
     finishHunt(state, d.damage, d.reveal);
   }

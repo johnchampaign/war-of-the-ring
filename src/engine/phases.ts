@@ -12,7 +12,7 @@ import { poolSize, rollPool } from './dice';
 import { checkMilitaryVictory, checkRingVictory } from './victory';
 import { combatStep } from './combat';
 import { pruneTableCards } from './persistent';
-import { armySide, sweepStrandedUnits } from './armies';
+import { armySide, sweepStrandedUnits, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { log } from './log';
 
@@ -88,7 +88,7 @@ const noDiceLeft = (state: GameState): boolean =>
 function sweepTableCards(state: GameState): void {
   pruneTableCards(
     state,
-    armySide,
+    characterWithArmy,
     (r) => { const n = REGIONS[r]?.nation; return n ? sideOfNation(n) : null; },
     (s, side, id) => {
       const deck = EVENT_BY_ID[id]?.deck === 'Character' ? 'character' : 'strategy';
@@ -100,6 +100,7 @@ function sweepTableCards(state: GameState): void {
 
 /** Run automatic phases; stop at the next phase that needs a player decision. */
 export function advance(state: GameState): void {
+  reindexBoardCharacters(state); // before sweepTableCards — its conditions read the index
   sweepTableCards(state);
   sweepStrandedUnits(state); // repair any illegal mixed-side region (see armies.ts)
   for (;;) {

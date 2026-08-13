@@ -565,15 +565,20 @@ any resulting siege resolve exactly as they always did), then raises an
 `advanceHoldBack` PendingChoice letting the winner send chosen figures back to the
 region it attacked from (`resolveAdvanceHoldBack`). Every "all or part" end state is
 reachable, without making the capture depend on an unanswered question.
-Offered only when it is a real decision — 2+ units forward
-(`advanceHoldBackAvailable`) — and **at least one unit always stays**: the ground was
-just taken, and a departing last unit would hand it straight back. The rearguard held
+Offered whenever it is a real decision (`advanceHoldBackAvailable`). Because "MAY move
+all or part" makes the advance **optional**, the winner may bring the **whole** Army
+back and leave the region it just won empty. The one place a unit must stay is a
+Settlement this advance put a Control marker on (`holdBackMinimum`): the capture is
+already applied, and an empty *captured* Settlement is a different rules situation than
+never having advanced. Pulling the whole Army back takes every Leader and Character
+with it — a Leader alone in an empty region is illegal (p.26). The rearguard held
 aside for the battle (p.28) is restored to the origin as before and is never part of
 this choice. The UI reuses the split picker (tick who stays forward; the rest march
-back); the AI keeps everything forward, which is the old behaviour.
-**Deviation:** advancing NOTHING is not offered — "all or part" is read as at least
-one figure, and declining entirely would un-capture a Settlement the battle log has
-already reported as taken. `scripts/probe-advance-holdback.mjs`.
+back), reached from the decision modal; the AI keeps everything forward.
+**Deviation:** only for a captured Settlement is declining the advance barred — see
+above. *(Both the missing option and the modal's single button were player reports:
+"the only option presented was keep the whole army forward… my choice would've been to
+hold all of them back.")* `scripts/probe-advance-holdback.mjs`.
 
 ---
 
@@ -666,6 +671,14 @@ already reported as taken. `scripts/probe-advance-holdback.mjs`.
   taken Companion is fully eliminated even if Level > damage (p.42).
 - **Taking a casualty**: FP eliminates one Companion — FP chooses to lose the
   Guide or a **random** Companion (SH draws a face-down counter) (p.42).
+  **Exactly ONE per Hunt.** p.42 says "he must eliminate one Companion" and that
+  "any excess damage must still be taken as Corruption", so a second casualty is not
+  a legal way to soak the remainder. The `huntDamage` choice carries a `casualty` flag
+  once one has been spent: the casualty options drop out of `legalActions` and the
+  engine refuses the action outright. Reduction *abilities* stay available after a
+  casualty, because p.42 also allows a newly appointed Guide's ability to "be used
+  immediately, if applicable". *(Player report: one tile ate Legolas, Gimli and
+  Meriadoc.)* `scripts/probe-hunt-casualty-mordor.mjs`.
 - **Multiple tiles** (Stronghold path + Balrog card etc.): resolve the
   reveal-causing tile fully first, then event tiles, then the Stronghold tile
   (p.41).
@@ -684,6 +697,14 @@ already reported as taken. `scripts/probe-advance-holdback.mjs`.
   roll): Eye damage = # Hunt-Box dice; advance one Mordor step **unless** a Stop
   icon (then stay). Must still be **Hidden** to advance; if Revealed, hide first
   (p.43).
+  Eye damage counts the Shadow dice in the box **plus Free Peoples dice "previously
+  used for moving the Fellowship during the same turn"** — the die paying for *this*
+  move is placed in the box only after the Hunt resolves (p.41, whose +1 example counts
+  only earlier moves), so it never counts towards its own draw. There is **no 5-cap**
+  here: that cap is on *rolled* Hunt dice (p.41) and in Mordor nothing is rolled.
+  *(Player reports: "5 dice in the box dealt 6 damage"; "an Eye for 3 damage although
+  there were only 2 dice in the box" — and, earlier, "2 Shadow + 1 FP die dealt 2".)*
+  `scripts/probe-hunt-casualty-mordor.mjs`.
 - If FP does **not** attempt to move/hide on the Mordor Track during Action
   Resolution, **+1 Corruption** automatically (p.43).
 - Companions can **never** separate on the Mordor Track; anything that would

@@ -473,6 +473,11 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // (Foul Stench: cancels the FP Leader re-roll) is its remaining value. Don't
       // burn it as a dead event (player report: "should have kept it for Combat").
       if (a.cardId === 'sh-char-22' && state.nations.rohan.active) return 1;
+      // Flocks of Crebain buys +1 on a Hunt ROLL, and on the Mordor Track no Hunt roll
+      // ever happens (p.43: the tile is drawn automatically) — so on the table there it
+      // is simply dead. Keep it for its combat half instead (player report: "SP played
+      // Flocks of Crebain while I was in Mordor (no effect)").
+      if (a.cardId === 'sh-char-16' && fs.mordor !== null) return 1;
       // Threats and Promises only bars the FP from advancing a PASSIVE Nation with a
       // Muster die — once every FP Nation is active it's a dead table card; keep it
       // for its combat half (Devilry of Orthanc). Same trap as Wormtongue (player

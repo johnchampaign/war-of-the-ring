@@ -469,6 +469,46 @@ export function liftSiegeIfAbandoned(state: GameState, id: RegionId): void {
   log(state, null, 'combat', `the siege of ${REGIONS[id]!.name ?? id} is lifted — its garrison returns to the field`);
 }
 
+/** The region where `char` stands WITH an Army of `side`, or null. A besieged
+ *  Character is with his Army inside the Stronghold, so the siege box counts — the
+ *  region's open field belongs to the besieger there, and asking `armySide` alone
+ *  reports the enemy (player report: "The Last Battle" was refused with Aragorn
+ *  holding Minas Morgul under siege). */
+export function characterWithArmy(state: GameState, char: string, side: Side): RegionId | null {
+  const id = state.characters.inPlay[char];
+  if (!id) return null;
+  const r = state.regions[id]; if (!r) return null;
+  if (r.siegeBox?.characters.includes(char)) {
+    return forceUnitCount(r.siegeBox) > 0 && forceSide(r.siegeBox) === side ? id : null;
+  }
+  return armySide(state, id) === side ? id : null;
+}
+/** Which side's units make up a Force (siege box or region), if any. */
+function forceSide(f: Force): Side | null {
+  for (const n of Object.keys(f.units) as Nation[]) {
+    if ((f.units[n]!.regular + f.units[n]!.elite) > 0) return sideOfNation(n);
+  }
+  return null;
+}
+
+/** State repair: rebuild `characters.inPlay` from where the figures actually are.
+ *  `regions[].characters` (plus a besieged Stronghold's `siegeBox`) is the truth; the
+ *  `inPlay` map is only an index — but Army moves, splits, post-battle advances and
+ *  retreats all carry Characters along by editing the region arrays, and several of
+ *  those paths never refreshed the index. A stale index is invisible on the board and
+ *  then quietly breaks whatever reads it: "The Last Battle" refused to play with
+ *  Aragorn besieged in Minas Morgul because the index still said Minas Tirith (player
+ *  report). Runs from advance() after every action, BEFORE the on-table card sweep
+ *  that reads it. Only rewrites entries for Characters actually found on the map —
+ *  Companions inside the Fellowship are indexed elsewhere and must not be touched. */
+export function reindexBoardCharacters(state: GameState): void {
+  for (const id of Object.keys(state.regions)) {
+    const r = state.regions[id]!;
+    for (const c of r.characters) if (state.characters.inPlay[c] !== id) state.characters.inPlay[c] = id;
+    for (const c of r.siegeBox?.characters ?? []) if (state.characters.inPlay[c] !== id) state.characters.inPlay[c] = id;
+  }
+}
+
 /** Merge a Force's figures INTO a region, additively.
  *  A returning garrison MUST be merged, never assigned: the open field can already
  *  hold friendly figures (the besieger having left, or a stale `besieged` flag with

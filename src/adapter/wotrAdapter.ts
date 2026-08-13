@@ -222,7 +222,12 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'huntDamage': {
         const fs = state.fellowship;
         const acts: WotrAction[] = [{ kind: 'huntDamage', mode: 'corruption' }];
-        if (fs.companions.length > 0) {
+        // ONE casualty per Hunt (p.42: "he must eliminate one Companion" — excess damage
+        // "must still be taken as Corruption"). Once one has been spent this Hunt, only
+        // the reduction abilities below remain (player report: the prompt kept offering
+        // the Guide until three Companions were gone).
+        const casualtySpent = !!(state.pendingChoice!.data as { casualty?: boolean } | undefined)?.casualty;
+        if (fs.companions.length > 0 && !casualtySpent) {
           acts.push({ kind: 'huntDamage', mode: 'guide' }, { kind: 'huntDamage', mode: 'random' });
         }
         // Guide damage-reduction abilities (−1 each): separate a Hobbit Guide, or
