@@ -248,13 +248,28 @@ export function separationDestinations(state: GameState, from: RegionId, maxMove
     const def = REGIONS[r]!;
     return !(def.settlement === 'Stronghold' && settlementController(state, r) === 'shadow' && !state.regions[r]!.besieged);
   };
+  // p.24: Companions "can enter or leave a region that contains Shadow units, but
+  // MUST STOP upon entering a region containing a Stronghold controlled by the Shadow
+  // player." The search used to expand straight through such a region, so a Companion
+  // could be sent PAST a Shadow Stronghold to somewhere beyond it (player report:
+  // separated to Dimrill Dale through Moria). A Shadow Stronghold is now a hard stop:
+  // reachable in itself, never a corridor.
+  const blocksFurther = (r: RegionId): boolean =>
+    REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow' && !state.regions[r]!.besieged;
   const out: RegionId[] = landable(from) ? [from] : [];
   const seen = new Set<RegionId>([from]);
   let layer: RegionId[] = [from], d = 0;
   while (layer.length && d < maxMove) {
     d++; const next: RegionId[] = [];
-    for (const r of layer) for (const a of REGIONS[r]!.adjacency) {
-      if (!seen.has(a)) { seen.add(a); next.push(a); if (landable(a)) out.push(a); }
+    for (const r of layer) {
+      // ...but only when the move ENTERED it. The rule is "must stop upon ENTERING";
+      // starting there is fine ("can enter or LEAVE a region that contains Shadow
+      // units"). Blocking the origin too left a Companion separating inside Moria with
+      // no legal destination at all — the 40-game soak caught it as a stall.
+      if (r !== from && blocksFurther(r)) continue; // movement ended here — expand no further
+      for (const a of REGIONS[r]!.adjacency) {
+        if (!seen.has(a)) { seen.add(a); next.push(a); if (landable(a)) out.push(a); }
+      }
     }
     layer = next;
   }
