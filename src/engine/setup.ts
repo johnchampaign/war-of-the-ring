@@ -32,9 +32,12 @@ export function createGame({ seed }: SetupOptions): GameState {
       control: null,        // null = original owner (def.nation's side)
       besieged: false,
     };
-    if (s && def.nation) {
+    // Osgiliath belongs to no Nation but starts with a Gondor garrison, so the
+    // figures follow `setupNation` where the region itself has no nation.
+    const garrison = def.setupNation ?? def.nation;
+    if (s && garrison) {
       const reg = s.regular ?? 0, el = s.elite ?? 0;
-      if (reg || el) region.units[def.nation] = { regular: reg, elite: el };
+      if (reg || el) region.units[garrison] = { regular: reg, elite: el };
       region.leaders = s.leader ?? 0;
       region.nazgul = s.nazgul ?? 0;
     }

@@ -124,12 +124,16 @@ function inMordor({ box, fpDice }) {
   check('The Last Battle is playable', canPlayCard(s, 'fp-str-01'));
 
   // It must NOT be playable inside a Free Peoples Nation ("outside of a Free Peoples
-  // Nation") — the reporter's South Ithilien / Osgiliath attempts were correctly refused.
+  // Nation"). Minas Tirith is Gondor; OSGILIATH IS NOT (see probe-osgiliath-neutral) —
+  // an earlier answer to a player claimed it was, and the reporter corrected us.
   const t = startGame(createGame({ seed: 3 }));
-  t.regions['osgiliath'].units = { gondor: { regular: 2, elite: 0 } };
+  t.regions['minas-tirith'].characters = ['aragorn'];
+  t.characters.inPlay['aragorn'] = 'minas-tirith';
+  check('but not in Minas Tirith — Gondor is a Free Peoples Nation', !canPlayCard(t, 'fp-str-01'));
+  t.regions['minas-tirith'].characters = [];
   t.regions['osgiliath'].characters = ['aragorn'];
   t.characters.inPlay['aragorn'] = 'osgiliath';
-  check('but not in Osgiliath — Gondor is a Free Peoples Nation', !canPlayCard(t, 'fp-str-01'));
+  check('but IS playable in Osgiliath — a ruin outside Gondor\'s border', canPlayCard(t, 'fp-str-01'));
 }
 
 {

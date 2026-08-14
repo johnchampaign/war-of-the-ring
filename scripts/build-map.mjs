@@ -49,6 +49,14 @@ const NATIONS = {
 // [nation, settlement, {regular,elite,leader,nazgul} setup]  — setup omitted = none.
 // settlement ∈ Town | City | Stronghold | Fortification.  VP derived below.
 const S = (nation, settlement, setup) => ({ nation, settlement, setup: setup || null });
+// A Settlement that belongs to NO Nation but starts garrisoned by one. Osgiliath is
+// the only case in the base game: the ruin of a Gondor city, drawn OUTSIDE Gondor's
+// border on the map, so it is not a Gondor region even though 2 Gondor Regulars
+// start there (Almanac, "Challenge of the King" and "House of the Stewards": "Note
+// that Osgiliath is a ruin of a Gondor city, and so is not a Gondor region (even
+// though Gondor units start the game in this region)"). `setupNation` places the
+// garrison; `nation: null` keeps every nation-of-the-region rule off it.
+const NEUTRAL = (setupNation, settlement, setup) => ({ nation: null, setupNation, settlement, setup: setup || null });
 const SETTLEMENTS = {
   // Dwarves (p.16)
   'erebor':        S('dwarves',  'Stronghold',   { regular: 1, elite: 2, leader: 1 }),
@@ -68,7 +76,8 @@ const SETTLEMENTS = {
   'minas-tirith':  S('gondor',   'Stronghold',   { regular: 3, elite: 1, leader: 1 }),
   'dol-amroth':    S('gondor',   'Stronghold',   { regular: 3 }),
   'pelargir':      S('gondor',   'City',         { regular: 1 }),
-  'osgiliath':     S('gondor',   'Fortification',{ regular: 2 }),
+  'osgiliath':     NEUTRAL('gondor', 'Fortification',{ regular: 2 }), // NOT a Gondor region — see NEUTRAL above
+
   'lossarnach':    S('gondor',   'Town'),
   'lamedon':       S('gondor',   'Town'),
   // The North (p.16)
@@ -155,6 +164,7 @@ for (const [id, node] of Object.entries(nodes)) {
   regions[id] = {
     name: node.name,
     nation: s ? s.nation : ns ? ns.nation : (WILDERNESS_NATION[id] || null),
+    ...(s?.setupNation ? { setupNation: s.setupNation } : {}),
     settlement: s ? s.settlement : null,
     vp: s ? VP[s.settlement] : 0,
     setup: s ? s.setup : ns ? ns.setup : null,

@@ -14,7 +14,7 @@
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
 import { getHandler, canPlayCard } from '../src/engine/handlers/registry.ts';
-import { moveArmy, sweepStrandedUnits, unitCount } from '../src/engine/armies.ts';
+import { moveArmy, sweepStrandedUnits, unitCount, musterBlockReason } from '../src/engine/armies.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -111,6 +111,52 @@ function board() {
   const regions = [...new Set(targets.map((t) => t.region))];
   check('the Fords of Isen is NOT offered', !regions.includes('fords-of-isen'), regions.join(', '));
   check('real Rohan Settlements are offered', regions.includes('edoras'));
+}
+
+// --- 5. "Why can't I muster here?" ------------------------------------------------
+// Report: "I can't muster in Lorien while it is empty, but it is still under control
+// of the Free People's player so I should be able to." Emptiness is never the reason —
+// but three real blockers are invisible on the board, so clicking your own Settlement
+// now names the one that applies instead of doing nothing.
+{
+  console.log('\n=== a refused muster explains itself ===');
+  const empty = () => {
+    const s = board();
+    const r = s.regions['lorien'];
+    r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = []; delete r.siegeBox; r.besieged = false;
+    return s;
+  };
+  const s = empty();
+  s.nations.elves.step = 0; // At War
+  check('an empty, At-War, friendly Lorien is mustered in freely', musterBlockReason(s, 'lorien', 'fp') === null,
+    String(musterBlockReason(s, 'lorien', 'fp')));
+
+  const notAtWar = empty();
+  notAtWar.nations.elves.step = 2;
+  check('not At War is named', /not At War/.test(musterBlockReason(notAtWar, 'lorien', 'fp') ?? ''),
+    String(musterBlockReason(notAtWar, 'lorien', 'fp')));
+
+  const captured = empty();
+  captured.nations.elves.step = 0;
+  captured.regions['lorien'].control = 'shadow';
+  check('an enemy Control marker is named', /enemy control/.test(musterBlockReason(captured, 'lorien', 'fp') ?? ''),
+    String(musterBlockReason(captured, 'lorien', 'fp')));
+
+  const drained = empty();
+  drained.nations.elves.step = 0;
+  drained.reinforcements.elves.regular = 0; drained.reinforcements.elves.elite = 0;
+  check('an empty reinforcement pool is named', /reinforcements/.test(musterBlockReason(drained, 'lorien', 'fp') ?? ''),
+    String(musterBlockReason(drained, 'lorien', 'fp')));
+
+  const besieged = empty();
+  besieged.nations.elves.step = 0;
+  besieged.regions['lorien'].besieged = true;
+  check('a siege is named', /siege/.test(musterBlockReason(besieged, 'lorien', 'fp') ?? ''),
+    String(musterBlockReason(besieged, 'lorien', 'fp')));
+
+  check('Osgiliath is named a Fortification', /Fortification/.test(musterBlockReason(s, 'osgiliath', 'fp') ?? ''),
+    String(musterBlockReason(s, 'osgiliath', 'fp')));
+  check('a Shadow Stronghold says nothing to the Free Peoples', musterBlockReason(s, 'barad-dur', 'fp') === null);
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

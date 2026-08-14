@@ -1193,7 +1193,8 @@
     },
     "osgiliath": {
       "name": "Osgiliath",
-      "nation": "gondor",
+      "nation": null,
+      "setupNation": "gondor",
       "settlement": "Fortification",
       "vp": 0,
       "setup": {

@@ -190,6 +190,38 @@ export function canMoveArmy(state: GameState, from: RegionId, to: RegionId, side
 
 const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** Why `side` may NOT muster in the Settlement at `id`, or null if it can. Mirrors
+ *  the gates in `recruit`/`recruitRegions`; the UI surfaces the string when a player
+ *  clicks one of their own Settlements and no muster is on offer, so a refusal
+ *  explains itself instead of looking like a bug. A player reported "I can't muster
+ *  in Lorien while it is empty" — every rule that can stop you there is invisible on
+ *  the board (the Nation's Political Track position, an enemy Control marker left
+ *  behind by a capture, an exhausted reinforcement pool), so the game now says which.
+ *  Rulebook p.26–27. Returns null for regions that are none of `side`'s business. */
+export function musterBlockReason(state: GameState, id: RegionId, side: Side): string | null {
+  const def = REGIONS[id]; if (!def) return null;
+  const name = def.name ?? id;
+  if (def.settlement === 'Fortification') {
+    return `${name} is a Fortification, not a Settlement — troops can never be mustered there (p.26).`;
+  }
+  const nation = def.nation;
+  if (!def.settlement || !nation || sideOfNation(nation) !== side) return null; // not yours to muster in
+  if (settlementController(state, id) !== side) {
+    return `${name} is under enemy control — you cannot muster in a Settlement the enemy controls (p.27). Retake it first.`;
+  }
+  if (armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) return `There is an enemy Army in ${name}.`;
+  if (state.regions[id]!.besieged) return `${name} is under siege — no troops can be mustered into a besieged Stronghold (p.27).`;
+  if (!isAtWar(state, nation)) {
+    return `${cap1(nation)} is not At War, so it cannot muster (p.26). Advance ${cap1(nation)} to “At War” on the Political Track first.`;
+  }
+  if (unitCount(state, id) >= STACKING_LIMIT) return `${name} already holds ${STACKING_LIMIT} Army units — the stacking limit (p.26).`;
+  const pool = state.reinforcements[nation] as { regular: number; elite: number };
+  if (pool.regular < 1 && pool.elite < 1) {
+    return `${cap1(nation)} has no units left in reinforcements — every figure is already on the board or lost (p.27).`;
+  }
+  return null;
+}
+
 /** Why `side` may NOT move the whole Army from `from` to `to`, or null if the move
  *  is legal. Single source of truth — canMoveArmy and the legal-action enumerator
  *  both derive from this, and the UI surfaces the string so a refused merge/move

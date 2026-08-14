@@ -78,7 +78,10 @@ export function describeAction(a: WotrAction): string {
     case 'skipDie': return `Discard a ${a.face} die`;
     case 'pass': return 'Pass';
     case 'playCombatCard': return a.cardId ? `Combat card: ${cardName(a.cardId)}` : 'No combat card';
-    case 'advanceHoldBack': return a.back ? 'Keep some figures back' : 'Keep the whole Army forward';
+    // The bare action (no `back`) is the button that OPENS the split picker, so it
+    // must not promise "the whole Army forward" — that reads as a decision already
+    // made, and the picker it opens then looked like a stray second pop-up.
+    case 'advanceHoldBack': return a.back ? 'Keep some figures back' : 'Choose who stays forward…';
     case 'chooseCasualties': return a.plan === 'regularsFirst' ? 'Lose Regulars first' : 'Reduce Elites first';
     case 'casualtyStep': {
       const n = a.nation.charAt(0).toUpperCase() + a.nation.slice(1);

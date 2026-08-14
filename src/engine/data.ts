@@ -11,6 +11,11 @@ import type { Nation, Side, Deck, DieFace } from './types';
 export interface RegionDef {
   name: string;
   nation: Nation | null;
+  /** Whose figures the `setup` block places, when the region belongs to no Nation.
+   *  Osgiliath is the only case: a ruined Gondor city that sits OUTSIDE Gondor's
+   *  border, yet starts the game garrisoned by 2 Gondor Regulars. Defaults to
+   *  `nation` everywhere else. */
+  setupNation?: Nation;
   settlement: 'Town' | 'City' | 'Stronghold' | 'Fortification' | null;
   vp: number;
   setup: { regular?: number; elite?: number; leader?: number; nazgul?: number } | null;

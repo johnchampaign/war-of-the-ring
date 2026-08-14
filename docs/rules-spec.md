@@ -23,6 +23,20 @@ base game, 2-player (Free Peoples = **FP**, Shadow = **SH**). Expansions and
   the engine's `regions`/`adjacency` data is transcribed from it.*
 - **Nations** (8): FP = Dwarves, Elves, Gondor, The North, Rohan; SH = Sauron,
   Isengard, Southrons & Easterlings (p.9). Each region belongs to ≤1 nation.
+  A region's nation is the thick coloured border on the map (p.9), **not** who
+  garrisons it. **Osgiliath is not a Gondor region** — it is the ruin of a Gondor
+  city drawn outside Gondor's border, and neither are North/South Ithilien
+  (Almanac, notes to *Challenge of the King* and *House of the Stewards*: "Note
+  that Osgiliath is a ruin of a Gondor city, and so is not a Gondor region (even
+  though Gondor units start the game in this region)"). Engine: `nation: null` +
+  `setupNation: 'gondor'` in `assets/map.json`, so the 2 Gondor Regulars still set
+  up there while every region-belongs-to-a-Nation rule (political activation on
+  entry, the not-At-War border rule, "a Gondor region" card conditions, *The Last
+  Battle*'s "outside of a Free Peoples Nation") treats it as neutral ground.
+  **Attacking** the garrison still rouses Gondor — that trigger is "an Army
+  containing units of that Nation is attacked" (p.35), which reads the units, not
+  the ground. The other Fortification, **Fords of Isen, IS a Rohan region**.
+  Player report (2026-08-13) corrected us on this; probe: `probe-osgiliath-neutral`.
 - **Settlements**: Town, City, Stronghold. **Fortifications**: Osgiliath, Fords
   of Isen (p.10–11). City = 1 VP to the opponent if captured; Stronghold = 2 VP
   (p.11, p.44).

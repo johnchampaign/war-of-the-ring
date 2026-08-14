@@ -33,7 +33,7 @@ import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction, dieOptions, describeAction, eventChoiceInModal } from './actionText';
-import { moveBlockReason } from '../engine/armies';
+import { moveBlockReason, musterBlockReason } from '../engine/armies';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { separationActivates } from '../engine/fellowship';
 import { REGIONS, levelOf } from '../engine/data';
@@ -361,6 +361,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (selected && id !== selected && g.view && REGIONS[selected]?.adjacency.includes(id)) {
       const reason = moveBlockReason(g.view, selected, id, g.you as Side);
       if (reason) setBlockMsg(reason);
+    } else if (g.view && g.you && !musterTargets.has(id)) {
+      // Clicked one of your own Settlements and it offered nothing at all: say why it
+      // can't be mustered in (player report: "I can't muster in Lorien while it is
+      // empty"). Every blocker — the Political Track, an enemy Control marker, an
+      // empty reinforcement pool — is otherwise invisible or easy to misread.
+      const reason = musterBlockReason(g.view, id, g.you as Side);
+      if (reason) setBlockMsg(reason);
     }
     clearMove();
   }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets]);
@@ -623,7 +630,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           </div>
         </div>
       )}
-      <div style={{ display: peekBoard ? 'none' : 'contents' }}>
+      {/* Hidden while the split picker is open: the End of Battle hold-back choice
+          OPENS the picker and leaves its own pendingChoice standing, so both modals
+          were live at zIndex 50 — and this one, rendered later, painted OVER the
+          picker. The player saw a second pop-up stranded behind the first and the
+          game was unresolvable (player report). The picker is now the only thing
+          on screen once it opens; cancelling it brings this back. */}
+      <div style={{ display: (peekBoard || moveDraft) ? 'none' : 'contents' }}>
         {/* onDecisionAction, not submit: the End of Battle "keep figures back?" call is
             a decision-modal choice, and routing it straight to submit meant its only
             button was "Keep the whole Army forward" — the split picker was unreachable
