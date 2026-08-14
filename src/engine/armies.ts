@@ -501,6 +501,21 @@ export function liftSiegeIfAbandoned(state: GameState, id: RegionId): void {
   log(state, null, 'combat', `the siege of ${REGIONS[id]!.name ?? id} is lifted — its garrison returns to the field`);
 }
 
+/** State repair: no besieged region may sit with no besieger in its open field.
+ *  `liftSiegeIfAbandoned` already runs at every seam that vacates a region, but a
+ *  siege left standing over an empty field is invisible on the board (the garrison
+ *  sits in the box, so the Stronghold LOOKS empty) and silently blocks mustering
+ *  there (p.27) — the shape of a player report we could not otherwise reproduce
+ *  ("I can't muster in Lorien while it is empty, but it is still under control of
+ *  the Free People's player"). One cheap sweep from advance() repairs the state
+ *  whatever path produced it. Skipped while a battle is live: mid-combat the field
+ *  can be momentarily empty between casualty steps, and finishCombat owns the siege
+ *  bookkeeping there. */
+export function sweepAbandonedSieges(state: GameState): void {
+  if (state.pendingCombat) return;
+  for (const id of Object.keys(state.regions)) liftSiegeIfAbandoned(state, id);
+}
+
 /** The region where `char` stands WITH an Army of `side`, or null. A besieged
  *  Character is with his Army inside the Stronghold, so the siege box counts — the
  *  region's open field belongs to the besieger there, and asking `armySide` alone

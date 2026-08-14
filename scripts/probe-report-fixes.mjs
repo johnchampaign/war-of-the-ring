@@ -14,7 +14,7 @@
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
 import { getHandler, canPlayCard } from '../src/engine/handlers/registry.ts';
-import { moveArmy, sweepStrandedUnits, unitCount, musterBlockReason } from '../src/engine/armies.ts';
+import { moveArmy, sweepStrandedUnits, unitCount, musterBlockReason, sweepAbandonedSieges } from '../src/engine/armies.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -157,6 +157,41 @@ function board() {
   check('Osgiliath is named a Fortification', /Fortification/.test(musterBlockReason(s, 'osgiliath', 'fp') ?? ''),
     String(musterBlockReason(s, 'osgiliath', 'fp')));
   check('a Shadow Stronghold says nothing to the Free Peoples', musterBlockReason(s, 'barad-dur', 'fp') === null);
+}
+
+// --- 6. a siege with nobody besieging it is over ----------------------------------
+// A besieged Stronghold whose besieger is gone looks EMPTY on the board (its garrison
+// is in the siege box) and quietly refuses musters. Whatever path leaves that behind,
+// one sweep per state transition puts the garrison back on the field.
+{
+  console.log('\n=== an abandoned siege is swept up ===');
+  const state = board();
+  const r = state.regions['lorien'];
+  r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = [];
+  r.besieged = true;
+  r.siegeBox = { units: { elves: { regular: 1, elite: 2 } }, leaders: 1, nazgul: 0, characters: [] };
+  sweepAbandonedSieges(state);
+  check('the siege is lifted', !r.besieged && !r.siegeBox);
+  check('the garrison is back on the field', unitCount(state, 'lorien') === 3, String(unitCount(state, 'lorien')));
+  check('and its Leader came with it', r.leaders === 1);
+
+  // A LIVE siege is untouched: the besieger still holds the field.
+  const held = board();
+  const h = held.regions['lorien'];
+  h.units = { sauron: { regular: 4, elite: 0 } };
+  h.besieged = true;
+  h.siegeBox = { units: { elves: { regular: 1, elite: 2 } }, leaders: 1, nazgul: 0, characters: [] };
+  sweepAbandonedSieges(held);
+  check('a real siege carries on', h.besieged && !!h.siegeBox);
+
+  // Mid-battle the field can be momentarily empty — never sweep then.
+  const mid = board();
+  const m = mid.regions['lorien'];
+  m.units = {}; m.besieged = true;
+  m.siegeBox = { units: { elves: { regular: 1, elite: 2 } }, leaders: 0, nazgul: 0, characters: [] };
+  mid.pendingCombat = { to: 'lorien', from: 'lorien' };
+  sweepAbandonedSieges(mid);
+  check('a live battle is left alone', m.besieged && !!m.siegeBox);
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

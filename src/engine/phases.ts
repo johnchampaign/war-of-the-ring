@@ -12,7 +12,7 @@ import { poolSize, rollPool } from './dice';
 import { checkMilitaryVictory, checkRingVictory } from './victory';
 import { combatStep } from './combat';
 import { pruneTableCards } from './persistent';
-import { armySide, sweepStrandedUnits, reindexBoardCharacters, characterWithArmy } from './armies';
+import { armySide, sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { log } from './log';
 
@@ -103,6 +103,7 @@ export function advance(state: GameState): void {
   reindexBoardCharacters(state); // before sweepTableCards — its conditions read the index
   sweepTableCards(state);
   sweepStrandedUnits(state); // repair any illegal mixed-side region (see armies.ts)
+  sweepAbandonedSieges(state); // a siege with no besieger left in the field is over (see armies.ts)
   for (;;) {
     if (state.winner) { state.phase = 'gameOver'; return; }
     if (state.pendingChoice) return;              // await the choice owner
