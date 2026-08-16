@@ -245,6 +245,9 @@ export interface PendingCombat {
   /** Corsairs of Umbar: "The attacking Shadow Army cannot cease the attack" — the
    *  continue/cease decision is skipped and each round presses on automatically. */
   noCease?: boolean;
+  /** Great Host's post-casualty 2:1 automatic hit has been evaluated THIS round
+   *  (the onslaught step is re-entered after its casualty prompt resolves). */
+  greatHostDone?: boolean;
   /** The White Rider battle-start choice: asked once; true if the FP forfeited
    *  Gandalf the White's Leadership to negate all Nazgûl Leadership this battle. */
   whiteRiderAsked?: boolean;

@@ -244,10 +244,11 @@ export function separationRange(state: GameState, id: CharacterId, opts: { extra
  *  Stronghold. Includes `from` itself (a move of 0). For the board-click destination
  *  choice when separating a Companion (computed after it's removed from the Box). */
 export function separationDestinations(state: GameState, from: RegionId, maxMove: number): RegionId[] {
-  const landable = (r: RegionId): boolean => {
-    const def = REGIONS[r]!;
-    return !(def.settlement === 'Stronghold' && settlementController(state, r) === 'shadow' && !state.regions[r]!.besieged);
-  };
+  // p.24 permits ENTERING the Shadow-Stronghold region — the figure merely stops
+  // there (blocksFurther below). Forbidding the landing as well was our own
+  // over-restriction, now lifted so a Companion may end its separation in e.g. Moria,
+  // exactly as at the table.
+  const landable = (_r: RegionId): boolean => true;
   // p.24: Companions "can enter or leave a region that contains Shadow units, but
   // MUST STOP upon entering a region containing a Stronghold controlled by the Shadow
   // player." The search used to expand straight through such a region, so a Companion

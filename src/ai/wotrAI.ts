@@ -672,7 +672,12 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         // in the Fellowship (they absorb more Hunt damage) and as separate agents.
         return adds.reduce((best, a) => (levelOf(a.companion!) < levelOf(best.companion!) ? a : best), adds[0]!);
       }
-      const settle = moves.find((a) => { const d = REGIONS[a.target!]!; return (d.settlement === 'City' || d.settlement === 'Stronghold') && !!d.nation && state.nations[d.nation as Nation]?.step > 0; });
+      // The rouse-target filter must demand a FREE PEOPLES Settlement. It only
+      // checked "Stronghold + nation not At War", which was harmless while Shadow
+      // Strongholds were unreachable — the moment the p.24 fix made them legal
+      // landing spots, the AI began separating Companions INTO Dol Guldur and Moria
+      // (measured: 4 of 19 placements over 100 games), mistaking them for targets.
+      const settle = moves.find((a) => { const d = REGIONS[a.target!]!; return (d.settlement === 'City' || d.settlement === 'Stronghold') && !!d.nation && FP.has(d.nation) && settlementCtrl(state, a.target!) !== 'shadow' && state.nations[d.nation as Nation]?.step > 0; });
       return settle ?? moves[0] ?? legal[0]!;
     }
     case 'combatCard': {

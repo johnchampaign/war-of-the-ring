@@ -63,3 +63,20 @@ alter table dbf_games     enable row level security;
 alter table dbf_snapshots enable row level security;
 alter table dbf_messages  enable row level security;
 alter table dbf_reports   enable row level security;
+
+-- Move-receipt timestamps for the game log (feature F, 2026-08-15).
+-- One row per applied move: log_seq is the highest engine-log seq present after
+-- that move, stamped with the server's receipt time. Clients map each log entry
+-- to the FIRST row with log_seq >= entry.seq (times are monotonic in seq). The
+-- engine stays clock-free — this is transport metadata, never game state.
+-- Framework-shaped (built on GameLogEntry.seq): candidate to upstream into the
+-- framework's schema.sql.
+create table if not exists dbf_log_times (
+  game_id     text not null references dbf_games(game_id) on delete cascade,
+  log_seq     integer not null,
+  seat        text,
+  created_at  timestamptz not null default now(),
+  primary key (game_id, log_seq)
+);
+create index if not exists dbf_log_times_game on dbf_log_times(game_id, log_seq);
+alter table dbf_log_times enable row level security;

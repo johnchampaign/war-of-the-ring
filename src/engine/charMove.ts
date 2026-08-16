@@ -33,26 +33,45 @@ export function availableNazgul(state: GameState, from: RegionId, excl?: CharMov
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 const enemyOf = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 
-/** Region-step distance from→to (BFS over adjacency), or Infinity if unreachable. */
-function regionDistance(from: RegionId, to: RegionId): number {
+/** Region-step distance from→to (BFS over adjacency), or Infinity if unreachable.
+ *  `stops` marks regions a WALKING figure may enter but not leave — p.24: a Companion
+ *  "must stop upon entering a region containing a Stronghold controlled by the Shadow
+ *  player". The engine had this exactly backwards for Character-die moves: plain BFS
+ *  let a Companion path THROUGH Moria while canLand forbade LANDING there; RAW allows
+ *  the landing and forbids the pass-through. (Fliers pass `stops = null`.) */
+function regionDistance(from: RegionId, to: RegionId, stops: ((r: RegionId) => boolean) | null = null): number {
   if (from === to) return 0;
   const seen = new Set([from]);
   let layer = [from], d = 0;
   while (layer.length) {
     d++;
     const next: RegionId[] = [];
-    for (const r of layer) for (const adj of REGIONS[r]?.adjacency ?? []) {
-      if (adj === to) return d;
-      if (!seen.has(adj)) { seen.add(adj); next.push(adj); }
+    for (const r of layer) {
+      if (stops && r !== from && stops(r)) continue; // entered a stop-region earlier: go no further
+      for (const adj of REGIONS[r]?.adjacency ?? []) {
+        if (adj === to) return d;
+        if (!seen.has(adj)) { seen.add(adj); next.push(adj); }
+      }
     }
     layer = next;
   }
   return Infinity;
 }
+/** The p.24 hard stop for walking Companions: a Shadow-controlled, unbesieged
+ *  Stronghold region. Nazgûl/Minions never use it (they may not enter FP Strongholds
+ *  at all — the canLand rule — and Nazgûl fly besides). */
+function companionStop(state: GameState) {
+  return (r: RegionId): boolean =>
+    REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow' && !state.regions[r]!.besieged;
+}
 
-/** A character/Nazgûl of `side` may not land in an enemy-controlled Stronghold
- *  unless it's under siege by that side (a besieged Stronghold is enterable). */
+/** Whether a figure may END a move in `to`. The two sides' Stronghold rules differ
+ *  (p.24) and were wrongly shared: a SHADOW figure may not enter an FP-controlled
+ *  Stronghold unless besieged — a genuine prohibition — while an FP Companion MAY
+ *  enter a Shadow Stronghold region; it merely must STOP there (handled by the
+ *  distance search), so landing is legal. */
 function canLand(state: GameState, to: RegionId, side: Side): boolean {
+  if (side === 'fp') return true; // Companions land anywhere they can reach; the stop rule limits reach, not landing
   const def = REGIONS[to]!;
   if (def.settlement === 'Stronghold' && settlementController(state, to) === enemyOf(side) && !state.regions[to]!.besieged) return false;
   return true;
@@ -95,7 +114,8 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
   if (from === to || !REGIONS[to]) return false;
   const range = rangeOf(state, char, from);
   if (range <= 0) return false;
-  if (regionDistance(from, to) > range) return false;
+  const stops = side === 'fp' ? companionStop(state) : null; // walking Companions stop at Shadow Strongholds (p.24)
+  if (regionDistance(from, to, stops) > range) return false;
   if (!canLand(state, to, side)) return false;
   const src = state.regions[from]!, dst = state.regions[to]!;
 
@@ -134,7 +154,9 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
     if (!COMPANION_SET.has(c) || !src.characters.includes(c)) return false;
     range = Math.max(range, rangeOf(state, c, from));
   }
-  if (range <= 0 || regionDistance(from, to) > range) return false;
+  // Companion GROUPS walk too: the p.24 Shadow-Stronghold stop applies (side is
+  // always 'fp' here — the guard above rejects anything else).
+  if (range <= 0 || regionDistance(from, to, companionStop(state)) > range) return false;
   if (!canLand(state, to, side)) return false;
   const dst = state.regions[to]!;
   for (const c of chars) {
@@ -183,10 +205,11 @@ export function remainingCharMoves(state: GameState, side: Side, excl?: CharMove
 export function characterDestinations(state: GameState, side: Side, char: string, from: RegionId): RegionId[] {
   const range = rangeOf(state, char, from);
   if (range <= 0) return [];
+  const stops = side === 'fp' ? companionStop(state) : null;
   const out: RegionId[] = [];
   for (const to of Object.keys(state.regions)) {
     if (to === from) continue;
-    if (regionDistance(from, to) <= range && canLand(state, to, side)) out.push(to);
+    if (regionDistance(from, to, stops) <= range && canLand(state, to, side)) out.push(to);
   }
   return out;
 }
@@ -212,10 +235,14 @@ export function characterMoveOptions(state: GameState, side: Side, cap = 18, exc
     // A separated Companion (small Level range) may move to ANY region in range (RAW);
     // Nazgûl/Minions (fly / range ≤3 but many destinations) use the restricted set.
     const candidates: Iterable<RegionId> = isCompanion(p.char) ? allRegions : restricted;
+    // Same stop-aware distance the APPLY path uses (moveCharacter), or this offers
+    // walks through Moria/Morannon that the engine then refuses — the soak caught
+    // exactly that (offer/apply disagreement) the moment the stop rule was added.
+    const stops = isCompanion(p.char) ? companionStop(state) : null;
     for (const to of candidates) {
       if (out.length >= cap) return out;
       if (to === p.from) continue;
-      if (regionDistance(p.from, to) <= range && canLand(state, to, side)) out.push({ char: p.char, from: p.from, to });
+      if (regionDistance(p.from, to, stops) <= range && canLand(state, to, side)) out.push({ char: p.char, from: p.from, to });
     }
   }
   return out;

@@ -137,14 +137,15 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   });
   // AUTOMATIC hits, which no die shows. Record them, or the line reads "[5 6 1 1 6]
   // on 6+ re-roll [6 4 2] -> 4 hits" when the dice justify only three, and a player
-  // reasonably reports the count as broken (it was Great Host's free hit).
+  // reasonably reports the count as broken.
+  // NB Great Host (bonusHitsIfOutnumber) does NOT belong here: its text times the
+  // 2:1 comparison "after removing casualties from the Combat roll and Leader
+  // re-roll", so it resolves in the round machine's post-casualty step. Evaluating
+  // it mid-roll was wrong in BOTH directions (own casualties can drop the owner
+  // below 2:1; enemy casualties can bring them within it) — the earlier spec note
+  // claiming the mid-roll timing was "strictly conservative" was mistaken.
   let auto = 0;
   if ((ownMods.bonusHitsIfAny ?? 0) > 0 && hits > 0) auto += ownMods.bonusHitsIfAny!;
-  // Compare against the enemy FORCE, not the enemy region: in a siege the region
-  // holds the besieger, so measuring it compared an army with ITSELF (the same
-  // mistake that mis-aimed pre-combat attacks).
-  const foe = enemyForce ?? state.regions[enemyRegion]!;
-  if ((ownMods.bonusHitsIfOutnumber ?? 0) > 0 && forceUnitCount(own) >= 2 * Math.max(1, forceUnitCount(foe))) auto += ownMods.bonusHitsIfOutnumber!;
   if (auto > 0 && roll) roll.auto = (roll.auto ?? 0) + auto;
   return hits + auto;
 }
@@ -1155,6 +1156,7 @@ export function combatStep(state: GameState): void {
         log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk)}; defender ${fmt(dRoll, defHits, def)}`,
           { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
         pc.attackerCard = null; pc.defenderCard = null;
+        pc.greatHostDone = false; // fresh cards next round -> fresh post-casualty evaluation
         pc.atkCardCost = undefined; pc.defCardCost = undefined; // costs are per-round, like the cards
         pc.step = 'attackerCasualties'; continue;
       }
@@ -1200,6 +1202,37 @@ export function combatStep(state: GameState): void {
           state.pendingChoice = { owner: side, kind: 'combatCardCost',
             data: { card: due.card, kind: due.vc.kind, min: due.range.min, max: due.range.max, postCasualty: true } };
           return;
+        }
+        // Great Host ("score one automatic hit if, AFTER removing casualties from the
+        // Combat roll and Leader re-roll, your Army units are at least twice as many
+        // as the enemy Army units"): the comparison uses the post-casualty counts on
+        // both sides, and the hit is absorbed like any other (per-casualty choice).
+        // greatHostDone latches per round so a casualty prompt's return trip through
+        // this step cannot award it twice.
+        if (!pc.greatHostDone) {
+          pc.greatHostDone = true;
+          for (const side of [pc.attacker, pc.defender] as const) {
+            const card = side === pc.attacker ? pc.attackerCard : pc.defenderCard;
+            if (!card) continue;
+            const ctx = { ownCharacters: (side === pc.attacker ? atkForce(state, pc) : defForce(state, pc)).characters, cost: side === pc.attacker ? pc.atkCardCost : pc.defCardCost };
+            const mods = combatModsFor(card, ctx) ?? EMPTY_MODS;
+            if (!(mods.bonusHitsIfOutnumber ?? 0)) continue;
+            const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
+            const foe = side === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
+            const foeSide = side === pc.attacker ? pc.defender : pc.attacker;
+            if (forceUnitCount(foe) === 0) continue;
+            if (forceUnitCount(own) >= 2 * Math.max(1, forceUnitCount(foe))) {
+              log(state, null, 'combat', `Great Host: outnumbering 2:1 after casualties — one automatic hit`);
+              const left = absorbForced(state, foe, foeSide, mods.bonusHitsIfOutnumber!);
+              if (meaningfulForceCasualty(foe, left)) {
+                const boxedFoe = pc.boxed === foeSide;
+                state.pendingChoice = { owner: foeSide, kind: 'combatCasualties',
+                  data: { region: foeSide === pc.attacker ? pc.from : pc.to, side: foeSide, hits: left, next: 'onslaught', boxed: boxedFoe } };
+                return;
+              }
+              finishForceCasualties(state, foe);
+            }
+          }
         }
         pc.step = pc.siege ? 'siegeAdvance' : 'continueDecision'; continue;
       }

@@ -388,11 +388,13 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
    worth of dice reads as a miscount otherwise (player report). The 2:1 comparison is
    made against the enemy **Force**, not the enemy region — in a siege the region holds
    the besieger, so measuring it compared an army with itself.
-   **Deviation:** Great Host's text times the comparison *"after removing casualties
-   from the Combat roll and Leader re-roll"*; the engine evaluates it during the roll,
-   i.e. against pre-casualty counts. This is the conservative direction (casualties can
-   only thin the enemy and make 2:1 easier), so the engine grants the hit strictly less
-   often than RAW, never more.
+   **Great Host now resolves at its printed time** — the 2:1 comparison uses the
+   post-casualty counts on both sides (onslaught step, `greatHostDone` latch), and the
+   hit is absorbed through the normal per-casualty choice. The earlier deviation note
+   here claimed the old mid-roll timing was "strictly conservative"; that was WRONG —
+   the owner's own casualties can drop it below 2:1 (mid-roll granted a hit RAW would
+   deny) just as enemy casualties can bring them within it (mid-roll denied a hit RAW
+   would grant). Corrected when the timing was fixed.
 
 4. **Remove casualties**: per hit, opponent removes 1 Regular **or** reduces 1
    Elite→Regular (replacement); for every 2 hits may instead remove 1 Elite (p.30).
