@@ -6,8 +6,8 @@ import type { GameState, Side, Nation, RegionId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy } from '../armies';
-import { applyCasualties, startBattle, queueOrApplyEventCasualties } from '../combat';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy } from '../armies';
+import { applyCasualties, startBattle, queueOrApplyEventCasualties, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
@@ -20,20 +20,34 @@ const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 
 /** Roll min(5, count) dice; count hits on `target`+. */
 const rollDice = (state: GameState, count: number, target: number): number =>
   withRng(state, (rng) => { let h = 0; for (let i = 0; i < Math.min(5, count); i++) if (rng.rollDie(6) >= target) h++; return h; });
-/** [FP-army region, Shadow-Nazgûl region] pairs that are the same or adjacent. */
+/** [FP-army region, Shadow-Nazgûl region] pairs that are the same or adjacent.
+ *  A BESIEGED Army — either side's — is still in its region (p.31), so both ends
+ *  read the region's Force for that side rather than the open field: a Gondor
+ *  garrison boxed in Minas Tirith is "a Free Peoples Army in the region", and
+ *  Nazgûl boxed inside a besieged Shadow Stronghold still count as present
+ *  (Almanac, "Dreadful Spells" C 19). */
 function fpArmyNearNazgul(state: GameState): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   for (const fp of Object.keys(state.regions)) {
-    if (armySide(state, fp) !== 'fp') continue;
+    if (!armyForceOf(state, fp, 'fp')) continue;
     for (const sh of [fp, ...REGIONS[fp]!.adjacency]) {
-      if (state.regions[sh] && state.regions[sh]!.nazgul > 0 && armySide(state, sh) === 'shadow') out.push([fp, sh]);
+      if (!state.regions[sh]) continue;
+      const f = armyForceOf(state, sh, 'shadow');
+      if (f && f.nazgul > 0) out.push([fp, sh]);
     }
   }
   return out;
 }
+/** The Free Peoples Force at `fp` (open field or boxed garrison) if a Companion
+ *  stands with it — The Eagles are Coming!'s precondition. */
+const eaglesArmy = (state: GameState, fp: string) => {
+  const f = armyForceOf(state, fp, 'fp');
+  return f && f.characters.some((c) => COMPANION_SET.has(c)) ? f : null;
+};
 function eliminateNazgul(state: GameState, region: string, n: number): void {
-  const r = state.regions[region]!; const k = Math.min(n, r.nazgul);
-  r.nazgul -= k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + k;
+  const f = armyForceOf(state, region, 'shadow') ?? state.regions[region]!;
+  const k = Math.min(n, f.nazgul);
+  f.nazgul -= k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + k;
 }
 // The five Sauron Strongholds (for Nazgûl relocation effects).
 const SAURON_STRONGHOLDS = Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'sauron' && REGIONS[id]!.settlement === 'Stronghold');
@@ -874,29 +888,56 @@ register('fp-str-06', {
 });
 // The Eagles are Coming!: eliminate Nazgûl near an FP Army containing a Companion.
 register('fp-char-18', {
-  canPlay: (state) => fpArmyNearNazgul(state).some(([fp]) => state.regions[fp]!.characters.some((c) => COMPANION_SET.has(c))),
+  canPlay: (state) => fpArmyNearNazgul(state).some(([fp]) => eaglesArmy(state, fp)),
   apply(state) {
-    const pair = fpArmyNearNazgul(state).find(([fp]) => state.regions[fp]!.characters.some((c) => COMPANION_SET.has(c)));
+    const pair = fpArmyNearNazgul(state).find(([fp]) => eaglesArmy(state, fp));
     if (!pair) return;
     const sh = pair[1];
-    const kills = rollDice(state, state.regions[sh]!.nazgul, 5);
+    const shf = armyForceOf(state, sh, 'shadow') ?? state.regions[sh]!; // may be a boxed garrison
+    const kills = rollDice(state, shf.nazgul, 5);
     eliminateNazgul(state, sh, kills);
     // Surviving Nazgûl must move to any one unconquered Sauron Stronghold (card text).
-    const survivors = state.regions[sh]!.nazgul;
+    const survivors = shf.nazgul;
     const dest = SAURON_STRONGHOLDS.find((r) => r !== sh && settlementController(state, r) === 'shadow');
-    if (survivors > 0 && dest) { state.regions[dest]!.nazgul += survivors; state.regions[sh]!.nazgul = 0; }
+    if (survivors > 0 && dest) { state.regions[dest]!.nazgul += survivors; shf.nazgul = 0; }
     log(state, null, 'event', `The Eagles are Coming!: eliminated ${kills} Nazgûl at ${sh}${survivors > 0 && dest ? `; ${survivors} fled to ${dest}` : ''}`);
   },
 });
 // Dreadful Spells (Shadow): hit an FP Army adjacent to/with a Nazgûl force.
+// WHICH Free Peoples Army is the Shadow player's call — the card names no target, so
+// the engine used to fire at whichever qualifying Army came first in region order
+// (a besieging force at Minas Tirith could find itself hitting Lórien instead).
+// The Nazgûl force behind the spell is NOT a choice: more Nazgûl is strictly more
+// dice at the chosen target, so the fullest adjacent stack is picked mechanically.
+const dreadfulSpellsTargets = (state: GameState): string[] =>
+  [...new Set(fpArmyNearNazgul(state).map(([fp]) => fp))];
+const dreadfulSpellsCaster = (state: GameState, fp: string): { region: string; nazgul: number } | null =>
+  fpArmyNearNazgul(state)
+    .filter(([f]) => f === fp)
+    .map(([, sh]) => ({ region: sh, nazgul: (armyForceOf(state, sh, 'shadow') ?? state.regions[sh]!).nazgul }))
+    .sort((a, b) => b.nazgul - a.nazgul)[0] ?? null;
 register('sh-char-19', {
-  canPlay: (state) => fpArmyNearNazgul(state).length > 0,
-  apply(state) {
-    const [fp, sh] = fpArmyNearNazgul(state)[0]!;
-    const hits = rollDice(state, state.regions[sh]!.nazgul, 5);
-    log(state, null, 'event', `Dreadful Spells: ${hits} hit(s) on ${fp}`);
+  canPlay: (state) => dreadfulSpellsTargets(state).length > 0,
+  targets: (state) => dreadfulSpellsTargets(state).map((region) => ({ region })),
+  applyTarget(state, _side, t) {
+    const fp = t.region!;
+    const caster = dreadfulSpellsCaster(state, fp);
+    if (!caster) return;
+    const hits = rollDice(state, caster.nazgul, 5);
+    log(state, null, 'event', `Dreadful Spells: ${caster.nazgul} Nazgûl at ${caster.region} — ${hits} hit(s) on ${fp}`);
+    // A besieged garrison is a legal target (Almanac, "Dreadful Spells" C 19), but the
+    // card is NOT an "attack": Companions inside the Stronghold are unaffected even if
+    // the Army around them is wiped out, so lift them out of the box before the hits
+    // land and let the follow-up put them back (in the box, or in the fallen region).
+    const garrison = armyForceOf(state, fp, 'fp');
+    const boxed = !!garrison && garrison !== state.regions[fp];
+    let then: CasualtyThen | undefined;
+    if (boxed) {
+      then = { kind: 'siegeFall', region: fp, besieger: 'shadow', spare: [...garrison!.characters] };
+      garrison!.characters = [];
+    }
     // The Free Peoples choose how their Army absorbs the hits (Regulars vs Elites).
-    queueOrApplyEventCasualties(state, 'fp', fp, hits);
+    queueOrApplyEventCasualties(state, 'fp', fp, hits, then);
   },
 });
 

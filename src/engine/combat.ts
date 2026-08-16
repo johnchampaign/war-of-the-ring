@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, type Force, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeForMovement, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods, type VariableCost } from './combatCards';
@@ -303,7 +303,9 @@ function pendingCasualtyForce(state: GameState): Force | null {
   if (!ch || (ch.kind !== 'combatCasualties' && ch.kind !== 'eventCasualties')) return null;
   const d = ch.data as { region: RegionId; boxed?: boolean };
   const box = state.regions[d.region]?.siegeBox;
-  return (ch.kind === 'combatCasualties' && d.boxed && box) ? box : state.regions[d.region] ?? null;
+  // `boxed` is set by both paths: a siege battle's boxed combatant, and an Event
+  // card whose target Army is the besieged garrison rather than the open field.
+  return (d.boxed && box) ? box : state.regions[d.region] ?? null;
 }
 
 /** The allocations currently on offer (for the adapter's legalActions). */
@@ -344,10 +346,34 @@ export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, na
 // defer to an `eventCasualties` PendingChoice whenever the choice is meaningful,
 // then run any card-specific follow-up. `then` is plain data (serializable), not
 // a closure, so the choice survives a save/reload.
-export type CasualtyThen = { kind: 'entsAwake'; region: RegionId; naz0: number; minions: string[] };
+export type CasualtyThen =
+  | { kind: 'entsAwake'; region: RegionId; naz0: number; minions: string[] }
+  // A card aimed at a BESIEGED garrison. `spare` holds the Characters lifted out of
+  // the Stronghold Box before the hits landed: a card that is not an "attack" cannot
+  // eliminate them with the Army (Almanac, "Dreadful Spells" C 19), so they go back
+  // into the box if the garrison held, or out into the region if the Stronghold fell.
+  | { kind: 'siegeFall'; region: RegionId; besieger: Side; spare: string[] };
 
 function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
   if (!then) return;
+  if (then.kind === 'siegeFall') {
+    const r = state.regions[then.region]!;
+    const box = r.siegeBox;
+    if (box && forceUnitCount(box) > 0) { box.characters.push(...then.spare); return; } // the garrison held
+    // Every unit defending the Stronghold is gone, so it falls to the Army standing
+    // in the region around it (p.32's second capture trigger). The Characters that
+    // were inside are untouched and simply find themselves in the open region.
+    delete r.siegeBox; r.besieged = false;
+    for (const c of then.spare) {
+      if (!r.characters.includes(c)) r.characters.push(c);
+      state.characters.inPlay[c] = then.region;
+    }
+    if (armySide(state, then.region) === then.besieger) {
+      captureIfEnemySettlement(state, then.region, then.besieger); // not an "attack": no attack-activation
+      log(state, null, 'army', `the garrison of ${then.region} is destroyed — the besieging Army takes the Stronghold`);
+    }
+    return;
+  }
   if (then.kind === 'entsAwake') {
     if (forceUnitCount(state.regions[then.region]!) === 0) {
       state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + then.naz0; // recycle Nazgûl
@@ -363,10 +389,14 @@ function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
  *  the follow-up immediately. */
 export function queueOrApplyEventCasualties(state: GameState, side: Side, region: RegionId, hits: number, then?: CasualtyThen): void {
   if (hits <= 0) { runCasualtyThen(state, then); return; }
-  const f = state.regions[region]!;
+  // The target Army may be a garrison in the Stronghold Box, not the open field —
+  // the besieger holds the field there, and hitting it would have wounded the WRONG
+  // side (and leaked Shadow units past the reinforcement pool).
+  const f = armyForceOf(state, region, side) ?? state.regions[region]!;
+  const boxed = f !== state.regions[region];
   const left = absorbForced(state, f, side, hits); // forced losses need no prompt
   if (meaningfulForceCasualty(f, left)) {
-    state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits: left, then: then ?? null } };
+    state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits: left, boxed, then: then ?? null } };
     return;
   }
   finishForceCasualties(state, f);
@@ -376,7 +406,7 @@ export function queueOrApplyEventCasualties(state: GameState, side: Side, region
 /** Resolve a pending `eventCasualties` choice with the owner's chosen plan. */
 export function resolveEventCasualties(state: GameState, plan: 'regularsFirst' | 'elitesFirst'): void {
   const d = state.pendingChoice!.data as { region: RegionId; side: Side; hits: number; then: CasualtyThen | null };
-  applyCasualties(state, d.region, d.side, d.hits, plan);
+  applyForceCasualties(state, pendingCasualtyForce(state)!, d.side, d.hits, plan); // honours `boxed`
   state.pendingChoice = null;
   runCasualtyThen(state, d.then);
 }

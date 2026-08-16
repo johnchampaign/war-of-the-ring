@@ -54,6 +54,9 @@ export function describeAction(a: WotrAction): string {
         return `${cardName(a.card)}: ${label}`;
       }
       if (a.eye) return `${cardName(a.card)}: turn a die into an Eye (→ Hunt Box)`;
+      // Dreadful Spells names its victim army and nothing else — say so, or the bare
+      // region name reads like a move rather than "these are the troops you hit".
+      if (a.card === 'sh-char-19' && a.region) return `${cardName(a.card)}: strike the Free Peoples Army in ${rName(a.region)}`;
       if (a.mode === 'recruit') return `${cardName(a.card)}: recruit 2 Nazgûl in ${rName(a.region!)}`;
       if (a.mode === 'attack' && a.from && a.from === a.to) return `${cardName(a.card)}: ⚔ assault the siege at ${rName(a.to)}`;
       if (a.companion === 'nazgul') return a.region ? `${cardName(a.card)}: move ${a.count ?? ''} Nazgûl ${rName(a.from!)} → ${rName(a.region)}`.replace('move  ', 'move ') : `${cardName(a.card)}: move the Nazgûl in ${rName(a.from!)}`;

@@ -530,6 +530,22 @@ export function characterWithArmy(state: GameState, char: string, side: Side): R
   }
   return armySide(state, id) === side ? id : null;
 }
+/** The Force `side` has standing in region `id`: its open-field Army, or the boxed
+ *  garrison when `side` is the one under siege. A besieged Army is still IN its
+ *  region (p.31) — only its units sit in the Stronghold Box — so any "is there an
+ *  enemy Army here?" test must look in the box too. `armySide` alone reports the
+ *  BESIEGER, which made Dreadful Spells unplayable against a Gondor garrison boxed
+ *  in Minas Tirith (player report), and would have aimed its hits at the besieging
+ *  Shadow Army had it been offered. Returns null if `side` has no Army there. */
+export function armyForceOf(state: GameState, id: RegionId, side: Side): Force | null {
+  const r = state.regions[id];
+  if (!r) return null;
+  if (armySide(state, id) === side) return r;
+  const box = r.siegeBox;
+  if (box && forceUnitCount(box) > 0 && forceSide(box) === side) return box;
+  return null;
+}
+
 /** Which side's units make up a Force (siege box or region), if any. */
 function forceSide(f: Force): Side | null {
   for (const n of Object.keys(f.units) as Nation[]) {
