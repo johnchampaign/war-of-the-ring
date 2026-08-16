@@ -10,6 +10,7 @@ import { Rng } from 'digital-boardgame-framework';
 import { createGame } from '../src/engine/setup.ts';
 import { wotrAdapter, startGame } from '../src/adapter/wotrAdapter.ts';
 import { redactStateForViewer } from '../src/adapter/redact.ts';
+import { REGIONS as REGIONSBYID } from '../src/engine/data.ts';
 import { chooseAction } from '../src/ai/wotrAI.ts';
 
 const arg = (name, def) => {
@@ -53,6 +54,11 @@ const strandedLeaderRegion = (s) => Object.keys(s.regions).find((id) => {
 }) ?? null;
 
 let stalls = 0, illegals = 0, timeouts = 0, leaks = 0, vanished = 0, stranded = 0;
+// --- Fellowship telemetry (docs/ai-fellowship-plan.md groundwork): the baseline the
+// plan-machine A/Bs will be judged against. Win rate alone is too coarse — the
+// per-turn-quota experiment RAISED FP% while ruining the game.
+const fel = { games: 0, mordorEntries: 0, entryTurns: [], healDeclares: 0, pushDeclares: 0,
+  progressAtPush: [], stalledTurns: 0, preMordorTurns: 0, peakCorruption: [] };
 const wins = { fp: 0, shadow: 0 };
 const reasons = {};
 const turnCounts = [];
@@ -62,13 +68,33 @@ for (let game = 0; game < GAMES; game++) {
   let state = startGame(createGame({ seed }));
   const ai = new Rng(seed * 1000 + 7); // independent choice RNG
   let actions = 0;
+  let peakCorr = 0, lastTurnSeen = 0, progressAtTurnStart = 0, movedThisTurn = false;
 
   while (!wotrAdapter.result(state) && actions < MAX_ACTIONS) {
+    peakCorr = Math.max(peakCorr, state.fellowship.corruption);
+    // Turn boundary: settle the PREVIOUS turn's stall verdict (pre-Mordor only).
+    if (state.turn !== lastTurnSeen) {
+      if (lastTurnSeen > 0 && state.fellowship.mordor === null) {
+        fel.preMordorTurns++;
+        if (!movedThisTurn && state.fellowship.progress === progressAtTurnStart) fel.stalledTurns++;
+      }
+      lastTurnSeen = state.turn; progressAtTurnStart = state.fellowship.progress; movedThisTurn = false;
+    }
     const actor = wotrAdapter.currentActor(state);
     if (actor === null) { stalls++; break; }
     const legal = wotrAdapter.legalActions(state, actor);
     if (legal.length === 0) { stalls++; break; }
     const action = pick(CTRL[actor], state, actor, legal, ai);
+    // Fellowship telemetry (cheap, observational only).
+    if (action.kind === 'moveFellowship' || action.kind === 'declareFellowship') movedThisTurn = true;
+    if (action.kind === 'enterMordor') { fel.mordorEntries++; fel.entryTurns.push(state.turn); }
+    else if (action.kind === 'declareFellowship') {
+      const t = action.target, fs = state.fellowship;
+      const d = state.regions[t], def = REGIONSBYID[t];
+      const heals = def && (def.settlement === 'City' || def.settlement === 'Stronghold')
+        && def.nation && FP_NATION.has(def.nation) && d.control !== 'shadow';
+      if (heals && fs.corruption > 0) fel.healDeclares++; else { fel.pushDeclares++; fel.progressAtPush.push(fs.progress); }
+    }
     // Conservation guard for move-family actions (no combat in play): the army-unit
     // total must be identical before/after — a drop is a vanished unit.
     const checkConserve = MOVE_KINDS.has(action.kind) && !state.pendingCombat;
@@ -96,6 +122,8 @@ for (let game = 0; game < GAMES; game++) {
   }
 
   const result = wotrAdapter.result(state);
+  fel.games++;
+  fel.peakCorruption.push(peakCorr);
   if (result) { wins[result.winners[0]]++; turnCounts.push(state.turn); reasons[result.reason] = (reasons[result.reason] || 0) + 1; }
   else if (actions >= MAX_ACTIONS) timeouts++;
 }
@@ -108,6 +136,8 @@ console.log(`  winners: FP ${wins.fp}, Shadow ${wins.shadow}`);
 console.log(`  win reasons: ${JSON.stringify(reasons)}`);
 console.log(`  turns: min ${turnCounts[0] ?? '-'}, median ${med}, avg ${avg.toFixed(1)}, max ${turnCounts.at(-1) ?? '-'}`);
 console.log(`  stalls: ${stalls}, illegal-accepted: ${illegals}, timeouts: ${timeouts}, view-leaks: ${leaks}, vanished-units: ${vanished}, stranded-leaders: ${stranded}`);
+const favg = (xs) => (xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1) : '-');
+console.log(`  fellowship: Mordor entries ${fel.mordorEntries}/${fel.games} (mean turn ${favg(fel.entryTurns)}), heal-declares ${fel.healDeclares}, push-declares ${fel.pushDeclares} (mean progress ${favg(fel.progressAtPush)}), stalled pre-Mordor turns ${fel.stalledTurns}/${fel.preMordorTurns}, peak corruption ${favg(fel.peakCorruption)}`);
 
 const ok = stalls === 0 && illegals === 0 && timeouts === 0 && leaks === 0 && vanished === 0 && stranded === 0 && (wins.fp + wins.shadow) === GAMES;
 console.log(ok ? '\nsoak OK — all games terminated cleanly' : '\nSOAK FAILED');
