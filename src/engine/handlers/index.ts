@@ -1426,19 +1426,45 @@ register('sh-char-09', {
   }),
   canPlay: (state) => state.fellowship.progress >= 1 && nazgulOnMap(state),
 });
-// The Nazgûl Strike! — move any/all Nazgûl; if one is then with the Fellowship, roll
-// for the Hunt. (The "discard an FP table card instead" option remains simplified to
-// the Hunt roll — rules-spec D13.)
+// The Nazgûl Strike! — move any/all Nazgûl; then, if one is with the Fellowship,
+// the card offers its printed CHOICE: "discard one Free Peoples Character Event
+// card from the table OR roll for the Hunt" (John's call D — the discard branch was
+// the last D13 residual). The choice is raised only when both branches are live: no
+// FP Character table card means the Hunt fires directly, exactly as before, so the
+// Shadow is never shown a one-answer question.
 register('sh-char-08b', {
   ...moveNazgulCard((state) => {
     const loc = state.fellowship.location;
     if (state.regions[loc]!.nazgul > 0 || state.regions[loc]!.characters.includes('witch-king')) {
+      const tableFpChar = state.cards.fp.table.filter((id) => EVENT_BY_ID[id]?.deck === 'Character');
+      if (tableFpChar.length > 0) {
+        state.pendingChoice = { owner: 'shadow', kind: 'nazgulStrike', data: { cards: tableFpChar } };
+        return;
+      }
       log(state, null, 'event', 'The Nazgûl Strike! — Hunt roll');
-      extraHunt(state);
+      extraHunt(state, { source: 'The Nazgûl Strike!' });
     }
   }),
   canPlay: (state) => state.fellowship.progress >= 1 && nazgulOnMap(state),
 });
+/** Resolve the Nazgûl Strike choice: discard the named FP Character table card, or
+ *  (discard omitted) roll for the Hunt. Public either way — table cards are open. */
+export function resolveNazgulStrike(state: GameState, discard?: string): void {
+  const d = state.pendingChoice!.data as { cards: string[] };
+  state.pendingChoice = null;
+  if (discard && d.cards.includes(discard)) {
+    const t = state.cards.fp.table;
+    const i = t.indexOf(discard);
+    if (i >= 0) {
+      t.splice(i, 1);
+      state.cards.fp.discard.character.push(discard);
+      log(state, null, 'event', `The Nazgûl Strike! — ${EVENT_BY_ID[discard]?.name ?? discard} is torn from the table`);
+      return;
+    }
+  }
+  log(state, null, 'event', 'The Nazgûl Strike! — Hunt roll');
+  extraHunt(state, { source: 'The Nazgûl Strike!' });
+}
 
 // Return to Valinor: each non-besieged Elven Stronghold with Elven units takes a
 // Hunt-style roll (1 die per unit, max 5; hit on 6). Playable only per the printed

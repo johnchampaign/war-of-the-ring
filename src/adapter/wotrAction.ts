@@ -79,6 +79,8 @@ export type WotrAction =
   // won — everything (no move), a subset (move), or nothing at all (advance: false).
   // Declining captures NOTHING: a region no one enters is not captured (p.32).
   | { kind: 'advanceChoice'; advance: boolean; move?: MoveSel }
+  // The Nazgûl Strike!: discard the named FP Character table card, or omit to Hunt.
+  | { kind: 'nazgulStrike'; discard?: string }
   | { kind: 'relieveAdvance'; advance: boolean } // reliever: march into the region whose siege it just broke (p.31, p.32)
   | { kind: 'besiegerAdvance'; advance: boolean } // attacker: advance into the region a defender just vacated, establishing the siege (p.31)
   | { kind: 'combatCardCost'; amount: number } // size a variable-cost combat card (self-hits / Nazgûl Leadership forfeited)

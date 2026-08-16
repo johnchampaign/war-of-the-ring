@@ -23,6 +23,7 @@ import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharM
 import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide, playFacesFor } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, type EventTarget } from '../engine/handlers/registry';
+import { resolveNazgulStrike } from '../engine/handlers/index';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
 import { redactStateForViewer } from './redact';
 
@@ -153,6 +154,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'siegeWithdraw', withdraw: true }, { kind: 'siegeWithdraw', withdraw: false }];
       case 'siegeExtend':
         return [{ kind: 'siegeExtend', extend: true }, { kind: 'siegeExtend', extend: false }];
+      case 'nazgulStrike': {
+        const d = state.pendingChoice!.data as { cards: string[] };
+        return [...d.cards.map((c) => ({ kind: 'nazgulStrike' as const, discard: c })), { kind: 'nazgulStrike' as const }];
+      }
       case 'advanceChoice':
         // "Advance everything" and "hold position" as plain buttons; the UI's split
         // picker decorates the former with a `move` subset when the player wants one.
@@ -1001,6 +1006,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       resolveCombatCardCost(state, action.amount);
       break; // advance() re-drives the sub-machine, which re-enters the same step
     }
+    case 'nazgulStrike':
+      requireChoice(state, 'nazgulStrike', actor);
+      resolveNazgulStrike(state, action.discard);
+      break;
     case 'advanceChoice': {
       requireChoice(state, 'advanceChoice', actor);
       const to = resolveAdvanceChoice(state, { advance: action.advance, move: action.move });

@@ -780,6 +780,13 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       want = Math.max(d.min, Math.min(d.max, want));
       return legal.find((a2) => a2.kind === 'combatCardCost' && a2.amount === want) ?? legal[0]!;
     }
+    case 'nazgulStrike': {
+      // Tear down a Hunt-defence card when one is on the table — those blunt every
+      // FUTURE Hunt, worth more than one roll now — otherwise take the roll.
+      const guards = new Set(['fp-char-06', 'fp-char-07', 'fp-char-08']); // Axe and Bow / Horn of Gondor / Wizard's Staff
+      const rip = legal.find((a) => a.kind === 'nazgulStrike' && a.discard && guards.has(a.discard));
+      return rip ?? legal.find((a) => a.kind === 'nazgulStrike' && !a.discard) ?? legal[0]!;
+    }
     case 'advanceChoice':
       // Advance the whole force — the ground was just taken and holding it wins the
       // game. (Same default the old auto-advance had, so soaks measure the mechanic.)
