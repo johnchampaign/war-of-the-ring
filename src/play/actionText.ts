@@ -56,7 +56,7 @@ export function describeAction(a: WotrAction): string {
       if (a.eye) return `${cardName(a.card)}: turn a die into an Eye (→ Hunt Box)`;
       if (a.mode === 'recruit') return `${cardName(a.card)}: recruit 2 Nazgûl in ${rName(a.region!)}`;
       if (a.mode === 'attack' && a.from && a.from === a.to) return `${cardName(a.card)}: ⚔ assault the siege at ${rName(a.to)}`;
-      if (a.companion === 'nazgul') return a.region ? `${cardName(a.card)}: move Nazgûl ${rName(a.from!)} → ${rName(a.region)}` : `${cardName(a.card)}: move the Nazgûl in ${rName(a.from!)}`;
+      if (a.companion === 'nazgul') return a.region ? `${cardName(a.card)}: move ${a.count ?? ''} Nazgûl ${rName(a.from!)} → ${rName(a.region)}`.replace('move  ', 'move ') : `${cardName(a.card)}: move the Nazgûl in ${rName(a.from!)}`;
       if (a.companion && a.mode === 'none') return `${cardName(a.card)}: deselect (move someone else)`;
       if (a.companion && a.region) return `${cardName(a.card)}: send ${charName(a.companion)} to ${rName(a.region)}`;
       if (a.companion && !a.region) return `${cardName(a.card)}: move ${charName(a.companion)} (joins the moving group)`;

@@ -79,7 +79,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined; chars?: undefined } | { kind: 'assault'; char?: undefined; chars?: undefined } | { kind: 'muster'; char?: undefined; chars?: undefined } | { kind: 'chargroup'; chars: string[]; char?: undefined } | { kind: 'char'; char: string; chars?: undefined }> } | null>(null);
   const [musterMenu, setMusterMenu] = useState<RegionId | null>(null); // board-click muster: the chosen Settlement
   // Choosing HOW MANY Nazgûl to move from a stack (RAW: move any number, not the whole group).
-  const [nazPick, setNazPick] = useState<{ from: RegionId; to: RegionId; max: number } | null>(null);
+  // `card` set = this came from a Nazgûl-moving EVENT CARD, so confirming submits an
+  // eventTarget rather than a Character-die move. Same picker either way, because it is
+  // the same decision (player reports: the card path silently moved the whole stack).
+  const [nazPick, setNazPick] = useState<{ from: RegionId; to: RegionId; max: number; card?: string } | null>(null);
   // Why the last attempted move/merge was refused (shown so it isn't a silent no-op).
   const [blockMsg, setBlockMsg] = useState<string | null>(null);
   // Replies to this device's resolved problem reports, fetched once on load.
@@ -298,7 +301,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     setBlockMsg(null); setMoveMenu(null);
     // Card-driven separation destination: click a highlighted region to place the Companion.
     if (cardSepTargets.has(id)) {
-      const a = cardSepActs.find((x) => x.region === id);
+      const here = cardSepActs.filter((x) => x.region === id);
+      // A Nazgûl group offering several counts is a real choice — ask, exactly as the
+      // Character-die path does, instead of quietly taking the first (= all of them).
+      const counts = here.filter((x) => x.companion === 'nazgul' && typeof x.count === 'number');
+      if (counts.length > 1) {
+        const max = Math.max(...counts.map((x) => x.count!));
+        clearMove(); setNazPick({ from: counts[0]!.from!, to: id, max, card: counts[0]!.card });
+        return;
+      }
+      const a = here[0];
       if (a) { clearMove(); void submit(a); }
       return;
     }
@@ -614,7 +626,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       )}
       {/* How many Nazgûl to move from a stack (RAW: move any number, not the whole group). */}
       {nazPick && <NazgulCountPicker pick={nazPick}
-        onConfirm={(count) => { const p = nazPick; clearMove(); void submit({ kind: 'moveCharacter', char: 'nazgul', from: p.from, to: p.to, count }); }}
+        onConfirm={(count) => { const p = nazPick; clearMove(); void submit(p.card
+          ? { kind: 'eventTarget', card: p.card, companion: 'nazgul', from: p.from, region: p.to, count }
+          : { kind: 'moveCharacter', char: 'nazgul', from: p.from, to: p.to, count }); }}
         onCancel={() => setNazPick(null)} />}
       {undoConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.6)', display: 'grid', placeItems: 'center', zIndex: 62 }} onClick={() => setUndoConfirm(false)}>

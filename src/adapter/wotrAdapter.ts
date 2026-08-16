@@ -184,7 +184,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'eventTarget': {
         const data = state.pendingChoice!.data as { card: string; applied: EventTarget[]; repeat: number };
         const h = getHandler(data.card);
-        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye }));
+        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye, count: t.count }));
         // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
         if ((h?.repeat ?? 1) > 1 && (data.applied.length > 0 || h?.optionalFromStart) && !h?.noDone) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         return opts;
@@ -662,7 +662,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
-        const target: EventTarget = { from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye, move: action.move };
+        const target: EventTarget = { from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye, count: action.count, move: action.move };
         h.applyTarget(state, actor, target, data.applied);
         data.applied.push(target);
         data.left -= 1;

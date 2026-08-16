@@ -1311,14 +1311,20 @@ function moveNazgulCard(after: (state: GameState) => void): EventHandler {
       const last = applied[applied.length - 1];
       if (last && last.from && !last.region) {
         // destination step for the Nazgûl group at last.from
-        return characterDestinations(state, 'shadow', 'nazgul', last.from).map((region) => ({ companion: 'nazgul', from: last.from, region }));
+        // One option PER COUNT: a stack of three offers "move 1", "move 2", "move 3".
+        // The action-die path has always asked how many (moveCharacter takes a count);
+        // the CARD path took the whole stack, so the same figures obeyed two different
+        // rules depending on how you moved them (reported independently by two players).
+        const avail = state.regions[last.from]!.nazgul;
+        return characterDestinations(state, 'shadow', 'nazgul', last.from).flatMap((region) =>
+          Array.from({ length: Math.max(1, avail) }, (_, i) => ({ companion: 'nazgul', from: last.from, region, count: i + 1 })));
       }
       // pick step: Nazgûl groups whose source/destination hasn't been used this card
       const blocked = new Set<string>([...applied.map((t) => t.from), ...applied.filter((t) => t.region).map((t) => t.region)].filter(Boolean) as string[]);
       return sourceRegions(state, blocked).map((from) => ({ companion: 'nazgul', from }));
     },
     applyTarget(state, _side, t) {
-      if (t.region && t.from) moveCharacter(state, 'shadow', 'nazgul', t.from, t.region);
+      if (t.region && t.from) moveCharacter(state, 'shadow', 'nazgul', t.from, t.region, t.count);
       // pick step (no region): records the source group; no mutation
     },
     // The effect runs ONCE, after all moves (a Nazgûl already on the Fellowship still

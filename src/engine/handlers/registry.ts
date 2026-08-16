@@ -11,7 +11,7 @@ import type { GameState, Nation, RegionId, Side } from '../types';
  *  hide/move/decline choice on "There Is Another Way"). `move` is an optional
  *  split selection for a card-granted Army move — p.28: "it is possible to split
  *  the Army before moving" (omitted = the whole Army moves). */
-export interface EventTarget { from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; move?: { units?: Partial<Record<Nation, { regular?: number; elite?: number }>>; leaders?: number; nazgul?: number; characters?: string[] } }
+export interface EventTarget { from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; count?: number; move?: { units?: Partial<Record<Nation, { regular?: number; elite?: number }>>; leaders?: number; nazgul?: number; characters?: string[] } }
 
 export interface EventHandler {
   /** "Play on the table" — the card persists (its id goes to cards[side].table)
