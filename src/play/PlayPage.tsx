@@ -10,7 +10,7 @@
 // die's second move (player report: "I only get 1 move when using a [C]", p.27).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGame, ChatPanel } from 'digital-boardgame-framework/client';
-import type { GameClientApi } from '../online/gameClient';
+import type { GameClientApi, LogTime } from '../online/gameClient';
 import type { GameState, RegionId, Side, DieFace } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import { Board } from './Board';
@@ -66,6 +66,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // (in the panel AND on the board). null = no filter (every legal action visible).
   const [die, setDie] = useState<DieFace | null>(null); // the die face the player selected in the tray
   const me: Side = g.you === 'shadow' ? 'shadow' : 'fp';
+  // Move-receipt times for the game log (feature F): re-fetched whenever the log
+  // grows. Best-effort — a failed fetch just leaves the log undated.
+  const [logTimes, setLogTimes] = useState<LogTime[]>([]);
+  const logLen = g.view?.log?.length ?? 0;
+  useEffect(() => {
+    let cancelled = false;
+    client.logTimes?.().then((t) => { if (!cancelled) setLogTimes(t); }).catch(() => { /* undated log */ });
+    return () => { cancelled = true; };
+  }, [client, logLen]);
   // Drop a stale selection (die spent / new round) so we never filter to a die you no longer have.
   const activeDie = die && (g.view?.dice[me] ?? []).includes(die) ? die : null;
   const charDieOk = !activeDie || activeDie === 'character' || activeDie === 'will';
@@ -585,7 +594,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                       Hover a card, a region, or the Guide to inspect it here.
                     </div>
                     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                      <LogPanel view={g.view} />
+                      <LogPanel view={g.view} times={logTimes} />
                     </div>
                   </div>
                 )}
@@ -723,7 +732,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 <button onClick={() => { setLogOpen(false); setLogHover(null); }} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
               </div>
               <div style={{ height: '60vh', overflowY: 'auto' }}>
-                <LogPanel view={g.view} onHoverCard={(id) => setLogHover(id ? { kind: 'card', id } : null)} />
+                <LogPanel view={g.view} times={logTimes} onHoverCard={(id) => setLogHover(id ? { kind: 'card', id } : null)} />
               </div>
             </div>
             {logHover?.kind === 'card' && (

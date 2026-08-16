@@ -17,6 +17,11 @@ export interface ViewResult {
   you: 'fp' | 'shadow';
 }
 
+/** A move-receipt timestamp: the wall-clock instant the transport accepted the
+ *  move that produced log seq `seq` (server clock online; client clock local).
+ *  A log entry's display time is the FIRST stamp with seq >= entry.seq. */
+export interface LogTime { seq: number; at: string }
+
 /** Whether an undo is currently available, and whether it would cross a random
  *  outcome the player has already seen ("foreknowledge"). In a 2-player game a
  *  foreknowledge undo is disallowed (canUndo:false, with a reason); vs the AI it's
@@ -28,6 +33,10 @@ export interface GameClientApi {
   submit(action: WotrAction): Promise<ViewResult>;
   legalActions(): Promise<WotrAction[]>;
   report(body: { message: string; category?: string; severity?: 'bug' | 'rules-question' | 'feedback'; clientBuild?: string }): Promise<{ reportId: string }>;
+  /** Move-receipt times for the game log, ascending by seq. The engine is
+   *  clock-free, so time lives at the transport layer (feature F). Optional —
+   *  a client without it just shows an undated log. */
+  logTimes?(): Promise<LogTime[]>;
   // Local-only undo (hotseat / vs AI). Absent on the online client (server-side undo
   // is a separate, deferred feature). undoStatus is a synchronous read of the local
   // history; undo() reverts one action and returns the refreshed view.
@@ -68,6 +77,7 @@ export function makeGameClient(
     // Never-silent: resolves only on a server-confirmed reportId; rejects on network
     // error / non-OK status / unparseable body / missing id (framework helper).
     report: (body) => submitReportViaHttp(`${base}/report${q}`, body),
+    logTimes: () => fetch(`${base}/log-times${q}`).then((r) => r.json()).then((r) => r.times ?? []),
     listMessages: () => fetch(`${base}/chat${q}`).then((r) => r.json()),
     postMessage: (body: string) => post('/chat', { message: body }),
     subscribeMoves: realtime ? realtime('moved') : undefined,

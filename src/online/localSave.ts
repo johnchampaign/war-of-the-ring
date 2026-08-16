@@ -33,6 +33,11 @@ export interface LocalSave {
   aiRng: number;
   /** Where the "what happened while you were away" summary starts. */
   oppLogStart: number;
+  /** Move-receipt times (client clock, epoch ms), ascending by log seq — the
+   *  local mirror of the server's dbf_log_times (feature F). Stamped by the
+   *  local CLIENT, never the engine (which stays clock-free). Optional: saves
+   *  from before the feature simply resume with an undated log. */
+  logTimes?: { seq: number; at: number }[];
   /** Denormalised for the lobby label so it needn't parse the whole state. */
   turn: number;
 }

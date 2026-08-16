@@ -1,7 +1,7 @@
 // Cloudflare Pages Function: the /api/* lobby for online async play. Routes map
 // onto the framework GameServer (see _lib/server.ts). Token auth via ?as=TOKEN.
 // Mirrors the integration-guide route table.
-import { makeServer, makeStore, type Env } from '../_lib/server';
+import { makeServer, makeStore, stampLogTime, fetchLogTimes, type Env } from '../_lib/server';
 import { ConflictError, type BugReportRow } from 'digital-boardgame-framework/server';
 import { createGame } from '../../src/engine/setup';
 import { startGame } from '../../src/adapter/wotrAdapter';
@@ -169,7 +169,19 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         if (typeof body?.identityToken === 'string' && body.identityToken) {
           try { await server.claimSeat(gameId, token, body.identityToken); } catch { /* optional */ }
         }
-        return json(await server.submit(gameId, token, body?.action));
+        const result = await server.submit(gameId, token, body?.action);
+        // Stamp the move's receipt time against the highest log seq now visible
+        // (server-driven AI replies run inside submit, so this stamp covers their
+        // entries too). Best-effort — a clock must never block a move.
+        const lg = (result.view as { log?: { seq: number }[] } | null)?.log;
+        if (lg?.length) await stampLogTime(env, gameId, lg[lg.length - 1]!.seq, String(result.you ?? ''));
+        return json(result);
+      }
+      // GET /api/games/:id/log-times — PUBLIC: wall-clock receipt time per move
+      // ({ times: [{seq, at, seat}] }, ascending). Transport metadata only — no
+      // game state — so it follows the trust-tier split as a public read.
+      if (sub === 'log-times' && method === 'GET') {
+        return json({ times: await fetchLogTimes(env, gameId) });
       }
       // POST /api/games/:id/claim — attach a hub identity to this seat on join.
       if (sub === 'claim' && method === 'POST') {

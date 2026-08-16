@@ -5,6 +5,7 @@
 // (player report: "I almost always want to look at something recent").
 // No hidden info: it shows exactly what the seat may see.
 import type { GameState } from '../engine/types';
+import type { LogTime } from '../online/gameClient';
 import { FACE } from './DiceTray';
 
 const KIND_COLOR: Record<string, string> = {
@@ -12,8 +13,35 @@ const KIND_COLOR: Record<string, string> = {
   fellowship: '#e6b85a', event: '#9fb6e6', politics: '#cbb', roll: '#8aa', victory: '#ffd23f', pass: '#889',
 };
 
-export function LogPanel({ view, onHoverCard }: { view: GameState; onHoverCard?: (id: string | null) => void }) {
+// "14:32" today, "Aug 14" earlier — the log column is narrow; the full instant
+// lives in the hover title.
+function shortTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  return d.toDateString() === now.toDateString()
+    ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+export function LogPanel({ view, times, onHoverCard }: {
+  view: GameState;
+  /** Move-receipt times, ascending by seq (feature F). An entry's time is the
+   *  FIRST stamp with seq >= entry.seq — the move whose submission produced it.
+   *  Absent (older client / endpoint down) -> the log renders undated, as before. */
+  times?: LogTime[];
+  onHoverCard?: (id: string | null) => void;
+}) {
   const log = view.log ?? [];
+  // Two-pointer walk (both lists ascend in seq): stamp[i] = display time of log[i].
+  let stamps: (string | null)[] | null = null;
+  if (times && times.length) {
+    let ti = 0;
+    stamps = log.map((e) => {
+      while (ti < times.length && times[ti]!.seq < e.seq) ti++;
+      return ti < times.length ? times[ti]!.at : null; // newer than the last stamp = still in flight
+    });
+  }
   const newestFirst = [...log].reverse(); // newest at the top — no auto-scroll needed
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, borderTop: '1px solid #2a2418' }}>
@@ -23,8 +51,19 @@ export function LogPanel({ view, onHoverCard }: { view: GameState; onHoverCard?:
       <div style={{ overflowY: 'auto', padding: '0 8px 6px', fontFamily: 'system-ui' }}>
         {newestFirst.length === 0
           ? <div style={{ fontSize: 12, color: '#776' }}>No events yet.</div>
-          : newestFirst.map((e, i) => (
+          : newestFirst.map((e, i) => {
+            const at = stamps ? stamps[log.length - 1 - i] : null;
+            return (
             <div key={i} style={{ fontSize: 12, lineHeight: 1.35, padding: '1px 0', display: 'flex', gap: 6 }}>
+              {/* When this happened (feature F, player-clock/server-clock via the
+                  transport — the engine has no clock). Only rendered when stamps
+                  exist, so older games keep their exact old layout. */}
+              {stamps && (
+                <span title={at ? new Date(at).toLocaleString() : 'awaiting timestamp'}
+                  style={{ flexShrink: 0, color: '#554', width: 38, fontSize: 10, textAlign: 'right', alignSelf: 'center' }}>
+                  {at ? shortTime(at) : ''}
+                </span>
+              )}
               <span style={{ flexShrink: 0, color: '#665', width: 22, textAlign: 'right' }}>T{e.turn}</span>
               {/* Who acted (player report: the kind tags alone don't say whose action it was).
                   Engine/phase entries (rolls, combat rounds) have no actor — blank keeps columns aligned. */}
@@ -40,7 +79,8 @@ export function LogPanel({ view, onHoverCard }: { view: GameState; onHoverCard?:
                     onMouseEnter={() => onHoverCard(e.card!)} onMouseLeave={() => onHoverCard(null)}>{e.msg}</span>
                 : <span style={{ color: '#ddd' }}>{e.msg}</span>}
             </div>
-          ))}
+            );
+          })}
       </div>
     </div>
   );

@@ -111,3 +111,36 @@ export function makeCronServer(env: Env): WotrServer {
     gameUrl: gameUrlFor(env),
   });
 }
+
+// ————— Move-receipt timestamps (feature F, 2026-08-15) —————————————————————
+// The engine is clock-free by design (no Date.now in src/engine), so the log
+// has ORDER but no TIME. These helpers hang wall-clock receipt times off the
+// framework log's `seq` at the transport layer: one dbf_log_times row per
+// applied move, stamped when the server accepts it. A log entry's display time
+// is the FIRST stamp with log_seq >= entry.seq (stamps are monotonic in seq).
+
+/** Best-effort: record that the move producing log seq `logSeq` arrived now.
+ *  Duplicate seq (e.g. a re-fetch race) is ignored; a clock must never block or
+ *  fail a move, so errors are swallowed. */
+export async function stampLogTime(env: Env, gameId: string, logSeq: number, seat: string): Promise<void> {
+  try {
+    await supabase(env).from('dbf_log_times').upsert(
+      { game_id: gameId, log_seq: logSeq, seat: seat || null },
+      { onConflict: 'game_id,log_seq', ignoreDuplicates: true },
+    );
+  } catch { /* best-effort */ }
+}
+
+/** All receipt times for a game, ascending by seq. Non-PII transport metadata
+ *  (a wall-clock instant + which seat moved — the same information the
+ *  opponent's "moved" broadcast already carries), so it's a public read under
+ *  the trust-tier split. */
+export async function fetchLogTimes(env: Env, gameId: string): Promise<{ seq: number; at: string; seat: string | null }[]> {
+  const { data } = await supabase(env).from('dbf_log_times')
+    .select('log_seq, seat, created_at')
+    .eq('game_id', gameId)
+    .order('log_seq', { ascending: true })
+    .limit(10000);
+  return (data ?? []).map((r: { log_seq: number; seat: string | null; created_at: string }) =>
+    ({ seq: r.log_seq, at: r.created_at, seat: r.seat }));
+}

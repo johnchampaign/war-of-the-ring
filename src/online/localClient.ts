@@ -50,6 +50,21 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
   // on the same deterministic track it was already following.
   const aiRng = resume ? Rng.fromState(resume.aiRng) : new Rng(seed * 1000 + 7);
 
+  // Move-receipt times (feature F): the local mirror of the server's
+  // dbf_log_times. The CLIENT stamps its own clock whenever the log grows —
+  // the engine stays clock-free. Ascending by seq; a log entry's display time
+  // is the first stamp with seq >= entry.seq.
+  const logTimes: { seq: number; at: number }[] = resume?.logTimes ? [...resume.logTimes] : [];
+  const stampNow = (): void => {
+    const last = state.log[state.log.length - 1];
+    if (!last) return;
+    // An undo shrank the log: stamps past its end are for entries that no
+    // longer exist — drop them so the replayed moves get fresh times.
+    while (logTimes.length && logTimes[logTimes.length - 1]!.seq > last.seq) logTimes.pop();
+    const prev = logTimes[logTimes.length - 1];
+    if (!prev || last.seq > prev.seq) logTimes.push({ seq: last.seq, at: Date.now() });
+  };
+
   /** Write the game to its slot after anything that changes it. Once the game is over
    *  the slot is dropped instead — there is nothing left to resume, and leaving it
    *  would offer the player a finished game from the lobby. */
@@ -58,7 +73,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
     if (wotrAdapter.result?.(state)) { clearLocalGame(); return; }
     saveLocalGame({
       schemaVersion: wotrAdapter.schemaVersion ?? 0, state, aiSide,
-      aiRng: aiRng.serialize(), oppLogStart, turn: state.turn,
+      aiRng: aiRng.serialize(), oppLogStart, turn: state.turn, logTimes,
     });
   };
 
@@ -120,7 +135,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
       // Persist on the very first open too, not just on a move: a game the player
       // started but has not yet acted in is still a game, and losing it to a reload is
       // the exact complaint this exists to fix.
-      if (firstOpen || state.log.length !== before) persistNow();
+      if (firstOpen || state.log.length !== before) { stampNow(); persistNow(); }
       return snapshot();
     },
     submit: async (action: WotrAction) => {
@@ -135,6 +150,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
       const afterHuman = state.log.length;
       runAI();                                            // then let the AI take its turn(s)
       oppLogStart = aiSide ? afterHuman : before;         // vs-AI: AI's entries; hotseat: the acting player's turn (for the next viewer)
+      stampNow();
       persistNow();
       return snapshot();
     },
@@ -143,6 +159,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
       if (!actor || (aiSide && actor !== human)) return [];
       return wotrAdapter.legalActions(state, actor);
     },
+    logTimes: async () => logTimes.map((t) => ({ seq: t.seq, at: new Date(t.at).toISOString() })),
     undoStatus: () => {
       const prev = history[history.length - 1];
       if (!prev) return { canUndo: false, foreknowledge: false };
@@ -166,6 +183,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
       if (foreknowledge) log(state, human, 'undo', `${sideName(human)} used a foreknowledge undo — re-deciding after seeing a random outcome (dice/cards).`);
       oppLogStart = state.log.length;
       opened = true;
+      stampNow(); // also prunes stamps past the restored log's end
       persistNow();
       return snapshot();
     },
