@@ -70,7 +70,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const activeDie = die && (g.view?.dice[me] ?? []).includes(die) ? die : null;
   const charDieOk = !activeDie || activeDie === 'character' || activeDie === 'will';
   const [selected, setSelected] = useState<RegionId | null>(null);
-  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' | 'armyMove2' | 'eventMove' | 'holdBack'; base?: WotrAction } | null>(null);
+  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' | 'armyMove2' | 'eventMove' | 'holdBack' | 'advance'; base?: WotrAction } | null>(null);
   // Board-driven independent-character (Nazgûl / Minion / Companion) move in progress.
   // `group` (Companions only): move several together — range = highest Level (p.24).
   const [charPick, setCharPick] = useState<{ from: RegionId; char: string; group?: string[] } | null>(null);
@@ -463,10 +463,18 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       const d = g.view.pendingChoice.data as { from: RegionId; to: RegionId };
       setMoveDraft({ from: d.to, to: d.from, kind: 'holdBack' }); return;
     }
+    // End of Battle (p.31 "all or part", advance optional): the ADVANCE button opens
+    // the picker choosing who marches in ("move all" is the one-click default);
+    // "Hold position" submits directly and captures nothing.
+    if (a.kind === 'advanceChoice' && a.advance && !a.move && g.view?.pendingChoice?.kind === 'advanceChoice') {
+      const d = g.view.pendingChoice.data as { from: RegionId; to: RegionId };
+      setMoveDraft({ from: d.from, to: d.to, kind: 'advance' }); return;
+    }
     void submit(a);
   };
   const onPanelAction = (a: WotrAction) => {
     if (a.kind === 'advanceHoldBack' && g.view?.pendingChoice?.kind === 'advanceHoldBack') { onDecisionAction(a); return; }
+    if (a.kind === 'advanceChoice' && g.view?.pendingChoice?.kind === 'advanceChoice') { onDecisionAction(a); return; }
     if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2' }); return; }
     // A card-granted Army MOVE (Shadows Gather, The Shadow Lengthens, Corsairs…)
     // routes through the split picker — p.28 allows splitting the Army before a

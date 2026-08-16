@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
+import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
@@ -153,6 +153,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'siegeWithdraw', withdraw: true }, { kind: 'siegeWithdraw', withdraw: false }];
       case 'siegeExtend':
         return [{ kind: 'siegeExtend', extend: true }, { kind: 'siegeExtend', extend: false }];
+      case 'advanceChoice':
+        // "Advance everything" and "hold position" as plain buttons; the UI's split
+        // picker decorates the former with a `move` subset when the player wants one.
+        return [{ kind: 'advanceChoice', advance: true }, { kind: 'advanceChoice', advance: false }];
       case 'advanceHoldBack':
         // "Keep everyone forward" is the default; the UI's picker supplies a `back`
         // selection for any partial split (p.31 "all or part").
@@ -996,6 +1000,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'combatCardCost', actor);
       resolveCombatCardCost(state, action.amount);
       break; // advance() re-drives the sub-machine, which re-enters the same step
+    }
+    case 'advanceChoice': {
+      requireChoice(state, 'advanceChoice', actor);
+      const to = resolveAdvanceChoice(state, { advance: action.advance, move: action.move });
+      if (to) afterMove(state, actor, to, { kind: 'none' }); // stacking check where units landed
+      break;
     }
     case 'advanceHoldBack': {
       requireChoice(state, 'advanceHoldBack', actor);

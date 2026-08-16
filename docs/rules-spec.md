@@ -574,27 +574,24 @@ Recapture by original owner removes the marker and reverses the VP (p.32, p.44).
 Captured settlements can't muster or advance the political track (p.32).
 
 ### End of Battle (p.31) — advancing into the region you took
-"If the defending Army is eliminated or retreats, the attacker may immediately move
-**all or part** of the attacking Army into the embattled region." Modelled in two
-steps: `finishCombat` advances the WHOLE force (so the capture, the outcome text and
-any resulting siege resolve exactly as they always did), then raises an
-`advanceHoldBack` PendingChoice letting the winner send chosen figures back to the
-region it attacked from (`resolveAdvanceHoldBack`). Every "all or part" end state is
-reachable, without making the capture depend on an unanswered question.
-Offered whenever it is a real decision (`advanceHoldBackAvailable`). Because "MAY move
-all or part" makes the advance **optional**, the winner may bring the **whole** Army
-back and leave the region it just won empty. The one place a unit must stay is a
-Settlement this advance put a Control marker on (`holdBackMinimum`): the capture is
-already applied, and an empty *captured* Settlement is a different rules situation than
-never having advanced. Pulling the whole Army back takes every Leader and Character
-with it — a Leader alone in an empty region is illegal (p.26). The rearguard held
-aside for the battle (p.28) is restored to the origin as before and is never part of
-this choice. The UI reuses the split picker (tick who stays forward; the rest march
-back), reached from the decision modal; the AI keeps everything forward.
-**Deviation:** only for a captured Settlement is declining the advance barred — see
-above. *(Both the missing option and the modal's single button were player reports:
-"the only option presented was keep the whole army forward… my choice would've been to
-hold all of them back.")* `scripts/probe-advance-holdback.mjs`.
+"If the defending Army is eliminated or retreats, the attacker **may** immediately
+move **all or part** of the attacking Army into the embattled region" — and the FFG
+FAQ confirms the advance itself is always optional. Fully modelled: a field-battle
+win raises an `advanceChoice` PendingChoice BEFORE anyone moves. The winner advances
+everything, a chosen subset (the split picker), or nothing at all — and the CAPTURE
+resolves only when units actually enter (`resolveAdvanceChoice` →
+`captureIfEnemySettlement(viaAttack)`), because p.32's capture triggers both require
+an Army entering the region. Declining logs "hold position" and captures nothing, so
+the battle-end line reports the military result ("defenders destroyed / retreat"),
+never a capture it cannot yet know about. The rearguard held aside for the battle
+(p.28) is restored to the origin only after the choice resolves, so an advance can
+never sweep it along; a subset advance that vacates every FP unit drags the FP
+Leaders with it (p.26). The AI advances everything (the old automatic behaviour).
+This supersedes the interim hold-back model (advance all, then send figures back,
+`holdBackMinimum` guarding captured Settlements): choosing BEFORE entry makes that
+guard unnecessary, since a region never entered is never captured. The hold-back
+resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
+`scripts/probe-decline-advance.mjs` (including a legacy-resolver check).
 
 ---
 

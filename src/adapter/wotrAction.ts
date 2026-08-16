@@ -74,7 +74,11 @@ export type WotrAction =
   // End of Battle (p.31): the winner advanced its whole Army into the region it took
   // and may now keep PART of it back in the region it attacked from. `back` names the
   // figures that return; omitted = the whole Army stays forward.
-  | { kind: 'advanceHoldBack'; back?: MoveSel }
+  | { kind: 'advanceHoldBack'; back?: MoveSel } // legacy: in-flight saves from the interim hold-back model
+  // End of Battle (p.31): the winner chooses what advances into the region it just
+  // won — everything (no move), a subset (move), or nothing at all (advance: false).
+  // Declining captures NOTHING: a region no one enters is not captured (p.32).
+  | { kind: 'advanceChoice'; advance: boolean; move?: MoveSel }
   | { kind: 'relieveAdvance'; advance: boolean } // reliever: march into the region whose siege it just broke (p.31, p.32)
   | { kind: 'besiegerAdvance'; advance: boolean } // attacker: advance into the region a defender just vacated, establishing the siege (p.31)
   | { kind: 'combatCardCost'; amount: number } // size a variable-cost combat card (self-hits / Nazgûl Leadership forfeited)

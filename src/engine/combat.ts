@@ -787,8 +787,8 @@ function finishCombat(state: GameState, advance: boolean): void {
   // Set when a relieving Army has earned the right to march into the freed region
   // (asked once the battle is fully wrapped up — see the end of this function).
   let reliefAdvance: { from: RegionId; to: RegionId; owner: Side } | null = null;
-  // Set when a winning attacker has advanced and may keep part of the Army behind.
-  let holdBack: { from: RegionId; to: RegionId; owner: Side } | null = null;
+  // Set when a winning attacker must now CHOOSE what advances (possibly nothing).
+  let advanceOffer: { from: RegionId; to: RegionId; owner: Side } | null = null;
   if (sortie) {
     // The rearguard never left the Stronghold (p.32), so put it back BEFORE judging
     // whether the Stronghold stands undefended — a surviving rearguard still defends it.
@@ -836,25 +836,19 @@ function finishCombat(state: GameState, advance: boolean): void {
     // freed garrison can push the stack over the 10-unit limit. Ask, don't assume.
     if (atkSurv > 0) reliefAdvance = { from: pc.from, to: pc.to, owner: pc.attacker };
   } else { // normal field battle
-    captured = advance && defSurv === 0 && atkSurv > 0;
-    // Say WHY the ground changed hands. "Free Peoples take Westemnet" alongside a
-    // loss tally reads as an annihilation; the defender marching off is a different
-    // story and the recap should tell it.
-    const took = (pc.defWithdrew ?? 0) > 0
-      ? `${side(pc.defender)} retreat — ${side(pc.attacker)} take ${name}`
-      : `${side(pc.attacker)} take ${name}`;
-    outcome = captured ? took
+    // The advance is now a real CHOICE (p.31 "may move all or part"; FFG FAQ:
+    // "advance after combat is always optional" — John's call C), so the capture is
+    // NOT settled here: a region no one enters is not captured (p.32). The battle-end
+    // line reports the military result; the capture logs itself if units enter.
+    const won = advance && defSurv === 0 && atkSurv > 0;
+    outcome = won
+      ? ((pc.defWithdrew ?? 0) > 0
+        ? `${side(pc.defender)} retreat from ${name}`
+        : `${side(pc.defender)} are destroyed at ${name}`)
       : mutualWipe ? `Both Armies are destroyed at ${name}`
       : (pc.atkWithdrew ?? 0) > 0 ? `${side(pc.attacker)} withdraw from ${name}`
       : pc.siege ? `The siege of ${name} holds` : `The attack on ${name} is repulsed`;
-    if (advance && atkSurv > 0) {
-      advanceInto(state, pc.attacker, pc.from, pc.to); r.besieged = false;
-      // p.31: the winner may move "all or part" of the Army in. We advance the whole
-      // force (so the capture, the outcome text and any resulting siege are settled
-      // exactly as before) and then offer to hold figures BACK — the same end states,
-      // reached without making the capture depend on an unanswered question.
-      holdBack = { from: pc.from, to: pc.to, owner: pc.attacker };
-    }
+    if (won) { advanceOffer = { from: pc.from, to: pc.to, owner: pc.attacker }; r.besieged = false; }
     if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
   }
   log(state, null, 'combat', `battle at ${pc.to} ended — ${outcome}`, {
@@ -867,7 +861,7 @@ function finishCombat(state: GameState, advance: boolean): void {
   // advance is still to be answered it must therefore stay held aside — restoring it
   // into `from` now would let advanceInto sweep it along. resolveRelieveAdvance puts it
   // back once the advance has (or hasn't) happened, matching the field battle's ordering.
-  if (pc.rearguard && !reliefAdvance && !sortie) restoreRearguard(state, pc.from, pc.rearguard);
+  if (pc.rearguard && !reliefAdvance && !advanceOffer && !sortie) restoreRearguard(state, pc.from, pc.rearguard);
   state.lastBattle = {
     seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
     atkLosses: Math.max(0, (pc.atkUnits0 ?? atkAlive) - atkAlive), defLosses: Math.max(0, (pc.defUnits0 ?? defAlive) - defAlive),
@@ -883,9 +877,59 @@ function finishCombat(state: GameState, advance: boolean): void {
       owner: reliefAdvance.owner, kind: 'relieveAdvance',
       data: { from: reliefAdvance.from, to: reliefAdvance.to, rearguard: pc.rearguard ?? null },
     };
-  } else if (holdBack && advanceHoldBackAvailable(state, holdBack.to, holdBack.owner)) {
-    state.pendingChoice = { owner: holdBack.owner, kind: 'advanceHoldBack', data: { from: holdBack.from, to: holdBack.to } };
+  } else if (advanceOffer) {
+    state.pendingChoice = { owner: advanceOffer.owner, kind: 'advanceChoice',
+      data: { from: advanceOffer.from, to: advanceOffer.to, rearguard: pc.rearguard ?? null } };
   }
+}
+
+/** Resolve the winner's End of Battle advance (p.31 "may move all or part"; the FFG
+ *  FAQ makes the advance itself optional). `sel.advance` false declines outright —
+ *  the army holds its ground and, since no one enters, NOTHING is captured (p.32).
+ *  With `sel.move` a chosen subset advances; without it the whole force does. The
+ *  rearguard held aside for the battle is restored to the origin either way and
+ *  never advances (p.28). */
+export function resolveAdvanceChoice(state: GameState, sel: { advance: boolean; move?: MoveSelection }): RegionId | null {
+  const d = state.pendingChoice!.data as { from: RegionId; to: RegionId; rearguard: PendingCombat['rearguard'] | null };
+  const owner = state.pendingChoice!.owner;
+  const who = owner === 'fp' ? 'Free Peoples' : 'Shadow';
+  state.pendingChoice = null;
+  let advancedTo: RegionId | null = null;
+  if (!sel.advance) {
+    log(state, null, 'combat', `${who} hold at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
+  } else if (sel.move) {
+    // Subset advance: sanitized like every split mover; a selection that clamps to
+    // nothing degrades to the whole-army advance rather than silently doing nothing.
+    const src = state.regions[d.from]!;
+    const clamped: MoveSelection = { units: {}, leaders: 0, nazgul: 0, characters: sel.move.characters ?? [] };
+    let moved = 0;
+    for (const [n, u] of Object.entries(sel.move.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
+      if (sideOfNation(n) !== owner) continue;
+      const have = src.units[n]; if (!have) continue;
+      const mr = Math.max(0, Math.min(u.regular ?? 0, have.regular));
+      const me = Math.max(0, Math.min(u.elite ?? 0, have.elite));
+      if (mr + me > 0) { clamped.units![n] = { regular: mr, elite: me }; moved += mr + me; }
+    }
+    if (moved === 0) { advanceInto(state, owner, d.from, d.to); advancedTo = d.to; }
+    else {
+      if (owner === 'fp') clamped.leaders = Math.max(0, Math.min(sel.move.leaders ?? 0, src.leaders));
+      else clamped.nazgul = Math.max(0, Math.min(sel.move.nazgul ?? 0, src.nazgul));
+      moveSelectedBack(state, d.from, d.to, owner, clamped);       // subset mover (shared with hold-back)
+      captureIfEnemySettlement(state, d.to, owner, true);          // units ENTERED: capture fires (viaAttack)
+      // p.26: FP Leaders can never stand without FP units — a full vacate drags them.
+      const ownLeft = (Object.keys(src.units) as Nation[]).some((n) => sideOfNation(n) === owner && (src.units[n]!.regular + src.units[n]!.elite) > 0);
+      if (owner === 'fp' && !ownLeft && src.leaders > 0) { state.regions[d.to]!.leaders += src.leaders; src.leaders = 0; }
+      advancedTo = d.to;
+      log(state, null, 'combat', `${who} advance ${moved} unit${moved === 1 ? '' : 's'} into ${REGIONS[d.to]!.name ?? d.to}`);
+    }
+  } else {
+    advanceInto(state, owner, d.from, d.to);                       // whole force; advanceInto captures viaAttack
+    advancedTo = d.to;
+    log(state, null, 'combat', `${who} advance into ${REGIONS[d.to]!.name ?? d.to}`);
+  }
+  // Only now — restoring earlier would let the advance sweep the rearguard along (p.28).
+  if (d.rearguard) restoreRearguard(state, d.from, d.rearguard);
+  return advancedTo;
 }
 
 /** Is there anything to decide about holding part of an advanced Army back? p.31: the

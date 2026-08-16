@@ -13,7 +13,7 @@
 // "Free Peoples take Westemnet" + a full-strength loss count read as an annihilation.
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
-import { startBattle, combatStep, resolveRetreat, resolveRetreatTo } from '../src/engine/combat.ts';
+import { startBattle, combatStep, resolveRetreat, resolveRetreatTo, resolveAdvanceChoice } from '../src/engine/combat.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -59,7 +59,14 @@ function battleThenRetreat(killed, pick) {
   check('2 Regulars actually left the board', s.reinforcements.sauron.regular >= 2);
   check('the survivors are somewhere else, alive', Object.values(s.regions).some((r) => (r.units.sauron?.regular ?? 0) === 2));
   check('the recap says they retreated', /retreat/i.test(b.outcome), b.outcome);
-  check('and that the attacker took the ground', b.captured === true, b.outcome);
+  // The advance is a CHOICE now (p.31 / FFG FAQ: always optional) — the ground is
+  // taken when the winner advances, not automatically at battle end.
+  check('the winner is asked to advance', s.pendingChoice?.kind === 'advanceChoice', s.pendingChoice?.kind ?? 'none');
+  resolveAdvanceChoice(s, { advance: true });
+  // The battlefield is Westemnet (Edoras attacked it); gap-of-rohan is where the
+  // DEFENDERS retreated to. Advancing puts the FP attackers on the won field.
+  check('the attackers stand on the won field', (s.regions['westemnet'].units.rohan?.regular ?? 0) + (s.regions['westemnet'].units.rohan?.elite ?? 0) > 0,
+    JSON.stringify(s.regions['westemnet'].units));
 }
 
 // --- a clean getaway costs nothing ------------------------------------------------

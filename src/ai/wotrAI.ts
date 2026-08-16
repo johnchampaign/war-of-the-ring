@@ -780,6 +780,10 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       want = Math.max(d.min, Math.min(d.max, want));
       return legal.find((a2) => a2.kind === 'combatCardCost' && a2.amount === want) ?? legal[0]!;
     }
+    case 'advanceChoice':
+      // Advance the whole force — the ground was just taken and holding it wins the
+      // game. (Same default the old auto-advance had, so soaks measure the mechanic.)
+      return legal.find((a) => a.kind === 'advanceChoice' && a.advance) ?? legal[0]!;
     case 'advanceHoldBack':
       // Keep the whole Army forward — the ground was just taken and holding it is
       // what wins the game. (Garrisoning the ORIGIN is maybeSplitGarrison's job, on

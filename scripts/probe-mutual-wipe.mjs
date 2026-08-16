@@ -12,7 +12,7 @@
 //      one unit remaining in the region"), and the siege ends (p.31).
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
-import { combatStep } from '../src/engine/combat.ts';
+import { combatStep, resolveAdvanceChoice } from '../src/engine/combat.ts';
 import { unitCount, settlementController } from '../src/engine/armies.ts';
 import { REGIONS, sideOfNation } from '../src/engine/data.ts';
 
@@ -95,8 +95,13 @@ function armCasualtyStep(state, pc) {
 
   const defLeft = (state.regions[to].units[def.nation]?.regular ?? 0) + (state.regions[to].units[def.nation]?.elite ?? 0);
   check('defender wiped', defLeft === 0, `${def.nation} units left: ${defLeft}`);
-  check('capture claimed', state.lastBattle?.captured === true, `captured=${state.lastBattle?.captured}`);
-  check('Settlement Control marker placed', settlementController(state, to) === 'shadow',
+  // The advance is a CHOICE now (p.31 "may move all or part"; FFG FAQ: always
+  // optional), so the win pauses on advanceChoice and the capture fires only when
+  // units actually enter.
+  check('the winner is asked to advance', state.pendingChoice?.kind === 'advanceChoice', state.pendingChoice?.kind ?? 'none');
+  check('no capture before entry', settlementController(state, to) !== 'shadow', `controller=${settlementController(state, to)}`);
+  resolveAdvanceChoice(state, { advance: true });
+  check('Settlement Control marker placed on advance', settlementController(state, to) === 'shadow',
     `controller=${settlementController(state, to)}`);
   check('VP awarded', state.victoryPoints.shadow === vp0 + def.vp,
     `${vp0} -> ${state.victoryPoints.shadow} (want +${def.vp})`);
