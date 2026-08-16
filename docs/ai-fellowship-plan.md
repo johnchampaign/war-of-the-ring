@@ -1,6 +1,6 @@
 # A Fellowship-plan state machine for the FP AI — design & evaluation groundwork
 
-Status: **stage 1 (RUN) tried and reverted, 2026-08-16** — see the result section. Design approved 2026-08-15. Nothing is currently built;
+Status: **stage 2 (HEAL) shipped 2026-08-16; stage 1 (RUN) tried and reverted** — see the result sections. Design approved 2026-08-15. HEAL is live in `src/ai/wotrAI.ts` (`fellowshipPlan`);
 this document exists so the build starts from measurements and a falsifiable plan,
 not from intuition — intuition has a measured 0-for-4 record on this problem.
 
@@ -20,6 +20,9 @@ number buys foresight:
 | *(baseline at d1795a1, 2026-08-16)* | *630*   | *810*         | *43.8%*   | median 15 turns |
 | RUN state, ≤2 steps to entrance   | 752       | **397**       | 43.3%  | reverted (median 11) |
 | RUN state, ≤2 steps & Corr ≤6     | 760       | **425**       | 44.0%  | reverted (median 11) |
+| *(baseline, 2 seed families pooled)* | *1279*  | *1618*        | *43.6%*   | 4000 games, median 15 |
+| HEAL state, exit at Corr ≤2       | +8.0%     | −11.8%        | 44.6%  | not shipped (Ring short of +10%) |
+| **HEAL state, exit at Corr ≤1 (shipped)** | **+14.6%** | **−18.9%** | **46.3%** | **kept by John's call** (median 13) |
 
 One conclusion: everything that makes the Fellowship move MORE OFTEN collapses the
 game into a Ring race, because the push score competes globally against every other
@@ -53,6 +56,34 @@ What this rules out / what remains (for the next stage's design, not tried):
 - Building HEAL / BANK first instead: they *reduce* move frequency (rest turns,
   banking without declaring), so they cannot fail this way, and RUN may only be
   safe once HEAL exists to bring Corruption down before the dash.
+
+## Stage 2 result: HEAL, shipped (2026-08-16)
+
+Built per the design: pure function — pre-Mordor, standing in an unconquered FP
+City/Stronghold, Corruption ≥ 4 (or ≥ 2 with no Progress banked, i.e. it rested
+here last turn — hysteresis without memory). While HEAL: `moveFellowship` scores
+5 (a move is a Hunt roll that undoes the rest, and the next in-place declare
+throws the Progress away regardless) and the rest-declare keeps firing down to
+the exit threshold. Two seed families × 2000 games each, both agreeing tightly:
+
+- exit ≤ 2: Ring +8.0%, military −11.8%, FP +1.0 pt — inside the military bar,
+  short of the Ring bar.
+- exit ≤ 1: Ring +14.6% (728 / 738 vs 630 / 649), military −18.9%, corruption
+  deaths +10.7%, FP 43.6% → 46.3%, median 15 → 13, Mordor entries +12%, gates zero.
+
+What HEAL does is convert military-decided games into Ring-decided games nearly
+1:1 (pooled: Ring-decided +305, military-decided −303) with the FP taking a
+growing share of them (FP wins +108). Resting longer converts more. So no exit
+threshold clears both bars — they pull opposite ways for a heal-only change. The
+call went to John: **ship exit ≤ 1**. The ±15% military bar was written to catch
+*collapse* (the reverted experiments took military 810 → 30–271); −19% with the
+army game intact and median 13 is not that, and the Ring lift addresses the
+standing player complaint. First Fellowship change ever to raise Ring wins
+without collapsing the military game — because it LOWERS move frequency.
+
+Criteria note for later stages: the FP-window criterion (48–52%) was written
+against a 50.0% baseline; fidelity work since (Great Host timing etc.) moved the
+baseline to ~43.6%, so it should be read as "moves toward 50, never away".
 
 ## The proposed machine
 

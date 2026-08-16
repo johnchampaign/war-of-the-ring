@@ -20,6 +20,31 @@ import { MORDOR_ENTRANCES } from '../engine/fellowship';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
 
+// ————— Fellowship plan (docs/ai-fellowship-plan.md) ————————————————————————
+// A small, explicit machine that BIASES the scorer for a handful of Fellowship
+// actions instead of reweighting them globally. Pure function of the state —
+// recomputed each decision, never stored — reading only what the FP player sees.
+//
+// Stage 1 (RUN) was built, measured and reverted — see score → moveFellowship.
+// Stage 2 (this build): HEAL. The Fellowship is RESTING in an unconquered FP
+// City/Stronghold: it declares in place each Fellowship phase (−1 Corruption,
+// p.39, and it stays Hidden) and does NOT move in between — every action-phase
+// move is a Hunt roll that undoes the rest, and the banked Progress is thrown
+// away by the next in-place declare anyway. Hysteresis without memory: enter at
+// Corruption ≥ 4 (the existing heal-declare threshold); once here with no
+// Progress banked (i.e. we rested last turn) keep resting down to 2, then leave.
+export type FellowshipPlan = 'HEAL' | null;
+export function fellowshipPlan(state: GameState): FellowshipPlan {
+  const fs = state.fellowship;
+  if (fs.mordor !== null || !isHealSettlement(state, fs.location)) return null;
+  if (fs.corruption >= 4) return 'HEAL';
+  // Exit threshold: rest all the way down to 1 (measured: exiting at 2 lifted
+  // Ring wins +8% pooled over two seed families but the healed Fellowship then
+  // died on the Track nearly as often as it won — corruption deaths +8%).
+  if (fs.corruption >= 2 && fs.progress === 0) return 'HEAL';
+  return null;
+}
+
 const HEAL_EVENTS = new Set(['fp-char-09', 'fp-char-10', 'fp-char-12', 'fp-char-13']);
 const CORRUPT_EVENTS = new Set(['sh-char-08', 'sh-char-12']);
 const SHADOW_CHARS = new Set(['witch-king', 'saruman', 'mouth-of-sauron']); // the rest are FP Companions
@@ -90,7 +115,9 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // stopped the pushing, Progress stayed at 0, the gate then refused the rest-heal,
     // Corruption never came down and the Fellowship froze for good. Instrumented over
     // 200 games: 249 legal rest-heals refused, in 50 of them (a quarter of all games).
-    if (declares.length && state.fellowship.corruption >= 4) {
+    // HEAL (fellowshipPlan): keep rest-declaring down to Corruption 2, not just
+    // while ≥ 4 — the hysteresis half of the plan's heal state.
+    if (declares.length && (state.fellowship.corruption >= 4 || fellowshipPlan(state) === 'HEAL')) {
       const heals = declares.filter((a) => isHealSettlement(state, a.target) && noRerolls(a.target));
       if (heals.length) return closestToMordor(heals);
     }
@@ -411,6 +438,12 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       //     The window is not narrow: Minas Tirith is 3 from Minas Morgul, so RUN was
       //     on for most of the mid-game. Same lesson, fifth time — the bias must be
       //     narrower still, or attach to something other than move frequency.
+      //
+      // HEAL (fellowshipPlan, stage 2): while resting in a heal-spot, do not move
+      // — a move is a Hunt roll that undoes the rest, and the next in-place declare
+      // discards the Progress anyway. This LOWERS move frequency, the opposite of
+      // every reverted experiment.
+      if (fellowshipPlan(state) === 'HEAL') return 5;
       return Math.max(8, 72 - fs.corruption * 9);
     case 'hideFellowship': return 85;                                  // must hide to keep moving
     case 'separateCompanion': {                                        // rouse a passive nation
