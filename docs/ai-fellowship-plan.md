@@ -1,6 +1,6 @@
 # A Fellowship-plan state machine for the FP AI — design & evaluation groundwork
 
-Status: **groundwork** (approved direction, 2026-08-15). Nothing here is built yet;
+Status: **stage 1 (RUN) tried and reverted, 2026-08-16** — see the result section. Design approved 2026-08-15. Nothing is currently built;
 this document exists so the build starts from measurements and a falsifiable plan,
 not from intuition — intuition has a measured 0-for-4 record on this problem.
 
@@ -17,6 +17,9 @@ number buys foresight:
 | Hunt-box awareness (free move=92) | 1071      | **271**       | 56.1%  | reverted |
 | per-turn quota (1 die/turn @82)   | 1087      | **66**        | 54.5%  | reverted |
 | **heal-deadlock fix (shipped)**   | **761**   | **849**       | **50.0%** | kept |
+| *(baseline at d1795a1, 2026-08-16)* | *630*   | *810*         | *43.8%*   | median 15 turns |
+| RUN state, ≤2 steps to entrance   | 752       | **397**       | 43.3%  | reverted (median 11) |
+| RUN state, ≤2 steps & Corr ≤6     | 760       | **425**       | 44.0%  | reverted (median 11) |
 
 One conclusion: everything that makes the Fellowship move MORE OFTEN collapses the
 game into a Ring race, because the push score competes globally against every other
@@ -24,6 +27,32 @@ FP action. The single success removed an *obstacle* (a deadlock) without changin
 healthy-game move frequency. The remaining failures players observe — no multi-turn
 run at Mordor, Will die burned instead of crowning Aragorn, no Elven-Ring endgame
 dash — are all *sequencing* failures. Hence: a plan.
+
+## Stage 1 result: RUN, as designed, fails (2026-08-16)
+
+Built exactly as below — pure function, distance-to-entrance trigger, four biases
+(push 88, Elven Ring 70 for the missing Character die, Companion trade from
+Corruption 6, entrance-declare beats rest-heal). Two 2000-game A/Bs against a fresh
+baseline at HEAD (table above). The machine did what it was built to do — Mordor
+entries 1225→1598, mean entry turn 11.2→9.0, stalled pre-Mordor turns 54%→44% —
+and the game became a Ring race decided at median turn 11: military wins halved,
+corruption deaths +45%, FP unchanged. A Corruption gate barely moved anything, so
+the collapse is not "corrupted Fellowships dashing"; it is the *frequency* of RUN.
+
+Why: the trigger window is not narrow. Minas Tirith is 3 regions from Minas Morgul,
+Osgiliath 2, so "≤2 steps after banked Progress" is true for most of the FP's
+mid-game staging turns. That reproduces the reverted per-action experiments almost
+exactly — a fifth data point for the same lesson.
+
+What this rules out / what remains (for the next stage's design, not tried):
+- Any RUN trigger keyed on distance alone. A real dash also needs *tempo*: the
+  Character dice in hand this turn (public), an Elven Ring available, Companions
+  left to absorb, and the Hunt box low. A conjunction of those is genuinely rare.
+- Decomposing the four biases (4 more soaks) would tell which one drives the
+  collapse; the push-to-88 is the prime suspect given every prior result.
+- Building HEAL / BANK first instead: they *reduce* move frequency (rest turns,
+  banking without declaring), so they cannot fail this way, and RUN may only be
+  safe once HEAL exists to bring Corruption down before the dash.
 
 ## The proposed machine
 

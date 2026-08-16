@@ -397,6 +397,20 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // changing how often the Fellowship moves in a healthy game. The remaining gap is
       // planning (bank Progress -> heal -> make the run), which no per-action number
       // can express.
+      //
+      //   Fellowship-plan RUN state (docs/ai-fellowship-plan.md, stage 1): a pure
+      //     function of public state — "within 2 steps of a Mordor entrance after
+      //     banked Progress" — that lifted THIS score to 88, let an Elven Ring buy the
+      //     Character die, traded Companions from Corruption 6, and let an entrance
+      //     declare beat a rest-heal. Tried and REVERTED (2 x 2000 games vs the
+      //     d1795a1 baseline, FP 876 / Ring 630 / military 810 / median 15):
+      //       ungated:              Ring 752, corruption 851, military 397, median 11
+      //       gated Corruption<=6:  Ring 760, corruption 815, military 425, median 11
+      //     The machine did what it was built to do (Mordor entries 1225->1598, mean
+      //     entry turn 11.2->9.0) and the game became a Ring race decided by turn 11.
+      //     The window is not narrow: Minas Tirith is 3 from Minas Morgul, so RUN was
+      //     on for most of the mid-game. Same lesson, fifth time — the bias must be
+      //     narrower still, or attach to something other than move frequency.
       return Math.max(8, 72 - fs.corruption * 9);
     case 'hideFellowship': return 85;                                  // must hide to keep moving
     case 'separateCompanion': {                                        // rouse a passive nation
