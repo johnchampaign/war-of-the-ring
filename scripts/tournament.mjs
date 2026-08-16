@@ -22,6 +22,10 @@ const strArg = (name, def) => {
   return i >= 0 ? process.argv[i + 1] : def;
 };
 const GAMES = arg('--games', 300);
+// --seed-offset N: play a DIFFERENT seed family (seeds N+1..N+GAMES) — a second
+// sample for A/Bs whose result sits near a threshold, so noise can be estimated
+// instead of guessed. Default 0 keeps every historic soak reproducible.
+const SEED_OFFSET = arg('--seed-offset', 0);
 const MAX_ACTIONS = 20000;
 // Controller per side: 'heuristic' (default) or 'random'.
 const CTRL = { fp: strArg('--fp', 'heuristic'), shadow: strArg('--shadow', 'heuristic') };
@@ -64,7 +68,7 @@ const reasons = {};
 const turnCounts = [];
 
 for (let game = 0; game < GAMES; game++) {
-  const seed = game + 1;
+  const seed = SEED_OFFSET + game + 1;
   let state = startGame(createGame({ seed }));
   const ai = new Rng(seed * 1000 + 7); // independent choice RNG
   let actions = 0;
