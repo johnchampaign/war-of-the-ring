@@ -125,6 +125,15 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // entering Mordor requires the declared figure to stand there.
     const entries = declares.filter((a) => MORDOR_ENTRANCES.includes(a.target));
     if (entries.length) return closestToMordor(entries);
+    // Fellowship-plan BANK (stage 3, tried and REVERTED 2026-08-16): suppress this
+    // distance declare while Corruption <= 3 and the gates are > 2 steps beyond
+    // the bank — "travel hidden, accumulate". Two seed families x 2000 games on
+    // top of the shipped HEAL: Ring 1466 -> 1353 (-7.7%), Mordor entries -6%,
+    // military +14.5%, FP 46.3% -> 45.6%; push-declares halved, so it fired as
+    // designed. Same finding as b845127 (the blanket version), now with the
+    // Corruption gate: these declares are not a leak, they are the WALK — each
+    // moves the figure a heal-spot closer, and hoarding Progress means fewer
+    // Mordor entries, not safer ones. Record in docs/ai-fellowship-plan.md.
     // Mid-journey declares are held to a high bar: a full bank (Progress 4+), a
     // safe target, AND ≥3 regions actually gained toward Morannon — a short hop
     // (Old Ford, player report) gifts the Shadow its "Play if the Fellowship is

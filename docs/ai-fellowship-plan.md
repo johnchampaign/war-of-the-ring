@@ -1,6 +1,6 @@
 # A Fellowship-plan state machine for the FP AI — design & evaluation groundwork
 
-Status: **stage 2 (HEAL) shipped 2026-08-16; stage 1 (RUN) tried and reverted** — see the result sections. Design approved 2026-08-15. HEAL is live in `src/ai/wotrAI.ts` (`fellowshipPlan`);
+Status: **stage 2 (HEAL) shipped 2026-08-16; stages 1 (RUN) and 3 (BANK) tried and reverted** — see the result sections. Design approved 2026-08-15. HEAL is live in `src/ai/wotrAI.ts` (`fellowshipPlan`);
 this document exists so the build starts from measurements and a falsifiable plan,
 not from intuition — intuition has a measured 0-for-4 record on this problem.
 
@@ -23,6 +23,7 @@ number buys foresight:
 | *(baseline, 2 seed families pooled)* | *1279*  | *1618*        | *43.6%*   | 4000 games, median 15 |
 | HEAL state, exit at Corr ≤2       | +8.0%     | −11.8%        | 44.6%  | not shipped (Ring short of +10%) |
 | **HEAL state, exit at Corr ≤1 (shipped)** | **+14.6%** | **−18.9%** | **46.3%** | **kept by John's call** (median 13) |
+| BANK state (on HEAL; Corr ≤3, gates >2 steps) | −7.7% | +14.5% | 45.6% | reverted (Mordor entries −6%) |
 
 One conclusion: everything that makes the Fellowship move MORE OFTEN collapses the
 game into a Ring race, because the push score competes globally against every other
@@ -84,6 +85,20 @@ without collapsing the military game — because it LOWERS move frequency.
 Criteria note for later stages: the FP-window criterion (48–52%) was written
 against a 50.0% baseline; fidelity work since (Great Host timing etc.) moved the
 baseline to ~43.6%, so it should be read as "moves toward 50, never away".
+
+## Stage 3 result: BANK, reverted (2026-08-16)
+
+Built as the doc says, with one gate learned from `b845127`: BANK only while
+Corruption ≤ 3 and the nearest entrance is > 2 steps beyond banked Progress; in
+BANK the distance-buying mid-journey declare is suppressed (heal-declares and
+entrance-declares untouched). Two seed families × 2000 games on top of the shipped
+HEAL, both agreeing: Ring 1466 → 1353 (−7.7%), Mordor entries −6%, military
++14.5%, FP 46.3% → 45.6%, median 13 → 14. Push-declares halved, so it fired as
+designed. Same finding as the blanket ban, now with the Corruption gate: the
+distance declares are not a leak, they are the *walk* — each moves the figure a
+heal-spot closer, and hoarding Progress means fewer Mordor entries, not safer
+ones. BANK as a "don't declare" state is falsified twice; a future BANK would
+have to mean something else (e.g. WHICH declares to prefer, not whether).
 
 ## The proposed machine
 
