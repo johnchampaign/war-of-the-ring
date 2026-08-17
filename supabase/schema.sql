@@ -80,3 +80,28 @@ create table if not exists dbf_log_times (
 );
 create index if not exists dbf_log_times_game on dbf_log_times(game_id, log_seq);
 alter table dbf_log_times enable row level security;
+
+-- Snapshot pruning (2026-08-17). The framework keeps up to `snapshotHistory`
+-- (20) snapshots per game and never trims a game once it RESOLVES, so finished
+-- games kept their whole undo history forever — 72% of the shared project's
+-- database (7,891 snapshots / 1.37 GB raw across 666 finished games) and the
+-- reason the free tier hit its 500 MB cap. This trims every finished game to its
+-- final snapshot (results/replays keep working). Called daily by the WotR cron
+-- sweep (functions/api/cron/sweep-reminders.ts); safe to run any time.
+-- Framework-shaped: candidate to upstream.
+create or replace function dbf_prune_resolved_snapshots()
+returns integer
+language sql
+security definer
+as $$
+  with gone as (
+    delete from dbf_snapshots s
+    using dbf_games g
+    where g.game_id = s.game_id
+      and g.resolved
+      and s.turn < (select max(turn) from dbf_snapshots x where x.game_id = s.game_id)
+    returning 1
+  )
+  select count(*)::integer from gone;
+$$;
+revoke all on function dbf_prune_resolved_snapshots() from public, anon, authenticated;

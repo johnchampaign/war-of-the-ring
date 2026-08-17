@@ -8,7 +8,7 @@
 // Authorization: Bearer header. Without RESEND_API_KEY the sweep still runs but
 // the notifier is a no-op (handy for a dry run). More specific than the catch-all
 // [[path]].ts, so this file wins the /api/cron/sweep-reminders route.
-import { makeCronServer, type Env } from '../../_lib/server';
+import { makeCronServer, pruneResolvedSnapshots, type Env } from '../../_lib/server';
 
 // Nudge a seat only once it's been on the clock a good while — async PvP, not a
 // chess clock. The framework marks a turn reminded so it won't re-nag each sweep.
@@ -30,7 +30,11 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
   try {
     const server = makeCronServer(env);
     const result = await server.sweepTurnReminders({ olderThanMs: OLDER_THAN_MS });
-    return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, ...result });
+    // Housekeeping on the same schedule: trim finished games to their final
+    // snapshot (dbf_prune_resolved_snapshots — see supabase/schema.sql). Best-
+    // effort; a failed prune must never fail the reminder sweep.
+    const pruned = await pruneResolvedSnapshots(env);
+    return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, prunedSnapshots: pruned, ...result });
   } catch (e) {
     const msg = (e as Error).message ?? 'error';
     return json({ error: msg }, /not configured/i.test(msg) ? 503 : 500);

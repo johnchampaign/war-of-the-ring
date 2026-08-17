@@ -144,3 +144,13 @@ export async function fetchLogTimes(env: Env, gameId: string): Promise<{ seq: nu
   return (data ?? []).map((r: { log_seq: number; seat: string | null; created_at: string }) =>
     ({ seq: r.log_seq, at: r.created_at, seat: r.seat }));
 }
+
+/** Trim every RESOLVED game to its final snapshot (dbf_prune_resolved_snapshots,
+ *  supabase/schema.sql). Returns rows removed, or null if the function is
+ *  missing / the call failed — best-effort housekeeping, never throws. */
+export async function pruneResolvedSnapshots(env: Env): Promise<number | null> {
+  try {
+    const { data, error } = await supabase(env).rpc('dbf_prune_resolved_snapshots');
+    return error ? null : (typeof data === 'number' ? data : null);
+  } catch { return null; }
+}
