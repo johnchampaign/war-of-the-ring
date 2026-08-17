@@ -404,6 +404,21 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
    Elite→Regular (replacement); for every 2 hits may instead remove 1 Elite (p.30).
    Attacker chooses his removals first (p.30). FP casualties are permanent &
    stored away from reinforcements; SH casualties recycle (p.30).
+   **Reducing an Elite conserves figures** (`reduceElite`, every path — casualty
+   choice, batch plan, pressing a siege assault): the Elite figure comes off the
+   board (Shadow → reinforcements, FP → gone) and the replacement Regular is TAKEN
+   FROM the reinforcements. It used to swap only the board figures, so the pool
+   never lost the Regular nor regained the Elite — four siege extensions left
+   Sauron with 40 Regulars in play out of 36 and four Trolls that existed nowhere
+   (player report). Edge: if the pool holds no Regular the reduction still happens
+   (RAW lets the FP draw from eliminated units; for the Shadow it is a documented
+   deviation rather than a failed reduction). `scripts/probe-figure-conservation.mjs`.
+   **Every attack — die-driven or card-driven — requires a unit of a Nation At War**
+   (`hasAtWarUnit`; Help Unlooked For, Nazgûl-led/Witch-king Army cards, Corsairs,
+   Grond/Uruk-hai assaults). Not-At-War units are forced into the rearguard, so an
+   Army with none At War would otherwise "attack" with its Leaders alone (player
+   report: a lone Leader attacked with 0 dice and died). `startBattle` also refuses
+   a zero-unit attacking force outright.
    **Allocated ONE HIT AT A TIME** (`casualtyOptions` / `resolveCasualtyStep`): the
    `combatCasualties` / `eventCasualties` PendingChoice re-prompts until the hits are
    spent, so mixed allocations are expressible. It used to be a single

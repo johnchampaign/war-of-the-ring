@@ -221,6 +221,25 @@ export function casualtyOptions(f: Force, hits: number): CasualtyOption[] {
   return out;
 }
 
+/** Reduce one Elite of `nation` in `f` to a Regular (p.30). The Elite FIGURE comes
+ *  off the board — back to the reinforcements for the Shadow, gone for the Free
+ *  Peoples — and the replacement Regular is TAKEN FROM the reinforcements. Every
+ *  reduction path (casualty choice, batch plan, pressing a siege assault) goes
+ *  through here so the figure count is conserved. It used to swap only the board
+ *  figures: the pool never lost the Regular nor regained the Elite, so four
+ *  siege-extensions left the Shadow with 40 Sauron Regulars in play out of 36
+ *  and four Trolls that existed nowhere (player report: "where are all my
+ *  trolls!"). If the pool holds no Regular the reduction still happens (the rule
+ *  never fails for want of a figure — RAW p.30 lets the FP draw one from their
+ *  eliminated units; for the Shadow it is a documented edge). */
+export function reduceElite(state: GameState, f: Force, nation: Nation, side: Side): void {
+  const u = f.units[nation]!;
+  u.elite -= 1; u.regular += 1;
+  const pool = state.reinforcements[nation];
+  if (side === 'shadow') pool.elite += 1;
+  if (pool.regular > 0) pool.regular -= 1;
+}
+
 /** Apply ONE allocation. Returns the hits it consumed (0 if it was illegal).
  *  Shadow figures recycle to reinforcements; FP losses are permanent (p.30). */
 function applyCasualtyOption(state: GameState, f: Force, side: Side, opt: CasualtyOption): number {
@@ -228,7 +247,7 @@ function applyCasualtyOption(state: GameState, f: Force, side: Side, opt: Casual
   if (opt.step === 'removeRegular' && u.regular > 0) {
     u.regular -= 1; if (side === 'shadow') state.reinforcements[opt.nation].regular += 1;
   } else if (opt.step === 'reduceElite' && u.elite > 0) {
-    u.elite -= 1; u.regular += 1; if (side === 'shadow') state.reinforcements[opt.nation].elite += 1;
+    reduceElite(state, f, opt.nation, side);
   } else if (opt.step === 'removeElite' && u.elite > 0) {
     u.elite -= 1; if (side === 'shadow') state.reinforcements[opt.nation].elite += 1;
   } else return 0;
@@ -268,10 +287,10 @@ function applyForceCasualties(state: GameState, f: Force, side: Side, hits: numb
     if (plan === 'regularsFirst') {
       const wr = nations.find((n) => f.units[n]!.regular > 0);
       if (wr) { f.units[wr]!.regular -= 1; if (side === 'shadow') state.reinforcements[wr].regular += 1; }
-      else { const n = nations[0]!; f.units[n]!.elite -= 1; f.units[n]!.regular += 1; if (side === 'shadow') state.reinforcements[n].elite += 1; }
+      else reduceElite(state, f, nations[0]!, side);
     } else {
       const we = nations.find((n) => f.units[n]!.elite > 0);
-      if (we) { f.units[we]!.elite -= 1; f.units[we]!.regular += 1; if (side === 'shadow') state.reinforcements[we].elite += 1; }
+      if (we) reduceElite(state, f, we, side);
       else { const n = nations[0]!; f.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
     }
   }
@@ -652,6 +671,16 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
     if (rgHasFigure) pc.rearguard = stashRearguard(state, from, rg, sortie ? box : undefined);
   }
   pc.atkUnits0 = atkCount(state, pc); // attacking force after the rearguard is held aside
+  // Defensive: an Army whose every unit was forced into the rearguard (none At
+  // War) has nothing left to fight with — Leaders/Nazgûl alone are not an Army
+  // (p.26) and cannot attack. Offers are gated on hasAtWarUnit so this should be
+  // unreachable; if it ever is, put the rearguard back and start no battle rather
+  // than roll 0 dice and lose the Leaders (player report).
+  if (pc.atkUnits0 === 0) {
+    if (pc.rearguard) { if (sortie) restoreRearguardInto(box!, pc.rearguard); else restoreRearguard(state, from, pc.rearguard); }
+    log(state, null, 'combat', `${attacker} cannot attack ${to} from ${from}: no unit of a Nation At War`);
+    return;
+  }
   state.pendingCombat = pc;
   // Name BOTH forces as they stand at the first roll (player report: "I always lose
   // track of the original forces and they're not listed in the log… that way the
@@ -1365,7 +1394,7 @@ export function resolveSiegeExtend(state: GameState, extend: boolean): void {
   const r = state.regions[pc.from]!;
   const n = (Object.keys(r.units) as Nation[]).find((k) => (r.units[k]?.elite ?? 0) > 0);
   if (!n) { finishCombat(state, false); return; } // no Elite left to spend (shouldn't happen — gated on offer)
-  r.units[n]!.elite -= 1; r.units[n]!.regular += 1; // the reduction swaps the figure on the board
+  reduceElite(state, r, n, pc.attacker); // Elite figure back to the pool (Shadow) / gone (FP), Regular taken from it
   log(state, null, 'combat', `${pc.attacker} presses the assault: an Elite is reduced to a Regular for another round`);
   pc.siegeRoundsLeft = 1;
   pc.round += 1;
@@ -1676,7 +1705,13 @@ export function attackTargets(state: GameState, side: Side): Array<[RegionId, Re
   }
   return out;
 }
-function hasAtWarUnit(state: GameState, id: RegionId, side: Side): boolean {
+/** Does `side`'s Army in `id` hold at least one unit of a Nation At War — i.e. a
+ *  unit that may attack? Every attack offer, die-driven OR card-driven, must pass
+ *  this: not-At-War units are forced into the rearguard by fullRearguard, so an
+ *  Army with none At War would "attack" with its Leaders alone (player report:
+ *  Help Unlooked For from Dale with 1 not-At-War North Regular + 1 Leader — the
+ *  Regular stayed, the Leader attacked by himself with 0 dice and died). */
+export function hasAtWarUnit(state: GameState, id: RegionId, side: Side): boolean {
   return hasAtWarUnitInForce(state, state.regions[id]!, side);
 }
 function hasAtWarUnitInForce(state: GameState, f: Force, side: Side): boolean {

@@ -35,7 +35,7 @@ const CHOICE_TITLE: Record<string, string> = {
   siegeExtend: 'Press the assault? (reduce one Elite to a Regular for another round)',
   advanceHoldBack: 'You took the region — keep any figures back where you attacked from?',
   advanceChoice: 'The field is yours — advance into the region?',
-  nazgulStrike: 'The Nazgûl find the Fellowship — tear a card from the table, or hunt?',
+  nazgulStrike: 'The Nazgûl find the Fellowship — discard one Free Peoples card from the table, or roll for the Hunt?',
   relieveAdvance: 'The siege is broken — advance your Army into the region?',
   combatCardCost: 'How much will you pay for this card?',
   besiegerAdvance: 'They have fallen back inside — advance and lay siege?',

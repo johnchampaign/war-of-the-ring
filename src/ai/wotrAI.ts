@@ -16,7 +16,7 @@ import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf } from '../engine/data';
 import { unitCount, forceUnitCount, STACKING_LIMIT, charDieLeaders } from '../engine/armies';
 import { sortieForce } from '../engine/combat';
-import { MORDOR_ENTRANCES } from '../engine/fellowship';
+import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
 
@@ -125,6 +125,17 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // entering Mordor requires the declared figure to stand there.
     const entries = declares.filter((a) => MORDOR_ENTRANCES.includes(a.target));
     if (entries.length) return closestToMordor(entries);
+    // ESCAPE a re-roll region: the Hunt re-rolls against the Fellowship's LAST
+    // KNOWN position, so a figure left standing with a Shadow Army / Nazgûl (e.g.
+    // after a reveal there) feeds every Hunt until it declares somewhere clean. Any
+    // clean target within Progress that loses no ground toward Mordor is worth it
+    // (player report: Progress 3, sat in a region with a Shadow Army and Nazgûl,
+    // "should've declared somewhere empty so it could move without hunt re-rolls").
+    if (!noRerolls(state.fellowship.location) && state.fellowship.progress >= 1) {
+      const here = dist(state.fellowship.location, 'morannon');
+      const clean = declares.filter((a) => a.target !== state.fellowship.location && noRerolls(a.target) && dist(a.target, 'morannon') <= here);
+      if (clean.length) return closestToMordor(clean);
+    }
     // Fellowship-plan BANK (stage 3, tried and REVERTED 2026-08-16): suppress this
     // distance declare while Corruption <= 3 and the gates are > 2 steps beyond
     // the bank — "travel hidden, accumulate". Two seed families x 2000 games on
@@ -982,7 +993,16 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     // its region) — aim there, not at the army campaign target (player report:
     // "put 4 Nazgûl in Dimrill Dale" after a declare in Parth Celebrant).
     if (a.companion === 'nazgul' && a.region) return 120 - dist(a.region, state.fellowship.location) * 20;
-    if (a.companion && a.region) return 110 - (target ? dist(a.region, target) : 0); // place the (group of) Companion(s) — do this rather than piling the whole Fellowship in
+    // Place the (group of) Companion(s) — do this rather than piling the whole
+    // Fellowship in. A landing spot that ACTIVATES a passive FP Nation outranks
+    // mere proximity to the campaign target: that is what a long Companion move
+    // is for (player report: We Prove the Swifter carried Merry 7 regions to Dol
+    // Guldur when Dale was in reach and would have woken the North).
+    if (a.companion && a.region) {
+      const rouse = owner === 'fp' && a.companion !== 'nazgul' && separationActivates(state, a.companion as never, a.region)
+        && settlementCtrl(state, a.region) !== 'shadow' ? 40 : 0;
+      return 110 + rouse - (target ? dist(a.region, target) : 0);
+    }
     if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
     if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;
     if (a.to) return 30 - (target ? dist(a.to, target) : 0);          // move toward the target

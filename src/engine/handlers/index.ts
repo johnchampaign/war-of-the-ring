@@ -7,7 +7,7 @@ import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
 import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy } from '../armies';
-import { applyCasualties, startBattle, queueOrApplyEventCasualties, type CasualtyThen } from '../combat';
+import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
@@ -525,8 +525,10 @@ const GONDOR_COASTAL = ['anfalas', 'dol-amroth', 'pelargir', 'lossarnach', 'osgi
 register('sh-str-10', {
   canPlay: (state) => isAtWar(state, 'southrons') && armySide(state, 'umbar') === 'shadow',
   targets: (state) => GONDOR_COASTAL
-    .filter((to) => armySide(state, to) === 'fp'
-      || unitCount(state, 'umbar') + unitCount(state, to) <= STACKING_LIMIT)
+    // An enemy-held coast is an ATTACK and needs an At-War unit in Umbar (the
+    // Southrons are At War by canPlay, but the Army there could be all-Isengard).
+    .filter((to) => (armySide(state, to) === 'fp' && hasAtWarUnit(state, 'umbar', 'shadow'))
+      || (armySide(state, to) !== 'fp' && unitCount(state, 'umbar') + unitCount(state, to) <= STACKING_LIMIT))
     // Tag enemy-held destinations as attacks so the UI doesn't offer the p.28
     // split picker for what resolves as a battle (applyTarget re-checks armySide).
     .map((to): EventTarget => ({ from: 'umbar', to, mode: armySide(state, to) === 'fp' ? 'attack' : 'move' })),
@@ -1090,14 +1092,17 @@ function nazgulArmyActions(state: GameState, allowAttack: boolean, exclude: Set<
   const out: EventTarget[] = [];
   for (const from of nazgulArmies(state)) {
     if (exclude.has(from)) continue;
+    // Attacks (field or assault) need a unit of a Nation At War, exactly like a
+    // die-driven attack (attackTargets) — Nazgûl alone are not an Army.
+    const canAttack = allowAttack && hasAtWarUnit(state, from, 'shadow');
     for (const to of REGIONS[from]!.adjacency) {
       if (canMoveArmy(state, from, to, 'shadow')) out.push({ from, to, mode: 'move' });
-      else if (allowAttack && armySide(state, to) === 'fp' && !shadowBarredFromRegion(state, to)) out.push({ from, to, mode: 'attack' });
+      else if (canAttack && armySide(state, to) === 'fp' && !shadowBarredFromRegion(state, to)) out.push({ from, to, mode: 'attack' });
     }
     // ASSAULT: this Nazgûl-led Army occupies a besieged Stronghold's open field and
     // may storm the boxed garrison (attack from===to), same gate as a normal attack.
     const box = state.regions[from]!.siegeBox;
-    if (allowAttack && box && forceUnitCount(box) > 0 && !shadowBarredFromRegion(state, from)) out.push({ from, to: from, mode: 'attack' });
+    if (canAttack && box && forceUnitCount(box) > 0 && !shadowBarredFromRegion(state, from)) out.push({ from, to: from, mode: 'attack' });
   }
   return out;
 }
@@ -1149,12 +1154,13 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
 function wkArmyActions(state: GameState, wk: RegionId): EventTarget[] {
   const out: EventTarget[] = [];
   if (armySide(state, wk) !== 'shadow') return out; // WK must be with a Shadow Army
+  const canAttack = hasAtWarUnit(state, wk, 'shadow'); // same At-War gate as a die-driven attack
   for (const to of REGIONS[wk]!.adjacency) {
     if (canMoveArmy(state, wk, to, 'shadow')) out.push({ from: wk, to, mode: 'move' });
-    else if (armySide(state, to) === 'fp' && !shadowBarredFromRegion(state, to)) out.push({ from: wk, to, mode: 'attack' });
+    else if (canAttack && armySide(state, to) === 'fp' && !shadowBarredFromRegion(state, to)) out.push({ from: wk, to, mode: 'attack' });
   }
   const box = state.regions[wk]!.siegeBox; // assault a Stronghold the WK's Army is besieging
-  if (box && forceUnitCount(box) > 0 && !shadowBarredFromRegion(state, wk)) out.push({ from: wk, to: wk, mode: 'attack' });
+  if (canAttack && box && forceUnitCount(box) > 0 && !shadowBarredFromRegion(state, wk)) out.push({ from: wk, to: wk, mode: 'attack' });
   return out;
 }
 
@@ -1229,7 +1235,9 @@ function siegeAssaultTargets(state: GameState, qualifies: (from: string) => bool
     // the besieger's own units (player report: the 3-round siege ended early).
     if (!r.siegeBox || forceUnitCount(r.siegeBox) === 0) continue;
     if (settlementController(state, id) !== 'fp') continue; // garrison (in the box) still holds it
-    if (armySide(state, id) === 'shadow' && qualifies(id)) out.push({ from: id, to: id });
+    // The besieger must hold a unit of a Nation At War to storm (same gate as a
+    // die-driven assault in attackTargets).
+    if (armySide(state, id) === 'shadow' && hasAtWarUnit(state, id, 'shadow') && qualifies(id)) out.push({ from: id, to: id });
   }
   return out;
 }
@@ -1545,7 +1553,7 @@ export function resolveNazgulStrike(state: GameState, discard?: string): void {
     if (i >= 0) {
       t.splice(i, 1);
       state.cards.fp.discard.character.push(discard);
-      log(state, null, 'event', `The Nazgûl Strike! — ${EVENT_BY_ID[discard]?.name ?? discard} is torn from the table`);
+      log(state, null, 'event', `The Nazgûl Strike! — ${EVENT_BY_ID[discard]?.name ?? discard} is discarded from the table (no Hunt roll)`);
       return;
     }
   }
@@ -1649,7 +1657,10 @@ function helpUnlookedForTargets(state: GameState): EventTarget[] {
   const out: EventTarget[] = [];
   for (const sh of Object.keys(state.regions)) {
     if (!besiegedFpStronghold(state, sh)) continue;
-    for (const from of REGIONS[sh]!.adjacency) if (armySide(state, from) === 'fp') out.push({ from, to: sh, mode: 'attack' });
+    // The relieving Army must be ABLE to attack: at least one unit of a Nation At
+    // War (player report: a not-At-War North Regular + Leader in Dale — the Regular
+    // was forced to stay, the Leader "attacked" alone with 0 dice and died).
+    for (const from of REGIONS[sh]!.adjacency) if (armySide(state, from) === 'fp' && hasAtWarUnit(state, from, 'fp')) out.push({ from, to: sh, mode: 'attack' });
   }
   return out;
 }

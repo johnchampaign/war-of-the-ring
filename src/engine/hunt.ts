@@ -361,7 +361,13 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
   // Guide ability) used to end on a bare "corruption N" with no arithmetic, so the
   // player couldn't check the total against what they'd spent reducing it (report).
   const taken = damage > 0 ? `${damage} Corruption taken` : 'no Corruption taken';
-  log(state, null, 'hunt', `Hunt resolved — ${taken}; Corruption now ${fs.corruption}, Fellowship ${fs.hidden ? 'hidden' : 'revealed'}`);
+  // Report the tile's OUTCOME, not the transient flag: when the reveal hands the FP
+  // a "where does the figure stand" choice, `hidden` is still true at this instant
+  // and the line used to say "Fellowship hidden" one entry before it was revealed
+  // (player report: board and status said revealed, the log said hidden).
+  const revealPending = reveal && (state.pendingChoice as GameState['pendingChoice'])?.kind === 'revealMove';
+  const status = reveal || !fs.hidden ? (revealPending ? 'revealed (choose where it stands)' : 'revealed') : 'hidden';
+  log(state, null, 'hunt', `Hunt resolved — ${taken}; Corruption now ${fs.corruption}, Fellowship ${status}`);
 }
 /** Log one −1 step of a Hunt-damage reduction, so the running total is legible. */
 function logReduce(state: GameState, from: number, why: string): void {
