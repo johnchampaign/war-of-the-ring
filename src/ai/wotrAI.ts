@@ -534,6 +534,13 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // is simply dead. Keep it for its combat half instead (player report: "SP played
       // Flocks of Crebain while I was in Mordor (no effect)").
       if (a.cardId === 'sh-char-16' && fs.mordor !== null) return 1;
+      // Worn with Sorrow and Toil only bites "if a Companion IN THE FELLOWSHIP is taken
+      // as a casualty" — and a Companion can never rejoin the Fellowship, so with the
+      // Fellowship down to the Ring-bearers the trigger can never fire again for the
+      // rest of the game. Keep it for its combat half (Words of Power) instead (player
+      // report: "SP played Worn with Sorrow & Toil when there were no Companions in the
+      // Fellowship. No effect.").
+      if (a.cardId === 'sh-char-15' && fs.companions.length === 0) return 1;
       // Threats and Promises only bars the FP from advancing a PASSIVE Nation with a
       // Muster die — once every FP Nation is active it's a dead table card; keep it
       // for its combat half (Devilry of Orthanc). Same trap as Wormtongue (player
