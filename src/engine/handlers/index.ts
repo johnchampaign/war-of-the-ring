@@ -13,7 +13,7 @@ import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations } from '../fellowship';
-import { moveCharacter, characterDestinations } from '../charMove';
+import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
 import { log, logCardDraw, notify } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
@@ -1071,6 +1071,18 @@ const nazgulArmies = (state: GameState): string[] =>
 /** A figure that a card's "move the Nazgûl" clause may fly: a region's Nazgûl
  *  group, or the Witch-king (himself a Nazgûl — rulebook p.25). */
 const isNazgulFigure = (c: string | undefined): boolean => c === 'nazgul' || c === 'witch-king';
+/** Destination targets for flying a picked Nazgûl figure. "Move any or ALL of the
+ *  Nazgûl" means a stack of three may send 1, 2 or 3 — so a Nazgûl group fans out to
+ *  one target PER COUNT (the Witch-king is one figure, so no count). Both "move any
+ *  or all" cards took the whole stack; the Character-die path and the other Nazgûl
+ *  cards have always asked (player report: wanted to move only one of the Nazgûl out
+ *  of Minas Tirith). */
+function nazgulFlyTargets(state: GameState, companion: string, from: RegionId): EventTarget[] {
+  const dests = characterDestinations(state, 'shadow', companion, from);
+  if (companion !== 'nazgul') return dests.map((region) => ({ companion, from, region }));
+  const avail = Math.max(1, state.regions[from]!.nazgul);
+  return dests.flatMap((region) => Array.from({ length: avail }, (_, i) => ({ companion, from, region, count: i + 1 })));
+}
 /** Legal move/attack EventTargets for Nazgûl-led Armies. `allowAttack` gates the
  *  attack option (Ringwraiths: only as the sole action); `exclude` skips Armies that
  *  have already moved this card. */
@@ -1111,9 +1123,7 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
     const last = applied[applied.length - 1];
     // Destination step of a Nazgûl figure-move (fly anywhere it can land). The
     // Witch-king flies on this card too — he is a Nazgûl (rulebook p.25).
-    if (last && isNazgulFigure(last.companion) && last.from && !last.region) {
-      return characterDestinations(state, 'shadow', last.companion!, last.from).map((region) => ({ companion: last.companion, from: last.from, region }));
-    }
+    if (last && isNazgulFigure(last.companion) && last.from && !last.region) return nazgulFlyTargets(state, last.companion!, last.from);
     const armyActs = applied.filter((a) => a.mode === 'move' || a.mode === 'attack');
     if (armyActs.some((a) => a.mode === 'attack') || armyActs.length >= 2) return []; // army clause spent (1 attack, or 2 moves)
     const out: EventTarget[] = [];
@@ -1130,7 +1140,7 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
     return out;
   },
   applyTarget(state, _side, t) {
-    if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region); return; }
+    if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region, t.count); return; }
     applyNazgulArmyAction(state, t);
   },
 });
@@ -1160,9 +1170,7 @@ register('sh-char-24', { // The Black Captain Commands
     const wk = charRegion(state, 'witch-king');
     const last = applied[applied.length - 1];
     // Destination step of a Nazgûl figure-fly (the Witch-king flies too — p.25).
-    if (last && isNazgulFigure(last.companion) && last.from && !last.region) {
-      return characterDestinations(state, 'shadow', last.companion!, last.from).map((region) => ({ companion: last.companion, from: last.from, region }));
-    }
+    if (last && isNazgulFigure(last.companion) && last.from && !last.region) return nazgulFlyTargets(state, last.companion!, last.from);
     const recruited = applied.some((a) => a.mode === 'recruit');
     const flies = applied.filter((a) => isNazgulFigure(a.companion));
     const armyActs = applied.filter((a) => a.mode === 'move' || a.mode === 'attack');
@@ -1184,7 +1192,7 @@ register('sh-char-24', { // The Black Captain Commands
       if (k > 0) { state.regions[t.region]!.nazgul += k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) - k; log(state, null, 'event', `The Black Captain Commands: ${k} Nazgûl muster at ${t.region}`); }
       return;
     }
-    if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region); return; }
+    if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region, t.count); return; }
     applyNazgulArmyAction(state, t);
   },
 });
@@ -1378,21 +1386,50 @@ function moveNazgulCard(after: (state: GameState) => void): EventHandler {
 /** A card that separates ONE Companion: step 1 pick the Companion, step 2 pick where
  *  it goes (the player's CHOICE, within Progress + Level + the card's bonus). `after`
  *  runs the card's post-placement effect (heal, extra rouse). */
-function separateViaCard(opts: { extraMove?: number; levelOverride?: number; after?: (state: GameState, companions: string[], dest: RegionId) => void } = {}): EventHandler {
+function separateViaCard(opts: { extraMove?: number; levelOverride?: number; mapMove?: boolean; after?: (state: GameState, companions: string[], dest: RegionId) => void } = {}): EventHandler {
   // RAW: these cards separate "one Companion OR one group of Companions". The player
   // picks one or more Companions (each a companion-only target → a panel button), then
   // a destination (a companion+region target → a board click) that places the whole
   // group together. Nothing mutates until the destination is chosen (no stranded
   // separated-but-unplaced Companions); placement happens in finalize from `applied`.
+  //
+  // `mapMove` adds the SECOND printed branch of Gwaihir / We Prove the Swifter:
+  // "Separate from the Fellowship, OR MOVE, one Companion or one group of Companions".
+  // That branch used to be treated as already covered by the Character-die move — but
+  // it isn't: it costs an Event die instead, it carries the card's range bonus, and
+  // with an empty Fellowship it is the ONLY way to play the card at all. (Player
+  // report: Gwaihir sat unplayable in hand on turn 8 with five Companions on the map
+  // and none in the Fellowship.) A map-branch target is tagged with `from` — the
+  // Companion's current region — which is also how `finalize` tells the branches apart.
   const chosenOf = (applied: EventTarget[]) => [...new Set(applied.filter((a) => a.companion).map((a) => a.companion!))];
+  const onMap = (state: GameState): Array<[string, RegionId]> =>
+    Object.entries(state.characters.inPlay).filter(([c]) => COMPANION_SET.has(c)) as Array<[string, RegionId]>;
+  const mapDests = (state: GameState, group: string[], from: RegionId): RegionId[] => {
+    // A group travels at the highest Level among its members (p.24) — with a
+    // levelOverride they are all equal, so the leader only matters for the +N cards.
+    const leader = group.reduce((best, c) => (levelOf(c) > levelOf(best) ? c : best), group[0]!);
+    return characterDestinations(state, 'fp', leader, from, opts);
+  };
+  const canMapMove = (state: GameState): boolean =>
+    !!opts.mapMove && onMap(state).some(([c, from]) => mapDests(state, [c], from).length > 0);
   return {
-    canPlay: canSeparate,
+    canPlay: (state) => canSeparate(state) || canMapMove(state),
     repeat: 24,   // pick any number of Companions, then a destination
     noDone: true, // can't stop without placing — the destination ends it
     targets(state, _side, applied = []) {
       if (applied.some((a) => a.region)) return []; // destination chosen → done
       const chosen = chosenOf(applied);
       const inGroup = new Set(chosen);
+      // The map branch is locked in as soon as a Companion is picked off the board.
+      const mapFrom = applied.find((a) => a.from)?.from;
+      if (mapFrom) {
+        // Only Companions in the SAME region may join the travelling group (p.24).
+        const out: EventTarget[] = onMap(state)
+          .filter(([c, r]) => r === mapFrom && !inGroup.has(c))
+          .map(([c]) => ({ companion: c, from: mapFrom }));
+        for (const region of mapDests(state, chosen, mapFrom)) out.push({ companion: chosen[0], from: mapFrom, region });
+        return out;
+      }
       // Add more Companions to the travelling group (panel buttons).
       const out: EventTarget[] = fellowCompanions(state).filter((t) => !inGroup.has(t.companion!));
       // Once ≥1 is chosen, offer destinations (range = Progress + the highest Level in
@@ -1400,26 +1437,35 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; aft
       if (chosen.length > 0) {
         const range = Math.max(...chosen.map((c) => separationRange(state, c, opts)));
         for (const region of separationDestinations(state, state.fellowship.location, range)) out.push({ companion: chosen[0], region });
+      } else if (opts.mapMove) {
+        // Nothing picked yet: the "or move" branch is offered alongside the separation.
+        for (const [c, from] of onMap(state)) if (mapDests(state, [c], from).length > 0) out.push({ companion: c, from });
       }
       return out;
     },
     applyTarget() { /* no mutation per step; the group is placed in finalize from `applied` */ },
     finalize(state, _side, applied) {
-      const region = applied.find((a) => a.region)?.region;
+      const dest = applied.find((a) => a.region);
       const companions = chosenOf(applied);
-      if (!region || companions.length === 0) return; // fizzle (no destination reachable)
+      if (!dest?.region || companions.length === 0) return; // fizzle (no destination reachable)
+      if (dest.from) { // "or move" branch: Companions already on the map travel together
+        moveCompanionGroup(state, 'fp', dest.from, dest.region, companions, opts);
+        opts.after?.(state, companions, dest.region);
+        return;
+      }
       for (const c of companions) beginSeparation(state, c);
-      placeSeparatedGroup(state, companions, region);
-      opts.after?.(state, companions, region);
+      placeSeparatedGroup(state, companions, dest.region);
+      opts.after?.(state, companions, dest.region);
     },
   };
 }
 // I Will Go Alone — separate a Companion (you choose where; +1 region), then heal 1.
+// Separate-only: the card's own text has no "or move" clause.
 register('fp-char-11', separateViaCard({ extraMove: 1, after: (s) => heal(s, 1) }));
-// Gwaihir the Windlord — separate a Companion as if Level 4 (you choose where).
-register('fp-char-15', separateViaCard({ levelOverride: 4 }));
-// We Prove the Swifter — separate a Companion +2 regions (you choose where).
-register('fp-char-16', separateViaCard({ extraMove: 2 }));
+// Gwaihir the Windlord — separate OR move a Companion/group as if their Level were 4.
+register('fp-char-15', separateViaCard({ levelOverride: 4, mapMove: true }));
+// We Prove the Swifter — separate OR move a Companion/group, +2 regions.
+register('fp-char-16', separateViaCard({ extraMove: 2, mapMove: true }));
 // There and Back Again — separate a Companion (+1, you choose where); if Gimli/Legolas
 // is then in Dale/Erebor/Woodland Realm, rouse the Dwarves, Elves & North.
 register('fp-char-17', separateViaCard({

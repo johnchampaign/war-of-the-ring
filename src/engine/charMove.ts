@@ -95,17 +95,23 @@ function activateOnCompanionLand(state: GameState, side: Side, chars: string[], 
 }
 
 const HOBBITS = new Set(['meriadoc', 'peregrin']);
+/** Range modifiers granted by an Event card ("as if their Level were 4", "two extra
+ *  regions"). Only ever applied to Companions — a card that boosts a walking figure
+ *  never boosts a flier. */
+export interface RangeOpts { extraMove?: number; levelOverride?: number }
 /** The movement range of a piece: Nazgûl/Witch-king fly; Saruman 0; others by Level.
  *  Gandalf the White's Shadowfax: Level 4 when alone or with a single Hobbit. */
-function rangeOf(state: GameState, char: string, from: RegionId): number {
+function rangeOf(state: GameState, char: string, from: RegionId, opts: RangeOpts = {}): number {
   if (char === 'nazgul' || char === 'witch-king') return FLY;
   if (char === 'saruman') return 0;
+  const bonus = opts.extraMove ?? 0;
+  if (opts.levelOverride !== undefined) return opts.levelOverride + bonus;
   if (char === 'gandalf-white') {
     const others = state.regions[from]!.characters.filter((c) => c !== 'gandalf-white' && COMPANION_SET.has(c));
     const aloneOrOneHobbit = others.length === 0 || (others.length === 1 && HOBBITS.has(others[0]!));
-    return aloneOrOneHobbit ? 4 : levelOf('gandalf-white');
+    return (aloneOrOneHobbit ? 4 : levelOf('gandalf-white')) + bonus;
   }
-  return levelOf(char); // mouth-of-sauron = 3, companions = their Level
+  return levelOf(char) + bonus; // mouth-of-sauron = 3, companions = their Level
 }
 
 /** Execute a character move. `char` is 'nazgul' (a region's Nazgûl group), a
@@ -146,13 +152,13 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
  *  group of Companions in the same region can be moved to a common destination at a
  *  distance equal to or less than the highest Level in the group" — so a Level-1
  *  Hobbit travels with a Level-4 Gandalf. Returns false if illegal. */
-export function moveCompanionGroup(state: GameState, side: Side, from: RegionId, to: RegionId, chars: string[]): boolean {
+export function moveCompanionGroup(state: GameState, side: Side, from: RegionId, to: RegionId, chars: string[], opts: RangeOpts = {}): boolean {
   if (side !== 'fp' || from === to || !REGIONS[to] || chars.length === 0) return false;
   const src = state.regions[from]!;
   let range = 0;
   for (const c of chars) {
     if (!COMPANION_SET.has(c) || !src.characters.includes(c)) return false;
-    range = Math.max(range, rangeOf(state, c, from));
+    range = Math.max(range, rangeOf(state, c, from, opts));
   }
   // Companion GROUPS walk too: the p.24 Shadow-Stronghold stop applies (side is
   // always 'fp' here — the guard above rejects anything else).
@@ -202,8 +208,8 @@ export function remainingCharMoves(state: GameState, side: Side, excl?: CharMove
 /** Every legal destination region for `char` moving from `from` — the full set
  *  (unlike characterMoveOptions, which caps a curated subset for the AI). For the
  *  board UI: highlight these when the player picks a character to move. */
-export function characterDestinations(state: GameState, side: Side, char: string, from: RegionId): RegionId[] {
-  const range = rangeOf(state, char, from);
+export function characterDestinations(state: GameState, side: Side, char: string, from: RegionId, opts: RangeOpts = {}): RegionId[] {
+  const range = rangeOf(state, char, from, opts);
   if (range <= 0) return [];
   const stops = side === 'fp' ? companionStop(state) : null;
   const out: RegionId[] = [];

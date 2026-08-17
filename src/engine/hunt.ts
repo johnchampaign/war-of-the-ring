@@ -357,7 +357,15 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
   state.pendingChoice = null;
   if (damage > 0) fs.corruption = Math.min(12, fs.corruption + damage);
   if (reveal) beginReveal(state); // may set the revealMove choice — after clearing this one
-  log(state, null, 'hunt', `Hunt resolved; corruption ${fs.corruption}, hidden ${fs.hidden}`);
+  // Say what the remaining damage actually cost. A long Hunt (redraw → sacrifice →
+  // Guide ability) used to end on a bare "corruption N" with no arithmetic, so the
+  // player couldn't check the total against what they'd spent reducing it (report).
+  const taken = damage > 0 ? `${damage} Corruption taken` : 'no Corruption taken';
+  log(state, null, 'hunt', `Hunt resolved — ${taken}; Corruption now ${fs.corruption}, Fellowship ${fs.hidden ? 'hidden' : 'revealed'}`);
+}
+/** Log one −1 step of a Hunt-damage reduction, so the running total is legible. */
+function logReduce(state: GameState, from: number, why: string): void {
+  log(state, null, 'hunt', `${why} — Hunt damage ${from} → ${Math.max(0, from - 1)}`);
 }
 /** Re-prompt the huntDamage choice if damage remains AND the FP could still reduce it
  *  (a Companion to sacrifice or a reduction ability); otherwise finish.
@@ -383,6 +391,7 @@ function repromptOrFinish(state: GameState, damage: number, reveal: boolean, cas
  *  it here would cycle). The Guide reassigns as part of the separation. */
 export function reduceHuntDamageBySeparate(state: GameState): void {
   const d = state.pendingChoice!.data as { damage: number; reveal: boolean };
+  logReduce(state, d.damage, 'The Hobbit Guide leaves the Fellowship to draw off the Hunt');
   repromptOrFinish(state, d.damage - 1, d.reveal);
 }
 
@@ -395,6 +404,7 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
   // (Reveals in place mid-resolution — no figure-move/extra-Hunt here; minor deviation.)
   if (mode === 'reduceReveal') {
     fs.hidden = false;
+    logReduce(state, d.damage, 'Gollum, the Guide, reveals the Fellowship to lead the Hunt astray');
     repromptOrFinish(state, d.damage - 1, false); // already revealed
     return;
   }
@@ -408,7 +418,7 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
     if (i >= 0) {
       const id = state.cards.fp.table.splice(i, 1)[0]!;
       state.cards.fp.discard.character.push(id);
-      log(state, null, 'hunt', `discard ${id} to reduce Hunt damage by 1`);
+      logReduce(state, d.damage, `Discard "${EVENT_BY_ID[id]?.name ?? id}" from the table`);
     }
     repromptOrFinish(state, d.damage - 1, d.reveal);
     return;

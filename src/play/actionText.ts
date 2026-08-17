@@ -62,7 +62,11 @@ export function describeAction(a: WotrAction): string {
       if (a.companion === 'nazgul') return a.region ? `${cardName(a.card)}: move ${a.count ?? ''} Nazgûl ${rName(a.from!)} → ${rName(a.region)}`.replace('move  ', 'move ') : `${cardName(a.card)}: move the Nazgûl in ${rName(a.from!)}`;
       if (a.companion && a.mode === 'none') return `${cardName(a.card)}: deselect (move someone else)`;
       if (a.companion && a.region) return `${cardName(a.card)}: send ${charName(a.companion)} to ${rName(a.region)}`;
-      if (a.companion && !a.region) return `${cardName(a.card)}: move ${charName(a.companion)} (joins the moving group)`;
+      // A pick tagged with a region is a figure ALREADY on the map (the "or move"
+      // branch of Gwaihir / We Prove the Swifter, or a Nazgûl-card fly) — say where
+      // from, so it reads differently from separating someone out of the Fellowship.
+      if (a.companion && a.from) return `${cardName(a.card)}: move ${charName(a.companion)} (on the map, in ${rName(a.from)})`;
+      if (a.companion && !a.region) return `${cardName(a.card)}: separate ${charName(a.companion)} (joins the travelling group)`;
       if (a.figure && a.region && !a.nation && !a.to) return `${cardName(a.card)}: upgrade a Regular to Elite in ${rName(a.region)}`;
       if (a.figure) return `${cardName(a.card)}: recruit a${a.nation ? ` ${cap(a.nation)}` : ''} ${a.figure === 'elite' ? 'Elite' : 'Regular'}${a.region ? ` in ${rName(a.region)}` : ''}`;
       if (a.nation) return `${cardName(a.card)}: activate ${cap(a.nation)} (advance 1 step)`;
