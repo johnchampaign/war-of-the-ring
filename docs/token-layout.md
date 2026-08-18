@@ -63,6 +63,13 @@ relative to the reference image and the layout logic works against it.
 
 - `region-geometry.json`: 105/105 regions, framework normalized format
   (polygons in reference-image pixels). ✅
+- **Two large blank areas on the placeholder board are intentional — they are
+  water, not missing regions:** the **Sea of Rhûn** (between Northern/Southern
+  Dorwinion, North/East Rhûn and South Rhûn) and the **Sea of Núrnen** (the
+  pocket between Gorgoroth and Nurn). Both were queried as possible bugs
+  (2026-08-18) and checked against adjacency; nothing borders across them. Thin
+  dark seams between neighbours are first-pass polygon slack — cosmetic only,
+  movement uses the adjacency table.
 - Token layout via framework `layoutTokensInPolygon`; audit overlay confirms
   0 bleed. ✅
 - Affine recalibration to the shipped board image + per-region click-fix:
