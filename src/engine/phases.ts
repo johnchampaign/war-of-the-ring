@@ -28,6 +28,7 @@ function runRecover(state: GameState): void {
   state.hunt.box = 0;
   state.hunt.fpDiceInBox = 0;
   state.flags.fellowshipDeclaredOrMovedThisTurn = false;
+  state.flags.fellowshipDeclaredThisTurn = false;
   state.flags.fpUsedElvenRingThisTurn = false;
   state.flags.shadowUsedElvenRingThisTurn = false;
   state.flags.mouthMusterUsedThisTurn = false;

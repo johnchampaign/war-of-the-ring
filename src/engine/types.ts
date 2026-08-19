@@ -297,6 +297,13 @@ export interface GameState {
     mouthMusterUsedThisTurn?: boolean;
     /** The Ents Awake: FP may play one Character Event card without an Action die. */
     fpFreeCharEventThisTurn?: boolean;
+    /** The Fellowship's position has already been declared this turn. The
+     *  declaration is a ONCE-PER-TURN act (rulebook p.39, Fellowship Phase), and
+     *  so is the Corruption it heals in a Free Peoples City/Stronghold — without
+     *  this the phase stayed open after declaring and the FP could re-declare in
+     *  place, healing again each time (player report 4r4z: five declarations at
+     *  Dale in one Fellowship phase took Corruption from 5 to 0). */
+    fellowshipDeclaredThisTurn?: boolean;
   };
   pendingChoice: PendingChoice | null;
   /** An interactive battle in progress, or null. */

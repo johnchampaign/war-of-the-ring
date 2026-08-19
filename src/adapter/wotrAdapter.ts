@@ -331,7 +331,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       // last-known position (the figure moves there; the player chooses — not a
       // forced march toward Mordor). The hidden Fellowship sneaks through anywhere,
       // including Shadow-Stronghold regions (Moria, Mordor), so no region is excluded.
-      if (fs.hidden && fs.mordor === null) {
+      // ...but only ONCE per turn: the phase stays open after declaring (Guide change,
+      // enter Mordor), and re-declaring in place healed another Corruption every time
+      // (report 4r4z: five declarations at Dale in one phase, Corruption 5 -> 0).
+      if (fs.hidden && fs.mordor === null && !state.flags.fellowshipDeclaredThisTurn) {
         // Declaring IN PLACE is always legal — even at Progress 0 — and it's how the
         // Fellowship rests: "If the Fellowship remains in a City or Stronghold for
         // several turns, during the Fellowship phase of each turn it is possible to
@@ -499,6 +502,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       break; // free choice — stays in the Fellowship phase (may still declare/enter/skip)
     case 'declareFellowship': {
       requirePhase(state, 'fellowship');
+      if (state.flags.fellowshipDeclaredThisTurn) throw new Error('The Fellowship has already been declared this turn');
       const fromLoc = state.fellowship.location;
       const stepsBefore = Math.min(state.fellowship.progress, pathTo(fromLoc, action.target).length);
       const traversed = [fromLoc, ...pathTo(fromLoc, action.target).slice(0, stepsBefore)];

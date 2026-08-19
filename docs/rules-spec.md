@@ -660,7 +660,13 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   is the *Balrog of Moria* card's own text ("declared or revealed" through Moria).
   Declaring does **not** end the Fellowship phase: the FP may then change the Guide
   or, if the figure now sits at Morannon/Minas Morgul, **enter Mordor this same
-  phase** (p.43: enter Mordor "after fully resolving the declaration").
+  phase** (p.43: enter Mordor "after fully resolving the declaration"). It is,
+  however, **once per turn** — the phase staying open is not a licence to declare
+  again. `flags.fellowshipDeclaredThisTurn` (reset in phase 1) drops the
+  `declareFellowship` actions after the first and makes a forced repeat throw;
+  without it the FP could re-declare in place and heal 1 Corruption *each time*
+  (player report 4r4z: five declarations at Dale in one Fellowship phase took
+  Corruption from 5 to 0). `scripts/probe-declare-once.mjs`.
 - **Revealed** (by successful Hunt or events): flip Progress to Revealed; FP must
   move the Ring-bearers figure (≤ Progress, never ending in an FP City/Stronghold)
   and reset to 0 (p.38). **A Revealed Fellowship cannot be moved** (via Character
@@ -669,7 +675,10 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   hide does **not** also move that action; the die is not added to the Hunt Box
   (p.39). Must be Hidden to move.
 - **Healing**: if **declared** in a non-enemy FP City/Stronghold during the
-  Fellowship phase, remove 1 Corruption (min 0) (p.39).
+  Fellowship phase, remove 1 Corruption (min 0) (p.39). Once per turn, since the
+  declaration itself is: "during the Fellowship phase of **each turn** it is
+  possible to declare them in that region and heal one Corruption each time"
+  (p.39) — each *turn*, not each declaration.
 - **Separating Companions** (Character die; forbidden on Mordor Track): move the
   Companion(s) from the Fellowship Box to the Ring-bearers' region, then move ≤
   (Progress step + Companion Level) regions (group: highest Level) (p.39). Remove

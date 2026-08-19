@@ -159,6 +159,11 @@ export function hideFellowship(state: GameState): void {
 export function declareFellowship(state: GameState, target: RegionId): void {
   const fs = state.fellowship;
   if (!fs.hidden || fs.mordor !== null) return;
+  // Once per turn only. The Fellowship phase deliberately stays OPEN after a
+  // declaration (so the FP may still change the Guide or enter Mordor), which used
+  // to let the FP declare again and again in place — healing 1 Corruption each
+  // time (report 4r4z).
+  if (state.flags.fellowshipDeclaredThisTurn) return;
   if (MORDOR_INTERIOR.includes(target)) return; // never strand the figure inside Mordor (report 681l)
   const path = pathTo(fs.location, target);
   const steps = Math.min(fs.progress, path.length);
@@ -171,6 +176,7 @@ export function declareFellowship(state: GameState, target: RegionId): void {
     && state.regions[fs.location]!.control !== 'shadow') {
     fs.corruption = Math.max(0, fs.corruption - 1);
   }
+  state.flags.fellowshipDeclaredThisTurn = true;
   log(state, null, 'fellowship', `Fellowship declared at ${fs.location} (corruption ${fs.corruption})`);
 }
 
