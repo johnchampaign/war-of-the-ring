@@ -100,6 +100,42 @@ heal-spot closer, and hoarding Progress means fewer Mordor entries, not safer
 ones. BANK as a "don't declare" state is falsified twice; a future BANK would
 have to mean something else (e.g. WHICH declares to prefer, not whether).
 
+## Two Hunt-choice fixes, shipped (2026-08-20)
+
+Not plan-machine states — two *correct-play* fixes, each raised by a player report,
+each fixing a decision the AI was making badly rather than changing how often the
+Fellowship moves. Isolated A/Bs, 2 seed families × 1000 games per arm:
+
+| arm                   | FP%      | Ring | Corr deaths | military | Mordor entries | peak Corr | median |
+|-----------------------|----------|------|-------------|----------|----------------|-----------|--------|
+| baseline (`33223c4`)  | 46.4     | 726  | 541         | 733      | 1297           | 8.1       | 14     |
+| reveal-move tie-break | 50.2     | 845  | 554         | 601      | 1439           | 8.1       | 13     |
+| Mordor casualties     | 52.5     | 849  | **414**     | 737      | 1297           | 7.5       | 14     |
+| **both (shipped)**    | **55.5** | 951  | 446         | 603      | 1439           | 7.4       | 13     |
+
+**Reveal-move tie-break.** The reveal PARKS the figure, and the Hunt re-rolls against
+wherever it stands until the next declaration — so the destination is a multi-turn
+commitment, not a step. The old rule was distance-to-Morannon only, and ties (there
+are always several) fell to action-list order. Now: distance first, then no re-roll
+source standing in the region, then nothing adjacent that can walk in, then near a
+rest-heal. It buys no safety with distance, yet Mordor entries rose 11% — a figure
+parked out of re-roll range simply gets to move.
+
+**Companions are currency on the Mordor Track.** A Companion in the Fellowship can
+never be separated again once on the Track (p.43), so its only remaining use is
+soaking Hunt damage; the old policy hoarded them until Corruption 8+ and the
+Fellowship died with a full escort. Now it takes the casualty on every hit, spending
+the Guide (the highest Level left) on a 3+ so nothing spills. Corruption deaths −23%
+with military wins untouched (737 vs 733) — this one converts deaths into Ring wins
+and touches nothing else.
+
+Both are outside the plan-machine acceptance band (FP 48–52%, military ±15%), and
+that band does not apply: it was written to stop *strategy* experiments from being
+justified by win rate alone. These are cases where the AI had a strictly better legal
+move available and did not take it, so the swing is the size of the mistake being
+removed, and the answer to a now-stronger FP AI is a stronger Shadow AI — not a
+dumber Free Peoples one. Pinned by `scripts/probe-ai-hunt-choices.mjs`.
+
 ## The proposed machine
 
 A small, explicit, public-information state machine that biases (never overrides)

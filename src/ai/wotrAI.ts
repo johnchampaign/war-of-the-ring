@@ -102,12 +102,7 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // Stronghold, a Shadow Army, or Nazgûl grants the Shadow a failed-die re-roll
     // on every Hunt there (huntRerollSources) — never end a heal-declare in one
     // (player report: the AI declared in Moria and handed the Shadow a re-roll).
-    const noRerolls = (t: RegionId): boolean => {
-      const r = state.regions[t]!;
-      return !(REGIONS[t]!.settlement === 'Stronghold' && settlementCtrl(state, t) === 'shadow')
-        && !armyHere(state, t, 'shadow')
-        && r.nazgul === 0 && !r.characters.includes('witch-king');
-    };
+    const noRerolls = (t: RegionId): boolean => huntClean(state, t);
     // NB no Progress requirement. Declaring IN PLACE at Progress 0 is legal precisely
     // so a Fellowship sitting in a friendly City/Stronghold can rest and heal (p.39),
     // and `declares` only ever contains targets already within Progress — so a
@@ -287,6 +282,27 @@ const isHealSettlement = (state: GameState, id: RegionId): boolean => {
 const armyHere = (state: GameState, id: RegionId, side: Side): boolean => {
   const r = state.regions[id]!;
   return (Object.keys(r.units) as Nation[]).some((n) => FP.has(n) === (side === 'fp') && (r.units[n]!.regular + r.units[n]!.elite) > 0);
+};
+
+/** Nothing in `id` feeds the Hunt: a Shadow-controlled Stronghold, a Shadow Army and a
+ *  Nazgûl each grant the Shadow one failed-die re-roll on EVERY Hunt while the
+ *  Ring-bearers' figure stands there (huntRerollSources, rules-spec §10). Shared by the
+ *  declare logic and by the reveal move — both put the figure down for several turns. */
+const huntClean = (state: GameState, id: RegionId): boolean => {
+  const r = state.regions[id]!;
+  return !(REGIONS[id]!.settlement === 'Stronghold' && settlementCtrl(state, id) === 'shadow')
+    && !armyHere(state, id, 'shadow')
+    && r.nazgul === 0 && !r.characters.includes('witch-king');
+};
+/** How many neighbours of `id` hold a re-roll source that could simply WALK IN. A region
+ *  that is clean today but sits next door to a Shadow Stronghold's garrison is a re-roll
+ *  region as soon as the Shadow spends one move on it. */
+const huntThreat = (state: GameState, id: RegionId): number =>
+  (REGIONS[id]!.adjacency as RegionId[]).filter((a) => state.regions[a] && !huntClean(state, a)).length;
+/** Lexicographic "is a better rank than" over an ordered list of tie-breakers. */
+const lexLess = (a: number[], b: number[]): boolean => {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! < b[i]!;
+  return false;
 };
 
 /** Is an enemy Army within `n` regions of `id`? Bounded outward walk rather than a
@@ -781,8 +797,25 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         const guide = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide');
         if (guide) return guide;
       }
-      // Trade a Companion (random, to keep the Guide) only when Corruption is
-      // about to get dangerous; otherwise absorb.
+      // ON THE MORDOR TRACK, SPEND THE BODIES. A Companion inside the Fellowship can
+      // never be separated again once it enters Mordor (p.43), so from here on their
+      // ONLY remaining use is soaking Hunt damage — hoarding them just means dying with
+      // them in hand while Corruption (the 12-step death clock) runs. Take the casualty
+      // on every hit; on a big one spend the GUIDE, who is the highest-Level Companion
+      // left (the engine re-assigns the Guide down the Levels) and so is the only body
+      // that can cover a 3 without spilling the excess into Corruption.
+      // (Player report: "why enter Mordor with all those companions if you're not going
+      // to use them? I would've used Strider to cancel the damage.")
+      if (state.fellowship.mordor !== null && state.fellowship.companions.length > 0) {
+        const guideCovers = state.fellowship.companions.includes(state.fellowship.guide)
+          && levelOf(state.fellowship.guide) >= damage && damage >= 3;
+        const cas = guideCovers
+          ? legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide')
+          : legal.find((a) => a.kind === 'huntDamage' && a.mode === 'random');
+        if (cas) return cas;
+      }
+      // Off the Track a Companion is still worth more alive (separations rouse Nations,
+      // Aragorn is still crownable), so trade one only when Corruption gets dangerous.
       if (wouldCorrupt >= 8 && state.fellowship.companions.length > 0) {
         return legal.find((a) => a.kind === 'huntDamage' && a.mode === 'random') ?? legal[0]!;
       }
@@ -916,8 +949,27 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const level = (state.pendingChoice!.data as { level: number }).level;
       return legal.find((a) => a.kind === 'crebain' && a.use === (level >= 2)) ?? legal[0]!;
     }
-    case 'revealMove': // figure moves toward Mordor (Morannon) when revealed
-      return legal.reduce((best, a) => (a.kind === 'revealMove' && best.kind === 'revealMove' && dist(a.target, 'morannon') < dist(best.target, 'morannon')) ? a : best, legal[0]!);
+    case 'revealMove': {
+      // The figure goes toward Mordor — but the reveal PARKS it, and the Hunt re-rolls
+      // against wherever it stands until the Fellowship declares again. So among targets
+      // EQUALLY close to Morannon the neighbourhood decides the next few Hunts: prefer a
+      // region with no re-roll source standing in it, then one with nothing next door
+      // that can walk in, then one near an unconquered FP City/Stronghold to rest-heal in.
+      // (Player report: revealed at Dimrill Dale, the AI stepped into North Anduin Vale —
+      // the same 5 regions from Morannon as Parth Celebrant, but hard against Dol Guldur's
+      // army and Nazgûl and facing away from Lorien's rest-heal.)
+      const moves = legal.filter((a): a is Extract<WotrAction, { kind: 'revealMove' }> => a.kind === 'revealMove');
+      if (!moves.length) return legal[0]!;
+      const healSpots = (Object.keys(state.regions) as RegionId[]).filter((id) => isHealSettlement(state, id));
+      const healDist = (t: RegionId): number => healSpots.reduce((m, h) => Math.min(m, dist(t, h)), Infinity);
+      const rank = (t: RegionId): number[] => [dist(t, 'morannon'), huntClean(state, t) ? 0 : 1, huntThreat(state, t), healDist(t)];
+      let best = moves[0]!, bestRank = rank(best.target);
+      for (const a of moves.slice(1)) {
+        const r = rank(a.target);
+        if (lexLess(r, bestRank)) { best = a; bestRank = r; }
+      }
+      return best;
+    }
     case 'eventTarget': return chooseEventTarget(state, legal);
     case 'musterSecond': // place the second figure of a two-figure muster (fuller build)
       return legal.find((a) => a.kind === 'recruitSecond' && !a.done) ?? legal[0]!;
