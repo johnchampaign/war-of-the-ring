@@ -135,7 +135,12 @@ export function moveFellowship(state: GameState): void {
   // Log the MOVE before resolving the Hunt it triggers, so the log reads in causal
   // order ("Fellowship moved" then "Hunt roll …") rather than the reverse (report 6q0s).
   if (fs.mordor !== null) {
-    log(state, null, 'fellowship', `Fellowship moved (Mordor step ${fs.mordor})`);
+    // No step number here: on the Mordor Track the step advances only AFTER the tile is
+    // drawn (a Stop tile holds the Fellowship in place), so naming it now printed the
+    // step the Fellowship was LEAVING — the first move in Mordor read "step 0" while the
+    // track, the Hunt Box and the status area all correctly showed 1 (player report).
+    // `applyDrawnTile` logs the step the Fellowship actually ends on.
+    log(state, null, 'fellowship', 'Fellowship moves on the Mordor Track');
     resolveMordorStep(state); // adds the FP die to the Hunt Box internally
   } else {
     fs.progress += 1;

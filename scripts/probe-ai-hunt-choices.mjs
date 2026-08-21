@@ -116,6 +116,31 @@ const mordorHit = (damage, corruption, companions, guide) => {
     pick.kind === 'huntDamage' && (pick.mode === 'random' || pick.mode === 'guide'), JSON.stringify(pick));
 }
 {
+  // The 2026-08-20 report: "T5: F&S (w/7 corruption) moved, drew Shelob and rolled a 6.
+  // Then (I guess) sacrificed a random companion (merry for -1) and lost. Should've
+  // sacrificed the guide (strider for -3) and would've survived." A random draw absorbs
+  // as little as 1; the Guide is always the highest-Level Companion left.
+  const state = mordorHit(6, 7, ['strider', 'meriadoc', 'peregrin'], 'strider');
+  const pick = decide(state);
+  check('a lethal 6 at Corruption 7 spends the Guide, not a random Hobbit',
+    pick.kind === 'huntDamage' && pick.mode === 'guide', JSON.stringify(pick));
+  // Resolve the rest of the hit (the excess over the casualty re-prompts, p.42).
+  let after = wotrAdapter.applyAction(state, pick, 'fp');
+  while (after.pendingChoice?.kind === 'huntDamage') {
+    after = wotrAdapter.applyAction(after, decide(after), 'fp');
+  }
+  const line = after.log.map((e) => e.msg).find((m) => m.startsWith('Hunt resolved')) ?? '';
+  check('the Ring-bearers survive it — Strider absorbed 3 of the 6, so 10 not 13', line.includes('Corruption now 10'), line);
+}
+{
+  // The reverse: a hit SMALLER than the Guide's Level wastes his absorption, so a
+  // cheap body goes instead — unless a random draw could still be lethal.
+  const state = mordorHit(1, 3, ['strider', 'meriadoc', 'peregrin'], 'strider');
+  const pick = decide(state);
+  check('a 1 with a Level-3 Guide spends a random body, not Strider',
+    pick.kind === 'huntDamage' && pick.mode === 'random', JSON.stringify(pick));
+}
+{
   // With nobody left the damage has to be Corruption — and the AI must not stall.
   const state = mordorHit(2, 5, [], 'gollum');
   const pick = decide(state);

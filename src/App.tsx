@@ -7,6 +7,12 @@ import { PolygonAudit } from './devtabs/PolygonAudit';
 import { ContentAudit } from './devtabs/ContentAudit';
 import { BlockedAreasEditor } from './devtabs/BlockedAreasEditor';
 import { makeLocalClient } from './online/localClient';
+
+/** The hub's ranked ladder for this game. Linked from BOTH the in-game sign-in bar
+ *  and the lobby — it used to hang off the sign-in bar only, which appears once you
+ *  are already in an online game, so a player who had not started one could not find
+ *  it at all (player report: "also i cant seem to find the leaderboard"). */
+const LEADERBOARD_URL = 'https://games-hub-5vo.pages.dev/leaderboard?game=war-of-the-ring';
 import { loadLocalGame, peekLocalGame, clearLocalGame, describeSave, type LocalSave, type SavePeek } from './online/localSave';
 import { wotrAdapter } from './adapter/wotrAdapter';
 import { makeGameClient, createOnlineGame, readOnlineInvite, claimSeat } from './online/gameClient';
@@ -66,7 +72,7 @@ export function App() {
     return mode.kind === 'online' ? (
       <>
         <div style={{ padding: '0 12px' }}>
-          <SignInBar leaderboardHref="https://games-hub-5vo.pages.dev/leaderboard?game=war-of-the-ring" />
+          <SignInBar leaderboardHref={LEADERBOARD_URL} />
         </div>
         {page}
       </>
@@ -148,7 +154,9 @@ function Lobby({ onStart, onResume }: { onStart: (aiSide?: 'fp' | 'shadow') => v
         <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Ranked online — vs the leaderboard AI:</div>
         <button onClick={() => createVsAi('fp')} disabled={creating} style={{ ...primary, background: '#2f4f9e' }}>{creating ? 'Creating…' : 'Play Free Peoples (vs AI Shadow) — ranked'}</button>
         <button onClick={() => createVsAi('shadow')} disabled={creating} style={{ ...primary, background: '#a83232' }}>{creating ? 'Creating…' : 'Play Shadow (vs AI Free Peoples) — ranked'}</button>
-        <div style={{ fontSize: 11, color: '#776', textAlign: 'left', margin: '2px 4px 0' }}>Sign in first so your result counts on the leaderboard.</div>
+        <div style={{ fontSize: 11, color: '#776', textAlign: 'left', margin: '2px 4px 0' }}>
+          Sign in first so your result counts on the <a href={LEADERBOARD_URL} target="_blank" rel="noreferrer" style={{ color: '#e6b85a' }}>leaderboard</a>.
+        </div>
         <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Play vs the AI (local, unranked):</div>
         <button onClick={() => startGuarded('shadow')} style={secondary}>Free Peoples (vs AI Shadow)</button>
         <button onClick={() => startGuarded('fp')} style={secondary}>Shadow (vs AI Free Peoples)</button>

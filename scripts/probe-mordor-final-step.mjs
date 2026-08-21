@@ -74,5 +74,37 @@ const takeAsCorruption = (state) => wotrAdapter.applyAction(state, { kind: 'hunt
   check('the Free Peoples win', done.winner === 'fp', done.winReason ?? '');
 }
 
+// --- the log names the step the Fellowship ENDS on ---------------------------------
+{
+  // 2026-08-20 report: "After 1st F&S move in Mordor, the log says they're on space 0.
+  // The hunt box, status area and Mordor track all say space 1 (which is correct)."
+  // The move used to print the step BEFORE the tile was drawn — i.e. the step being
+  // left — and a Stop tile means the number is not even known until then.
+  console.log('\n=== the Mordor-Track log names the step actually reached ===');
+  const state = atStepFour(0);
+  state.fellowship.mordor = 0; // first step INTO the Track
+  const moved = step(state);
+  const msgs = moved.log.map((e) => e.msg);
+  check('the track advanced to step 1', moved.fellowship.mordor === 1, String(moved.fellowship.mordor));
+  check('the log says step 1, not step 0',
+    msgs.includes('Fellowship advances to Mordor step 1') && !msgs.some((m) => m.includes('Mordor step 0')),
+    msgs.filter((m) => m.includes('Mordor')).join(' | '));
+}
+
+// --- a Stop tile holds the Fellowship, and the log says so -------------------------
+{
+  console.log('\n=== a Stop tile keeps the Fellowship on its step ===');
+  const state = atStepFour(0);
+  state.fellowship.mordor = 1;
+  // "On, On They Went" (sh-char-03): a Shadow special tile with the Mordor Stop icon.
+  Object.assign(state.hunt, { pool: [], drawn: [], specialsInPool: ['sh-char-03'], specialsDrawn: [] });
+  const moved = step(state);
+  const msgs = moved.log.map((e) => e.msg);
+  check('the track did NOT advance', moved.fellowship.mordor === 1, String(moved.fellowship.mordor));
+  check('the log says the Fellowship is stopped on step 1',
+    msgs.some((m) => m.includes('stopped') && m.includes('step 1')),
+    msgs.filter((m) => m.includes('Mordor')).join(' | '));
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

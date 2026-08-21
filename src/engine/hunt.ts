@@ -201,7 +201,13 @@ function doHuntDraw(state: GameState, successes: number, onMordor: boolean): voi
 /** Advance the Mordor Track (unless the tile is a Stop) then apply the tile. */
 function applyDrawnTile(state: GameState, tile: HuntTileDef, successes: number, onMordor: boolean): void {
   const fs = state.fellowship;
-  if (onMordor && fs.mordor !== null && !tile.stop) fs.mordor = Math.min(5, fs.mordor + 1);
+  if (onMordor && fs.mordor !== null) {
+    if (!tile.stop) fs.mordor = Math.min(5, fs.mordor + 1);
+    // Report the step the Fellowship ENDS on — this is the moment it is known.
+    log(state, null, 'fellowship', tile.stop
+      ? `Fellowship is stopped — still on Mordor step ${fs.mordor}`
+      : `Fellowship advances to Mordor step ${fs.mordor}`);
+  }
   applyHuntTile(state, tile, successes);
 }
 

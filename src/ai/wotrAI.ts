@@ -806,18 +806,31 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // that can cover a 3 without spilling the excess into Corruption.
       // (Player report: "why enter Mordor with all those companions if you're not going
       // to use them? I would've used Strider to cancel the damage.")
+      // WHICH body to spend: RAW gives exactly two options (p.42) — take the GUIDE, or
+      // draw a RANDOM Companion. The Guide is always the highest-Level Companion left
+      // (the engine re-assigns down the Levels), so he absorbs the most; a random draw
+      // can come back a Level-1 Hobbit. Take him whenever the hit is at least as big as
+      // his Level (no absorption is wasted, and it is the largest reduction on offer) —
+      // or whenever a random draw could still leave the Ring-bearers dead at 12.
+      // Otherwise spend a cheap body and keep the big one for a bigger hit.
+      // (Player report: 6 damage at 7 Corruption drew Merry for −1 and lost the game;
+      // Strider, the Guide, would have absorbed 3 and the Fellowship would have lived.)
+      const guideIn = state.fellowship.companions.includes(state.fellowship.guide);
+      const guideLevel = guideIn ? levelOf(state.fellowship.guide) : 0;
+      const randomMightKill = wouldCorrupt - 1 >= 12; // a random Companion absorbs as little as 1
+      const takeGuide = guideIn && (damage >= guideLevel || randomMightKill);
+      const casualty = (): WotrAction | undefined => (takeGuide
+        ? legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide')
+        : legal.find((a) => a.kind === 'huntDamage' && a.mode === 'random'))
+        ?? legal.find((a) => a.kind === 'huntDamage' && (a.mode === 'guide' || a.mode === 'random'));
       if (state.fellowship.mordor !== null && state.fellowship.companions.length > 0) {
-        const guideCovers = state.fellowship.companions.includes(state.fellowship.guide)
-          && levelOf(state.fellowship.guide) >= damage && damage >= 3;
-        const cas = guideCovers
-          ? legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide')
-          : legal.find((a) => a.kind === 'huntDamage' && a.mode === 'random');
+        const cas = casualty();
         if (cas) return cas;
       }
       // Off the Track a Companion is still worth more alive (separations rouse Nations,
       // Aragorn is still crownable), so trade one only when Corruption gets dangerous.
       if (wouldCorrupt >= 8 && state.fellowship.companions.length > 0) {
-        return legal.find((a) => a.kind === 'huntDamage' && a.mode === 'random') ?? legal[0]!;
+        return casualty() ?? legal[0]!;
       }
       return legal.find((a) => a.kind === 'huntDamage' && a.mode === 'corruption') ?? legal[0]!;
     }
