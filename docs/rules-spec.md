@@ -294,7 +294,23 @@ die already showing an Eye.
   stack (the UI prompts "how many?" when a stack has >1 unmoved Nazgûl); the
   relay-guard tracks already-moved Nazgûl **per region** (`movedNazgul`), so the
   unmoved remainder of a split stack stays movable while a moved Nazgûl can't relay
-  onward. No residual — character movement is now fully RAW.
+  onward. **The besieged-Stronghold seal is enforced on both halves.** p.24 gives a
+  Companion (and, p.25, the Mouth of Sauron) a second Stronghold rule beside the
+  enemy-Stronghold one: "they can never leave or enter a region containing a
+  **friendly** Stronghold besieged by an enemy Army". Only the enemy half was coded,
+  so a Companion could walk into a Minas Tirith the Shadow was besieging — landing in
+  the open field, which in this siege model belongs to the *besieger*. `canLand` now
+  refuses that landing (Character-die move, group move and separation alike; the
+  garrison already lives in the siege box, so the "leave" half needed no code), the
+  **Nazgûl stay exempt** (p.25: the FP-Stronghold rule is "the only restriction" on
+  their flight), and the exception the two cards print — *Gwaihir the Windlord* /
+  *We Prove the Swifter*, "this movement is allowed to end in a Stronghold under
+  siege" — rides in as `RangeOpts.siegeOk`. A Companion separating **inside** an
+  already-besieged Stronghold simply stays there (he may not leave either), so the
+  origin region is always a legal destination. `scripts/probe-nazgul-to-siege.mjs`.
+  *(Found while checking a player report that a Nazgûl could not join an Army
+  conducting a siege — that flight is legal and was, and still is, offered.)*
+  No residual — character movement is now fully RAW.
 - **Event cards that move Companions already on the map** (*Gwaihir the Windlord*,
   *We Prove the Swifter*) are a distinct action from the Character-die move: they
   spend an **Event** die, they grant the card's range bonus, and they are the card's

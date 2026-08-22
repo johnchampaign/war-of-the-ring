@@ -65,12 +65,30 @@ function companionStop(state: GameState) {
     REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow' && !state.regions[r]!.besieged;
 }
 
+/** p.24/p.25: a region holding a figure's OWN Stronghold while an enemy Army besieges
+ *  it is sealed — "they can never leave or enter a region containing a friendly
+ *  Stronghold besieged by an enemy Army". In this engine the garrison (and its
+ *  Characters) live in the siege box, so LEAVING is already impossible; this is the
+ *  ENTER half. Nazgûl are the one exemption: p.25 says the FP-Stronghold rule below is
+ *  "the only restriction" on their flight. */
+function friendlyStrongholdBesieged(state: GameState, to: RegionId, side: Side): boolean {
+  return REGIONS[to]!.settlement === 'Stronghold'
+    && !!state.regions[to]!.besieged
+    && settlementController(state, to) === side;
+}
+const NAZGUL_FIGURE = new Set(['nazgul', 'witch-king']);
+
 /** Whether a figure may END a move in `to`. The two sides' Stronghold rules differ
  *  (p.24) and were wrongly shared: a SHADOW figure may not enter an FP-controlled
  *  Stronghold unless besieged — a genuine prohibition — while an FP Companion MAY
  *  enter a Shadow Stronghold region; it merely must STOP there (handled by the
- *  distance search), so landing is legal. */
-function canLand(state: GameState, to: RegionId, side: Side): boolean {
+ *  distance search), so landing is legal.
+ *  Both sides, though, are sealed OUT of their own besieged Stronghold (p.24/p.25) —
+ *  Gwaihir / We Prove the Swifter print the exception ("allowed to end in a Stronghold
+ *  under siege"), which arrives as `opts.siegeOk`. */
+function canLand(state: GameState, to: RegionId, side: Side, char?: string, opts: RangeOpts = {}): boolean {
+  const nazgul = !!char && NAZGUL_FIGURE.has(char);
+  if (!nazgul && !opts.siegeOk && friendlyStrongholdBesieged(state, to, side)) return false;
   if (side === 'fp') return true; // Companions land anywhere they can reach; the stop rule limits reach, not landing
   const def = REGIONS[to]!;
   if (def.settlement === 'Stronghold' && settlementController(state, to) === enemyOf(side) && !state.regions[to]!.besieged) return false;
@@ -98,7 +116,9 @@ const HOBBITS = new Set(['meriadoc', 'peregrin']);
 /** Range modifiers granted by an Event card ("as if their Level were 4", "two extra
  *  regions"). Only ever applied to Companions — a card that boosts a walking figure
  *  never boosts a flier. */
-export interface RangeOpts { extraMove?: number; levelOverride?: number }
+export interface RangeOpts { extraMove?: number; levelOverride?: number;
+  /** Gwaihir / We Prove the Swifter: "allowed to end in a Stronghold under siege". */
+  siegeOk?: boolean }
 /** The movement range of a piece: Nazgûl/Witch-king fly; Saruman 0; others by Level.
  *  Gandalf the White's Shadowfax: Level 4 when alone or with a single Hobbit. */
 function rangeOf(state: GameState, char: string, from: RegionId, opts: RangeOpts = {}): number {
@@ -122,7 +142,7 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
   if (range <= 0) return false;
   const stops = side === 'fp' ? companionStop(state) : null; // walking Companions stop at Shadow Strongholds (p.24)
   if (regionDistance(from, to, stops) > range) return false;
-  if (!canLand(state, to, side)) return false;
+  if (!canLand(state, to, side, char)) return false;
   const src = state.regions[from]!, dst = state.regions[to]!;
 
   if (char === 'nazgul') {
@@ -163,7 +183,7 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
   // Companion GROUPS walk too: the p.24 Shadow-Stronghold stop applies (side is
   // always 'fp' here — the guard above rejects anything else).
   if (range <= 0 || regionDistance(from, to, companionStop(state)) > range) return false;
-  if (!canLand(state, to, side)) return false;
+  if (!canLand(state, to, side, chars[0], opts)) return false;
   const dst = state.regions[to]!;
   for (const c of chars) {
     src.characters.splice(src.characters.indexOf(c), 1);
@@ -215,7 +235,7 @@ export function characterDestinations(state: GameState, side: Side, char: string
   const out: RegionId[] = [];
   for (const to of Object.keys(state.regions)) {
     if (to === from) continue;
-    if (regionDistance(from, to, stops) <= range && canLand(state, to, side)) out.push(to);
+    if (regionDistance(from, to, stops) <= range && canLand(state, to, side, char, opts)) out.push(to);
   }
   return out;
 }
@@ -248,7 +268,7 @@ export function characterMoveOptions(state: GameState, side: Side, cap = 18, exc
     for (const to of candidates) {
       if (out.length >= cap) return out;
       if (to === p.from) continue;
-      if (regionDistance(p.from, to, stops) <= range && canLand(state, to, side)) out.push({ char: p.char, from: p.from, to });
+      if (regionDistance(p.from, to, stops) <= range && canLand(state, to, side, p.char)) out.push({ char: p.char, from: p.from, to });
     }
   }
   return out;

@@ -254,12 +254,22 @@ export function separationRange(state: GameState, id: CharacterId, opts: { extra
 /** Legal landing regions within `maxMove` of `from`, excluding a not-besieged enemy
  *  Stronghold. Includes `from` itself (a move of 0). For the board-click destination
  *  choice when separating a Companion (computed after it's removed from the Box). */
-export function separationDestinations(state: GameState, from: RegionId, maxMove: number): RegionId[] {
+export function separationDestinations(state: GameState, from: RegionId, maxMove: number,
+  opts: { siegeOk?: boolean } = {}): RegionId[] {
   // p.24 permits ENTERING the Shadow-Stronghold region — the figure merely stops
   // there (blocksFurther below). Forbidding the landing as well was our own
   // over-restriction, now lifted so a Companion may end its separation in e.g. Moria,
   // exactly as at the table.
-  const landable = (_r: RegionId): boolean => true;
+  // What a Companion may NOT do (p.24) is "leave or enter a region containing a
+  // friendly Stronghold besieged by an enemy Army" — so a separating Companion cannot
+  // drop into an FP Stronghold the Shadow is besieging. Gwaihir / We Prove the Swifter
+  // print the exception ("allowed to end in a Stronghold under siege") → `siegeOk`.
+  // `from` itself always stands: the rule is "leave or ENTER", and a Companion who
+  // separates inside a besieged Minas Tirith simply stays there (he may not leave) —
+  // excluding it too would leave that separation with no legal destination at all.
+  const landable = (r: RegionId): boolean =>
+    r === from || !!opts.siegeOk
+    || !(REGIONS[r]!.settlement === 'Stronghold' && state.regions[r]!.besieged && settlementController(state, r) === 'fp');
   // p.24: Companions "can enter or leave a region that contains Shadow units, but
   // MUST STOP upon entering a region containing a Stronghold controlled by the Shadow
   // player." The search used to expand straight through such a region, so a Companion

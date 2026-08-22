@@ -1394,7 +1394,7 @@ function moveNazgulCard(after: (state: GameState) => void): EventHandler {
 /** A card that separates ONE Companion: step 1 pick the Companion, step 2 pick where
  *  it goes (the player's CHOICE, within Progress + Level + the card's bonus). `after`
  *  runs the card's post-placement effect (heal, extra rouse). */
-function separateViaCard(opts: { extraMove?: number; levelOverride?: number; mapMove?: boolean; after?: (state: GameState, companions: string[], dest: RegionId) => void } = {}): EventHandler {
+function separateViaCard(opts: { extraMove?: number; levelOverride?: number; siegeOk?: boolean; mapMove?: boolean; after?: (state: GameState, companions: string[], dest: RegionId) => void } = {}): EventHandler {
   // RAW: these cards separate "one Companion OR one group of Companions". The player
   // picks one or more Companions (each a companion-only target → a panel button), then
   // a destination (a companion+region target → a board click) that places the whole
@@ -1444,7 +1444,7 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; map
       // the group + the card's bonus). Tagged with chosen[0] so it's a board-click target.
       if (chosen.length > 0) {
         const range = Math.max(...chosen.map((c) => separationRange(state, c, opts)));
-        for (const region of separationDestinations(state, state.fellowship.location, range)) out.push({ companion: chosen[0], region });
+        for (const region of separationDestinations(state, state.fellowship.location, range, opts)) out.push({ companion: chosen[0], region });
       } else if (opts.mapMove) {
         // Nothing picked yet: the "or move" branch is offered alongside the separation.
         for (const [c, from] of onMap(state)) if (mapDests(state, [c], from).length > 0) out.push({ companion: c, from });
@@ -1471,9 +1471,9 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; map
 // Separate-only: the card's own text has no "or move" clause.
 register('fp-char-11', separateViaCard({ extraMove: 1, after: (s) => heal(s, 1) }));
 // Gwaihir the Windlord — separate OR move a Companion/group as if their Level were 4.
-register('fp-char-15', separateViaCard({ levelOverride: 4, mapMove: true }));
+register('fp-char-15', separateViaCard({ levelOverride: 4, mapMove: true, siegeOk: true }));
 // We Prove the Swifter — separate OR move a Companion/group, +2 regions.
-register('fp-char-16', separateViaCard({ extraMove: 2, mapMove: true }));
+register('fp-char-16', separateViaCard({ extraMove: 2, mapMove: true, siegeOk: true }));
 // There and Back Again — separate a Companion (+1, you choose where); if Gimli/Legolas
 // is then in Dale/Erebor/Woodland Realm, rouse the Dwarves, Elves & North.
 register('fp-char-17', separateViaCard({
