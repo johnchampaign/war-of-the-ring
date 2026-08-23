@@ -387,6 +387,75 @@ function enemyPressure(state: GameState, actor: Side): number {
   return Math.max(0, Math.min(1, (state.victoryPoints?.[enemy] ?? 0) / need));
 }
 
+/** The POLITICAL price of hitting `id` right now, in "reinforcement figures the enemy
+ *  Nation would unlock", discounted by how many steps it still is from At War. Zero once
+ *  the Nation IS At War — by then there is nothing left to wake.
+ *
+ *  Capturing a Settlement advances (and activates) the Nation that owns it, and attacking
+ *  an Army advances every Nation with units in the region — politics.ts
+ *  onSettlementCaptured / onArmyAttacked. A Nation that reaches At War may finally recruit
+ *  its whole reinforcement pool, and its Armies may finally march and attack (armies.ts).
+ *  So a cheap prize taken off a sleeping Nation is bought with that Nation's entire war
+ *  effort, and the scorer had NO term for it at all: a 1-VP City read as a free 1 VP.
+ *
+ *  Player report: "the ai seems obsessed with taking pelgair. It marched in an army from
+ *  mordor. this wakes up gondor and lets you muster in the strongholds. But it wont muster
+ *  up enough leadership before it leaves to TAKE gondor. Its a losing strategy." Exactly
+ *  right. Charging ONE FLAT price per Nation does the discrimination by itself: the same
+ *  subtraction swamps a 1-VP City and still leaves a 2-VP Stronghold worth waking them
+ *  for — which is the human rule of thumb, don't rouse Gondor for anything less than
+ *  Minas Tirith.
+ *
+ *  MEASURED, two seed families x 1000 games per arm (4000 games in all), heuristic v
+ *  heuristic. Shadow wins 794/2000 (39.7%) -> 890/2000 (44.5%), the same direction in
+ *  both families (+64, +32); Shadow military victories 444 -> 531. Free Peoples military
+ *  victories fall 154 -> 111 even though the FP scorer is UNTOUCHED — a Free Peoples
+ *  Nation cannot march or attack until it is At War (armies.ts), so the Shadow had been
+ *  handing the FP the very army it was then beaten with. That is the other standing
+ *  player report ("the ai is completely unprepared for the free ppl to push for a
+ *  military attack") answered at its root rather than by defending harder.
+ *
+ *  The rule is symmetric — taking a Shadow Settlement advances that Shadow Nation toward
+ *  At War the same way — and the symmetric version was built and measured FIRST: Shadow
+ *  839/2000 (42.0%), i.e. worse than charging the Shadow alone, because the FP arm cost
+ *  the Free Peoples 49 military victories to buy back only 4 Ring wins. The positions are
+ *  not symmetric even though the rule is: the Shadow chooses when its own Nations go to
+ *  War and advances them with Muster dice regardless, so the FP is mostly paying a price
+ *  for something that was going to happen anyway. Hence the Shadow-only guard below. */
+function wakePrice(state: GameState, actor: Side, id: RegionId, attacking = false): number {
+  // SHADOW ONLY — measured, see the note above. The rule is symmetric but the two
+  // sides' positions are not, and charging the Free Peoples for it cost them more
+  // than it saved.
+  if (actor !== 'shadow') return 0;
+  const theirs = (n: Nation): boolean => FP.has(n); // actor is the Shadow, so "theirs" is any FP Nation
+  const priceOf = (n: Nation): number => {
+    const ns = state.nations[n];
+    if (!ns || ns.step === 0) return 0;
+    const p = state.reinforcements[n];
+    return ((p?.regular ?? 0) + (p?.elite ?? 0) + (p?.leader ?? 0)) / ns.step;
+  };
+  const woken = new Set<Nation>();
+  const def = REGIONS[id];
+  // A Fortification (Osgiliath) belongs to no Nation and rouses nobody (armies.ts).
+  if (def?.nation && def.settlement && def.settlement !== 'Fortification' && theirs(def.nation)) woken.add(def.nation);
+  if (attacking) {
+    const r = state.regions[id];
+    for (const f of [r?.units, r?.siegeBox?.units]) {
+      for (const n of Object.keys(f ?? {}) as Nation[]) {
+        const u = f![n];
+        if (u && u.regular + u.elite > 0 && theirs(n)) woken.add(n);
+      }
+    }
+  }
+  let total = 0;
+  for (const n of woken) total += priceOf(n);
+  return total;
+}
+// Weights for `wakePrice` at the two scales it is charged on: the action scorer
+// (capture ~vp*30+25, attack ~vp*25+25) and the campaign-target ranking (~vp*4).
+const WAKE_W_ACTION = 8;
+const WAKE_W_TARGET = 0.8;
+
 /** The enemy Settlement (vp>0) worth marching on: nearest to one of our armies,
  *  weighted by VP. Cached per state object (one campaign target per decision). */
 const targetCache = new WeakMap<object, RegionId | null>();
@@ -404,7 +473,10 @@ function campaignTarget(state: GameState, actor: Side): RegionId | null {
     // losses. Rank it above a defended one of the same worth so the AI actually
     // takes the opening rather than massing next to it (player report: six armies
     // sat in Lórien while Dol Guldur and Moria stood undefended).
-    const s = def.vp * 4 - d + (armyHere(state, id, enemy) ? 0 : def.vp * 3);
+    // ...minus the political price of waking its Nation (wakePrice), so the campaign
+    // aims at ground whose Nation is already At War before it aims at a sleeping one.
+    const s = def.vp * 4 - d + (armyHere(state, id, enemy) ? 0 : def.vp * 3)
+      - wakePrice(state, actor, id) * WAKE_W_TARGET;
     if (s > bestScore) { bestScore = s; best = id; }
   }
   targetCache.set(state, best);
@@ -524,7 +596,7 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
         const gar = box ? Object.values(box.units).reduce((s2, u) => s2 + (u?.regular ?? 0) + (u?.elite ?? 0), 0) : 0;
         if (gar > 0 && fromU < gar * 2) return -40;
       }
-      return (fromU - toU) * 8 + REGIONS[a.to]!.vp * 25 + 25;
+      return (fromU - toU) * 8 + REGIONS[a.to]!.vp * 25 + 25 - wakePrice(state, actor, a.to, true) * WAKE_W_ACTION;
     }
     // Aragorn / Gandalf the White: +1 FP Action die, permanently — worth more than
     // any single action, so it outranks even the Fellowship push (72 at Corruption
@@ -657,7 +729,10 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // numbers here suggest. If a later measurement shows it doing nothing against human
   // play either, delete it — an unearned multiplier is a liability.
   const pressing = actor === 'shadow' && fellowshipStalled(state);
-  if (settlementCtrl(state, to) === enemy && !armyHere(state, to, enemy)) s += (REGIONS[to]!.vp * 30 + 25) * (pressing ? 1.4 : 1); // capture
+  if (settlementCtrl(state, to) === enemy && !armyHere(state, to, enemy)) {
+    s += (REGIONS[to]!.vp * 30 + 25) * (pressing ? 1.4 : 1);                                // capture
+    s -= wakePrice(state, actor, to) * WAKE_W_ACTION;                                       // ...at the political price of it
+  }
   if (armyHere(state, to, actor)) s += 10;                                                                // concentrate
   // Re-garrison one of our own VP Settlements that is sitting empty within an enemy's
   // reach. Scored BELOW the equivalent capture so the AI still prefers taking ground to
