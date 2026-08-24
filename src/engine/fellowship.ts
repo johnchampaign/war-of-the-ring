@@ -180,6 +180,19 @@ export function declareFellowship(state: GameState, target: RegionId): void {
     && def.nation && ['dwarves', 'elves', 'gondor', 'north', 'rohan'].includes(def.nation)
     && state.regions[fs.location]!.control !== 'shadow') {
     fs.corruption = Math.max(0, fs.corruption - 1);
+    // Worn with Sorrow and Toil (sh-char-15) carries its own printed discard
+    // clause: "discard this card from the table if the Fellowship is declared in a
+    // City or Stronghold controlled by the Free Peoples" — exactly this branch's
+    // condition. (The TTS-mod transcription omits the clause; player report + card
+    // scans confirm it.) Event-triggered here, not a pruneTableCards condition: the
+    // trigger is the DECLARE itself, not a state that persists.
+    const t = state.cards.shadow.table;
+    const i = t.indexOf('sh-char-15');
+    if (i >= 0) {
+      t.splice(i, 1);
+      state.cards.shadow.discard.character.push('sh-char-15');
+      log(state, null, 'event', 'Worn with Sorrow and Toil is discarded — the Fellowship declared in a Free Peoples haven');
+    }
   }
   state.flags.fellowshipDeclaredThisTurn = true;
   log(state, null, 'fellowship', `Fellowship declared at ${fs.location} (corruption ${fs.corruption})`);

@@ -1167,7 +1167,18 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     // landing on the Fellowship (reveal / extra Hunt fires only if a Nazgûl shares
     // its region) — aim there, not at the army campaign target (player report:
     // "put 4 Nazgûl in Dimrill Dale" after a declare in Parth Celebrant).
-    if (a.companion === 'nazgul' && a.region) return 120 - dist(a.region, state.fellowship.location) * 20;
+    if (a.companion === 'nazgul' && a.region) {
+      // ONE Nazgûl on the Fellowship is the whole prize — the Hunt re-roll and the
+      // reveal/extra-Hunt triggers are all presence-gated, so a second Ringwraith
+      // in the region adds nothing, and every one sent is an Army somewhere losing
+      // its Leadership and its Character-die move. Score below 'done' (-1) once the
+      // target already holds a Nazgûl / the Witch-king, so the chain STOPS instead
+      // of piling all five onto the same square (player report: 'moved all 5 Nazgul
+      // to fords of bruin... counterproductive', with the reasons itemised).
+      const r = state.regions[a.region]!;
+      if (r.nazgul > 0 || r.characters.includes('witch-king')) return -5;
+      return 120 - dist(a.region, state.fellowship.location) * 20;
+    }
     // Place the (group of) Companion(s) — do this rather than piling the whole
     // Fellowship in. A landing spot that ACTIVATES a passive FP Nation outranks
     // mere proximity to the campaign target: that is what a long Companion move

@@ -53,6 +53,16 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
     charMove2: 'Finish the character move on the map first.',
   };
   const boardPending = view.pendingChoice ? pendingHint[view.pendingChoice.kind] : undefined;
+  // The character-move chain (one Character die moves all eligible figures, p.24)
+  // parks EVERY other action until it's answered — and unlike the other pending
+  // kinds it renders a button ("Done moving characters"), so the rest-empty banner
+  // below never shows. Without this line a player who just did what they wanted
+  // (e.g. moved Gandalf to activate Rohan) sees their Muster dice dead and no
+  // explanation (player report: "I should now be able to advance Rohan using [M]
+  // dice but can't" — filed mid-chain).
+  const chainNote = view.pendingChoice?.kind === 'charMove2'
+    ? 'Character move in progress — move more characters on the map, or click "Done moving characters". Your other dice unlock when the move ends.'
+    : undefined;
 
   // Combat/hunt decisions are handled by the DecisionModal; this list is the
   // ordinary action menu (the caller filters those out before passing actions).
@@ -63,6 +73,9 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
           <span>Actions for the <DieTag face={sel} /> die:</span>
           <button onClick={onClearDie} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #5a4a2a', color: '#cb8', borderRadius: 5, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>← show all dice</button>
         </div>
+      )}
+      {chainNote && (
+        <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '6px 9px', margin: '2px 0 6px', fontSize: 12 }}>⚑ {chainNote}</div>
       )}
       {pass && (
         <button disabled={busy} onClick={() => click(pass)}

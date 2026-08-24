@@ -66,6 +66,24 @@ base game, 2-player (Free Peoples = **FP**, Shadow = **SH**). Expansions and
   (allow, then prompt to remove). Both readings end at ≤10 units, so neither produces
   the reported bug; the difference is only whether the mover loses figures.
 
+### Printed discard clauses missing from the transcription (2026-08-24)
+
+The TTS-mod card transcription (`assets/event-cards.json`) omits the italic
+discard clauses on two on-table Shadow cards; both were found by a player with
+the physical cards and confirmed against card scans / BGG:
+
+- **Wormtongue (sh-char-22):** "You must discard this card from the table as soon
+  as Rohan is activated, or if Saruman is eliminated." Modelled in
+  `TABLE_CONDITIONS` — the card now holds only while Saruman is in play AND Rohan
+  is still passive.
+- **Worn with Sorrow and Toil (sh-char-15):** "discard this card from the table if
+  the Fellowship is declared in a City or Stronghold controlled by the Free
+  Peoples." Event-triggered in `declareFellowship` (the same branch as the
+  rest-heal, which tests exactly that condition), not a prune condition — the
+  trigger is the declare itself.
+
+Covered by `scripts/probe-table-discards.mjs`.
+
 ### Unit / leader / character taxonomy
 - **Army units**: Regular or Elite, per nation (counts p.7). Elite can be
   "reduced" to a Regular of the same nation as a casualty step.

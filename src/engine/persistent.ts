@@ -121,9 +121,14 @@ const TABLE_CONDITIONS: Array<{ side: 'fp' | 'shadow'; id: string; holds: (s: Ga
   },
   // sh-str-03 Denethor's Folly: "if Minas Tirith is under siege by a Shadow Army".
   { side: 'shadow', id: 'sh-str-03', holds: (s) => !!s.regions['minas-tirith']?.besieged },
-  // sh-char-21 Palantír of Orthanc / sh-char-22 Wormtongue: "if Saruman is in play".
+  // sh-char-21 Palantír of Orthanc: "if Saruman is in play".
   { side: 'shadow', id: 'sh-char-21', holds: sarumanInPlay },
-  { side: 'shadow', id: 'sh-char-22', holds: sarumanInPlay },
+  // sh-char-22 Wormtongue — the printed card carries its own discard clause on top
+  // of the play condition: "You must discard this card from the table as soon as
+  // Rohan is activated, or if Saruman is eliminated." (The TTS-mod transcription in
+  // assets/event-cards.json omits the clause; player report + card scans confirm
+  // it.) Holds only while Saruman is in play AND Rohan is still passive.
+  { side: 'shadow', id: 'sh-char-22', holds: (s) => sarumanInPlay(s) && !s.nations.rohan.active },
 ];
 /** Discard any on-table card whose play condition ceased (rulebook p.22). The army/
  *  nation lookups are passed in to keep this module import-cycle-free. */
