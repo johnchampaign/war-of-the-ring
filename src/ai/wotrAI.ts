@@ -186,8 +186,20 @@ function garrisonWorthy(state: GameState, actor: Side, from: RegionId): boolean 
  *  region). Leaders/Nazgûl/Characters advance with the army; a Regular (else an
  *  Elite) holds. */
 function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): WotrAction {
-  if (action.kind !== 'moveArmy' || action.move) return action;
-  const from = action.from;
+  // Both army-move kinds: the Army die's FIRST move and its optional SECOND
+  // (armyMove2, p.27). The second move used to skip this entirely, and
+  // armyMoveScore only charges the vacate penalty when the stack is too small to
+  // split (`unitCount < 2`) — it assumes THIS function will garrison anything
+  // bigger. So a 2+ stack could march out of a threatened Stronghold on the second
+  // move with neither a garrison nor a penalty: measured over 250 self-play games,
+  // every one of the Shadow's VP Settlements captured while standing empty had
+  // marched its garrison out, with an FP Army already inside the 4-region warning
+  // radius (player report: "the ai is completely unprepared for the free ppl to
+  // push for a military attack").
+  if ((action.kind !== 'moveArmy' && action.kind !== 'armyMove2') || action.move) return action;
+  // armyMove2's from/to are optional (its "done" variant carries neither).
+  const from = action.from, to = action.to;
+  if (!from || !to) return action;
   if (!garrisonWorthy(state, actor, from)) return action;
   const r = state.regions[from];
   if (unitCount(state, from) < 2) return action;                                // need ≥2: leave 1, move ≥1
@@ -234,7 +246,7 @@ function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): 
     const move = buildSplit(c.n, c.useReg);
     const sel = { units: move.units ?? {}, leaders: move.leaders ?? 0, nazgul: move.nazgul ?? 0, characters: move.characters ?? [] };
     if (armyDieLeft || charDieLeaders(state, sel, actor, false) >= 1) {
-      return { kind: 'moveArmy', from, to: action.to, move };
+      return { ...action, from, to, move };
     }
   }
   return action;
@@ -1098,7 +1110,9 @@ function chooseArmyMove2(state: GameState, legal: WotrAction[]): WotrAction {
   const base = owner === 'shadow' ? 16 : 8; // armyMoveScore's flat base — only move if we beat it
   let best: WotrAction | null = null, bestS = base;
   for (const m of moves) { const s = armyMoveScore(state, owner, m.from!, m.to!, target); if (s > bestS) { bestS = s; best = m; } }
-  return best ?? done;
+  // Same garrison split the first move gets — armyMoveScore's vacate penalty is
+  // written on the assumption that it runs.
+  return best ? maybeSplitGarrison(state, owner, best) : done;
 }
 
 /** Resolve the Character-die move chain (RAW: one die moves all eligible
