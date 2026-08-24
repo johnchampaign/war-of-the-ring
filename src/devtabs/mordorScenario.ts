@@ -21,5 +21,14 @@ export function applyMordorScenario(state: GameState): GameState {
   state.dice.shadow = ['army', 'character'];
   state.pendingChoice = null;
   state.pendingCombat = null;
+
+  // A MIXED-NATION Shadow stack in Gorgoroth (Sauron + Southrons). Board.tsx draws
+  // one badge per NATION, and both of these are on the same side — the case that
+  // regressed when the badge's React key was `a.side`, so only Sauron's badge
+  // rendered (player report). Staged here so the fix has a one-click repro.
+  state.regions['gorgoroth']!.units = {
+    sauron: { regular: 3, elite: 1 },
+    southrons: { regular: 2, elite: 0 },
+  };
   return state;
 }

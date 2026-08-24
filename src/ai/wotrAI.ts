@@ -967,10 +967,15 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       let want: number;
       if (d.kind === 'nazgulLeadership') {
         want = d.max;                                  // the forfeit buys enemy dice off; take it all
-      } else if (d.postCasualty) {
-        want = mine >= 6 ? d.max : mine >= 4 ? 1 : 0;  // Onslaught trades our units for 4+ dice
       } else {
-        want = mine >= 5 ? d.max : mine >= 3 ? 1 : 0;  // Relentless Assault buys +1 per hit
+        // SELF-HITS (Relentless Assault, Onslaught). A Combat roll is min(5, units)
+        // dice, so a hit paid out of a stack of 5 or fewer BUYS A BONUS BY THROWING
+        // AWAY A DIE — and the unit is gone for the rest of the game either way.
+        // Only spend what sits ABOVE the 5-dice cap, where the figure costs no dice.
+        // (Until the cardCost step became reachable this branch never ran; the first
+        // soak that exercised it swung 2000 games by ~140 FP wins, the Shadow bleeding
+        // 2 units a battle for a one-round edge.)
+        want = Math.max(0, Math.min(d.max, mine - 5));
       }
       want = Math.max(d.min, Math.min(d.max, want));
       return legal.find((a2) => a2.kind === 'combatCardCost' && a2.amount === want) ?? legal[0]!;

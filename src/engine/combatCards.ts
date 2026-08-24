@@ -19,6 +19,11 @@ export interface CombatMods {
   symmetricBonus?: boolean;
   /** +N to the enemy's COMBAT ROLL hit target (their dice are worse). */
   enemyRollPenalty?: number;
+  /** Confusion: "every UNMODIFIED die result of '1' in the enemy's Combat roll
+   *  scores one hit against the enemy Army. Any such result cannot be rolled again
+   *  during their Leader re-roll." Not a to-hit penalty (that is Advantageous
+   *  Position) — the 1s backfire on the roller and are barred from the re-roll. */
+  enemyOnesBackfire?: boolean;
   /** Cap the enemy's number of dice this round. */
   maxDiceEnemy?: number;
   /** The enemy rolls N fewer Combat dice, to a minimum of one (Dread and Despair). */
@@ -112,7 +117,9 @@ const BY_TITLE: Record<string, CombatMods> = {
   // Forfeit 1 Nazgûl Leadership → the enemy rolls 1 fewer COMBAT die (not a worse
   // to-hit). Forfeiting more than one point is a choice — unmodelled (D5).
   'Dread and Despair': {}, // sized by the Nazgûl Leadership the owner forfeits (VARIABLE_COST)
-  'Confusion': { enemyRollPenalty: 1 },
+  // NOT enemyRollPenalty: the card never modifies the to-hit. Each unmodified '1'
+  // is a hit on the roller's OWN Army, and cannot be re-rolled (player report).
+  'Confusion': { enemyOnesBackfire: true },
   'Foul Stench': { negateEnemyRerollIfNazgulDominant: true }, // RAW gates it on Leadership (see the field)
   // cancel one enemy Companion's Leadership + abilities for the round
   'Words of Power': { enemyLeadershipPenalty: 1, enemyCaptainCancel: true },
@@ -155,6 +162,7 @@ export function describeCombatMods(mods: CombatMods): string {
     if (mods.rerollBonus) p.push(`+${mods.rerollBonus} to Leader re-roll dice`);
   }
   if (mods.enemyRollPenalty) p.push(`−${mods.enemyRollPenalty} to the enemy's Combat roll dice`);
+  if (mods.enemyOnesBackfire) p.push("every unmodified '1' in the enemy's Combat roll hits their own Army, and cannot be re-rolled");
   if (mods.maxDiceEnemy != null) p.push(`enemy rolls at most ${mods.maxDiceEnemy} Combat dice`);
   if (mods.enemyDiceReduction) p.push(`enemy rolls ${mods.enemyDiceReduction} fewer Combat ${mods.enemyDiceReduction === 1 ? 'die' : 'dice'} (min 1)`);
   if (mods.ownLeadershipPenalty) p.push(`forfeits ${mods.ownLeadershipPenalty} Leadership (fewer re-roll dice)`);

@@ -167,11 +167,24 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
     // NEIGHBOURING region (player report: Gandalf "in Lorien" while in Fangorn).
     const layout = (armies.length || (r?.characters.length ?? 0) > 0 || def?.settlement)
       ? layoutTokensInPolygon(poly, Math.max(1, armies.length), { tokenRadius: 22 }) : null;
+    // Where each nation's badge sits. Clamping is per-point, and a polygon that runs
+    // off the crop (Gorgoroth reaches x=1920, past the crop edge at 1751) can map two
+    // DISTINCT layout points onto the SAME clamped spot — stacking the badges exactly
+    // on top of each other, so a mixed Sauron+Southrons army looked like Sauron alone
+    // (player report). When that happens, fan them vertically instead.
+    const rawPoints = armies.map((_, i) => clampToCrop(
+      layout && !layout.stacked && layout.points[i]
+        ? layout.points[i]!
+        : { x: layout?.anchor.x ?? poly[0]!.x, y: (layout?.anchor.y ?? poly[0]!.y) + i * 22 }));
+    const collided = rawPoints.some((p, i) => rawPoints.some((q, j) => j < i && Math.abs(p.x - q.x) < 30 && Math.abs(p.y - q.y) < 20));
+    const armyPoints = collided
+      ? armies.map((_, i) => clampToCrop({ x: rawPoints[0]!.x, y: rawPoints[0]!.y + (i - (armies.length - 1) / 2) * 22 }))
+      : rawPoints;
     const control = r?.control;
     // Boxed garrison of a besieged Stronghold (RAW siege: defenders in the box, the
     // besieger occupies the region's open field above).
     const boxed = r?.siegeBox ? presentArmies(r.siegeBox as unknown as GameState['regions'][string], sarumanLead) : [];
-    return { id, poly, fill, def, armies, layout, control, r, boxed };
+    return { id, poly, fill, def, armies, layout, control, r, boxed, armyPoints };
   }), [view]);
 
   // --- Zoom / pan (the whole map is detailed; let the player get close to read it).
@@ -300,13 +313,15 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
               </g>
             );
           })()}
-          {/* army badges (one per side present) */}
+          {/* army badges — one per NATION present (presentArmies splits by nation, so a
+              mixed Sauron+Southrons stack is two badges on the same side). The key was
+              `a.side`, which those two share: React saw duplicate keys and dropped one,
+              so a mixed army showed only its first nation (player report: "moved to
+              Gorgoroth, only the indicator for Sauron's units is displayed"). It
+              surfaced on a MOVE because duplicate keys misbehave on reconciliation. */}
           {e.armies.map((a, i) => {
-            const raw = e.layout && !e.layout.stacked && e.layout.points[i]
-              ? e.layout.points[i]
-              : { x: (e.layout?.anchor.x ?? e.poly[0]!.x), y: (e.layout?.anchor.y ?? e.poly[0]!.y) + i * 22 };
-            const pt = clampToCrop(raw);
-            return <ArmyBadge key={a.side} x={pt.x} y={pt.y} scale={e.layout?.scale ?? 1} army={a} />;
+            const pt = e.armyPoints[i]!;
+            return <ArmyBadge key={`${a.side}-${a.nation ?? 'leaders'}`} x={pt.x} y={pt.y} scale={e.layout?.scale ?? 1} army={a} />;
           })}
           {/* Boxed garrison of a besieged Stronghold — small badges by the settlement
               marker (inside the red siege ring), distinct from the besieger above. */}

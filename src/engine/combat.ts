@@ -65,7 +65,11 @@ export interface CombatRoll { dice: number[]; rerolls: number[]; target: number;
   extra?: number[]; extraHits?: number;
   /** Automatic hits granted by a card with no die behind them (Great Host's 2:1
    *  free hit, Shield Wall-style "+1 if you scored any"). */
-  auto?: number }
+  auto?: number;
+  /** Confusion: unmodified '1's in THIS roll, each one a hit against the roller's
+   *  OWN Army (and barred from the Leader re-roll). Scored by the enemy's card, so
+   *  it is not part of `hits` — the round machine adds it to the other side's total. */
+  backfire?: number }
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
   baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll, force?: Force,
   enemyForce?: Force): number {
@@ -106,9 +110,19 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   }
   const allowReroll = !enemyMods.negateEnemyReroll && !conditionalNegate;
   if (roll) { roll.dice = []; roll.rerolls = []; roll.target = target; roll.rerollTarget = rerollTarget; }
+  // Confusion (held by the ENEMY): our unmodified '1's hit our own Army and may not
+  // be re-rolled. Counted from the RAW face, which is what "unmodified" means — a
+  // roll bonus never rescues a 1.
+  const onesBackfire = !!enemyMods.enemyOnesBackfire;
+  let backfire = 0;
   let hits = withRng(state, (rng) => {
     let h = 0, failed = 0;
-    for (let i = 0; i < count; i++) { const d = rng.rollDie(6); roll?.dice.push(d); if (d === 6 || (d !== 1 && d >= target)) h++; else failed++; }
+    for (let i = 0; i < count; i++) {
+      const d = rng.rollDie(6); roll?.dice.push(d);
+      if (d === 6 || (d !== 1 && d >= target)) h++;
+      else if (d === 1 && onesBackfire) backfire++; // a miss that cannot be re-rolled
+      else failed++;
+    }
     // The re-roll ALLOWANCE is fixed before any die is thrown (p.30: re-roll one die
     // per Leadership point, up to the number of misses). It must not be the loop
     // condition — `failed--` below mutates it, so a re-roll that HIT used to steal a
@@ -147,6 +161,7 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   let auto = 0;
   if ((ownMods.bonusHitsIfAny ?? 0) > 0 && hits > 0) auto += ownMods.bonusHitsIfAny!;
   if (auto > 0 && roll) roll.auto = (roll.auto ?? 0) + auto;
+  if (backfire > 0 && roll) roll.backfire = backfire;
   return hits + auto;
 }
 
@@ -1240,6 +1255,12 @@ export function combatStep(state: GameState): void {
         // belong to its opponent, so the region form used to strike the caster's OWN army.)
         atk = applyCombatEliminations(state, defForce(state, pc), pc.to, aMods, atk);
         def = applyCombatEliminations(state, atkForce(state, pc), pc.from, dMods, def);
+        // Confusion: a roller's unmodified '1's hit that roller's OWN Army. They are
+        // scored by the opponent's card, not by the opponent's dice, so they are added
+        // AFTER cancellation (Shield Wall cancels hits the enemy SCORED) and land in
+        // the other side's total, which is what the casualty steps apply.
+        def += aRoll.backfire ?? 0;   // the attacker's 1s wound the attacker
+        atk += dRoll.backfire ?? 0;   // the defender's 1s wound the defender
         pc.atkHits = atk; pc.defHits = def;
         // Announce the round's dice PUBLICLY so both players can audit the resolution
         // (player report: "the log should display the combat dice rolls").
@@ -1254,6 +1275,9 @@ export function combatStep(state: GameState): void {
           // nowhere (player report: a defender showing [1] re-roll [2] "scored" 2 hits).
           + (roll.extra?.length ? ` + extra attack [${roll.extra.join(' ')}] on 5+ → ${roll.extraHits ?? 0} hit${(roll.extraHits ?? 0) === 1 ? '' : 's'}` : '')
           + (roll.auto ? ` + ${roll.auto} automatic hit${roll.auto === 1 ? '' : 's'} from the card` : '')
+          // Confusion's backfire is a hit AGAINST this roller, so it is named on their
+          // own segment rather than silently inflating the opponent's total.
+          + (roll.backfire ? ` + ${roll.backfire} unmodified '1'${roll.backfire === 1 ? '' : 's'} wounding their own Army (Confusion, no re-roll)` : '')
           + ` → ${rolled} hit${rolled === 1 ? '' : 's'} total`
           + (hits !== rolled ? ` (${hits} after card effects)` : '');
         log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk)}; defender ${fmt(dRoll, defHits, def)}`,
@@ -1682,7 +1706,14 @@ export function resolvePlayCombatCard(state: GameState, cardId: string | null): 
     log(state, owner, 'combat', `${owner} plays combat card ${EVENT_BY_ID[cardId]?.combat?.title ?? cardId}`);
     state.log[state.log.length - 1]!.card = cardId; // hoverable in the log
   }
-  pc.step = pc.step === 'attackerCard' ? 'defenderCard' : 'beginRound';
+  // -> 'cardCost', NOT straight to 'beginRound': a variable-size card (Relentless
+  // Assault, Dread and Despair) is sized by its owner in the cardCost step, and
+  // jumping past it meant the card was played, discarded, and did NOTHING. The
+  // step was only ever reached through the 'defenderCard' fall-through, i.e. when
+  // the defender had NO playable card — so the bug hid whenever the defender
+  // actually answered (player report: "it never asked me how many hits I wanted,
+  // and therefore never gave me a bonus").
+  pc.step = pc.step === 'attackerCard' ? 'defenderCard' : 'cardCost';
   state.pendingChoice = null;
 }
 
