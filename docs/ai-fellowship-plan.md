@@ -136,6 +136,49 @@ move available and did not take it, so the swing is the size of the mistake bein
 removed, and the answer to a now-stronger FP AI is a stronger Shadow AI — not a
 dumber Free Peoples one. Pinned by `scripts/probe-ai-hunt-choices.mjs`.
 
+## Mordor-entry gating: tried and rejected on measurement (2026-08-24)
+
+Raised by a player report (Shadow seat): *"if you are at 6 corruption, no
+companions, you ought to abandon the ring game and push for a military win —
+does the AI calculate its odds?"* It does not: `enterMordor` is taken
+unconditionally the moment it is legal. Two gates were built and A/B'd, 1000
+games x 2 seed families per arm, against a 1089/2000 (54.5%) baseline at
+`78fb514`:
+
+| arm                                   | FP wins | Ring | FP military | Corr deaths | Mordor entries |
+|---------------------------------------|---------|------|-------------|-------------|----------------|
+| baseline (`78fb514`)                  | 1089    | 1004 | 85          | 360         | 1416           |
+| refuse at Corruption >= 8             | 1090    | 1004 | 86          | 351         | 1406           |
+| refuse at <=1 Companion & Corr >= 3   | 1083    | 986  | 96          | 333         | 1363           |
+
+Neither ships. The Corruption gate is inert — it changes the death certificate
+(corruption deaths -9, Shadow military +9) and not the result. The Companion
+gate does exactly what the report asks and *loses by doing it*: FP military wins
++11, Ring wins -18.
+
+**The reason is the finding.** The FP AI's military conversion is 85/2000 =
+**4.2%**; 92% of its wins are the Ring. So there is no military game to pivot
+*to*, and a 20%-odds Mordor run is still the better bet than the board. Any
+future "abandon the Ring" logic is blocked on making FP military play strong
+enough to be worth pivoting to — that is the real gap the report found.
+
+Entry telemetry (1390 entries / 2000 games) also **inverts the report's
+premise** — Corruption is the weaker predictor, the escort is the stronger one:
+
+| Corruption at entry | Ring win % |     | Companions at entry | Ring win % |
+|---------------------|------------|-----|---------------------|------------|
+| 0-2                 | 85-88%     |     | 0                   | 19%        |
+| 5                   | 63%        |     | 1                   | 39%        |
+| 7                   | 49%        |     | 3                   | 67%        |
+| 9+                  | 0-14%      |     | 6                   | 74%        |
+
+Corruption 7 with 6 Companions wins the Ring 75% of the time; Corruption 3 with
+<=1 Companion wins it 0%. So "6 Corruption is hopeless" is false, but the
+reporter was pointing at the right *variable* — bodies to soak the Track. A
+future experiment worth more than entry-gating: value Companions higher
+pre-Mordor (discourage separations that strip the escort), since the escort is
+what the run is actually made of.
+
 ## The proposed machine
 
 A small, explicit, public-information state machine that biases (never overrides)

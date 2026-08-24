@@ -89,6 +89,22 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
   // --- fellowship phase (FP): enter Mordor > declare when advanced > skip ---
   if (state.phase === 'fellowship') {
     const enter = legal.find((a) => a.kind === 'enterMordor');
+    // UNCONDITIONAL, and measured to be right (2026-08-24). Player report: "if you
+    // are at 6 corruption, no companions, you ought to abandon the ring game and
+    // push for a military win" — does the AI weigh its odds before the one-way door?
+    // It does not, and gating it does not pay. Two 2000-game A/Bs (2 seed families)
+    // against the 1089/2000 baseline:
+    //   refuse at Corruption >= 8       : FP 1090 (+1), Ring 1004 (unchanged) — the
+    //     gate only relabels the death: corruption deaths -9, Shadow military +9.
+    //   refuse at <=1 Companion & Corr>=3: FP 1083 (-6), Ring 1004->986, FP military
+    //     85->96. It DOES produce the requested pivot, and the pivot loses: the Ring
+    //     wins it forfeits outnumber the military wins it buys.
+    // Why: the FP AI's military conversion is only 85/2000 (4.2%) — 92% of its wins
+    // are the Ring — so even a grim Mordor run beats what it can do with the board.
+    // "Abandon the Ring" cannot be right until FP military play is much stronger;
+    // that is the real gap, not the entry decision. Entry telemetry also inverts the
+    // report's premise: Corruption is the weaker signal, Companions the stronger one
+    // (Corr 7 with 6 Companions = 75% Ring; Corr 3 with <=1 Companion = 0%).
     if (enter) return enter;
     // Declare when advanced. Normally push toward Mordor (the target closest to
     // Morannon). BUT when Corruption is climbing, declaring in an unconquered FP
