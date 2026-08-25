@@ -147,13 +147,26 @@ const mordorHit = (damage, corruption, companions, guide) => {
   check('an empty Fellowship takes the Corruption', pick.kind === 'huntDamage' && pick.mode === 'corruption', JSON.stringify(pick));
 }
 {
-  // OFF the Track the old policy stands: Companions still rouse Nations by separating
-  // and Aragorn is still crownable, so a 3 at Corruption 4 is absorbed.
+  // OFF the Track the bodies are spent too. Hoarding Companions only banks Corruption
+  // that has to be paid back by declaring in a City to heal, and that detour is what
+  // stalls the Ring run (measured: Free Peoples 54.8% -> 66.3% over 400 games per arm).
+  // A 3 at Corruption 4 takes the Level-3 Guide and costs no Corruption at all.
   const state = mordorHit(3, 4, ['strider', 'legolas', 'gimli'], 'strider');
   state.fellowship.mordor = null;
   state.fellowship.location = 'lorien';
   const pick = decide(state);
-  check('outside Mordor a mid-hit is still taken as Corruption',
+  check('outside Mordor a mid-hit now spends the Guide, not Corruption',
+    pick.kind === 'huntDamage' && pick.mode === 'guide', JSON.stringify(pick));
+}
+{
+  // The one exception: at 0-2 Corruption a single point is cheaper than a Companion,
+  // who can still rouse a Nation by separating. A 1 at Corruption 0 off the Track is
+  // taken on the Corruption dial.
+  const state = mordorHit(1, 0, ['strider', 'legolas', 'gimli'], 'strider');
+  state.fellowship.mordor = null;
+  state.fellowship.location = 'lorien';
+  const pick = decide(state);
+  check('outside Mordor a cheap early hit is still taken as Corruption',
     pick.kind === 'huntDamage' && pick.mode === 'corruption', JSON.stringify(pick));
 }
 

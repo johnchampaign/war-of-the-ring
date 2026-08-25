@@ -179,6 +179,59 @@ future experiment worth more than entry-gating: value Companions higher
 pre-Mordor (discourage separations that strip the escort), since the escort is
 what the run is actually made of.
 
+## Companions are currency OFF the Track too, shipped (2026-08-25)
+
+Raised by a player report (Free Peoples seat): *"Isn't it always better to take a
+companion than damage? Like unless you are planning to heal. Shouldn't you just use
+your guys as meat shields?"*
+
+They were right, and the answer sharpens the 2026-08-20 Mordor-Track finding above.
+Off the Track the AI hoarded Companions until Corruption would reach **8**, on the
+theory that a body alive can separate to rouse a Nation and Aragorn is still
+crownable. The reporter's parenthetical is the flaw in that theory: the Corruption
+banked instead has to be **paid back by declaring in a friendly City to heal**, and
+that detour is what stalls the Ring run. Corruption is only renewable if you spend
+turns on it.
+
+A/B, 200 games x 2 seed families per arm (400 each), both sides heuristic, from
+`f002358`. The arm is the Corruption level at which bodies start being spent:
+
+| arm            | FP wins /400 | FP %  | Ring wins | Corr deaths | Mordor entries /400 | mean entry turn | heal-declares |
+|----------------|--------------|-------|-----------|-------------|---------------------|-----------------|---------------|
+| `>= 8` (old)   | 219          | 54.8% | 195       | 71          | 282                 | 10.6            | 486           |
+| `>= 5`         | 233          | 58.3% | 228       | 129         | 364                 | 9.6             | 474           |
+| **`>= 3`**     | **265**      | 66.3% | 265       | 120         | 390                 | 8.0             | 198           |
+| `>= 2`         | 262          | 65.5% | 261       | 127         | 390                 | 7.6             | 124           |
+| always (`>= 1`)| 267          | 66.8% | 265       | 123         | 389                 | 7.4             | 93            |
+
+Everything from 3 down is tied inside the noise, so the number was chosen on play
+quality rather than on the decimal. **`>= 3` ships**: at 0-2 Corruption a single
+point is cheap and the Companion still has a job, which is the reporter's own caveat
+("unless it's planning on using them in the war effort"); above that the body is the
+cheaper currency. The mechanism is legible in the telemetry, not just the win rate --
+stalled pre-Mordor turns fall 45% -> 13% and heal-declares more than halve, because
+the Fellowship stops needing the detour at all.
+
+Note this does **not** contradict the "value Companions higher pre-Mordor" idea at
+the end of the Mordor-entry section. Both protect the same asset: the escort is worth
+more soaking Hunt damage than it is being spent on errands or left in hand while
+Corruption climbs. What changed is only *which* alternative the body is measured
+against.
+
+Two caveats for the next pass, both visible in the same runs:
+
+- **The Free Peoples AI is now materially stronger than the Shadow AI.** 54.8% ->
+  66.3% self-play. Per the note in the 2026-08-20 section, the answer is a stronger
+  Shadow, not a re-weakened Fellowship -- but the gap is now large enough to be the
+  headline AI item.
+- **Shadow military play looks worse than it is.** Mean Shadow VP falls 5.5 -> 2.6
+  and 10-VP wins 110/400 -> 15/400, almost entirely because games now end at turn ~8
+  instead of ~14. That is a shorter clock, not a dumber Shadow -- do not "fix" the
+  Shadow scorer off this number.
+
+Pinned by `scripts/probe-ai-hunt-choices.mjs` (both the mid-hit casualty and the
+cheap-early-hit exception).
+
 ## The proposed machine
 
 A small, explicit, public-information state machine that biases (never overrides)

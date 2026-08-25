@@ -930,9 +930,25 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         const cas = casualty();
         if (cas) return cas;
       }
-      // Off the Track a Companion is still worth more alive (separations rouse Nations,
-      // Aragorn is still crownable), so trade one only when Corruption gets dangerous.
-      if (wouldCorrupt >= 8 && state.fellowship.companions.length > 0) {
+      // OFF THE TRACK, SPEND THE BODIES TOO. The old policy hoarded Companions until
+      // Corruption reached 8 on the theory that they are worth more alive (separations
+      // rouse Nations, Aragorn is still crownable). Measured, that theory is wrong: the
+      // Corruption it banks has to be paid back by DECLARING in a friendly City to heal,
+      // and that detour is what stalls the Ring run. (Player report: "isn't it always
+      // better to take a companion than damage — unless you are planning to heal?")
+      //
+      // A/B over 400 games per arm, two seed families, both sides heuristic —
+      // Free Peoples win rate by the Corruption level at which bodies start being spent:
+      //   >= 8 (old) 54.8%  |  >= 5  58.3%  |  >= 3  66.3%  |  >= 2  65.5%  |  always 66.8%
+      // Everything from 3 down is tied inside the noise, and the mechanism is visible in
+      // the telemetry: heal-declares 486 -> 198, stalled pre-Mordor turns 45% -> 13%,
+      // mean Mordor entry turn 10.6 -> 8.0, Mordor entries 282/400 -> 390/400.
+      //
+      // Take 3 rather than "always": at 0-2 Corruption a single point is cheap and the
+      // Companion still has a job (a separation that rouses a Nation is the Free Peoples'
+      // only military path), which is the reporter's own caveat — "unless it's planning
+      // on using them in the war effort". Above that, the body is the cheaper currency.
+      if (wouldCorrupt >= 3 && state.fellowship.companions.length > 0) {
         return casualty() ?? legal[0]!;
       }
       return legal.find((a) => a.kind === 'huntDamage' && a.mode === 'corruption') ?? legal[0]!;
