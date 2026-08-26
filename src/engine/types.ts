@@ -304,6 +304,12 @@ export interface GameState {
      *  place, healing again each time (player report 4r4z: five declarations at
      *  Dale in one Fellowship phase took Corruption from 5 to 0). */
     fellowshipDeclaredThisTurn?: boolean;
+    /** Meriadoc / Peregrin "Take Them Alive!": the Hobbit was taken as a casualty
+     *  and must be re-placed on the map "as if he was just separated from the
+     *  Fellowship". The range and origin are frozen at the moment of the casualty
+     *  (a Reveal later in the same Hunt resets Progress to 0), and the destination
+     *  choice is raised by `advance` once the Hunt has finished resolving. */
+    takenAlive?: { companion: CharacterId; from: RegionId; range: number };
   };
   pendingChoice: PendingChoice | null;
   /** An interactive battle in progress, or null. */

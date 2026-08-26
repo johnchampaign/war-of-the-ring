@@ -381,7 +381,10 @@ export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, na
 // then run any card-specific follow-up. `then` is plain data (serializable), not
 // a closure, so the choice survives a save/reload.
 export type CasualtyThen =
-  | { kind: 'entsAwake'; region: RegionId; naz0: number; minions: string[] }
+  // `boxed` marks that the hits landed on the BESIEGED garrison in the Stronghold
+  // Box rather than on an Army in the open field — the follow-up has to look in the
+  // same place the units died, or it reads the besieger's Army instead.
+  | { kind: 'entsAwake'; region: RegionId; naz0: number; minions: string[]; boxed?: boolean }
   // A card aimed at a BESIEGED garrison. `spare` holds the Characters lifted out of
   // the Stronghold Box before the hits landed: a card that is not an "attack" cannot
   // eliminate them with the Army (Almanac, "Dreadful Spells" C 19), so they go back
@@ -409,11 +412,23 @@ function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
     return;
   }
   if (then.kind === 'entsAwake') {
-    if (forceUnitCount(state.regions[then.region]!) === 0) {
+    const r = state.regions[then.region]!;
+    const f = then.boxed ? r.siegeBox : r;
+    if (!f || forceUnitCount(f) === 0) {
       state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + then.naz0; // recycle Nazgûl
       const gone: string[] = [];
       for (const m of then.minions) if (!state.characters.eliminated.includes(m)) { state.characters.eliminated.push(m); delete state.characters.inPlay[m]; gone.push(m); }
       if (gone.length) log(state, null, 'event', `The Ents Awake: the Orthanc Army is destroyed — eliminated ${gone.join(', ')}`);
+      // The Ents wiped out a BESIEGED garrison: every unit defending the Stronghold
+      // is gone, so it falls to the Army standing in the region around it (p.32's
+      // second capture trigger) — the same ending as `siegeFall`.
+      if (then.boxed) {
+        delete r.siegeBox; r.besieged = false;
+        if (armySide(state, then.region) === 'fp') {
+          captureIfEnemySettlement(state, then.region, 'fp'); // not an "attack": no attack-activation
+          log(state, null, 'event', `The Ents Awake: the garrison of ${then.region} is destroyed — the besieging Army takes the Stronghold`);
+        }
+      }
     }
   }
 }

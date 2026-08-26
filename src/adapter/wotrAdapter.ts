@@ -307,10 +307,15 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'separateMove': {
         // The FP board-clicks where the separated GROUP lands (within range), and may
         // first add more Companions to travel together (RAW p.39).
-        const data = state.pendingChoice.data as { companions: string[]; from: RegionId; range: number };
+        const data = state.pendingChoice.data as { companions: string[]; from: RegionId; range: number; solo?: boolean };
         const acts: WotrAction[] = separationDestinations(state, data.from, data.range).map((target) => ({ kind: 'separateMove' as const, target }));
-        const grp = new Set(data.companions);
-        for (const c of state.fellowship.companions) if (c !== 'gollum' && !grp.has(c)) acts.push({ kind: 'separateMove', companion: c });
+        // `solo` = this placement is Meriadoc/Peregrin's "Take Them Alive!", not a
+        // Character-die separation: it puts back the Hobbit who was just taken as a
+        // Hunt casualty and nothing else, so no Companion may hitch a ride out.
+        if (!data.solo) {
+          const grp = new Set(data.companions);
+          for (const c of state.fellowship.companions) if (c !== 'gollum' && !grp.has(c)) acts.push({ kind: 'separateMove', companion: c });
+        }
         return acts;
       }
       case 'placeGandalf': {
@@ -573,10 +578,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'separateMove': {
       requireChoice(state, 'separateMove', 'fp');
-      const data = state.pendingChoice!.data as { companions: string[]; from: RegionId; range: number };
+      const data = state.pendingChoice!.data as { companions: string[]; from: RegionId; range: number; solo?: boolean };
       // Add another Companion to the travelling group (range grows to Progress + the
-      // highest Level in the group).
+      // highest Level in the group). Never on a "Take Them Alive!" placement — that
+      // one is the Hunt casualty going back on the board, not a Character-die action.
       if (action.companion && action.target == null) {
+        if (data.solo) throw new Error('Only the Hobbit taken alive is placed here');
         if (!state.fellowship.companions.includes(action.companion)) throw new Error('Cannot separate that Companion');
         beginSeparation(state, action.companion);
         const companions = [...data.companions, action.companion];

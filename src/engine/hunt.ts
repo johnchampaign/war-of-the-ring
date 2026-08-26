@@ -460,8 +460,20 @@ function eliminateCompanionInline(state: GameState, id: string): number {
   const fs = state.fellowship;
   const i = fs.companions.indexOf(id);
   if (i < 0) return 0;
+  const level = levelOf(id);
   fs.companions.splice(i, 1);
-  if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
+  // Meriadoc / Peregrin, "Take Them Alive!": "If he is eliminated while in the
+  // Fellowship, immediately place him in play again as if he was just separated
+  // from the Fellowship. This special ability cannot be used if the Fellowship is
+  // on the Mordor Track." The Hunt is where the Hobbits are spent, and this path
+  // eliminated them outright (player report 506t: Pippin sacrificed to a Hunt tile
+  // was removed from the game instead of being put on the board). He still absorbs
+  // his Level in Hunt damage — the ability replaces the elimination, not the
+  // casualty. The destination is a real choice, so it is frozen here and raised as
+  // the ordinary separation prompt once the Hunt has finished resolving.
+  const takenAlive = (id === 'meriadoc' || id === 'peregrin') && fs.mordor === null;
+  if (takenAlive) state.flags.takenAlive = { companion: id, from: fs.location, range: fs.progress + level };
+  else if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
   if (wornWithSorrowActive(state)) discardFpCharacterCard(state); // Worn with Sorrow and Toil
   // Reassign Guide: highest-Level remaining Companion, else Gollum.
   const oldGuide = fs.guide;
@@ -474,8 +486,7 @@ function eliminateCompanionInline(state: GameState, id: string): number {
   // then go quiet, so the sacrifice was invisible (player report: "it doesn't say what
   // the FP decision was — I assume Gandalf was sacrificed because he wasn't there
   // anymore"). Companion casualties are open information, so this is a public entry.
-  const level = levelOf(id);
-  log(state, null, 'hunt', `${charLabel(id)} is eliminated to absorb ${level} Hunt damage`
+  log(state, null, 'hunt', `${charLabel(id)} ${takenAlive ? 'is taken alive' : 'is eliminated'} to absorb ${level} Hunt damage`
     + (fs.guide !== oldGuide ? ` — ${charLabel(fs.guide)} becomes the Guide` : ''));
   return level;
 }

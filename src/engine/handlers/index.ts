@@ -835,10 +835,21 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
           log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event without a die');
         }
       };
-      if (armySide(state, 'orthanc') !== 'shadow') {
-        // No Shadow Army: Saruman alone in Orthanc is eliminated (card text).
-        if (orthanc.characters.includes('saruman')) {
-          orthanc.characters.splice(orthanc.characters.indexOf('saruman'), 1);
+      // A BESIEGED Army is still IN its region (p.31) — only its units sit in the
+      // Stronghold Box. Reading the open field alone made the card a dead letter
+      // exactly when the Ents matter most: with the Free Peoples besieging Orthanc,
+      // the Isengard garrison and Saruman were in the box, so the card reported
+      // "Orthanc holds no Shadow Army" and burned a die plus the card (player report
+      // 4u10: "0r, 1e, Saruman didn't count"). Same fix as Dreadful Spells.
+      const force = armyForceOf(state, 'orthanc', 'shadow');
+      if (!force) {
+        // No Shadow Army: Saruman alone in Orthanc is eliminated (card text) —
+        // whether he stands in the open field or sits alone inside the Stronghold.
+        const box = orthanc.siegeBox;
+        const holder = orthanc.characters.includes('saruman') ? orthanc
+          : (box?.characters.includes('saruman') ? box : null);
+        if (holder) {
+          holder.characters.splice(holder.characters.indexOf('saruman'), 1);
           state.characters.eliminated.push('saruman');
           delete state.characters.inPlay['saruman'];
           log(state, null, 'event', 'The Ents Awake: Saruman is alone in Orthanc — eliminated');
@@ -850,14 +861,15 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       }
       // Snapshot Nazgûl + Minions before casualties: when the Army is destroyed the
       // card wants them eliminated with it — carried into the casualty follow-up.
-      const naz0 = orthanc.nazgul;
-      const minionsHere = orthanc.characters.filter((c) => MINIONS.includes(c));
+      const boxed = force !== orthanc;
+      const naz0 = force.nazgul;
+      const minionsHere = force.characters.filter((c) => MINIONS.includes(c));
       const hits = rollDice(state, 3, 4);
-      log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on Orthanc`);
+      log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on ${boxed ? 'the Orthanc garrison' : 'Orthanc'}`);
       freeChar();
       // Shadow chooses how the Orthanc Army absorbs the hits (Regulars vs Elites);
       // if the Army is wiped, its Nazgûl recycle and its Minions are eliminated.
-      queueOrApplyEventCasualties(state, 'shadow', 'orthanc', hits, { kind: 'entsAwake', region: 'orthanc', naz0, minions: minionsHere });
+      queueOrApplyEventCasualties(state, 'shadow', 'orthanc', hits, { kind: 'entsAwake', region: 'orthanc', naz0, minions: minionsHere, boxed });
     },
   });
 }

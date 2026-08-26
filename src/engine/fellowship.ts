@@ -50,10 +50,14 @@ export function eliminateCompanion(state: GameState, id: CharacterId): number {
   fs.companions.splice(i, 1);
   // Meriadoc / Peregrin "Take Them Alive!": eliminated from the Fellowship → re-placed
   // on the map as if separated (the casualty/absorption still happens), not removed.
-  if (id === 'meriadoc' || id === 'peregrin') {
-    state.characters.inPlay[id] = fs.location;
-    state.regions[fs.location]!.characters.push(id);
-    log(state, null, 'hunt', `${COMPANIONS[id]?.name ?? id} taken alive — placed at ${fs.location}`);
+  // "This special ability cannot be used if the Fellowship is on the Mordor Track" —
+  // there he really is gone, and placing him would have dropped the figure into the
+  // Mordor entrance region the Fellowship left behind. The destination is the FP's
+  // choice (Progress + Level, exactly like a separation), raised by `advance` once
+  // whatever eliminated him has finished resolving.
+  if ((id === 'meriadoc' || id === 'peregrin') && fs.mordor === null) {
+    state.flags.takenAlive = { companion: id, from: fs.location, range: fs.progress + lvl };
+    log(state, null, 'hunt', `${COMPANIONS[id]?.name ?? id} is taken alive — he leaves the Fellowship as if separated`);
   } else if (!state.characters.eliminated.includes(id)) {
     state.characters.eliminated.push(id);
   }
