@@ -99,8 +99,10 @@ const FP_NATION_SET = new Set<string>(FP_NATIONS);
 /** RAW p.34: a Companion (or group) that ENDS its movement in a City/Stronghold of a
  *  Free Peoples Nation it can activate — and not enemy-controlled — activates that
  *  Nation (presence only; never advances the track). Mirrors the separation rule; the
- *  Character-die move path previously skipped it (report: Gandalf into The Shire). */
-function activateOnCompanionLand(state: GameState, side: Side, chars: string[], to: RegionId): void {
+ *  Character-die move path previously skipped it (report: Gandalf into The Shire).
+ *  The same rule reads "ends his movement OR ENTERS PLAY", so bringUpgrade calls this
+ *  too when Aragorn is crowned / Gandalf the White arrives. */
+export function activateOnCompanionLand(state: GameState, side: Side, chars: string[], to: RegionId): void {
   if (side !== 'fp') return;
   const dn = REGIONS[to]?.nation as Nation | undefined;
   const st = REGIONS[to]?.settlement;

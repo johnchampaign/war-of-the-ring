@@ -119,26 +119,30 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
   if (!opts.ignoreAtWar && !isAtWar(state, nation)) return false; // Event cards may recruit before At War (rules-spec §6)
   const side = sideOfNation(nation);
   if (settlementController(state, id) !== side) return false; // not friendly/free
-  if (armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) return false;
   // Can't MUSTER troops into a Stronghold besieged by the enemy (rulebook p.26).
-  // Event-card recruits (ignoreAtWar) may, per p.27.
-  if (!opts.ignoreAtWar && state.regions[id]!.besieged) return false;
+  // Event-card recruits (ignoreAtWar) may, per p.28 — they land in the siege box.
+  const besiegedHere = !!state.regions[id]!.besieged;
+  if (!opts.ignoreAtWar && besiegedHere) return false;
+  const dest = opts.ignoreAtWar ? eventRecruitTarget(state, id, side) : null;
+  if (!dest && armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) return false;
+  if (opts.ignoreAtWar && !dest) return false;
+  const into: Force = dest ? dest.force : state.regions[id]!;
+  const limit = dest ? dest.limit : STACKING_LIMIT;
   const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
   const leader = opts.leader ?? 0;
   if (regular > pool.regular || elite > pool.elite || leader > (pool.leader ?? 0)) return false;
-  if (unitCount(state, id) + regular + elite > STACKING_LIMIT) return false;
+  if (forceUnitCount(into) + regular + elite > limit) return false;
   // "Free Peoples Leaders can never be in a region without Free Peoples Army units"
   // (p.26). The movement paths enforce this (moveArmySplit, moveSelectedUnits) but
   // the MUSTER path did not, so a Leader could be recruited alone into an empty
   // friendly Settlement (player report). Nazgûl are NOT restricted this way — the
   // rule names Free Peoples Leaders — so this gate is FP-only.
-  if (side === 'fp' && leader > 0 && unitCount(state, id) + regular + elite === 0) return false;
+  if (side === 'fp' && leader > 0 && forceUnitCount(into) + regular + elite === 0) return false;
   pool.regular -= regular; pool.elite -= elite;
-  const r = state.regions[id]!;
-  const u: ArmyUnits = r.units[nation] ?? { regular: 0, elite: 0 };
+  const u: ArmyUnits = into.units[nation] ?? { regular: 0, elite: 0 };
   u.regular += regular; u.elite += elite;
-  r.units[nation] = u;
-  if (leader > 0) { pool.leader = (pool.leader ?? 0) - leader; r.leaders += leader; }
+  into.units[nation] = u;
+  if (leader > 0) { pool.leader = (pool.leader ?? 0) - leader; into.leaders += leader; }
   log(state, null, 'muster', `Recruited ${regular}R/${elite}E${leader ? `/${leader}L` : ''} ${nation} in ${id}`);
   return true;
 }
@@ -152,6 +156,39 @@ export function canRecruitNazgul(state: GameState, id: RegionId): boolean {
   if (settlementController(state, id) !== 'shadow') return false;
   if (armySide(state, id) === 'fp' || state.regions[id]!.besieged) return false;
   return (state.reinforcements.sauron as { nazgul?: number }).nazgul! > 0;
+}
+
+/** Where an EVENT-CARD recruit for `side` lands in `id`, and the stacking limit that
+ *  applies there — or null if `side` may not recruit there at all.
+ *
+ *  Rulebook p.28 ("Using an Event card to recruit troops"): a card may recruit into a
+ *  region even if "the region includes a Stronghold under siege". Our siege model puts
+ *  the BESIEGER in the region's open field (`units`) and the garrison in `siegeBox`, so
+ *  which stack the figures join depends on who is recruiting:
+ *   - the besieged garrison recruits INTO the Stronghold (the box), capped at five
+ *     Army units (p.31);
+ *   - the besieger recruits into the open field, which p.33 says "is considered free
+ *     for the besieging player", under the normal 10-unit limit.
+ *  The Almanac confirms both directions ("It is possible for the Free Peoples to
+ *  recruit by a card at a Stronghold … when a Free Peoples Army is under siege inside
+ *  a Stronghold"). Without this, `recruitable`/`placeUnits` read the besieger's stack
+ *  for both sides, so Imrahil of Dol Amroth and Celeborn's Galadhrim were unplayable
+ *  while their Stronghold was besieged and Olog-hai could not reinforce a siege
+ *  (player reports).
+ *
+ *  DEVIATION: the Almanac lets you over-recruit past the five-unit siege cap and then
+ *  choose which units to remove (a way to trade Regulars for Elites); we simply cap the
+ *  recruit at five. Noted in docs/rules-spec.md. */
+export function eventRecruitTarget(state: GameState, id: RegionId, side: Side): { force: Force; limit: number } | null {
+  const r = state.regions[id];
+  if (!r) return null;
+  const box = r.siegeBox;
+  if (!r.besieged || !box || forceUnitCount(box) === 0) {
+    return armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp') ? null : { force: r, limit: STACKING_LIMIT };
+  }
+  if (forceSide(box) === side) return { force: box, limit: SIEGE_LIMIT };   // the garrison
+  if (armySide(state, id) === side) return { force: r, limit: STACKING_LIMIT }; // the besieger
+  return null;
 }
 
 export const SIEGE_LIMIT = 5;
@@ -547,7 +584,7 @@ export function armyForceOf(state: GameState, id: RegionId, side: Side): Force |
 }
 
 /** Which side's units make up a Force (siege box or region), if any. */
-function forceSide(f: Force): Side | null {
+export function forceSide(f: Force): Side | null {
   for (const n of Object.keys(f.units) as Nation[]) {
     if ((f.units[n]!.regular + f.units[n]!.elite) > 0) return sideOfNation(n);
   }

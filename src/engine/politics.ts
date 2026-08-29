@@ -18,22 +18,41 @@ export function activateNation(state: GameState, n: Nation, trigger: { region?: 
   }
 }
 
-/** Advance a nation toward At War. Passive nations stop one short of At War. */
-export function advancePolitical(state: GameState, n: Nation, steps = 1): void {
+/** Advance a nation toward At War. Passive nations stop one short of At War.
+ *  `trigger` carries the advance's SOURCE so a persistent card can react to it
+ *  (Threats and Promises discards itself on an attack- or Companion-driven advance). */
+export function advancePolitical(state: GameState, n: Nation, steps = 1, trigger: { viaAttack?: boolean; viaCompanion?: boolean } = {}): void {
   const ns = state.nations[n];
   const floor = ns.active ? 0 : 1;
   const newStep = Math.max(floor, ns.step - steps);
   if (newStep !== ns.step) {
     ns.step = newStep;
     log(state, null, 'politics', `${n} advances to step ${ns.step}${ns.step === 0 ? ' (At War)' : ''}`);
+    if (sideOfNation(n) === 'fp' && (trigger.viaAttack || trigger.viaCompanion)) discardThreatsAndPromises(state, !!trigger.viaAttack);
   }
+}
+
+/** sh-str-05 "Threats and Promises", printed discard clause (card text, verbatim):
+ *  "You must discard this card from the table as soon as a Free Peoples Nation
+ *  advances on the Political Track either due to an attack or due to a Companion's
+ *  special ability." Event-triggered, not a pruneTableCards condition — the trigger is
+ *  the advance itself, not a state that persists (same shape as Worn with Sorrow's
+ *  declare clause). Player report: the card sat on the table through an attack that
+ *  advanced the Elves. */
+function discardThreatsAndPromises(state: GameState, viaAttack: boolean): void {
+  const t = state.cards.shadow.table;
+  const i = t.indexOf('sh-str-05');
+  if (i < 0) return;
+  t.splice(i, 1);
+  state.cards.shadow.discard.strategy.push('sh-str-05');
+  log(state, null, 'event', `Threats and Promises is discarded — a Free Peoples Nation advanced ${viaAttack ? 'through an attack' : "through a Companion's ability"}`);
 }
 
 /** Automatic political reaction when a nation's army is attacked (in `region`). An
  *  attack is the only army trigger that can rouse Rohan while Wormtongue is in play. */
 export function onArmyAttacked(state: GameState, n: Nation, region?: RegionId): void {
   activateNation(state, n, { region, viaAttack: true });
-  advancePolitical(state, n, 1);
+  advancePolitical(state, n, 1, { viaAttack: true });
 }
 
 /** Automatic reaction when one of a nation's Settlements (in `region`) is captured.
@@ -41,7 +60,7 @@ export function onArmyAttacked(state: GameState, n: Nation, region?: RegionId): 
  *  Wormtongue) from a walk-in occupation of an undefended Settlement (which cannot). */
 export function onSettlementCaptured(state: GameState, n: Nation, region?: RegionId, viaAttack = false): void {
   activateNation(state, n, { region, viaAttack });
-  advancePolitical(state, n, 1);
+  advancePolitical(state, n, 1, { viaAttack });
 }
 
 /** Nations of a side that can still be advanced on the track (diplomatic action). */

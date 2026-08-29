@@ -886,6 +886,22 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     case 'huntDamage': {
       const damage = (state.pendingChoice!.data as { damage: number }).damage;
       const wouldCorrupt = state.fellowship.corruption + damage;
+      // LETHAL DAMAGE: take EVERY reduction on offer before conceding the game. At 12
+      // Corruption the Free Peoples lose outright (p.44), so a reduction whose only
+      // price is the Fellowship's hiding place — Gollum revealing, a Hobbit Guide
+      // stepping out — is free by comparison. Each reduction re-prompts, so this keeps
+      // firing until the hit is survivable and then hands back to the normal policy.
+      // (Player report, from the SHADOW seat: "I think the FP cheated itself out of a
+      // win… Gollum could've used his guide ability to reveal F&S and reduce the damage
+      // by 1, thus giving the FP a ring victory." It was on Mordor step 4 with an empty
+      // Fellowship, so every casualty branch below was inapplicable and the AI walked
+      // into 12 Corruption with a live out in hand.)
+      if (wouldCorrupt >= 12) {
+        const lifeline = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'reduceCard')
+          ?? legal.find((a) => a.kind === 'huntDamage' && a.mode === 'reduceReveal')
+          ?? legal.find((a) => a.kind === 'huntDamage' && a.mode === 'reduceSeparate');
+        if (lifeline) return lifeline;
+      }
       // Spend a cheap −1 reduction (discard an on-table card) once Corruption is
       // climbing — it costs no Companion and lowers the hit before we absorb it.
       if (wouldCorrupt >= 7) {

@@ -7,6 +7,7 @@ import { REGIONS, levelOf, COMPANIONS } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
 import { activateNation } from './politics';
 import { settlementController, armySide } from './armies';
+import { activateOnCompanionLand } from './charMove';
 import { MINION_IDS } from './minions';
 import { log, notify } from './log';
 
@@ -325,6 +326,27 @@ export function beginSeparation(state: GameState, id: CharacterId): boolean {
   return true;
 }
 
+/** Separation ON THE MORDOR TRACK. Rulebook p.44: "Companions in the Fellowship can
+ *  never be separated… Anything that would normally separate a Companion removes him
+ *  from the game instead." The Almanac applies this to the separation Event cards by
+ *  name — "I Will Go Alone": "This card may be played on the Mordor Track, but
+ *  separating Companions from the Fellowship here simply removes them from play (but
+ *  the Corruption healing takes effect)"; Gwaihir likewise ("sometimes done to bring
+ *  Gollum into play for his Guide abilities"). The card was refused outright instead
+ *  (player report). Not a casualty — no Hunt damage is absorbed and Worn with Sorrow
+ *  does not fire. Returns whether the Companion was removed. */
+export function removeCompanionOnMordorTrack(state: GameState, id: CharacterId): boolean {
+  const fs = state.fellowship;
+  if (fs.mordor === null || !fs.companions.includes(id)) return false;
+  fs.companions.splice(fs.companions.indexOf(id), 1);
+  if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
+  const oldGuide = fs.guide;
+  reassignGuide(state);
+  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} leaves the Fellowship on the Mordor Track and is removed from play`
+    + (fs.guide !== oldGuide ? ` — ${COMPANIONS[fs.guide]?.name ?? fs.guide} becomes the Guide` : ''));
+  return true;
+}
+
 /** Place an already-removed Companion at `dest`, rousing its Nation if it lands in a
  *  City/Stronghold of one it can activate. */
 export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest: RegionId): void {
@@ -434,6 +456,13 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     delete state.characters.inPlay['strider'];
     state.characters.inPlay['aragorn'] = r;
     log(state, null, 'muster', `Strider becomes Aragorn at ${r} — Will of the West die (+1 FP die next turn)`);
+    // p.35: a Companion capable of activating a Nation activates it when he "ends his
+    // movement OR ENTERS PLAY in one of its Cities or Strongholds". Aragorn can only be
+    // crowned at Minas Tirith, Dol Amroth or Pelargir, so the Almanac states it flatly:
+    // "If Gondor is not activated, it will be activated when Aragorn is brought into
+    // play." Strider could not do this, so the crowning was the moment it had to fire —
+    // and it never did (player report: "Aragorn does not activate Gondor").
+    activateOnCompanionLand(state, 'fp', ['aragorn'], r);
   } else {
     if (!canBringGandalfWhite(state)) return false;
     const grey = findCharacterRegion(state, 'gandalf-grey');
@@ -449,6 +478,7 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     // showed only its green MUSTER kind tag — read by a player as "FP used a [M] to
     // bring GtW" when a Will of the West die had in fact been spent (p.21).
     log(state, null, 'muster', `Gandalf the White enters at ${target} — Will of the West die (+1 FP die next turn)`);
+    activateOnCompanionLand(state, 'fp', ['gandalf-white'], target); // "…or enters play" (p.35) — an Elven Stronghold rouses the Elves
   }
   return true;
 }

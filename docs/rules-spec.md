@@ -82,7 +82,19 @@ the physical cards and confirmed against card scans / BGG:
   rest-heal, which tests exactly that condition), not a prune condition — the
   trigger is the declare itself.
 
-Covered by `scripts/probe-table-discards.mjs`.
+- **Threats and Promises (sh-str-05):** "You must discard this card from the table
+  as soon as a Free Peoples Nation advances on the Political Track either due to an
+  attack or due to a Companion's special ability." Present in the transcription but
+  never wired, so the card sat on the table through the very attacks it was meant to
+  end *(player report, 2026-08-28: "Threats and Promises can't be discarded" — the
+  Shadow attacked Rivendell, the Elves advanced, and the card stayed)*. Now
+  event-triggered inside `advancePolitical`, which takes a `trigger` argument
+  (`viaAttack` from `onArmyAttacked` / `onSettlementCaptured`, `viaCompanion` from the
+  adapter's `companionMuster` action). An Event card that advances a Nation is neither
+  of the named routes and does **not** discard it.
+
+Covered by `scripts/probe-table-discards.mjs` and
+`scripts/probe-siege-recruit-and-card-clauses.mjs`.
 
 ### Unit / leader / character taxonomy
 - **Army units**: Regular or Elite, per nation (counts p.7). Elite can be
@@ -268,7 +280,16 @@ die already showing an Eye.
   and the Hunt-condition cards reading "a Free Peoples Settlement" (Orc Patrol /
   Isildur's Bane / Foul Thing / Candles of Corpses) use `isSettlementRegion`, which
   excludes **Fortifications** (Osgiliath, Fords of Isen) — a Fortification is not a
-  Settlement (p.10).
+  Settlement (p.10). For those four Hunt-condition cards, "a **Free Peoples**
+  Settlement" means one belonging to a Free Peoples **Nation**, not one the Free Peoples
+  currently controls: the Almanac says the restriction "applies even if the Settlement
+  has been captured by the Shadow player (the remnant of that captured Settlement offers
+  the Fellowship some ability to hide from effects like this)", and conversely "a
+  captured Shadow Stronghold offers no protection from this card as it is not a Free
+  Peoples Settlement". `fellowshipInFpSettlement` reads `sideOfNation(REGIONS[loc].nation)`;
+  it used to read the control marker, which got both halves backwards *(player report,
+  2026-08-28: "Candles of Corpses can't be played while the fellowship are in a
+  settlement")*.
   "Play if"/"Play on the table if" preconditions gate play (`canPlay`) for *The Last
   Battle*, *Denethor's Folly*, and *The Palantír of Orthanc* like every other
   precondition card — previously they could be played with the condition unmet and
@@ -352,6 +373,39 @@ into a second Leader). Cannot recruit in enemy-controlled or besieged settlement
 beyond available figures. Nazgûl recruit only in Sauron Strongholds (p.26). Event
 cards may recruit even in not-yet-At-War nations or besieged Strongholds
 (card-specific) (p.27).
+
+#### Event-card recruits at a besieged Stronghold (p.28, p.33)
+
+Rulebook p.28 ("Using an Event card to recruit troops") allows the recruit "even if
+… the region includes a Stronghold under siege", and p.33 adds that during a siege the
+region "is considered free for the besieging player, while the Stronghold itself
+remain[s] controlled by the player under siege". Our siege model keeps the **besieger**
+in `region.units` and the **garrison** in `region.siegeBox`, so a single region holds
+two stacks with two different limits. `eventRecruitTarget(state, region, side)` picks
+the one that belongs to the recruiting side and reports its cap — the box at
+`SIEGE_LIMIT` 5 (p.31), the open field at `STACKING_LIMIT` 10 — and `recruitable`,
+`placeUnits`, `placeForce`, `recruitChoiceCard` and `placeChoiceCard` all route through
+it. Before this, every one of those read the open field for both sides, so **Imrahil of
+Dol Amroth** and **Celeborn's Galadhrim** were unplayable while their own Stronghold was
+besieged and **Olog-hai** could not reinforce a siege *(three player reports,
+2026-08-27/29)*. "A region where a Shadow Army is present" (Olog-hai / Half-orcs) and
+"a coastal region containing a Free Peoples Army" (Círdan's Ships) now read
+`armyForceOf`, so a boxed garrison counts as an Army present, per the Almanac ("It is
+possible for the Free Peoples to recruit by a card at a Stronghold both when a Shadow
+Army is inside a Stronghold that is besieged by a Free Peoples Army, or when a Free
+Peoples Army is under siege inside a Stronghold"). Riders of Théoden likewise looks for
+its Companion inside the box.
+
+**Éomer, Son of Éomund (fp-str-23) is the Almanac's named exception** — its printed text
+requires a *free* region, so a besieged Free Peoples garrison may **not** recruit with
+it (it may still recruit into a Stronghold its own Army is besieging).
+
+**Deviation:** the Almanac lets a garrison over-recruit past five and then choose which
+units to put back ("first, fully perform the recruitment … and then remove units (from
+any Nation in that Stronghold)"), which can be used to trade a Regular for an Elite. The
+engine simply caps the recruit at five rather than raising a remove-which-unit prompt.
+
+Covered by `scripts/probe-siege-recruit-and-card-clauses.mjs`.
 
 ### Movement (p.27–28)
 - **Army die**: move up to **2 different** armies one region each (can't move the
@@ -657,6 +711,17 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   army containing its units is attacked; Fellowship declared in its City/
   Stronghold; or an activating Companion ends movement / enters play in its
   City/Stronghold (p.34).
+  The "**or enters play**" half is easy to lose, because the two Companions it applies
+  to arrive by a Will of the West die rather than by moving. `bringUpgrade` now runs the
+  same `activateOnCompanionLand` check the movement paths use: **crowning Aragorn**
+  activates the Nation of the City/Stronghold he is crowned in — always Gondor, since
+  Minas Tirith / Dol Amroth / Pelargir are the only legal spots (Almanac: "If Gondor is
+  not activated, it will be activated when Aragorn is brought into play") — and
+  **Gandalf the White** arriving in an Elven Stronghold rouses the Elves. Strider
+  cannot do this ("He cannot activate Gondor … until after he is crowned"), so the
+  crowning is the moment it has to fire, and it never did *(player report, 2026-08-27:
+  "Aragorn does not activate Gondor")*.
+  `scripts/probe-siege-recruit-and-card-clauses.mjs`.
 - **Advance** one step toward At War via a **Muster (Diplomatic)** action or
   events. **Automatic** advance: each time the nation's army is attacked (1/battle)
   *and* its nation becomes active; each time one of its settlements is captured
@@ -806,7 +871,30 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   Mordor read "step 0" while the track, the Hunt Box and the status area all showed 1
   *(player report, 2026-08-20)*. `scripts/probe-mordor-final-step.mjs`.
 - Companions can **never** separate on the Mordor Track; anything that would
-  separate eliminates instead (p.43).
+  separate eliminates instead (p.43). The rule names special abilities and Event cards
+  explicitly ("either as a result of using Action dice or **as the effect of special
+  abilities or Event cards**"), so both still *work* on the Track — they just remove the
+  Companion from the game (`removeCompanionOnMordorTrack`) instead of placing him:
+  - **Separation Event cards** (I Will Go Alone fp-char-11, Gwaihir fp-char-15, We Prove
+    the Swifter fp-char-16, There and Back Again fp-char-17) are playable on the Track.
+    The card has no destination step there, so the player picks who leaves and stops;
+    the card's own effect still happens — the Almanac on "I Will Go Alone": "This card
+    may be played on the Mordor Track, but separating Companions from the Fellowship
+    here simply removes them from play (**but the Corruption healing takes effect**)",
+    and on Gwaihir: "sometimes done to bring Gollum into play for his Guide abilities".
+    Stopping with **nobody** picked is not offered — the separation is what the card
+    costs. *(Player report, 2026-08-26: "I wanted to use [E] to play 'i will go alone'
+    but it won't let me; probably because i'm in mordor and AI thinks I can't separate
+    companions there.")*
+  - **The Hobbit Guide's damage reduction** likewise works on the Track. Routing the
+    player to a Companion casualty instead is *not* equivalent: only **one** casualty is
+    allowed per Hunt (p.42) while Guide separations chain (Almanac: "the Free Peoples
+    player decides to separate the Hobbit who is Guide to reduce damage by 1, and then,
+    as the remaining Hobbit becomes the Guide, he can separate also"). *(Player report,
+    2026-08-28: "You can seperate the 2 Hobbits in a row and negate 2 damage if they are
+    guides. This works also even if you kill off a level 2 companion.")*
+  - **"Take Them Alive!" is the exception** — its own card text bars it on the Track, so
+    a Hobbit taken as a *casualty* there is still eliminated outright.
 - Completing all 5 Mordor steps reaches the **Crack of Doom** → FP wins (if
   Corruption < 12) (p.43, p.44). The step **draws its tile first**: the track
   advances, then that tile's damage is assigned (a real FP choice — Corruption or a

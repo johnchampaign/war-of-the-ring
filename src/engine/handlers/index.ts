@@ -2,17 +2,17 @@
 // cards (heal/Corruption, political, recruit, dice). Each cites its card id from
 // assets/event-cards.json. Cards not registered here stay unimplemented (not
 // offered) until added. Effects modify the standard rules per the card text.
-import type { GameState, Side, Nation, RegionId } from '../types';
+import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID } from '../data';
-import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations } from '../fellowship';
+import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
 import { log, logCardDraw, notify } from '../log';
 
@@ -145,16 +145,20 @@ function moveSelectedUnits(state: GameState, from: string, to: string, side: Sid
 }
 /** Force-place units into a region (a card that recruits in a NAMED region,
  *  bypassing the settlement/control checks recruit() applies). Capped by
- *  reinforcements + the stacking limit. */
+ *  reinforcements + the stacking limit. Under a siege the figures join the stack that
+ *  belongs to the recruiting side — the boxed garrison (5-unit cap) or the besieger in
+ *  the open field (10) — per eventRecruitTarget. */
 function placeUnits(state: GameState, nation: Nation, region: string, regular: number, elite: number): void {
-  const pool = state.reinforcements[nation], r = state.regions[region]!;
-  const room = STACKING_LIMIT - unitCount(state, region);
+  const pool = state.reinforcements[nation];
+  const dest = eventRecruitTarget(state, region, sideOfNation(nation));
+  if (!dest) return;
+  const room = dest.limit - forceUnitCount(dest.force);
   const reg = Math.max(0, Math.min(regular, pool.regular, room));
   const el = Math.max(0, Math.min(elite, pool.elite, room - reg));
   if (reg + el === 0) return;
   pool.regular -= reg; pool.elite -= el;
-  const u = r.units[nation] ?? { regular: 0, elite: 0 };
-  u.regular += reg; u.elite += el; r.units[nation] = u;
+  const u = dest.force.units[nation] ?? { regular: 0, elite: 0 };
+  u.regular += reg; u.elite += el; dest.force.units[nation] = u;
 }
 
 // Force-place units + a Leader into a NAMED region for an event recruit (bypasses the
@@ -163,9 +167,10 @@ function placeForce(state: GameState, nation: Nation, region: string, opts: { re
   placeUnits(state, nation, region, opts.regular ?? 0, opts.elite ?? 0);
   const lead = opts.leader ?? 0;
   if (lead > 0) {
+    const dest = eventRecruitTarget(state, region, sideOfNation(nation));
     const pool = state.reinforcements[nation] as { leader?: number };
     const k = Math.min(lead, pool.leader ?? 0);
-    if (k > 0) { state.regions[region]!.leaders += k; pool.leader = (pool.leader ?? 0) - k; }
+    if (dest && k > 0) { dest.force.leaders += k; pool.leader = (pool.leader ?? 0) - k; }
   }
 }
 /** A region containing a true Settlement — Town, City, or Stronghold. A
@@ -176,10 +181,23 @@ const isSettlementRegion = (region: string): boolean => {
   const s = REGIONS[region]?.settlement;
   return !!s && s !== 'Fortification';
 };
-/** A region an event may recruit into: not controlled or occupied by the enemy. */
+/** A region an event may recruit into: not controlled or occupied by the enemy — except
+ *  at a besieged Stronghold, which rulebook p.28 explicitly opens to Event-card
+ *  recruits for BOTH the boxed garrison and the besieger holding the open field
+ *  (p.33: the region "is considered free for the besieging player, while the Stronghold
+ *  itself remain[s] controlled by the player under siege"). */
 const recruitable = (state: GameState, side: Side, region: string): boolean => {
   const enemy: Side = side === 'fp' ? 'shadow' : 'fp';
+  if (state.regions[region]?.besieged) return !!eventRecruitTarget(state, region, side);
   return settlementController(state, region) !== enemy && armySide(state, region) !== enemy;
+};
+
+/** Units in the stack an event recruit for `side` would join at `region` (the boxed
+ *  garrison under a siege, otherwise the region itself). Used to tell "did the recruit
+ *  land?" apart from "the stack was full". */
+const recruitStackSize = (state: GameState, region: string, side: Side): number => {
+  const dest = eventRecruitTarget(state, region, side);
+  return dest ? forceUnitCount(dest.force) : 0;
 };
 
 type RecruitSlot = { nation: Nation; region: string };
@@ -199,7 +217,8 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
     const sl = slots[i]!;
     if (!recruitable(state, side, sl.region)) return [];
     const pool = state.reinforcements[sl.nation];
-    const room = STACKING_LIMIT - unitCount(state, sl.region);
+    const dest = eventRecruitTarget(state, sl.region, side);
+    const room = dest ? dest.limit - forceUnitCount(dest.force) : 0;
     const o: EventTarget[] = [];
     if (room > 0 && pool.regular > 0) o.push({ nation: sl.nation, region: sl.region, figure: 'regular', slot: i });
     if (room > 0 && pool.elite > 0) o.push({ nation: sl.nation, region: sl.region, figure: 'elite', slot: i });
@@ -219,17 +238,18 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
       return [];
     },
     applyTarget(state, _side, t) {
-      const before = unitCount(state, t.region!);
+      const before = recruitStackSize(state, t.region!, side);
       placeUnits(state, t.nation!, t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0);
       // Log the recruit (previously silent — a player report read the missing log as
       // "the unit/leader wasn't recruited"). Same public format as a Muster recruit.
-      if (unitCount(state, t.region!) > before) log(state, null, 'muster', `Recruited ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} ${t.nation} in ${t.region}`);
+      if (recruitStackSize(state, t.region!, side) > before) log(state, null, 'muster', `Recruited ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} ${t.nation} in ${t.region}`);
     },
     finalize(state) {
       for (const l of opts.leaders ?? []) {
-        const before = state.regions[l.region]!.leaders;
+        const dest = eventRecruitTarget(state, l.region, side);
+        const before = dest ? dest.force.leaders : 0;
         placeForce(state, l.nation, l.region, { leader: 1 });
-        if (state.regions[l.region]!.leaders > before) log(state, null, 'muster', `Recruited a ${l.nation} Leader in ${l.region}`);
+        if (dest && dest.force.leaders > before) log(state, null, 'muster', `Recruited a ${l.nation} Leader in ${l.region}`);
       }
       opts.then?.(state);
     },
@@ -338,10 +358,25 @@ for (const [id, nation] of fpRecruits) {
 }
 
 // --- Shadow: Corruption --------------------------------------------------
+/** "Play if the Fellowship is not in a region containing a Free Peoples Settlement" —
+ *  the shared precondition of Orc Patrol / Isildur's Bane / Foul Thing from the Deep /
+ *  Candles of Corpses (sh-char-05/06/07/08).
+ *
+ *  A "Free Peoples Settlement" is one belonging to a Free Peoples NATION, not one the
+ *  Free Peoples currently controls. The Almanac is explicit both ways: the restriction
+ *  "applies even if the Settlement has been captured by the Shadow player (the remnant
+ *  of that captured Settlement offers the Fellowship some ability to hide from effects
+ *  like this)", and "a captured Shadow Stronghold offers no protection from this card
+ *  as it is not a Free Peoples Settlement". Keying off the control marker got both of
+ *  those backwards (player report). */
+const fellowshipInFpSettlement = (state: GameState): boolean => {
+  const loc = state.fellowship.location;
+  const n = REGIONS[loc]?.nation as Nation | undefined;
+  return isSettlementRegion(loc) && !!n && sideOfNation(n) === 'fp';
+};
+
 register('sh-char-08', { // Candles of Corpses: +1 corruption per die 4+ (6 if Gollum guides)
-  // Precondition (shared with Orc Patrol / Isildur's Bane / Foul Thing, sh-char-05/06/07):
-  // "Play if the Fellowship is not in a region containing a Free Peoples Settlement."
-  canPlay: (state) => { const loc = state.fellowship.location; return !(isSettlementRegion(loc) && settlementController(state, loc) === 'fp'); },
+  canPlay: (state) => !fellowshipInFpSettlement(state),
   apply(state) {
     const t = isGollumGuide(state) ? 6 : 4;
     const c = withRng(state, (rng) => { let n = 0; for (let i = 0; i < 3; i++) if (rng.rollDie(6) >= t) n++; return n; });
@@ -397,8 +432,16 @@ for (const [id, nation] of shRecruits) {
 
 // --- Interactive recruit cards: the player picks the legal region(s) -----------
 const COASTAL = ['ered-luin', 'north-ered-luin', 'south-ered-luin', 'forlindon', 'harlindon', 'grey-havens', 'tower-hills', 'andrast', 'anfalas', 'dol-amroth', 'lossarnach', 'pelargir'];
+// "a region where a Shadow Army is present" — armyForceOf, not armySide, so a Shadow
+// garrison boxed inside a Stronghold the FP is besieging still counts (Almanac: a card
+// may recruit "when a Shadow Army is inside a Stronghold that is besieged by a Free
+// Peoples Army"), as does a Shadow Army besieging an FP Stronghold (player report:
+// Olog-hai was refused at a besieged Minas Tirith).
 const regionsWithShadowArmy = (s: GameState): EventTarget[] =>
-  Object.keys(s.regions).filter((id) => armySide(s, id) === 'shadow' && unitCount(s, id) > 0 && recruitable(s, 'shadow', id)).map((region) => ({ region }));
+  Object.keys(s.regions).filter((id) => {
+    const f = armyForceOf(s, id, 'shadow');
+    return !!f && forceUnitCount(f) > 0 && recruitable(s, 'shadow', id);
+  }).map((region) => ({ region }));
 const ROHAN_REGIONS = Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'rohan');
 
 /** A "recruit N <Nation> unit(s) (Regular OR Elite) [+ Leader] in one of these
@@ -410,14 +453,19 @@ const ROHAN_REGIONS = Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation ==
 function placeChoiceCard(nation: Nation, regions: (s: GameState) => string[], opts: { leader?: boolean; count?: number } = {}): EventHandler {
   const count = opts.count ?? 1;
   const pool = (s: GameState) => s.reinforcements[nation] as { regular: number; elite: number };
+  const hasRoom = (s: GameState, region: string): boolean => {
+    const dest = eventRecruitTarget(s, region, sideOfNation(nation));
+    return !!dest && forceUnitCount(dest.force) < dest.limit;
+  };
   return {
-    canPlay: (s) => regions(s).length > 0 && (pool(s).regular > 0 || pool(s).elite > 0),
+    canPlay: (s) => (pool(s).regular > 0 || pool(s).elite > 0) && regions(s).some((r) => hasRoom(s, r)),
     repeat: count,
     noDone: count > 1, // "recruit two" is mandatory (up to what's available)
     targets: (s, _side, applied = []) => {
       const locked = applied.find((a) => a.region)?.region; // all units of this card go to one region
       const out: EventTarget[] = [];
       for (const region of (locked ? [locked] : regions(s))) {
+        if (!hasRoom(s, region)) continue;
         if (pool(s).regular > 0) out.push({ region, figure: 'regular', nation });
         if (pool(s).elite > 0) out.push({ region, figure: 'elite', nation });
       }
@@ -425,30 +473,45 @@ function placeChoiceCard(nation: Nation, regions: (s: GameState) => string[], op
     },
     applyTarget: (s, _side, t) => {
       if (!t.region || !t.figure) return;
-      const before = unitCount(s, t.region);
+      const before = recruitStackSize(s, t.region, sideOfNation(nation));
       placeForce(s, nation, t.region, { regular: t.figure === 'regular' ? 1 : 0, elite: t.figure === 'elite' ? 1 : 0, leader: opts.leader ? 1 : 0 });
       // Log the placement (previously silent — a player report had to guess where
       // Éomer's reinforcements landed). Same public format as a Muster recruit.
-      if (unitCount(s, t.region) > before) {
+      if (recruitStackSize(s, t.region, sideOfNation(nation)) > before) {
         log(s, null, 'muster', `Recruited ${t.figure === 'elite' ? '0R/1E' : '1R/0E'}${opts.leader ? ' + Leader' : ''} ${nation} in ${t.region}`);
       }
     },
   };
 }
+// Riders of Théoden: Edoras, or any Rohan region holding a Companion. A besieged
+// garrison's Companions live in the siege box, and the Almanac allows the recruit
+// there ("this card could recruit to a Free Peoples Army besieged inside Helm's Deep,
+// but only if a Companion is present"), so look in the box too.
+const companionPresent = (s: GameState, r: string): boolean => {
+  const reg = s.regions[r]!;
+  return reg.characters.some((c) => COMPANION_SET.has(c))
+    || !!reg.siegeBox?.characters.some((c) => COMPANION_SET.has(c));
+};
 const ridersRegions = (s: GameState): string[] => {
   const set = new Set<string>();
   if (recruitable(s, 'fp', 'edoras')) set.add('edoras');
-  for (const r of ROHAN_REGIONS) if (s.regions[r]!.characters.some((c) => COMPANION_SET.has(c)) && recruitable(s, 'fp', r)) set.add(r);
+  for (const r of ROHAN_REGIONS) if (companionPresent(s, r) && recruitable(s, 'fp', r)) set.add(r);
   return [...set];
 };
 
 // Círdan's Ships: TWO Elven units (each Regular OR Elite) in a coastal FP-Army region.
 // Círdan's Ships: printed precondition — 'Play if the Elves are "At War"'.
-const cirdans = placeChoiceCard('elves', (s) => COASTAL.filter((r) => armySide(s, r) === 'fp'), { count: 2 });
+const cirdans = placeChoiceCard('elves', (s) => COASTAL.filter((r) => !!armyForceOf(s, r, 'fp')), { count: 2 });
 register('fp-str-13', { ...cirdans, canPlay: (s, side) => isAtWar(s, 'elves') && cirdans.canPlay!(s, side) });
 // Riders of Théoden / Éomer: 1 Rohan unit (Regular OR Elite) + a Rohan Leader.
 register('fp-str-16', placeChoiceCard('rohan', ridersRegions, { leader: true }));
-register('fp-str-23', placeChoiceCard('rohan', (s) => ROHAN_REGIONS.filter((r) => isSettlementRegion(r) && recruitable(s, 'fp', r)), { leader: true }));
+// Éomer's printed text requires a FREE region, which the Almanac calls out as the one
+// exception to the besieged-Stronghold recruit allowance: "a Free Peoples Army besieged
+// inside Helm's Deep cannot recruit with this card … but may recruit to Helm's Deep if
+// a Free Peoples Army has besieged a Shadow Army inside that Stronghold".
+const eomerRegions = (s: GameState): string[] => ROHAN_REGIONS.filter((r) =>
+  isSettlementRegion(r) && recruitable(s, 'fp', r) && armySide(s, r) !== 'shadow');
+register('fp-str-23', placeChoiceCard('rohan', eomerRegions, { leader: true }));
 // Half-orcs and Goblin-men / Olog-hai: 1 Isengard / Sauron unit (Regular OR Elite)
 // in a region with a Shadow Army.
 const shadowArmyRegionIds = (s: GameState): string[] => regionsWithShadowArmy(s).map((t) => t.region!);
@@ -956,10 +1019,6 @@ register('sh-char-19', {
 });
 
 // --- Shadow: extra Hunt cards (draw a tile; skip Eye / FP-special) -----------
-const fellowshipInFpSettlement = (state: GameState): boolean => {
-  const loc = state.fellowship.location;
-  return isSettlementRegion(loc) && settlementController(state, loc) === 'fp';
-};
 for (const id of ['sh-char-05', 'sh-char-06', 'sh-char-07']) { // Orc Patrol / Isildur's Bane / Foul Thing
   register(id, {
     canPlay: (state) => !fellowshipInFpSettlement(state),
@@ -1287,6 +1346,11 @@ const fellowCompanions = (state: GameState): EventTarget[] =>
   state.fellowship.companions.filter((c) => COMPANION_SET.has(c)).map((companion) => ({ companion }));
 const canSeparate = (state: GameState): boolean =>
   state.fellowship.mordor === null && state.fellowship.companions.some((c) => COMPANION_SET.has(c));
+/** On the Mordor Track a separation card still plays — the Companions are removed from
+ *  play instead of being placed (rulebook p.44 + the Almanac's per-card notes), so the
+ *  card has no destination step. See removeCompanionOnMordorTrack. */
+const canSeparateOnMordorTrack = (state: GameState): boolean =>
+  state.fellowship.mordor !== null && state.fellowship.companions.some((c) => COMPANION_SET.has(c));
 
 /** A card that may MOVE any or all already-separated Companions, then (if a Companion
  *  ends in a `trigger` region) rouses `nation` to war. Interactive: repeatedly pick a
@@ -1433,15 +1497,31 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
   const canMapMove = (state: GameState): boolean =>
     !!opts.mapMove && onMap(state).some(([c, from]) => mapDests(state, [c], from).length > 0);
   return {
-    canPlay: (state) => canSeparate(state) || canMapMove(state),
+    canPlay: (state) => canSeparate(state) || canSeparateOnMordorTrack(state) || canMapMove(state),
     repeat: 24,   // pick any number of Companions, then a destination
-    noDone: true, // can't stop without placing — the destination ends it
+    // Off the Mordor Track you can't stop without placing — the destination ends it.
+    // ON the track there is no destination step (the Companions are removed from play),
+    // so "done" is how the card resolves — but only after at least one pick: the
+    // separation is what the card costs, so stopping with nobody chosen is not a legal
+    // way to collect "I Will Go Alone"'s free Corruption heal.
+    noDone: (state: GameState) => state.fellowship.mordor === null,
     targets(state, _side, applied = []) {
       if (applied.some((a) => a.region)) return []; // destination chosen → done
       const chosen = chosenOf(applied);
       const inGroup = new Set(chosen);
       // The map branch is locked in as soon as a Companion is picked off the board.
       const mapFrom = applied.find((a) => a.from)?.from;
+      // Mordor Track: pick which Companion(s) leave the Fellowship (and are removed
+      // from play). There is nowhere to place them, so the picks alone resolve the
+      // card. The "or move" branch (Gwaihir / We Prove the Swifter) still works on
+      // already-separated Companions, so it is offered alongside until one is picked.
+      if (state.fellowship.mordor !== null && !mapFrom) {
+        const out: EventTarget[] = fellowCompanions(state).filter((t) => !inGroup.has(t.companion!));
+        if (chosen.length === 0 && opts.mapMove) {
+          for (const [c, from] of onMap(state)) if (mapDests(state, [c], from).length > 0) out.push({ companion: c, from });
+        }
+        return out;
+      }
       if (mapFrom) {
         // Only Companions in the SAME region may join the travelling group (p.24).
         const out: EventTarget[] = onMap(state)
@@ -1467,6 +1547,14 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
     finalize(state, _side, applied) {
       const dest = applied.find((a) => a.region);
       const companions = chosenOf(applied);
+      if (state.fellowship.mordor !== null && !dest?.region) {
+        // Mordor Track: the Companions are removed from play; the card's own effect
+        // (e.g. "I Will Go Alone" healing one Corruption) still takes effect.
+        if (companions.length === 0) return; // nobody separated → the card does nothing
+        for (const c of companions) removeCompanionOnMordorTrack(state, c as CharacterId);
+        opts.after?.(state, companions, state.fellowship.location);
+        return;
+      }
       if (!dest?.region || companions.length === 0) return; // fizzle (no destination reachable)
       if (dest.from) { // "or move" branch: Companions already on the map travel together
         moveCompanionGroup(state, 'fp', dest.from, dest.region, companions, opts);

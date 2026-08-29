@@ -34,10 +34,10 @@ export interface EventHandler {
   repeat?: number;
   /** Suppress the "done" (stop-early) option for a multi-step card whose steps are
    *  all mandatory (e.g. separate a Companion → choose its destination). */
-  noDone?: boolean;
+  noDone?: boolean | ((state: GameState) => boolean);
   /** Offer "done" even before the first target is applied (for "move any or ALL …"
    *  cards where moving zero is a legal choice). */
-  optionalFromStart?: boolean;
+  optionalFromStart?: boolean | ((state: GameState) => boolean);
   /** Run AFTER the card is fully resolved (discarded, turn passed). Use for an
    *  effect that itself raises a follow-up PendingChoice (e.g. a Fellowship move
    *  that triggers a Hunt) — set last, it survives the eventTarget cleanup. */
@@ -52,6 +52,10 @@ export function register(id: string, h: EventHandler): void {
 export function getHandler(id: string): EventHandler | undefined {
   return handlers.get(id);
 }
+/** Resolve a flag that may be a state predicate (noDone / optionalFromStart). */
+export const flagValue = (f: boolean | ((state: GameState) => boolean) | undefined, state: GameState): boolean =>
+  typeof f === 'function' ? f(state) : !!f;
+
 export function canPlayCard(state: GameState, id: string, side: Side): boolean {
   const h = handlers.get(id);
   if (!h) return false;

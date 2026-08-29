@@ -7,7 +7,7 @@ import type { WotrAction } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, MORDOR_INTERIOR } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, MORDOR_INTERIOR } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import { log, logCardDraw } from '../engine/log';
 import {
@@ -22,7 +22,7 @@ import { canBringMinion, entryRegions, bringMinion, MINION_IDS } from '../engine
 import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
 import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide, playFacesFor } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
-import { getHandler, canPlayCard, type EventTarget } from '../engine/handlers/registry';
+import { getHandler, canPlayCard, flagValue, type EventTarget } from '../engine/handlers/registry';
 import { resolveNazgulStrike } from '../engine/handlers/index';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
 import { redactStateForViewer } from './redact';
@@ -195,7 +195,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const h = getHandler(data.card);
         const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye, count: t.count }));
         // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
-        if ((h?.repeat ?? 1) > 1 && (data.applied.length > 0 || h?.optionalFromStart) && !h?.noDone) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
+        if ((h?.repeat ?? 1) > 1 && (data.applied.length > 0 || flagValue(h?.optionalFromStart, state)) && !flagValue(h?.noDone, state)) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         return opts;
       }
       case 'bonusDraw':
@@ -241,11 +241,17 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         }
         // Guide damage-reduction abilities (−1 each): separate a Hobbit Guide, or
         // Gollum reveals the Fellowship. The Hobbit "separate −1" is NOT available in
-        // Mordor — Companions can't be separated there (rulebook p.43); eliminate one
-        // as a casualty instead (the 'guide'/'random' options give the same −1 for a
-        // Level-1 Hobbit). (Isildur's Bane never reaches this prompt — its damage is
-        // straight Corruption, applied in the engine.)
-        if ((fs.guide === 'meriadoc' || fs.guide === 'peregrin') && fs.mordor === null) acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
+        // The Hobbit Guide's ability works on the Mordor Track too — p.44: "Companions
+        // in the Fellowship can never be separated, either as a result of using Action
+        // dice or AS THE EFFECT OF SPECIAL ABILITIES or Event cards. Anything that would
+        // normally separate a Companion removes him from the game instead." Routing the
+        // player to a casualty instead is NOT equivalent: only ONE casualty is allowed
+        // per Hunt (p.42) while Guide separations chain, so a player with both Hobbits
+        // could reduce by 1 where RAW allows 2 (report: "You can separate the 2 Hobbits
+        // in a row and negate 2 damage… even if you kill off a level 2 companion").
+        // (Isildur's Bane never reaches this prompt — its damage is straight Corruption,
+        // applied in the engine.)
+        if (fs.guide === 'meriadoc' || fs.guide === 'peregrin') acts.push({ kind: 'huntDamage', mode: 'reduceSeparate' });
         // Gollum reduces damage by REVEALING the Fellowship — impossible when the
         // drawn tile itself already reveals it (his card: only while it would stay
         // hidden; player report from a Mordor Eye+Reveal tile).
@@ -769,7 +775,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const r = pa && findCharacterRegion(state, pa.companion);
       if (!pa || !r || !pa.at(r) || settlementController(state, r) !== 'fp') throw new Error('Companion ability condition not met');
       if (!consumePreferred(state, 'fp', [...new Set(state.dice.fp)], action.die)) throw new Error('No Action die');
-      advancePolitical(state, pa.nation, 1); passResolutionTurn(state, actor); break;
+      advancePolitical(state, pa.nation, 1, { viaCompanion: true }); passResolutionTurn(state, actor); break;
     }
     case 'useElvenRing': {
       requirePhase(state, 'actionResolution');
@@ -1105,10 +1111,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'huntDamage', actor);
       if (action.mode === 'reduceSeparate') {
         // The Hobbit Guide leaves the Fellowship (separateCompanion reassigns the
-        // Guide); hunt damage drops by 1, then re-prompt / finish. Guard against
-        // Mordor, where separateCompanion returns false — without this check the
-        // reduction would apply for free (no Companion removed).
-        if (!separateCompanion(state, state.fellowship.guide)) throw new Error('The Guide cannot be separated here (Companions cannot be separated in Mordor) — eliminate a Companion as a casualty instead.');
+        // Guide); hunt damage drops by 1, then re-prompt / finish. On the Mordor Track
+        // the same ability removes him from the game instead of placing him (p.44).
+        // Either way a Companion must actually leave, or the −1 would be free.
+        const left = state.fellowship.mordor !== null
+          ? removeCompanionOnMordorTrack(state, state.fellowship.guide)
+          : separateCompanion(state, state.fellowship.guide);
+        if (!left) throw new Error('The Guide cannot use that ability here.');
         reduceHuntDamageBySeparate(state);
       } else {
         resolveHuntDamage(state, action.mode, action.card);

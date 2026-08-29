@@ -170,5 +170,51 @@ const mordorHit = (damage, corruption, companions, guide) => {
     pick.kind === 'huntDamage' && pick.mode === 'corruption', JSON.stringify(pick));
 }
 
+// --- 3. never walk into 12 Corruption with a live reduction in hand ------------------
+// The 2026-08-27 report, filed from the SHADOW seat: "If I read this right, F&S
+// (corruption=9) on Mordor 4 moved, drew a (3) hunt, and gave me the win with
+// corruption=12. Gollum could've used his guide ability to reveal F&S and reduce the
+// damage by 1, thus giving the FP a ring victory." The engine offered the reveal; the
+// AI never looked at it, because every branch it did consider needed a Companion and
+// the Fellowship was empty.
+console.log('\n=== a lethal hit spends the free reductions before conceding ===');
+{
+  const state = mordorHit(3, 9, [], 'gollum');
+  state.fellowship.mordor = 4;
+  const pick = decide(state);
+  check('Gollum reveals rather than let Corruption reach 12',
+    pick.kind === 'huntDamage' && pick.mode === 'reduceReveal', JSON.stringify(pick));
+  const after = wotrAdapter.applyAction(state, pick, 'fp');
+  // (The probe applies the choice out of turn, so the Mordor Track's own end-of-turn
+  // "you neither moved nor hid" Corruption lands on top — the Hunt itself resolved at
+  // 11, which is the reduction being tested.)
+  check('the Fellowship is revealed and the Hunt resolves at 11, not 12',
+    !after.fellowship.hidden && after.log.some((e) => e.msg.includes('Corruption now 11')),
+    after.log.filter((e) => e.kind === 'hunt').slice(-1)[0]?.msg ?? '');
+}
+{
+  // The Hobbit Guide's ability works on the Mordor Track too (p.44 — a separation
+  // there removes him from play), and unlike a casualty it can chain. The report:
+  // "You can seperate the 2 Hobbits in a row and negate 2 damage if they are guides."
+  const state = mordorHit(2, 11, ['meriadoc', 'peregrin'], 'meriadoc');
+  state.fellowship.mordor = 4;
+  const offered = wotrAdapter.legalActions(state, 'fp');
+  check('the Hobbit Guide separate is offered on the Mordor Track',
+    offered.some((a) => a.kind === 'huntDamage' && a.mode === 'reduceSeparate'));
+  const after = wotrAdapter.applyAction(state, { kind: 'huntDamage', mode: 'reduceSeparate' }, 'fp');
+  check('Meriadoc left the Fellowship and is out of play',
+    !after.fellowship.companions.includes('meriadoc') && after.characters.eliminated.includes('meriadoc'));
+  check('Peregrin is the new Guide and may separate in turn', after.fellowship.guide === 'peregrin'
+    && wotrAdapter.legalActions(after, 'fp').some((a) => a.kind === 'huntDamage' && a.mode === 'reduceSeparate'));
+}
+{
+  // A hit that is NOT lethal keeps the old policy — the reveal is not spent for free.
+  const state = mordorHit(1, 3, [], 'gollum');
+  state.fellowship.mordor = 4;
+  const pick = decide(state);
+  check('a survivable hit is still taken on the Corruption dial',
+    pick.kind === 'huntDamage' && pick.mode === 'corruption', JSON.stringify(pick));
+}
+
 console.log(failures === 0 ? '\nprobe OK' : `\nPROBE FAILED (${failures})`);
 process.exit(failures === 0 ? 0 : 1);
