@@ -66,6 +66,17 @@ base game, 2-player (Free Peoples = **FP**, Shadow = **SH**). Expansions and
   (allow, then prompt to remove). Both readings end at ≤10 units, so neither produces
   the reported bug; the difference is only whether the mover loses figures.
 
+### The Witch-king is a Nazgûl on event cards (2026-08-31)
+
+FAQ: the Witch-king counts as a Nazgûl for every event-card reference unless the
+card differentiates with the "Minion" title. **Dreadful Spells** now counts him
+toward its dice (and he alone can enable it), capped at the card's printed max
+of 5 — a player counting his own figures caught the short roll. **Residual:**
+*The Eagles are Coming!* still uses the figure-only count; extending the FAQ
+reading there would let the Eagles ELIMINATE the Witch-king (permanently — he
+never re-musters), a materially bigger ruling left unchanged pending its own
+verification.
+
 ### Printed discard clauses missing from the transcription (2026-08-24)
 
 The TTS-mod card transcription (`assets/event-cards.json`) omits the italic

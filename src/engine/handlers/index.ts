@@ -26,14 +26,19 @@ const rollDice = (state: GameState, count: number, target: number): number =>
  *  garrison boxed in Minas Tirith is "a Free Peoples Army in the region", and
  *  Nazgûl boxed inside a besieged Shadow Stronghold still count as present
  *  (Almanac, "Dreadful Spells" C 19). */
-function fpArmyNearNazgul(state: GameState): Array<[string, string]> {
+/** `includeWk`: the FAQ rules the Witch-king IS a Nazgûl for every event-card
+ *  reference unless the card says "Minion" — so Dreadful Spells counts (and is
+ *  enabled by) him. The Eagles are Coming! keeps the figure-only count for now:
+ *  extending it would let the Eagles ELIMINATE the Witch-king, a materially
+ *  bigger ruling recorded as a residual in the spec rather than changed unverified. */
+function fpArmyNearNazgul(state: GameState, includeWk = false): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   for (const fp of Object.keys(state.regions)) {
     if (!armyForceOf(state, fp, 'fp')) continue;
     for (const sh of [fp, ...REGIONS[fp]!.adjacency]) {
       if (!state.regions[sh]) continue;
       const f = armyForceOf(state, sh, 'shadow');
-      if (f && f.nazgul > 0) out.push([fp, sh]);
+      if (f && (f.nazgul > 0 || (includeWk && f.characters.includes('witch-king')))) out.push([fp, sh]);
     }
   }
   return out;
@@ -1000,11 +1005,18 @@ register('fp-char-18', {
 // The Nazgûl force behind the spell is NOT a choice: more Nazgûl is strictly more
 // dice at the chosen target, so the fullest adjacent stack is picked mechanically.
 const dreadfulSpellsTargets = (state: GameState): string[] =>
-  [...new Set(fpArmyNearNazgul(state).map(([fp]) => fp))];
-const dreadfulSpellsCaster = (state: GameState, fp: string): { region: string; nazgul: number } | null =>
-  fpArmyNearNazgul(state)
+  [...new Set(fpArmyNearNazgul(state, true).map(([fp]) => fp))];
+// The Witch-king counts toward (and can alone supply) the dice: the FAQ makes him
+// a Nazgûl for card references unless the text says 'Minion' (player report: '2N
+// there (I had 3, counting the WK)' — the reporter was right, we rolled one short).
+const dreadfulSpellsCaster = (state: GameState, fp: string): { region: string; nazgul: number; wk: boolean } | null =>
+  fpArmyNearNazgul(state, true)
     .filter(([f]) => f === fp)
-    .map(([, sh]) => ({ region: sh, nazgul: (armyForceOf(state, sh, 'shadow') ?? state.regions[sh]!).nazgul }))
+    .map(([, sh]) => {
+      const force = armyForceOf(state, sh, 'shadow') ?? state.regions[sh]!;
+      const wk = force.characters.includes('witch-king');
+      return { region: sh, nazgul: force.nazgul + (wk ? 1 : 0), wk };
+    })
     .sort((a, b) => b.nazgul - a.nazgul)[0] ?? null;
 register('sh-char-19', {
   canPlay: (state) => dreadfulSpellsTargets(state).length > 0,
@@ -1013,8 +1025,8 @@ register('sh-char-19', {
     const fp = t.region!;
     const caster = dreadfulSpellsCaster(state, fp);
     if (!caster) return;
-    const hits = rollDice(state, caster.nazgul, 5);
-    log(state, null, 'event', `Dreadful Spells: ${caster.nazgul} Nazgûl at ${caster.region} — ${hits} hit(s) on ${fp}`);
+    const hits = rollDice(state, Math.min(5, caster.nazgul), 5);
+    log(state, null, 'event', `Dreadful Spells: ${caster.nazgul} Nazgûl at ${caster.region}${caster.wk ? ' (the Witch-king among them)' : ''} — ${hits} hit(s) on ${fp}`);
     // A besieged garrison is a legal target (Almanac, "Dreadful Spells" C 19), but the
     // card is NOT an "attack": Companions inside the Stronghold are unaffected even if
     // the Army around them is wiped out, so lift them out of the box before the hits
