@@ -1083,10 +1083,44 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const rip = legal.find((a) => a.kind === 'nazgulStrike' && a.discard && guards.has(a.discard));
       return rip ?? legal.find((a) => a.kind === 'nazgulStrike' && !a.discard) ?? legal[0]!;
     }
-    case 'advanceChoice':
-      // Advance the whole force — the ground was just taken and holding it wins the
-      // game. (Same default the old auto-advance had, so soaks measure the mechanic.)
-      return legal.find((a) => a.kind === 'advanceChoice' && a.advance) ?? legal[0]!;
+    case 'advanceChoice': {
+      const adv = legal.find((a) => a.kind === 'advanceChoice' && a.advance) ?? legal[0]!;
+      // Advance the force — but leave ONE unit when marching out would hand the
+      // enemy the origin. Log mining (530 uploaded games, 2026-08-30) found the
+      // single biggest human exploit was exactly this seam: attack FROM a VP
+      // Stronghold, win, advance everything, and the human walks into the empty
+      // origin. 81 of 83 empty-Orthanc captures in human-FP military wins came
+      // this way (Saruman still inside for 77); the FP AI mirrors it at Helm's
+      // Deep / Pelargir / Lórien. maybeSplitGarrison can't help — it guards MOVES,
+      // and this vacating happens inside the battle's advance step.
+      const d = state.pendingChoice!.data as { from: RegionId; to: RegionId };
+      const owner: Side = state.pendingChoice!.owner;
+      if (adv.kind === 'advanceChoice' && adv.advance && garrisonWorthy(state, owner, d.from)) {
+        const r = state.regions[d.from]!;
+        const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
+        const total = nations.reduce((s2, n) => s2 + r.units[n]!.regular + r.units[n]!.elite, 0);
+        if (total >= 2) {
+          const garN = nations.find((n) => r.units[n]!.regular > 0) ?? nations[0]!;
+          const useReg = r.units[garN]!.regular > 0;
+          const units: NonNullable<MoveSel['units']> = {};
+          for (const n of nations) {
+            const reg = r.units[n]!.regular - (n === garN && useReg ? 1 : 0);
+            const eli = r.units[n]!.elite - (n === garN && !useReg ? 1 : 0);
+            const u: { regular?: number; elite?: number } = {};
+            if (reg > 0) u.regular = reg;
+            if (eli > 0) u.elite = eli;
+            if (u.regular || u.elite) units[n] = u;
+          }
+          const move: MoveSel = { units };
+          if (owner === 'fp' && r.leaders) move.leaders = r.leaders;
+          if (owner === 'shadow' && r.nazgul) move.nazgul = r.nazgul;
+          const mine = r.characters.filter((c) => (owner === 'shadow') === SHADOW_CHARS.has(c) && c !== 'saruman'); // Saruman never leaves Orthanc
+          if (mine.length) move.characters = mine;
+          return { kind: 'advanceChoice', advance: true, move };
+        }
+      }
+      return adv;
+    }
     case 'advanceHoldBack':
       // Keep the whole Army forward — the ground was just taken and holding it is
       // what wins the game. (Garrisoning the ORIGIN is maybeSplitGarrison's job, on
