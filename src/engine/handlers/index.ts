@@ -431,7 +431,17 @@ for (const [id, nation] of shRecruits) {
 }
 
 // --- Interactive recruit cards: the player picks the legal region(s) -----------
-const COASTAL = ['ered-luin', 'north-ered-luin', 'south-ered-luin', 'forlindon', 'harlindon', 'grey-havens', 'tower-hills', 'andrast', 'anfalas', 'dol-amroth', 'lossarnach', 'pelargir'];
+// Coastal regions — Player Aid glossary: "a region adjacent to the sea on the left
+// side of the board". This used to be eyeballed, and it was wrong at both ends of the
+// map: it listed Lossarnach and Tower Hills (both landlocked) and omitted Lamedon,
+// Minhiriath and Umbar (player report 6r6b3v: "Lamedon is coastal and Lossarnach is
+// not"). The list below is derived from the board polygons in
+// `assets/region-geometry.json` — a region is coastal when its outline touches the sea
+// area rather than another region — and cross-checks against the Almanac twice: the
+// Corsairs entry names the settlements a landing can capture, "a Settlement (Lamedon),
+// City (Pelargir), or Stronghold (Dol Amroth)", and the Círdan's Ships entry names the
+// coastal Strongholds, "Grey Havens, Dol Amroth, or Umbar".
+const COASTAL = ['north-ered-luin', 'south-ered-luin', 'forlindon', 'harlindon', 'grey-havens', 'minhiriath', 'enedwaith', 'druwaith-iaur', 'andrast', 'anfalas', 'dol-amroth', 'lamedon', 'pelargir', 'west-harondor', 'umbar', 'near-harad', 'far-harad'];
 // "a region where a Shadow Army is present" — armyForceOf, not armySide, so a Shadow
 // garrison boxed inside a Stronghold the FP is besieging still counts (Almanac: a card
 // may recruit "when a Shadow Army is inside a Stronghold that is besieged by a Free
@@ -578,13 +588,16 @@ register('sh-char-10', {
   targets: (state) => (REGIONS[state.fellowship.location]?.adjacency ?? []).map((region) => ({ region })),
   applyTarget(state, _side, t) { state.fellowship.location = t.region!; log(state, null, 'event', `Cruel Weather moves the Fellowship to ${t.region}`); },
 });
-// Corsairs of Umbar: move the Umbar Army to a Gondor coastal region (coastal set
-// approximated). Card text: "If there is a Free Peoples Army in the region, a battle
-// starts" (the attack can't be ceased) — it previously just merged the two Armies
-// into one region with no battle (report: Pelargir "is not attacked", and the mixed
-// stack then moved as one). The stacking check applies only when merging with a
-// friendly Army; an attack advances via the normal end-of-battle rules.
-const GONDOR_COASTAL = ['anfalas', 'dol-amroth', 'pelargir', 'lossarnach', 'osgiliath'];
+// Corsairs of Umbar: move the Umbar Army to a Gondor coastal region. Card text: "If
+// there is a Free Peoples Army in the region, a battle starts" (the attack can't be
+// ceased) — it previously just merged the two Armies into one region with no battle
+// (report: Pelargir "is not attacked", and the mixed stack then moved as one). The
+// stacking check applies only when merging with a friendly Army; an attack advances
+// via the normal end-of-battle rules. The destination set is now the Gondor slice of
+// the board's coastal regions (Anfalas, Dol Amroth, Lamedon, Pelargir) instead of a
+// hand-written guess that offered landlocked Lossarnach and Osgiliath and left out
+// Lamedon (player report 6r6b3v).
+const GONDOR_COASTAL = COASTAL.filter((r) => REGIONS[r]?.nation === 'gondor');
 register('sh-str-10', {
   canPlay: (state) => isAtWar(state, 'southrons') && armySide(state, 'umbar') === 'shadow',
   targets: (state) => GONDOR_COASTAL

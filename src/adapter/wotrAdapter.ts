@@ -563,8 +563,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (actor !== 'fp') throw new Error('Only FP hides the Fellowship');
       // Strider's Guide ability lets any die hide; otherwise a Character/Will die.
       const hideFaces = state.fellowship.guide === 'strider' ? [...new Set(state.dice.fp)] : (['character', 'will'] as DieFace[]);
-      if (!consumePreferred(state, 'fp', hideFaces, action.die)) throw new Error('No usable die');
-      hideFellowship(state); passResolutionTurn(state, actor); break;
+      const hideFace = consumePreferred(state, 'fp', hideFaces, action.die);
+      if (!hideFace) throw new Error('No usable die');
+      // Spending anything other than a Character/Will result is Strider's Guide
+      // ability — say so in the log, or it reads like a rules break (report 5b303u).
+      hideFellowship(state, hideFace !== 'character' && hideFace !== 'will');
+      passResolutionTurn(state, actor); break;
     }
     case 'separateCompanion': {
       requirePhase(state, 'actionResolution');

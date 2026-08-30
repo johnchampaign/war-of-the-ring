@@ -156,11 +156,17 @@ export function moveFellowship(state: GameState): void {
 }
 
 /** Hide a Revealed Fellowship (Character die). Does not move; die not added to
- *  the Hunt Box. */
-export function hideFellowship(state: GameState): void {
+ *  the Hunt Box. `viaStrider` is set when the die spent was NOT a Character/Will
+ *  result — only Strider's Guide ability allows that ("Guide. You may use any of
+ *  your Action Die results to hide a revealed Fellowship"), and the bare "Fellowship
+ *  hidden" line made it look like the rule had been broken (player report 5b303u:
+ *  "Free peoples used Army/Mus die to hide fellowship"). Name the ability instead. */
+export function hideFellowship(state: GameState, viaStrider = false): void {
   state.fellowship.hidden = true;
   state.flags.fellowshipDeclaredOrMovedThisTurn = true; // counts as attempting a move/hide (Mordor penalty)
-  log(state, null, 'fellowship', 'Fellowship hidden');
+  log(state, null, 'fellowship', viaStrider
+    ? 'Fellowship hidden — Strider guides, so any Action die result may hide a revealed Fellowship'
+    : 'Fellowship hidden');
 }
 
 /** Declare the Fellowship's position: move the figure up to `progress` regions
