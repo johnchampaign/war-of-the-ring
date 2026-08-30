@@ -624,7 +624,19 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
         const gar = box ? Object.values(box.units).reduce((s2, u) => s2 + (u?.regular ?? 0) + (u?.elite ?? 0), 0) : 0;
         if (gar > 0 && fromU < gar * 2) return -40;
       }
-      return (fromU - toU) * 8 + REGIONS[a.to]!.vp * 25 + 25 - wakePrice(state, actor, a.to, true) * WAKE_W_ACTION;
+      let atk = (fromU - toU) * 8 + REGIONS[a.to]!.vp * 25 + 25 - wakePrice(state, actor, a.to, true) * WAKE_W_ACTION;
+      // Stage the Ringwraiths first (player report): a big fortified fight with thin
+      // Leadership, a Character die still in hand, and Nazgûl elsewhere to bring —
+      // ease THIS attack below the fly-in scores so the wraiths arrive before the
+      // dice are rolled. Tightly gated; the attack fires as normal next activation.
+      if (actor === 'shadow' && (fortified || a.from === a.to) && state.dice.shadow.includes('character')) {
+        const r = state.regions[a.from]!;
+        const lead = r.nazgul + (r.characters.includes('witch-king') ? 2 : 0);
+        const wraithsElsewhere = Object.entries(state.regions)
+          .some(([id, rr]) => id !== a.from && (rr.nazgul > 0 || rr.characters.includes('witch-king')));
+        if (lead < 3 && wraithsElsewhere) atk -= 30;
+      }
+      return atk;
     }
     // Aragorn / Gandalf the White: +1 FP Action die, permanently — worth more than
     // any single action, so it outranks even the Fellowship push (72 at Corruption
@@ -635,7 +647,7 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'bringMinion': return 55 - (target ? Math.min(10, dist(a.region, target)) : 0); // +1 die and a strong leader — placed toward the front
     case 'recruitUnit': return recruitScore(state, actor, a, target); // build the war stacks WHERE THEY MATTER
     case 'moveArmy': return armyMoveScore(state, actor, a.from, a.to, target);
-    case 'moveCharacter': return moveCharacterScore(state, actor, a); // reposition Nazgûl/Companions
+    case 'moveCharacter': return moveCharacterScore(state, actor, a, target); // reposition Nazgûl/Companions
     case 'diplomaticAction': return diplomaticScore(state, actor, a.nation); // mobilize toward At War
     case 'companionMuster': // a Companion advances its Nation toward War (any die) — mobilization
       return state.nations[a.nation].step > 0 ? 28 : 6;                // worth it only while the Nation isn't yet At War
@@ -814,10 +826,34 @@ function elvenRingScore(state: GameState, actor: Side, a: Extract<WotrAction, { 
 /** Initiating an independent-character move with a Character die. The big win is
  *  the Shadow pouncing a Nazgûl onto a REVEALED Fellowship (Hunt pressure); other
  *  repositioning is modest so it doesn't crowd out higher-value Character-die uses. */
-function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction, { kind: 'moveCharacter' }>): number {
+/** How much a Shadow Ringwraith gains by flying INTO the army staged against the
+ *  campaign target before the attack goes in (player report: "the AI should have
+ *  used [C] to move all the nazgul to the siege before attacking Minas Tirith —
+ *  re-rolls, plus extra cards with the Witch-king"). Nazgûl fly any distance on a
+ *  Character die, each adds a Leader re-roll die (cap 5, p.30), and the
+ *  Witch-king adds Leadership 2. 0 when it wouldn't help: not our army, not the
+ *  target's doorstep, or the re-roll cap is already met. */
+function nazgulStagingBonus(state: GameState, char: string, to: RegionId, target: RegionId | null): number {
+  if (!target || (char !== 'nazgul' && char !== 'witch-king')) return 0;
+  if (!armyHere(state, to, 'shadow')) return 0;
+  // The staging army: besieging the target (assaults launch from the target region
+  // itself) or standing adjacent, ready to attack into it.
+  const atDoor = to === target ? !!state.regions[to]!.siegeBox : (REGIONS[to]!.adjacency as RegionId[]).includes(target);
+  if (!atDoor) return 0;
+  const r = state.regions[to]!;
+  const lead = r.nazgul + (r.characters.includes('witch-king') ? 2 : 0);
+  if (lead >= 5) return 0;                        // the re-roll cap is met — more adds nothing
+  return char === 'witch-king' ? 62 : 56;         // WK: Leadership 2 + his card strength
+}
+
+function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction, { kind: 'moveCharacter' }>, target: RegionId | null): number {
   const fs = state.fellowship;
-  if (actor === 'shadow' && a.char === 'nazgul') return (!fs.hidden && a.to === fs.location) ? 42 : 6;
-  if (actor === 'shadow') return 4; // Minions: situational
+  if (actor === 'shadow') {
+    const staging = nazgulStagingBonus(state, a.char, a.to, target);
+    if (staging > 0) return staging;
+    if (a.char === 'nazgul') return (!fs.hidden && a.to === fs.location) ? 42 : 6;
+    return 4; // Minions: situational
+  }
   // A separated Companion used to score a flat 4 for every destination, so it never
   // went anywhere worth going and simply stood where it was dropped (player report:
   // the FP "take a bunch of guys out of the fellowship anddddd forgot about them").
@@ -1174,6 +1210,7 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
   const scoreMove = (a: Extract<WotrAction, { kind: 'moveCharacter' }>): number => {
     let s = 0;
     if (owner === 'shadow' && a.char === 'nazgul' && !fs.hidden && a.to === fs.location) s += 30; // press a revealed Fellowship
+    if (owner === 'shadow') s += nazgulStagingBonus(state, a.char, a.to, target);                 // join the army staged on the target
     if (target) s += -(dist(a.to, target) - dist(a.from, target)) * 4;                            // drift toward the target
     return s;
   };
