@@ -450,6 +450,18 @@ function enemyPressure(state: GameState, actor: Side): number {
  *  not symmetric even though the rule is: the Shadow chooses when its own Nations go to
  *  War and advances them with Muster dice regardless, so the FP is mostly paying a price
  *  for something that was going to happen anyway. Hence the Shadow-only guard below. */
+// TRIED AND REVERTED (2026-08-31): waiving this price for the campaign plan's
+// current objective Nation ("waking the objective IS the plan"). It was aimed at
+// a real reported exploit — a fully passive FP board is permanently attack-proof
+// (Luke Martens: "if you don't bring any of your factions to war the AI won't
+// attack you"; the fix measured +24% Shadow attacks vs a passive-FP policy). But
+// always-on it LOSES: two seed families x 2000 games vs e92900e, FP 1398->1467
+// and 1400->1438, Shadow corruption wins 541->480 and 543->489. Mechanism:
+// attacking a passive Nation ACTIVATES it (onArmyAttacked), so the exemption
+// hands the FP its mobilization early and diverts Shadow dice from the Hunt to
+// armies — the Ring game pays for the military game. A retry should be a
+// narrow anti-turtle TRIGGER (waive only when no FP Nation is At War by
+// mid-game, i.e. the opponent is provably turtling), not a standing exemption.
 function wakePrice(state: GameState, actor: Side, id: RegionId, attacking = false): number {
   // SHADOW ONLY — measured, see the note above. The rule is symmetric but the two
   // sides' positions are not, and charging the Free Peoples for it cost them more
