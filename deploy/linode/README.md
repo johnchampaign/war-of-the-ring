@@ -1,28 +1,27 @@
-# WotR AI processing on the Linode (172.232.14.119)
+# WotR online AI worker (Linode) — future home of the multistep AI
 
-Heavy AI work — A/B tournament soaks, gamelog mining, future search-AI
-evaluation — runs on the Linode box, **not** the dev machine (which may be
-powered off or rebooted into Windows). Same box and root-free conventions as
-Star Wars Rebellion's `deploy/ai-worker/`.
+The Linode box (`champaignj@172.232.14.119`) is the **runtime** home for the
+deployed game's strong AI, exactly like Star Wars Rebellion's
+`deploy/ai-worker/`: Cloudflare's per-request CPU limit can't run a real
+search, so once the multistep AI (1-ply evaluator, later deeper search) ships,
+a worker on this box will poll the deployed API for games waiting on an AI
+seat, compute the move locally, and post it back.
 
-## Layout on the box (`champaignj@172.232.14.119`)
-- `~/wotr-ai/` — `--depth 1` clone via the read-only GitHub deploy key
-  `linode-wotr-readonly` (added 2026-08-30). `git pull --ff-only` before
-  measuring; the box never pushes.
-- `~/wotr-soaks/` — soak outputs: `<name>.log` (tournament output) and
-  `<name>.exit` (exit code, written on completion — poll THIS, not the process).
+**This box is NOT for development** — A/B tournament soaks and experiments run
+on the dev machine as always (John, 2026-08-29). The box hosts a live
+tutor/forum; anything here runs `nice -19`.
 
-## Running an A/B (from any session)
-```bash
-ssh champaignj@172.232.14.119 'cd ~/wotr-ai && git pull --ff-only -q && ./deploy/linode/run-soak.sh base_f1 --games 2000'
-# poll:  ssh ... 'cat ~/wotr-soaks/base_f1.exit 2>/dev/null || echo running'
-# fetch: ssh ... 'cat ~/wotr-soaks/base_f1.log'
-```
-Sequential-soak discipline still applies (never two at once — 1 vCPU, and the
-box hosts a live tutor/forum; everything runs `nice -19`). ~16 min per
-2000-game soak measured 2026-08-30. For a treatment run, push the change to a
-branch and check it out on the box, or push to main and pull — the clone is
-read-only either way.
+## Already in place (2026-08-30)
+- `~/wotr-ai/` — `--depth 1` read-only clone (GitHub deploy key
+  `linode-wotr-readonly`). No secrets, no write access, no deploys from here.
+- node v20 present; the engine runs (`npx vite-node scripts/tournament.mjs
+  --games 30` verified, output identical to the dev machine).
 
-## Not on this box
-Secrets, service-role keys, deploys. The box holds a read-only clone only.
+## Still to build (when the multistep AI lands)
+Mirroring SWR's `deploy/ai-worker/`:
+- admin endpoints on the Pages Functions (`ai-due` / `ai-move`, token-gated,
+  optimistic concurrency on the turn number);
+- `scripts/ai-worker.mjs` polling loop with an env file (`~/wotr-worker.env`,
+  perms 600, outside the repo);
+- `tick.sh` cron supervisor (+ `@reboot`) for pull-to-deploy and self-healing —
+  SWR's version documents the setsid/nohup detach pitfall.
