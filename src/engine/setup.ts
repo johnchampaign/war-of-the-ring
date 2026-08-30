@@ -78,6 +78,9 @@ export function createGame({ seed }: SetupOptions): GameState {
   const state: GameState = {
     schemaVersion: 1,
     rngState: rng.serialize(),
+    // A stable per-game campaign roll for the Shadow AI (see types.ts). A hash of
+    // the seed, NOT the raw seed — the seed reconstructs the shuffled decks.
+    shadowPlanRoll: Math.abs(Math.imul(seed ^ 0x9e3779b9, 2654435761)) % 100,
     turn: 1,
     phase: 'recover',
     currentPlayer: 'fp',

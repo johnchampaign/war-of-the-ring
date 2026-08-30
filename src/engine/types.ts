@@ -267,6 +267,14 @@ export interface GameState {
   schemaVersion: 1;
   /** Serialized framework Rng state. */
   rngState: number;
+  /** Which pre-authored Shadow campaign the AI follows this game: a 0-99 roll
+   *  fixed at setup from the seed (Luke Martens' "pick a 10-point plan at the
+   *  beginning, vary it game to game"). Stored so the plan survives saves with
+   *  no AI memory; the AI maps roll -> plan book entry, so plan WEIGHTS can be
+   *  retuned without touching saved games. Hidden from the FP view (redact.ts)
+   *  — not knowing the opening is the point. Optional: older snapshots lack it
+   *  and the AI falls back to its planless targeting. */
+  shadowPlanRoll?: number;
   turn: number;
   phase: Phase;
   /** Whose action it is during Action Resolution (alternates). */

@@ -487,6 +487,45 @@ const WAKE_W_TARGET = 0.8;
 /** The enemy Settlement (vp>0) worth marching on: nearest to one of our armies,
  *  weighted by VP. Cached per state object (one campaign target per decision). */
 const targetCache = new WeakMap<object, RegionId | null>();
+// ————— Shadow campaign plans (Luke Martens, 2026-08-30) ————————————————————
+// "You need 10 points... instead of running an optimization algorithm, hard
+// code a few routes... a shopping list: if a die can fit in place, use it for
+// Rohan; if you can't, use it for your next task." Each plan is an ordered
+// 10-VP route; the current objective is the first target not yet held, and an
+// army much closer to a LATER objective serves that one instead (his plan-B
+// fall-through). The roll is fixed at setup (state.shadowPlanRoll) so the
+// opening varies game to game but every decision stays a pure function of the
+// state; no roll (old save) -> null -> the planless targeting below.
+const SHADOW_PLANS: RegionId[][] = [
+  // A (roll 0-39): Rohan (3) -> Gondor (5) -> an Elven Stronghold (2).
+  ['helms-deep', 'edoras', 'minas-tirith', 'pelargir', 'dol-amroth', 'lorien'],
+  // B (roll 40-74): Gondor first, then Rohan, then Lorien.
+  ['minas-tirith', 'pelargir', 'dol-amroth', 'helms-deep', 'edoras', 'lorien'],
+  // C (roll 75-99): the northern "DEW line" — Dale, Erebor, Woodland Realm — then south.
+  ['dale', 'erebor', 'woodland-realm', 'lorien', 'rivendell'],
+];
+function shadowPlan(state: GameState): RegionId[] | null {
+  const roll = state.shadowPlanRoll;
+  if (roll == null) return null;
+  return SHADOW_PLANS[roll < 40 ? 0 : roll < 75 ? 1 : 2]!;
+}
+/** The plan's live objectives: targets not yet Shadow-held, in plan order. */
+function planObjectives(state: GameState): RegionId[] {
+  const plan = shadowPlan(state);
+  return plan ? plan.filter((t) => settlementCtrl(state, t) !== 'shadow') : [];
+}
+/** Luke's fall-through: this army serves the FIRST objective unless a later one
+ *  is decisively closer (>=4 regions), so a second front forms naturally. */
+function planTargetFor(state: GameState, from: RegionId, primary: RegionId | null): RegionId | null {
+  if (!primary) return primary;
+  const objs = planObjectives(state);
+  if (objs.length < 2 || objs[0] !== primary) return primary;
+  for (const later of objs.slice(1, 3)) {
+    if (dist(from, later) + 4 <= dist(from, primary)) return later;
+  }
+  return primary;
+}
+
 function campaignTarget(state: GameState, actor: Side): RegionId | null {
   if (targetCache.has(state)) return targetCache.get(state)!;
   const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
@@ -506,6 +545,18 @@ function campaignTarget(state: GameState, actor: Side): RegionId | null {
     const s = def.vp * 4 - d + (armyHere(state, id, enemy) ? 0 : def.vp * 3)
       - wakePrice(state, actor, id) * WAKE_W_TARGET;
     if (s > bestScore) { bestScore = s; best = id; }
+  }
+  // Shadow campaign plan: the plan's first live objective replaces the greedy
+  // pick — EXCEPT a walk-in (an empty enemy VP Settlement within 2 of one of our
+  // armies) is free points now and always worth the detour.
+  if (actor === 'shadow') {
+    const objs = planObjectives(state);
+    if (objs.length) {
+      const walkIn = best && !armyHere(state, best, enemy)
+        && myArmies.some((a) => dist(a, best!) <= 2);
+      targetCache.set(state, walkIn ? best : objs[0]!);
+      return walkIn ? best : objs[0]!;
+    }
   }
   targetCache.set(state, best);
   return best;
@@ -757,6 +808,9 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
  *  outright, and concentrate stacks. */
 function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: RegionId, target: RegionId | null): number {
   const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
+  // Luke's fall-through: an army decisively closer to a LATER plan objective
+  // marches on that one instead of trekking across the map to objective #1.
+  if (actor === 'shadow') target = planTargetFor(state, from, target);
   let s = actor === 'shadow' ? 16 : 8;
   // While the Ring is parked the Shadow is racing an opponent who has stopped racing:
   // lean into captures and marching, which is how a human punishes a resting Fellowship.

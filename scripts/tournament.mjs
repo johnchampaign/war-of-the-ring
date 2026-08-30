@@ -122,6 +122,9 @@ for (let game = 0; game < GAMES; game++) {
       // everything by design (see redact.ts), so skip terminal states.
       const sv = redactStateForViewer(state, 'shadow');
       if (!state.winner && (sv.rngState !== 0 || sv.cards.fp.hand.some((c) => !String(c).startsWith('hidden')))) leaks++;
+      // The FP view must not see the Shadow AI's campaign roll (the opening plan).
+      const fv = redactStateForViewer(state, 'fp');
+      if (!state.winner && fv.shadowPlanRoll != null) leaks++;
     }
   }
 

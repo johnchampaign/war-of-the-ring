@@ -11,6 +11,8 @@ import { EVENT_BY_ID } from '../engine/data';
 export function redactStateForViewer(state: GameState, viewer: Side | null): GameState {
   const v: GameState = JSON.parse(JSON.stringify(state));
   v.rngState = 0; // never expose the RNG (it determines future Hunt draws / rolls)
+  // The Shadow AI's campaign roll: the FP player must not learn the opening plan.
+  if (viewer !== 'shadow') delete v.shadowPlanRoll;
 
   if (state.winner) return v; // game over — reveal all (rng stays hidden, irrelevant)
 
