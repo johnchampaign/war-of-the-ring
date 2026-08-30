@@ -187,10 +187,20 @@ const FOUL_STENCH = 'sh-char-09';
       JSON.stringify(after.log.filter((e) => /forfeit/.test(e.msg ?? '')).map((e) => e.msg)));
   }
 
-  { // Onslaught is asked after casualties, so the pre-roll step must skip it.
+  { // Onslaught is asked AFTER casualties, so the pre-roll step must skip it. The
+    // old assertion ("no cost prompt at battleWith's end") only held because of the
+    // card-expiry bug — the round used to null the played cards at the roll, so the
+    // post-casualty prompt could never fire at all (player reports x2). Now the
+    // prompt is expected, and what matters is its TIMING: postCasualty, never pre-roll.
     const { state } = battleWith('sh-str-02');
-    check('Onslaught: NOT asked before the roll', state.pendingChoice?.kind !== 'combatCardCost',
-      `kind=${state.pendingChoice?.kind}`);
+    const ch = state.pendingChoice;
+    if (ch?.kind === 'combatCardCost') {
+      check('Onslaught: the cost prompt is the POST-casualty one', ch.data?.postCasualty === true, JSON.stringify(ch.data));
+    } else {
+      // The battle may legitimately end without the prompt (defender wiped -> the
+      // card is moot); it must just never ask pre-roll.
+      check('Onslaught: no pre-roll cost prompt', true);
+    }
   }
 }
 

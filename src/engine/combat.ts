@@ -274,14 +274,26 @@ function applyCasualtyOption(state: GameState, f: Force, side: Side, opt: Casual
  *  player is never asked to "choose" a non-choice. Returns the hits still open. */
 function absorbForced(state: GameState, f: Force, side: Side, hits: number): number {
   let left = hits;
+  const taken: string[] = [];
   for (;;) {
     const opts = casualtyOptions(f, left);
-    if (left <= 0 || opts.length !== 1) return left;
-    const spent = applyCasualtyOption(state, f, side, opts[0]!);
-    if (spent <= 0) return left; // defensive: never spin
+    if (left <= 0 || opts.length !== 1) break;
+    const o = opts[0]!;
+    const spent = applyCasualtyOption(state, f, side, o);
+    if (spent <= 0) break; // defensive: never spin
     left -= spent;
+    taken.push(o.step === 'removeRegular' ? `a ${cap1(o.nation)} Regular is eliminated`
+      : o.step === 'reduceElite' ? `a ${cap1(o.nation)} Elite is reduced to a Regular`
+        : `a ${cap1(o.nation)} Elite is eliminated`);
   }
+  // Forced allocations skip the prompt (there is no decision), but they must NOT
+  // skip the log: an invisible casualty reads as a broken battle. Two reports in
+  // one day — '2E took my hit and I concluded Shield Wall cancelled it', and 'the
+  // log didn't say that' on an Elite reduction — were both this silence.
+  if (taken.length) log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} casualties (forced): ${taken.join('; ')}`);
+  return left;
 }
+const cap1 = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
 
 /** True when the owner still has a real decision to make about these hits. */
 function meaningfulForceCasualty(f: Force, hits: number): boolean {
@@ -1150,6 +1162,11 @@ export function combatStep(state: GameState): void {
         // at the START of every round — including the first — so the offer is inserted
         // here rather than once at battle start. The latch is per-round: declining in
         // round 0 does not waive the choice in round 1.
+        // A new round: the previous round's cards and costs expire now (not at the
+        // roll — the post-casualty 'onslaught' step reads them; see the note there).
+        pc.attackerCard = null; pc.defenderCard = null;
+        pc.atkCardCost = undefined; pc.defCardCost = undefined;
+        pc.greatHostDone = false; // fresh cards -> fresh post-casualty evaluation
         if (pc.siegeWithdrawAsked !== pc.round && strongholdWithdrawAvailable(state, pc)) {
           pc.step = 'siegeWithdraw'; continue;
         }
@@ -1297,9 +1314,13 @@ export function combatStep(state: GameState): void {
           + (hits !== rolled ? ` (${hits} after card effects)` : '');
         log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk)}; defender ${fmt(dRoll, defHits, def)}`,
           { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
-        pc.attackerCard = null; pc.defenderCard = null;
-        pc.greatHostDone = false; // fresh cards next round -> fresh post-casualty evaluation
-        pc.atkCardCost = undefined; pc.defCardCost = undefined; // costs are per-round, like the cards
+        // NB the round's cards are NOT cleared here: the 'onslaught' step still
+        // needs them AFTER casualties — Onslaught's own post-casualty cost prompt
+        // (unpaidCost reads pc.attackerCard/defenderCard) and Great Host's 2:1
+        // automatic hit both read the played card. Clearing them here meant both
+        // effects silently never fired in a real battle (player report: 'I played
+        // Onslaught... It never asked' — twice). They are cleared when the NEXT
+        // round begins ('attackerCard') or the battle ends.
         pc.step = 'attackerCasualties'; continue;
       }
       case 'attackerCasualties': {

@@ -262,7 +262,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const acts = g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'recruitUnit' }> => a.kind === 'recruitUnit');
     return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
   }, [g.legalActions, activeDie, g.view, g.you]);
-  const musterTargets = useMemo(() => new Set(recruitActs.map((a) => a.region)), [recruitActs]);
+  // Minion entries (the Witch-king / Saruman / the Mouth) join the board-click
+  // muster flow: their candidate regions highlight, and the Settlement's bundle
+  // menu lists them (player report: 'a popup to place the witchking in a sauron
+  // army would be wonderful' — it was a wall of one-button-per-region).
+  const minionActs = useMemo(() => {
+    const acts = g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'bringMinion' }> => a.kind === 'bringMinion');
+    return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
+  }, [g.legalActions, activeDie, g.view, g.you]);
+  const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...minionActs.map((a) => a.region)]), [recruitActs, minionActs]);
   const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
@@ -615,7 +623,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 16, borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 280, boxShadow: '0 8px 40px #000' }}
             onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>Muster in {REGIONS[musterMenu]?.name ?? musterMenu}</div>
-            {recruitActs.filter((a) => a.region === musterMenu).map((a, i) => (
+            {[...recruitActs, ...minionActs].filter((a) => a.region === musterMenu).map((a, i) => (
               <button key={i} onClick={() => { setMusterMenu(null); void submit(a); }}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
                 {describeAction(a)}

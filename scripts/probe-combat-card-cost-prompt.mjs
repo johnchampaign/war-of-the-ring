@@ -127,5 +127,37 @@ function runTo(s, kind, { shadowCard, fpCard } = {}) {
   }
 }
 
+{
+  console.log("\n=== Onslaught: the post-casualty prompt survives the round's card expiry ===");
+  // The round machine used to null both played cards at the END of the roll step —
+  // before casualties — so the 'onslaught' step could never see an unpaid
+  // post-casualty card and Onslaught was played, discarded, and did nothing
+  // (player reports x2: 'I played Onslaught... It never asked'). Cards now expire
+  // when the NEXT round begins.
+  const s = startGame(createGame({ seed: 21 }));
+  for (const r of Object.values(s.regions)) { r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = []; delete r.siegeBox; r.besieged = false; }
+  s.nations.sauron.step = 0; s.nations.north.step = 0;
+  // The defender must SURVIVE the round: a wiped Army ends the battle at the
+  // loop-top check before the onslaught step (correctly — the card is moot with
+  // no enemy left), which is a different path from the reported bug.
+  s.regions['dale'].units = { north: { regular: 6, elite: 0 } };
+  s.regions['northern-rhovanion'].units = { sauron: { regular: 8, elite: 0 } };
+  s.cards.shadow.hand = ['sh-str-02']; // Onslaught
+  startBattle(s, 'shadow', 'northern-rhovanion', 'dale');
+  let sawCost = null;
+  for (let i = 0; i < 60 && s.pendingCombat; i++) {
+    combatStep(s);
+    const ch = s.pendingChoice;
+    if (!ch) continue;
+    if (ch.kind === 'combatCard') { resolvePlayCombatCard(s, ch.owner === 'shadow' ? 'sh-str-02' : null); continue; }
+    if (ch.kind === 'combatCardCost') { sawCost = ch; break; }
+    if (ch.kind === 'combatCasualties') { s.pendingChoice = null; s.pendingCombat.step = ch.data.next; continue; } // skip: forced application not needed for this check
+    if (ch.kind === 'combatContinue') break; // round finished without ever asking — the reported bug
+    break;
+  }
+  check('the Onslaught cost prompt is raised AFTER casualties', sawCost?.kind === 'combatCardCost' && sawCost.data.postCasualty === true,
+    sawCost ? JSON.stringify(sawCost.data) : `stopped at ${s.pendingChoice?.kind ?? 'none'}`);
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

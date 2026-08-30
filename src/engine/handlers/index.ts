@@ -1292,10 +1292,14 @@ register('sh-char-14', {
   canPlay: (state) => state.fellowship.mordor === null && !state.fellowship.hidden && state.fellowship.companions.some((c) => COMPANION_SET.has(c)),
   apply(state) {
     const n = drawHuntTileNumber(state);
-    if (n === null) { log(state, null, 'event', 'The Breaking of the Fellowship: tile had no effect'); return; }
+    if (n === null) { log(state, null, 'event', 'The Breaking of the Fellowship: the tile shows an Eye (or a Fellowship special) — discarded without effect'); return; }
     if (isGollumGuide(state)) { corrupt(state, 1); log(state, null, 'event', 'The Breaking of the Fellowship: Gollum guides — +1 Corruption'); return; }
     const avail = state.fellowship.companions.filter((c) => COMPANION_SET.has(c)).length;
     const k = Math.min(n, avail);
+    // EVERY branch logs the drawn number: a 0 tile legitimately separates nobody,
+    // but doing it silently read as the card being broken (player report: 'doesn't
+    // give you options to separate and does nothing').
+    log(state, null, 'event', `The Breaking of the Fellowship: tile number ${n} — ${k > 0 ? `${k} Companion${k === 1 ? '' : 's'} must separate` : 'no Companions separate'}`);
     if (k > 0) state.pendingChoice = { owner: 'fp', kind: 'breakingSep', data: { left: k } };
   },
 });
@@ -1321,7 +1325,11 @@ function siegeAssaultTargets(state: GameState, qualifies: (from: string) => bool
     if (settlementController(state, id) !== 'fp') continue; // garrison (in the box) still holds it
     // The besieger must hold a unit of a Nation At War to storm (same gate as a
     // die-driven assault in attackTargets).
-    if (armySide(state, id) === 'shadow' && hasAtWarUnit(state, id, 'shadow') && qualifies(id)) out.push({ from: id, to: id });
+    // mode:'attack' — this is an ASSAULT, not a move. Untagged, the UI routed it
+    // through the p.28 split-move picker, which greeted the player with
+    // 'move Lorien -> Lorien; you'll have to remove 4 excess' instead of starting
+    // Grond's 3-round siege (player report).
+    if (armySide(state, id) === 'shadow' && hasAtWarUnit(state, id, 'shadow') && qualifies(id)) out.push({ from: id, to: id, mode: 'attack' });
   }
   return out;
 }
