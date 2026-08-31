@@ -248,6 +248,9 @@ export interface PendingCombat {
   /** Great Host's post-casualty 2:1 automatic hit has been evaluated THIS round
    *  (the onslaught step is re-entered after its casualty prompt resolves). */
   greatHostDone?: boolean;
+  /** We Come to Kill's post-casualty extra attack: fired-this-round latch (same
+   *  re-entry hazard as greatHostDone). */
+  postAtkDone?: boolean;
   /** The White Rider battle-start choice: asked once; true if the FP forfeited
    *  Gandalf the White's Leadership to negate all Nazgûl Leadership this battle. */
   whiteRiderAsked?: boolean;

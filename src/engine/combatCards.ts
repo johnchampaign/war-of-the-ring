@@ -35,6 +35,16 @@ export interface CombatMods {
    *  Kill ("using only the … Elite units"). All three were hardcoded to 3, which a
    *  player caught when a single Leader rolled three dice (report 2w424i0). Max 5. */
   extraAttackFrom?: 'leadership' | 'elites';
+  /** "BEFORE the Combat roll, roll an additional attack ... and apply the result
+   *  immediately" (Sudden Strike: Leadership dice; Charge: Elite dice; both max 5).
+   *  Resolves in the pre-combat pipeline, so its casualties thin the enemy before
+   *  anyone rolls — the point of the card (player report: it was pooled into the
+   *  round as a simultaneous extra attack, so the mauled army still hit back). */
+  preCombatAttackFrom?: 'leadership' | 'elites';
+  /** We Come to Kill: "AFTER removing casualties ... roll an additional attack
+   *  using only the Shadow Elite units (max 5)" — resolves in the post-casualty
+   *  step, counting the Elites that SURVIVED. */
+  postCasualtyAttackFrom?: 'elites';
   /** +N hits if the owner scored at least one hit. */
   bonusHitsIfAny?: number;
   /** +N hits if the owner has at least twice the enemy's units. */
@@ -126,9 +136,9 @@ const BY_TITLE: Record<string, CombatMods> = {
   // eliminate an FP Leader / Companion when the Leader re-roll scores a hit
   'Black Breath': { blackBreath: true },
   // extra attacks
-  'Charge': { extraAttackFrom: 'elites' },
-  'Sudden Strike': { extraAttackFrom: 'leadership' },
-  'We Come to Kill': { extraAttackFrom: 'elites' },
+  'Charge': { preCombatAttackFrom: 'elites' },
+  'Sudden Strike': { preCombatAttackFrom: 'leadership' },
+  'We Come to Kill': { postCasualtyAttackFrom: 'elites' },
   'Onslaught': {}, // resolved as its own post-casualty step, not a roll modifier (VARIABLE_COST)
   // extra hits
   'No Quarter': { bonusHitsIfAny: 1 },
@@ -173,6 +183,8 @@ export function describeCombatMods(mods: CombatMods): string {
   if (mods.preCombatAttackDice) p.push(`pre-combat attack: ${mods.preCombatAttackDice} dice, hits on 4+`);
   if (mods.extraAttackFrom === 'leadership') p.push('extra attack: one die per point of Leadership (max 5), hits on 5+');
   else if (mods.extraAttackFrom === 'elites') p.push('extra attack: one die per Elite unit (max 5), hits on 5+');
+  if (mods.preCombatAttackFrom) p.push(`BEFORE the Combat roll: an additional attack, one die per ${mods.preCombatAttackFrom === 'leadership' ? 'point of Leadership' : 'Elite unit'} (max 5), applied immediately`);
+  if (mods.postCasualtyAttackFrom) p.push('AFTER casualties: an additional attack, one die per surviving Elite unit (max 5)');
   else if (mods.extraAttackDice) p.push(`extra attack: ${mods.extraAttackDice} dice, hits on 5+`);
   if (mods.guaranteedHits) p.push(`turns ${mods.guaranteedHits} miss into a hit`);
   if (mods.bonusHitsIfAny) p.push(`+${mods.bonusHitsIfAny} hit${mods.bonusHitsIfAny === 1 ? '' : 's'} if it scored any`);

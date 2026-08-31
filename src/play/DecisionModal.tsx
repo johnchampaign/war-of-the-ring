@@ -12,6 +12,9 @@ import { useCardArt } from './artCache';
 import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import mapData from '../../assets/map.json';
+import { characterSide } from '../engine/data';
+import { forceLeadership } from '../engine/armies';
+import { charName } from './charInfo';
 import eventCards from '../../assets/event-cards.json';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
@@ -133,8 +136,8 @@ function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']
       </div>
       {/* Army sizes — so the player can size up the fight without closing the modal (report). */}
       <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
-        <ArmySize label="Attacker" force={atk} side={pc.attacker} />
-        <ArmySize label={boxed ? 'Defender (in siege)' : 'Defender'} force={def} side={pc.defender} />
+        <ArmySize label="Attacker" force={atk} side={pc.attacker} view={view} />
+        <ArmySize label={boxed ? 'Defender (in siege)' : 'Defender'} force={def} side={pc.defender} view={view} />
       </div>
       <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
         <Hits label="Attacker hits" n={pc.atkHits} />
@@ -156,15 +159,24 @@ function Hits({ label, n }: { label: string; n: number }) {
 
 // A compact army summary for the combat header: total units + Regular/Elite split and
 // any Leaders/Nazgûl, so the player can judge the fight from inside the modal.
-function ArmySize({ label, force, side }: { label: string; force?: { units?: Record<string, { regular: number; elite: number }>; leaders: number; nazgul: number }; side: Side }) {
+function ArmySize({ label, force, side, view }: { label: string; force?: { units?: Record<string, { regular: number; elite: number }>; leaders: number; nazgul: number; characters?: string[] }; side: Side; view: GameState }) {
   const us = Object.values(force?.units ?? {});
   const reg = us.reduce((s, u) => s + (u?.regular ?? 0), 0);
   const eli = us.reduce((s, u) => s + (u?.elite ?? 0), 0);
   const lead = force?.leaders ?? 0, naz = force?.nazgul ?? 0;
-  const extra = [lead ? `${lead} Leader${lead === 1 ? '' : 's'}` : '', naz ? `${naz} Nazgûl` : ''].filter(Boolean).join(', ');
+  // Name the Characters in the battle and the total Leadership, like the log's
+  // battle line does (player report: 'The WK and total leadership was not
+  // mentioned' — the Witch-king was invisible in the pop-up, and Leadership is
+  // what decides the re-roll dice). Leadership: 1/Leader, 1/Nazgûl, WK 2, and the
+  // named figures' printed values via levelOf (Leadership == Level for Minions
+  // and Companions in the battle context shown here).
+  const chars = (force?.characters ?? []).filter((c) => characterSide(c) === side);
+  const leadership = force ? Math.min(5, forceLeadership(view, force as never, side)) : 0;
+  const extra = [lead ? `${lead} Leader${lead === 1 ? '' : 's'}` : '', naz ? `${naz} Nazgûl` : '',
+    ...chars.map((c) => charName(c))].filter(Boolean).join(', ');
   return (
     <div style={{ fontSize: 12, color: side === 'fp' ? '#7fb6e6' : '#e6857f' }}>
-      {label}: <b>{reg + eli}</b> unit{reg + eli === 1 ? '' : 's'} <span style={{ color: '#998' }}>({reg}R / {eli}E{extra ? ` · ${extra}` : ''})</span>
+      {label}: <b>{reg + eli}</b> unit{reg + eli === 1 ? '' : 's'} <span style={{ color: '#998' }}>({reg}R / {eli}E{extra ? ` · ${extra}` : ''}{leadership ? ` · Leadership ${leadership}` : ''})</span>
     </div>
   );
 }

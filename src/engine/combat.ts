@@ -765,8 +765,8 @@ function describeForce(state: GameState, f: Force, side: Side): string {
  *  other non-choice steps. */
 function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods, dMods: CombatMods): boolean {
   const effects: Array<{ side: Side; ini: number; mods: CombatMods }> = [];
-  if (pc.attackerCard && (aMods.retreatBeforeCombat || aMods.preCombatAttackDice)) effects.push({ side: pc.attacker, ini: cardInitiative(pc.attackerCard), mods: aMods });
-  if (pc.defenderCard && (dMods.retreatBeforeCombat || dMods.preCombatAttackDice)) effects.push({ side: pc.defender, ini: cardInitiative(pc.defenderCard), mods: dMods });
+  if (pc.attackerCard && (aMods.retreatBeforeCombat || aMods.preCombatAttackDice || aMods.preCombatAttackFrom)) effects.push({ side: pc.attacker, ini: cardInitiative(pc.attackerCard), mods: aMods });
+  if (pc.defenderCard && (dMods.retreatBeforeCombat || dMods.preCombatAttackDice || dMods.preCombatAttackFrom)) effects.push({ side: pc.defender, ini: cardInitiative(pc.defenderCard), mods: dMods });
   if (!effects.length) return false;
   effects.sort((x, y) => x.ini - y.ini || (x.side === pc.defender ? -1 : 1)); // lower first; tie -> defender
   for (const ef of effects) {
@@ -800,6 +800,32 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       const dice = ef.mods.preCombatAttackDice;
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) if (rng.rollDie(6) >= 4) h++; return h; });
       if (hits > 0) { applyForceCasualties(state, foe, foeSide, hits, 'regularsFirst'); log(state, null, 'combat', `pre-combat attack scores ${hits} at ${enemy}`); }
+    } else if (ef.mods.preCombatAttackFrom) {
+      // Sudden Strike / Charge: "BEFORE the Combat roll, roll an additional attack
+      // using [Leadership | Elite] dice (max 5) and apply the result immediately."
+      // The card names no special to-hit, so the additional attack hits on what the
+      // owner's Combat roll would: the attacker needs 6s against a Stronghold siege
+      // or a Fortification/City's first round, 5s otherwise; the defender always 5s.
+      // Applied BEFORE anyone rolls — thinning the enemy is the point of the card
+      // (player report: 'Please let Sudden Strike hit before combat!' — it used to
+      // be pooled into the round as a simultaneous extra attack).
+      const foeSide: Side = ef.side === pc.attacker ? pc.defender : pc.attacker;
+      const foe = ef.side === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
+      if (forceUnitCount(foe) === 0) continue;
+      let ownElites = 0;
+      for (const n of Object.keys(ownForce.units) as Nation[]) ownElites += ownForce.units[n]!.elite;
+      const dice = Math.min(5, ef.mods.preCombatAttackFrom === 'leadership'
+        ? forceLeadership(state, ownForce, ef.side) : ownElites);
+      if (dice <= 0) continue;
+      const target = ef.side === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
+      const faces: number[] = [];
+      const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= target) h++; } return h; });
+      log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`);
+      if (hits > 0) {
+        const left = absorbForced(state, foe, foeSide, hits);
+        if (left > 0) applyForceCasualties(state, foe, foeSide, left, 'regularsFirst'); // residual: pre-combat leftovers auto-resolve (same as Durin's Bane)
+        finishForceCasualties(state, foe);
+      }
     }
   }
   return false;
@@ -1166,7 +1192,7 @@ export function combatStep(state: GameState): void {
         // roll — the post-casualty 'onslaught' step reads them; see the note there).
         pc.attackerCard = null; pc.defenderCard = null;
         pc.atkCardCost = undefined; pc.defCardCost = undefined;
-        pc.greatHostDone = false; // fresh cards -> fresh post-casualty evaluation
+        pc.greatHostDone = false; pc.postAtkDone = false; // fresh cards -> fresh post-casualty evaluation
         if (pc.siegeWithdrawAsked !== pc.round && strongholdWithdrawAvailable(state, pc)) {
           pc.step = 'siegeWithdraw'; continue;
         }
@@ -1372,6 +1398,41 @@ export function combatStep(state: GameState): void {
         // both sides, and the hit is absorbed like any other (per-casualty choice).
         // greatHostDone latches per round so a casualty prompt's return trip through
         // this step cannot award it twice.
+        // We Come to Kill: "AFTER removing casualties from the Combat roll and
+        // Leader re-roll, roll an additional attack using only the [surviving]
+        // Elite units (max 5)". It was pooled into the round's roll as a
+        // simultaneous extra attack — wrong timing AND wrong count (pre-casualty
+        // Elites). Latched like Great Host against casualty-prompt re-entry.
+        if (!pc.postAtkDone) {
+          pc.postAtkDone = true;
+          for (const side of [pc.attacker, pc.defender] as const) {
+            const card = side === pc.attacker ? pc.attackerCard : pc.defenderCard;
+            if (!card) continue;
+            const mods = combatModsFor(card, { cost: side === pc.attacker ? pc.atkCardCost : pc.defCardCost }) ?? EMPTY_MODS;
+            if (!mods.postCasualtyAttackFrom) continue;
+            const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
+            const foe = side === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
+            const foeSide = side === pc.attacker ? pc.defender : pc.attacker;
+            if (forceUnitCount(foe) === 0 || forceUnitCount(own) === 0) continue;
+            let elites = 0;
+            for (const n of Object.keys(own.units) as Nation[]) elites += own.units[n]!.elite;
+            const dice = Math.min(5, elites);
+            if (dice <= 0) continue;
+            const target = side === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
+            const faces: number[] = [];
+            const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= target) h++; } return h; });
+            log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (after casualties): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`);
+            if (hits > 0) {
+              const left = absorbForced(state, foe, foeSide, hits);
+              if (meaningfulForceCasualty(foe, left)) {
+                state.pendingChoice = { owner: foeSide, kind: 'combatCasualties',
+                  data: { region: foeSide === pc.attacker ? pc.from : pc.to, side: foeSide, hits: left, next: 'onslaught', boxed: pc.boxed === foeSide } };
+                return;
+              }
+              finishForceCasualties(state, foe);
+            }
+          }
+        }
         if (!pc.greatHostDone) {
           pc.greatHostDone = true;
           for (const side of [pc.attacker, pc.defender] as const) {
