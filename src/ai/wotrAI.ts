@@ -1099,8 +1099,18 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     }
     case 'siegeWithdraw': {
       // Defender: withdraw into the Stronghold (deny the capture / VP, force a siege)
-      // unless we strongly outnumber the attacker and can win in the open.
-      const hold = !pc || unitCount(state, pc.to) < unitCount(state, pc.from) + 2;
+      // unless we strongly outnumber the attacker and can win in the open — OR the
+      // siege cap would eat the difference. The box holds 5 Army units (p.31);
+      // withdrawing a bigger stack sacrifices the excess outright, and the AI paid
+      // it every time (Andreas, forum: 'AI pulls its troops back into the fortress
+      // even if the army limit forces him to sacrifice 1-5 Units. Here it should
+      // definitely consider fighting the first round in the open.'). Fight outside
+      // while the cap-loss is worse than a round's likely casualties (~2), or when
+      // we clearly outnumber; withdrawing stays right for a small garrison.
+      if (!pc) return legal[0]!;
+      const mine = unitCount(state, pc.to), theirs = unitCount(state, pc.from);
+      const capLoss = Math.max(0, mine - 5);
+      const hold = mine < theirs + 2 && capLoss < 2;
       return legal.find((a) => a.kind === 'siegeWithdraw' && a.withdraw === hold) ?? legal[0]!;
     }
     case 'siegeExtend': {

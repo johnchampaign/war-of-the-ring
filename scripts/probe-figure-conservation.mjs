@@ -14,7 +14,7 @@
 //     startBattle refuses a zero-unit attacking force outright.
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
-import { applyCasualties, startBattle, resolveSiegeExtend, hasAtWarUnit } from '../src/engine/combat.ts';
+import { applyCasualties, startBattle, resolveSiegeExtend, hasAtWarUnit, combatStep, resolveContinue, resolveRetreat, resolvePlayCombatCard } from '../src/engine/combat.ts';
 import { getHandler } from '../src/engine/handlers/registry.ts';
 
 let failures = 0;
@@ -91,6 +91,41 @@ const sauronTotal = (s) => {
     `north=${s.regions['dale'].units.north?.regular}, leaders=${s.regions['dale'].leaders}`);
   s.nations.north.step = 0; // North At War -> the attack is legal again
   check('...and IS offered once the North is At War', h.targets(s).some((t) => t.from === 'dale'));
+}
+
+{
+  console.log('\n=== a destroyed Army takes only ITS OWN figures with it ===');
+  // Nazgûl are not Army units: a Shadow Nazgûl legally shares a region with an FP
+  // Army (Andreas, forum: 'The Nazgul were counted as part of the FP army and
+  // therefore destroyed with it'). Destroying the FP defenders must leave the
+  // Shadow's Nazgûl standing — and a separated Companion must survive a Shadow
+  // Army's destruction in mirror.
+  const s = bare(15);
+  s.nations.sauron.step = 0; s.nations.north.step = 0;
+  s.regions['dale'].units = { north: { regular: 1, elite: 0 } };
+  s.regions['dale'].nazgul = 2;                       // the SHADOW's wraiths, watching
+  s.regions['dale'].characters = ['gimli'];           // an FP Companion with the army
+  s.regions['northern-rhovanion'].units = { sauron: { regular: 9, elite: 0 } };
+  const nazPool0 = s.reinforcements.sauron.nazgul ?? 0;
+  startBattle(s, 'shadow', 'northern-rhovanion', 'dale');
+  for (let i = 0; i < 60 && s.pendingCombat; i++) {
+    combatStep(s);
+    const ch = s.pendingChoice;
+    if (!ch) continue;
+    if (ch.kind === 'advanceChoice') break;
+    if (ch.kind === 'combatCard') { resolvePlayCombatCard(s, null); continue; }  // both hands decline
+    if (ch.kind === 'combatCasualties') { s.pendingChoice = null; s.pendingCombat.step = ch.data.next; continue; }
+    if (ch.kind === 'combatContinue') { resolveContinue(s, true); continue; }   // press on
+    if (ch.kind === 'combatRetreat') { resolveRetreat(s, false); continue; }    // stand and die
+    break;
+  }
+  if (s.regions['dale'].units.north?.regular > 0 && s.pendingCombat) { console.log('  (defender survived every round — skipped)'); }
+  else {
+    check('the FP army is destroyed', (s.regions['dale'].units.north?.regular ?? 0) === 0);
+    check("the Shadow's own Nazgûl still stand in Dale", s.regions['dale'].nazgul === 2, `nazgul=${s.regions['dale'].nazgul}`);
+    check('...and none leaked into the reinforcement pool', (s.reinforcements.sauron.nazgul ?? 0) === nazPool0);
+    check('Gimli fell with HIS army (FP figures do die with it)', s.characters.eliminated.includes('gimli'));
+  }
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

@@ -321,7 +321,7 @@ function applyForceCasualties(state: GameState, f: Force, side: Side, hits: numb
       else { const n = nations[0]!; f.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
     }
   }
-  finishForceCasualties(state, f);
+  finishForceCasualties(state, f, side);
 }
 
 /** Run once the last hit has landed: if the Army is gone, its Leaders/Nazgûl and
@@ -332,14 +332,29 @@ function applyForceCasualties(state: GameState, f: Force, side: Side, hits: numb
  *  on-map roster; without it a besieged Saruman survived the fall of Orthanc and kept
  *  his die (player report). Idempotent — the event-casualty follow-up (The Ents
  *  Awake) re-checks `eliminated` — so the per-hit path may call it after each step. */
-function finishForceCasualties(state: GameState, f: Force): void {
+function finishForceCasualties(state: GameState, f: Force, side: Side): void {
   if (forceUnitCount(f) !== 0) return;
-  for (const c of f.characters) {
+  // Only the DESTROYED side's figures fall with the Army. Nazgûl are not Army
+  // units, so a Shadow Nazgûl legally shares a region with a Free Peoples Army —
+  // and this function used to wipe the region's nazgul/leaders/characters
+  // wholesale, so destroying the FP defenders destroyed the Shadow's own Nazgûl
+  // standing there (Andreas, forum: 'The Nazgul were counted as part of the FP
+  // army and therefore destroyed with it'), and in mirror a separated Companion
+  // died with a Shadow Army. Nazgûl that DO fall recycle to reinforcements
+  // (p.30) — the old wholesale zero also leaked them out of the pool for good.
+  const mine = f.characters.filter((c) => characterSide(c) === side);
+  for (const c of mine) {
     if (!state.characters.eliminated.includes(c)) state.characters.eliminated.push(c);
     delete state.characters.inPlay[c];
   }
-  if (f.characters.length) log(state, null, 'combat', `${f.characters.join(', ')} eliminated with the destroyed Army`);
-  f.leaders = 0; f.nazgul = 0; f.characters = [];
+  if (mine.length) log(state, null, 'combat', `${mine.join(', ')} eliminated with the destroyed Army`);
+  f.characters = f.characters.filter((c) => characterSide(c) !== side);
+  if (side === 'fp') {
+    f.leaders = 0;                              // FP Leaders are permanent losses
+  } else {
+    state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + f.nazgul;
+    f.nazgul = 0;
+  }
 }
 
 /** The Force a pending casualty choice is allocating from (region, or the siege box
@@ -379,7 +394,7 @@ export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, na
     state.pendingChoice = { ...ch, data: { ...d, hits: left } };
     return;
   }
-  finishForceCasualties(state, f);
+  finishForceCasualties(state, f, d.side);
   state.pendingChoice = null;
   if (isEvent) runCasualtyThen(state, d.then ?? null);
   else state.pendingCombat!.step = d.next!;
@@ -460,7 +475,7 @@ export function queueOrApplyEventCasualties(state: GameState, side: Side, region
     state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits: left, boxed, then: then ?? null } };
     return;
   }
-  finishForceCasualties(state, f);
+  finishForceCasualties(state, f, side);
   runCasualtyThen(state, then);
 }
 
@@ -824,7 +839,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       if (hits > 0) {
         const left = absorbForced(state, foe, foeSide, hits);
         if (left > 0) applyForceCasualties(state, foe, foeSide, left, 'regularsFirst'); // residual: pre-combat leftovers auto-resolve (same as Durin's Bane)
-        finishForceCasualties(state, foe);
+        finishForceCasualties(state, foe, foeSide);
       }
     }
   }
@@ -1359,7 +1374,7 @@ export function combatStep(state: GameState): void {
             state.pendingChoice = { owner: pc.attacker, kind: 'combatCasualties', data: { region: pc.from, side: pc.attacker, hits: left, next: 'defenderCasualties', boxed: boxedAtk } };
             return;
           }
-          finishForceCasualties(state, f);
+          finishForceCasualties(state, f, pc.attacker);
         }
         pc.step = 'defenderCasualties'; continue;
       }
@@ -1372,7 +1387,7 @@ export function combatStep(state: GameState): void {
             state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: left, next: 'onslaught', boxed: boxedDef } };
             return;
           }
-          finishForceCasualties(state, f);
+          finishForceCasualties(state, f, pc.defender);
         }
         pc.step = 'onslaught'; continue;
       }
@@ -1429,7 +1444,7 @@ export function combatStep(state: GameState): void {
                   data: { region: foeSide === pc.attacker ? pc.from : pc.to, side: foeSide, hits: left, next: 'onslaught', boxed: pc.boxed === foeSide } };
                 return;
               }
-              finishForceCasualties(state, foe);
+              finishForceCasualties(state, foe, foeSide);
             }
           }
         }
@@ -1454,7 +1469,7 @@ export function combatStep(state: GameState): void {
                   data: { region: foeSide === pc.attacker ? pc.from : pc.to, side: foeSide, hits: left, next: 'onslaught', boxed: boxedFoe } };
                 return;
               }
-              finishForceCasualties(state, foe);
+              finishForceCasualties(state, foe, foeSide);
             }
           }
         }
