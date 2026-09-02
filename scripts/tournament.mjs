@@ -12,6 +12,7 @@ import { wotrAdapter, startGame } from '../src/adapter/wotrAdapter.ts';
 import { redactStateForViewer } from '../src/adapter/redact.ts';
 import { REGIONS as REGIONSBYID } from '../src/engine/data.ts';
 import { chooseAction } from '../src/ai/wotrAI.ts';
+import { chooseActionEval } from '../src/ai/evalChooser.ts';
 
 const arg = (name, def) => {
   const i = process.argv.indexOf(name);
@@ -27,10 +28,14 @@ const GAMES = arg('--games', 300);
 // instead of guessed. Default 0 keeps every historic soak reproducible.
 const SEED_OFFSET = arg('--seed-offset', 0);
 const MAX_ACTIONS = 20000;
-// Controller per side: 'heuristic' (default) or 'random'.
+// Controller per side: 'heuristic' (default), 'random', or 'eval' (the 1-ply
+// evaluator — docs/ai-1ply-evaluator.md; ~50-100x slower per decision, so size
+// --games accordingly). Head-to-head: --shadow eval vs the heuristic FP, etc.
 const CTRL = { fp: strArg('--fp', 'heuristic'), shadow: strArg('--shadow', 'heuristic') };
 const pick = (ctrl, state, actor, legal, rng) =>
-  ctrl === 'random' ? rng.pick(legal) : chooseAction(state, actor, legal, rng);
+  ctrl === 'random' ? rng.pick(legal)
+    : ctrl === 'eval' ? chooseActionEval(state, actor, legal, rng)
+      : chooseAction(state, actor, legal, rng);
 
 // Total Army units (regular+elite) on the board plus in reinforcements. Move-family
 // actions only relocate/recycle units, so this total must NOT change across them —

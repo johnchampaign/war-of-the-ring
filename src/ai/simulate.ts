@@ -61,6 +61,12 @@ const CASCADE_GUARD = 300;
  *  materialization edge — the caller should fall back to the heuristic score).
  *  Deterministic: same (state, actor, action, simSeed) -> same score. */
 export function simulateAction(state: GameState, actor: Side, action: WotrAction, simSeed: number): number | null {
+  const end = simulateOutcome(state, actor, action, simSeed);
+  return end ? evaluate(end, actor) : null;
+}
+
+/** The simulated END STATE itself (for tracing / probes), or null if refused. */
+export function simulateOutcome(state: GameState, actor: Side, action: WotrAction, simSeed: number): GameState | null {
   // Bound, not extracted: the adapter's methods call each other through `this`,
   // and an unbound call made every simulation fail closed as ok:false.
   const tryApply = wotrAdapter.tryApplyAction!.bind(wotrAdapter);
@@ -79,5 +85,5 @@ export function simulateAction(state: GameState, actor: Side, action: WotrAction
     if (!r.ok) break; // never loop on a refused cascade step
     sim = r.state;
   }
-  return evaluate(sim, actor);
+  return sim;
 }

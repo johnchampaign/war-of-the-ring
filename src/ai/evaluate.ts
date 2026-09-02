@@ -40,6 +40,13 @@ export function evaluate(state: GameState, side: Side, breakdown?: EvalBreakdown
   const shVp = state.victoryPoints.shadow ?? 0, fpVp = state.victoryPoints.fp ?? 0;
   t('vp.shadow', 340 * Math.pow(Math.min(1, shVp / 10), 1.5));
   t('vp.fp', -340 * Math.pow(Math.min(1, fpVp / 4), 1.5));
+  // A threshold REACHED is decisive: military victory is recorded at the end of
+  // the turn (p.44), so `winner` is still null mid-turn and, without this, the
+  // 10th VP scored only +50 over the 9th — sample noise flipped a chooser probe
+  // toward a Moria recruit over the winning capture. Below true terminal (1e6),
+  // above everything positional.
+  if (shVp >= 10) t('vp.shadowWinPending', 5000);
+  if (fpVp >= 4) t('vp.fpWinPending', -5000);
 
   // ——— The Ring (the other clock) ————————————————————————————————————————————
   const fs = state.fellowship;

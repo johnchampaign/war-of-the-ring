@@ -129,6 +129,26 @@ uploaded-gamelog win rates. No flag flip to default until the corpus shows it.
    revert-and-record.
 5. Linode worker plumbing (separate doc/commit series).
 
+## Build log
+
+- **Stage 1 (905b6e1)** — `evaluate()` + property probe + `eval-trace.mjs`.
+  Sanity number: turn-8 eval sign predicts the winner in 53% of games — the
+  meta is a Ring race decided by late dice; expect the evaluator's value in
+  decision quality, not oracle judgment.
+- **Stage 2 (869e04b)** — `simulateAction`/`simulateOutcome` built from the
+  redacted view. The no-peek probe caught a fail-closed bug before commit
+  (unbound adapter method → every sim refused → no-peek vacuously true).
+  Measured 1.14 ms/simulation at 85 candidates.
+- **Stage 3** — `chooseActionEval`, tournament key `eval`. Two lessons from
+  the probes: (1) military victory is recorded at TURN END, so `winner` is
+  null mid-turn — a reached threshold needed its own decisive term
+  (`vp.*WinPending`, 5000) or the 10th VP scored only +50 over the 9th and
+  sample noise chose a recruit over the winning capture; (2) the Army die's
+  second move is part of the simulated cascade (played by the heuristic), so
+  a probe with a decoy army tied because the heuristic walked the other army
+  into the win. Timing: ~29 s/game with Shadow=eval at K=3 → 500 games/family
+  ≈ 4 h; the stage-4 A/B (6 runs) is an overnight detached chain.
+
 ## Non-goals
 
 - No opponent-move search (the opponent "responds" only inside forced cascades,
