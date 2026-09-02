@@ -121,10 +121,15 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
 }
 
 function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']>; view: GameState }) {
-  // The attacker occupies `from`; the defender is in `to` (or its siege box on an assault).
-  const atk = view.regions[pc.from];
-  const boxed = pc.boxed === pc.defender ? view.regions[pc.to]?.siegeBox : undefined;
-  const def = boxed ?? view.regions[pc.to];
+  // Whose figures are where: EITHER side can be the one in the siege box. On an
+  // assault the boxed side is the defending garrison; on a SORTIE (p.32) it is the
+  // attacker, and `from === to`, so reading the region for the attacker showed the
+  // besieger as BOTH armies — a player sortieing out of Minas Morgul was told the
+  // Shadow was attacking itself. Same rule the dice use (engine atkForce/defForce).
+  const atkBoxed = pc.boxed === pc.attacker ? view.regions[pc.from]?.siegeBox : undefined;
+  const defBoxed = pc.boxed === pc.defender ? view.regions[pc.to]?.siegeBox : undefined;
+  const atk = atkBoxed ?? view.regions[pc.from];
+  const def = defBoxed ?? view.regions[pc.to];
   return (
     <div style={{ borderBottom: '1px solid #443', paddingBottom: 8 }}>
       <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1 }}>
@@ -136,8 +141,8 @@ function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']
       </div>
       {/* Army sizes — so the player can size up the fight without closing the modal (report). */}
       <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
-        <ArmySize label="Attacker" force={atk} side={pc.attacker} view={view} />
-        <ArmySize label={boxed ? 'Defender (in siege)' : 'Defender'} force={def} side={pc.defender} view={view} />
+        <ArmySize label={atkBoxed ? 'Attacker (sortie, from the Stronghold)' : 'Attacker'} force={atk} side={pc.attacker} view={view} />
+        <ArmySize label={defBoxed ? 'Defender (in siege)' : atkBoxed ? 'Defender (besieging)' : 'Defender'} force={def} side={pc.defender} view={view} />
       </div>
       <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
         <Hits label="Attacker hits" n={pc.atkHits} />

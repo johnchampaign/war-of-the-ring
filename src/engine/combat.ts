@@ -1707,11 +1707,9 @@ export const canRetreat = (state: GameState): boolean => retreatRegion(state, st
 /** The White Rider choice is offered only when Gandalf the White is in the FP Army and
  *  the Shadow has Nazgûl Leadership worth negating. */
 export function whiteRiderApplicable(state: GameState, pc: PendingCombat): boolean {
-  const fpR = pc.attacker === 'fp' ? pc.from : pc.to;
-  const shR = pc.attacker === 'shadow' ? pc.from : pc.to;
-  if (!state.regions[fpR]!.characters.includes('gandalf-white')) return false;
-  const sr = state.regions[shR]!;
-  return sr.nazgul + (sr.characters.includes('witch-king') ? 2 : 0) > 0;
+  const { fp, sh } = battleForces(state, pc);
+  if (!fp.characters.includes('gandalf-white')) return false;
+  return sh.nazgul + (sh.characters.includes('witch-king') ? 2 : 0) > 0;
 }
 /** Resolve the White Rider battle-start choice (combat resumes via advance). */
 export function resolveWhiteRider(state: GameState, forfeit: boolean): void {
@@ -1725,9 +1723,16 @@ const HOBBIT_IDS = new Set(['meriadoc', 'peregrin']);
 // "Captain of the West": +1 Combat Strength to a FP Army these Companions are in.
 const CAPTAINS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'aragorn']);
 
-/** Which of the battle's two regions holds the FP vs the Shadow army. */
-function battleRegions(pc: PendingCombat): { fp: RegionId; sh: RegionId } {
-  return pc.attacker === 'fp' ? { fp: pc.from, sh: pc.to } : { fp: pc.to, sh: pc.from };
+/** Which FORCE in the battle is the Free Peoples' and which the Shadow's. Forces,
+ *  NOT regions: in a siege assault or a sortie one side's figures stand in the siege
+ *  box while the region holds the other side — and `from === to`, so both "sides"
+ *  resolved to the SAME region and every check ran against the wrong army. The
+ *  besieged garrison's Elites, Companions and Leaders were invisible, so their
+ *  "Play if…" cards were silently never offered (player report: defending a stormed
+ *  Minas Morgul with an Elite in the box, 'We Come to Kill' was never asked for). */
+function battleForces(state: GameState, pc: PendingCombat): { fp: Force; sh: Force } {
+  const atk = atkForce(state, pc), def = defForce(state, pc);
+  return pc.attacker === 'fp' ? { fp: atk, sh: def } : { fp: def, sh: atk };
 }
 
 /** Is a Combat card's precondition (the boldface "Play if…" line) met by the
@@ -1736,8 +1741,7 @@ function battleRegions(pc: PendingCombat): { fp: RegionId; sh: RegionId } {
 function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): boolean {
   const pre = EVENT_BY_ID[cardId]?.combat?.precondition;
   if (!pre) return true;
-  const { fp: fpR, sh: shR } = battleRegions(pc);
-  const fp = state.regions[fpR]!, sh = state.regions[shR]!;
+  const { fp, sh } = battleForces(state, pc);
   const fpChars = fp.characters;
   const companionInBattle = fpChars.some((c) => COMPANION_IDS.has(c));
   const fpElite = Object.entries(fp.units).some(([n, u]) => sideOfNation(n as Nation) === 'fp' && u!.elite > 0);
