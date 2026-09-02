@@ -28,7 +28,15 @@ export interface LogTime { seq: number; at: string }
  *  allowed but flagged so the UI can warn + the engine can log it. */
 export interface UndoStatus { canUndo: boolean; foreknowledge: boolean; reason?: string }
 
+/** How this game is being played — stamped onto uploaded game logs so the
+ *  AI-tuning corpus can tell vs-AI from hotseat from online PvP (until 2026-09-02
+ *  every upload was indistinguishable, so human-vs-human games were invisible). */
+export type GameMode = 'vs-ai' | 'hotseat' | 'online';
+
 export interface GameClientApi {
+  /** Play mode + which side the AI holds (null/undefined when no local AI). */
+  mode?: GameMode;
+  aiSide?: 'fp' | 'shadow' | null;
   fetch(): Promise<ViewResult>;
   submit(action: WotrAction): Promise<ViewResult>;
   legalActions(): Promise<WotrAction[]>;
@@ -71,6 +79,7 @@ export function makeGameClient(
     : null;
 
   return {
+    mode: 'online', // an online seat may face a server-driven AI; the log's `you` + winner still say who played
     fetch: () => fetch(`${base}${q}`).then((r) => r.json()),
     submit: (action) => post('/submit', { action, identityToken: getIdentityToken?.() }),
     legalActions: () => fetch(`${base}/legal${q}`).then((r) => r.json()).then((r) => r.legalActions ?? r),

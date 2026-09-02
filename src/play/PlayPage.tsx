@@ -710,9 +710,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 : "Not ranked — couldn't reach the leaderboard."}
         </p>
       )}
-      <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
+      <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} mode={{ mode: client.mode, aiSide: client.aiSide }} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
         uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} />
-      <UploadLogButton view={g.view} you={g.you as Side | null} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
+      <UploadLogButton view={g.view} you={g.you as Side | null} mode={{ mode: client.mode, aiSide: client.aiSide }} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
         uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} />
       <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
       {responseQueue.length > 0 && (

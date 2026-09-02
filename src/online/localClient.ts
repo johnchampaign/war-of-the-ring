@@ -124,6 +124,8 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
   };
 
   return {
+    mode: aiSide ? 'vs-ai' : 'hotseat',
+    aiSide,
     // Opening sets the marker to "nothing new"; later refreshes must NOT reset it
     // (in local play the opponent acts inside submit, so a poll mustn't wipe the
     // pending summary).

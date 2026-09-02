@@ -8,6 +8,7 @@
 //     was already uploaded (via the button) this game.
 import { useState } from 'react';
 import type { GameState, Side } from '../engine/types';
+import type { GameMode } from '../online/gameClient';
 
 // On the deployed site, post same-origin; from the local dev client (no Functions
 // runtime) post to the deployed, CORS-open endpoint instead.
@@ -16,12 +17,17 @@ const ENDPOINT = (isLocalDev ? 'https://war-of-the-ring.pages.dev' : '') + '/api
 
 /** POST the current game log to the AI-tuning endpoint. Works mid-game or at the end.
  *  Returns true on success. */
-export async function uploadGameLog(view: GameState, you: Side | null, clientBuild?: string): Promise<boolean> {
+export interface UploadMode { mode?: GameMode; aiSide?: Side | null }
+export async function uploadGameLog(view: GameState, you: Side | null, clientBuild?: string, m?: UploadMode): Promise<boolean> {
   try {
     const winner = view.winner === 'fp' ? 'Free Peoples' : view.winner === 'shadow' ? 'Shadow' : null;
-    const message = winner
+    // The mode tag makes the corpus classifiable: vs-AI (and which side the AI
+    // held), hotseat (two humans, one screen), or online. Rides in the message
+    // text — no schema change, and the public report summary carries it.
+    const tag = m?.mode ? ` [mode: ${m.mode}${m.mode === 'vs-ai' && m.aiSide ? `, AI=${m.aiSide}` : ''}]` : '';
+    const message = (winner
       ? `GAME COMPLETE — ${winner} wins (${view.winReason ?? '?'}). Uploaded for AI tuning. (turns: ${view.turn})`
-      : `GAME IN PROGRESS — uploaded for AI tuning (turn ${view.turn}, ${view.phase}).`;
+      : `GAME IN PROGRESS — uploaded for AI tuning (turn ${view.turn}, ${view.phase}).`) + tag;
     const res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -32,15 +38,15 @@ export async function uploadGameLog(view: GameState, you: Side | null, clientBui
 }
 
 /** Floating "Upload log" button — beside the Log/Report buttons; usable any time. */
-export function UploadLogButton({ view, you, clientBuild, uploaded, onUploaded, style }: {
-  view: GameState; you: Side | null; clientBuild?: string; uploaded: boolean; onUploaded: () => void; style?: React.CSSProperties;
+export function UploadLogButton({ view, you, clientBuild, uploaded, onUploaded, style, mode }: {
+  view: GameState; you: Side | null; clientBuild?: string; uploaded: boolean; onUploaded: () => void; style?: React.CSSProperties; mode?: UploadMode;
 }) {
   const [stage, setStage] = useState<'idle' | 'uploading' | 'error'>('idle');
   const done = uploaded; // shared with the end-game prompt so each game uploads once
   const click = async () => {
     if (done || stage === 'uploading') return;
     setStage('uploading');
-    const ok = await uploadGameLog(view, you, clientBuild);
+    const ok = await uploadGameLog(view, you, clientBuild, mode);
     if (ok) { onUploaded(); setStage('idle'); } else setStage('error');
   };
   const label = stage === 'uploading' ? '⏳ Uploading…' : done ? '✓ Log sent' : stage === 'error' ? '⚠ Retry upload' : '⬆ Upload log';
@@ -55,8 +61,8 @@ export function UploadLogButton({ view, you, clientBuild, uploaded, onUploaded, 
   );
 }
 
-export function GameOverUpload({ view, you, gameOver, clientBuild, uploaded, onUploaded }: {
-  view: GameState; you: Side | null; gameOver: boolean; clientBuild?: string; uploaded: boolean; onUploaded: () => void;
+export function GameOverUpload({ view, you, gameOver, clientBuild, uploaded, onUploaded, mode }: {
+  view: GameState; you: Side | null; gameOver: boolean; clientBuild?: string; uploaded: boolean; onUploaded: () => void; mode?: UploadMode;
 }) {
   const [stage, setStage] = useState<'offer' | 'uploading' | 'done' | 'error' | 'dismissed'>('offer');
   if (!gameOver || !view.winner || stage === 'dismissed') return null;
@@ -66,7 +72,7 @@ export function GameOverUpload({ view, you, gameOver, clientBuild, uploaded, onU
   const alreadyDone = uploaded || stage === 'done';
   const upload = async () => {
     setStage('uploading');
-    const ok = await uploadGameLog(view, you, clientBuild);
+    const ok = await uploadGameLog(view, you, clientBuild, mode);
     if (ok) { onUploaded(); setStage('done'); } else setStage('error');
   };
 
