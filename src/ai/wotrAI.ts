@@ -295,7 +295,7 @@ function maybeAttackRearguard(state: GameState, actor: Side, action: WotrAction)
 }
 
 const FP = new Set(['dwarves', 'elves', 'gondor', 'north', 'rohan']);
-const settlementCtrl = (state: GameState, id: RegionId): Side | null => {
+export const settlementCtrl = (state: GameState, id: RegionId): Side | null => {
   const def = REGIONS[id]!;
   if (!def.settlement) return null;
   return state.regions[id]!.control ?? (def.nation ? (FP.has(def.nation) ? 'fp' : 'shadow') : null);
@@ -307,7 +307,7 @@ const isHealSettlement = (state: GameState, id: RegionId): boolean => {
   return (def.settlement === 'City' || def.settlement === 'Stronghold')
     && !!def.nation && FP.has(def.nation) && settlementCtrl(state, id) !== 'shadow';
 };
-const armyHere = (state: GameState, id: RegionId, side: Side): boolean => {
+export const armyHere = (state: GameState, id: RegionId, side: Side): boolean => {
   const r = state.regions[id]!;
   return (Object.keys(r.units) as Nation[]).some((n) => FP.has(n) === (side === 'fp') && (r.units[n]!.regular + r.units[n]!.elite) > 0);
 };
@@ -368,7 +368,7 @@ function undefendedVP(state: GameState, id: RegionId, actor: Side, reach = 2): b
  *  state, so a pair's distance is fixed for the whole process. Without the cache the
  *  per-army targeting below would re-walk the map on every candidate action. */
 const distMemo = new Map<string, number>();
-function dist(from: RegionId, to: RegionId): number {
+export function dist(from: RegionId, to: RegionId): number {
   if (from === to) return 0;
   const key = `${from}>${to}`;
   const hit = distMemo.get(key);
@@ -522,13 +522,13 @@ function shadowPlan(state: GameState): RegionId[] | null {
   return SHADOW_PLANS[roll < 40 ? 0 : roll < 75 ? 1 : 2]!;
 }
 /** The plan's live objectives: targets not yet Shadow-held, in plan order. */
-function planObjectives(state: GameState): RegionId[] {
+export function planObjectives(state: GameState): RegionId[] {
   const plan = shadowPlan(state);
   return plan ? plan.filter((t) => settlementCtrl(state, t) !== 'shadow') : [];
 }
 /** Luke's fall-through: this army serves the FIRST objective unless a later one
  *  is decisively closer (>=4 regions), so a second front forms naturally. */
-function planTargetFor(state: GameState, from: RegionId, primary: RegionId | null): RegionId | null {
+export function planTargetFor(state: GameState, from: RegionId, primary: RegionId | null): RegionId | null {
   if (!primary) return primary;
   const objs = planObjectives(state);
   if (objs.length < 2 || objs[0] !== primary) return primary;
@@ -538,7 +538,7 @@ function planTargetFor(state: GameState, from: RegionId, primary: RegionId | nul
   return primary;
 }
 
-function campaignTarget(state: GameState, actor: Side): RegionId | null {
+export function campaignTarget(state: GameState, actor: Side): RegionId | null {
   if (targetCache.has(state)) return targetCache.get(state)!;
   const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
   const myArmies = Object.keys(state.regions).filter((id) => armyHere(state, id, actor));
