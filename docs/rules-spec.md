@@ -307,6 +307,23 @@ die already showing an Eye.
   `pruneTableCards` discarded them for no effect on the next transition (two player
   reports: the FP AI wasted The Last Battle; a player wasted the Palantír before
   mustering Saruman).
+  A card with **no printed "Play if" line** is a different case: p.23 says the actions
+  on an Event card are mandatory, but "it can happen that the effects of an Event card
+  cannot be fully applied. In this case, the card can still be played, and its effects
+  are applied to the maximum extent possible" (the *Imrahil of Dol Amroth* example: no
+  Leader in reinforcements → only the unit is recruited). So `canPlay` for such a card
+  gates on **any** half of the text being applicable, not all of it. *Faramir's Rangers*
+  (fp-str-06) is the worked case: it used to require a Shadow Army in Osgiliath / N. or
+  S. Ithilien, which locked it out of the opening position entirely, but the Almanac
+  says it "may be used if no Shadow Army is in North Ithilien or South Ithilien just to
+  perform the final recruitment action, but only if a Free Peoples Army is currently
+  standing in Osgiliath" — so it is now playable for either half, and the target machine
+  skips straight to the Osgiliath recruit when there is nothing to shoot at *(player
+  report, 2026-09-03: "Faramir's Rangers can be played without a shadow army in
+  Ithilien")*. That recruit is **one Gondor unit AND one Gondor Leader** per the card
+  text; the Leader (no choice to make, and not subject to stacking) rides along in
+  `finalize`, or in `apply` when the unit half has no legal target at all.
+  Regression: `scripts/probe-faramir-rangers.mjs`.
   **Multi-target cards** (`EventHandler.repeat = N`, e.g. *The Shadow Lengthens* = 2,
   *The Shadow is Moving* = 4) re-prompt the same `eventTarget` choice up to N times:
   the choice persists (`data.left`/`data.applied`), `targets(state, side, applied)`

@@ -954,32 +954,63 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
     },
   });
 }
-// Faramir's Rangers: hit a Shadow Army in Osgiliath / N. or S. Ithilien.
 // Faramir's Rangers: CHOOSE a Shadow Army in Osgiliath/N./S. Ithilien, roll 3 dice
-// (hit on 5+); then, if an FP Army is in Osgiliath, recruit one Gondor unit (R or E).
+// (hit on 5+); then, if an FP Army is in Osgiliath, recruit one Gondor unit (R or E)
+// AND one Gondor Leader there.
+// The two halves stand alone. The card carries no "Play if" line, and the rulebook
+// (p.23) says a card whose effects "cannot be fully applied ... can still be played,
+// and its effects are applied to the maximum extent possible"; the Almanac spells it
+// out for this card — "may be used if no Shadow Army is in North Ithilien or South
+// Ithilien just to perform the final recruitment action, but only if a Free Peoples
+// Army is currently standing in Osgiliath". Player report: with no Shadow Army in
+// Ithilien the card was locked out of the hand entirely.
+const FARAMIR_REGIONS = ['osgiliath', 'south-ithilien', 'north-ithilien'];
+const faramirStrikes = (state: GameState): string[] => FARAMIR_REGIONS.filter((r) => armySide(state, r) === 'shadow');
+/** The Osgiliath half: one Gondor unit (R or E) — only while an FP Army holds it. */
+const faramirRecruits = (state: GameState): EventTarget[] => {
+  if (armySide(state, 'osgiliath') !== 'fp' || !recruitable(state, 'fp', 'osgiliath')) return [];
+  const pool = state.reinforcements.gondor, room = STACKING_LIMIT - unitCount(state, 'osgiliath');
+  const o: EventTarget[] = [];
+  if (room > 0 && pool.regular > 0) o.push({ nation: 'gondor', region: 'osgiliath', figure: 'regular', slot: 1 });
+  if (room > 0 && pool.elite > 0) o.push({ nation: 'gondor', region: 'osgiliath', figure: 'elite', slot: 1 });
+  return o;
+};
+/** ...and one Gondor Leader with it (no choice to make, so it isn't a target step).
+ *  Leaders don't count against stacking, so this can land even when the unit can't. */
+const faramirLeader = (state: GameState): void => {
+  if (armySide(state, 'osgiliath') !== 'fp' || !recruitable(state, 'fp', 'osgiliath')) return;
+  const before = state.regions['osgiliath']!.leaders;
+  placeForce(state, 'gondor', 'osgiliath', { leader: 1 });
+  if (state.regions['osgiliath']!.leaders > before) log(state, null, 'muster', 'Recruited a gondor Leader in osgiliath');
+};
 register('fp-str-06', {
-  canPlay: (state) => ['osgiliath', 'south-ithilien', 'north-ithilien'].some((r) => armySide(state, r) === 'shadow'),
-  repeat: 2, // the attack target, then the optional Gondor recruit
+  canPlay: (state) => faramirStrikes(state).length > 0
+    || (faramirRecruits(state).length > 0
+      || (armySide(state, 'osgiliath') === 'fp' && recruitable(state, 'fp', 'osgiliath') && state.reinforcements.gondor.leader > 0)),
+  repeat: 2, // the attack target, then the Gondor recruit
   targets(state, _side, applied = []) {
-    if (applied.length === 0) {
-      return ['osgiliath', 'south-ithilien', 'north-ithilien'].filter((r) => armySide(state, r) === 'shadow').map((region) => ({ region }));
-    }
-    // After the strike: the Osgiliath recruit (R or E), if you hold Osgiliath.
-    if (armySide(state, 'osgiliath') === 'fp') {
-      const pool = state.reinforcements.gondor, room = STACKING_LIMIT - unitCount(state, 'osgiliath');
-      const o: EventTarget[] = [];
-      if (room > 0 && pool.regular > 0) o.push({ nation: 'gondor', region: 'osgiliath', figure: 'regular', slot: 1 });
-      if (room > 0 && pool.elite > 0) o.push({ nation: 'gondor', region: 'osgiliath', figure: 'elite', slot: 1 });
-      return o;
-    }
-    return [];
+    // The strike, when there is something in Ithilien/Osgiliath to shoot at...
+    if (applied.length === 0 && faramirStrikes(state).length > 0) return faramirStrikes(state).map((region) => ({ region }));
+    // ...then the Osgiliath recruit, once.
+    if (applied.some((t) => t.figure)) return [];
+    return faramirRecruits(state);
   },
   applyTarget(state, _side, t) {
-    if (t.figure) { placeUnits(state, 'gondor', t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0); return; }
+    if (t.figure) {
+      const before = recruitStackSize(state, t.region!, 'fp');
+      placeUnits(state, 'gondor', t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0);
+      if (recruitStackSize(state, t.region!, 'fp') > before) log(state, null, 'muster', `Recruited ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} gondor in ${t.region}`);
+      return;
+    }
     const hits = rollDice(state, 3, 5);
     if (hits > 0) applyCasualties(state, t.region!, 'shadow', hits, 'regularsFirst');
     log(state, null, 'event', `Faramir's Rangers: ${hits} hit(s) on ${t.region}`);
   },
+  // Leader-only case: nothing to strike and no Gondor unit placeable leaves no target
+  // to choose, so the card resolves straight out of playEvent and finalize (which only
+  // runs off the eventTarget path) never fires — place the Leader here instead.
+  apply(state) { if (faramirStrikes(state).length === 0 && faramirRecruits(state).length === 0) faramirLeader(state); },
+  finalize(state) { faramirLeader(state); },
 });
 // The Eagles are Coming!: eliminate Nazgûl near an FP Army containing a Companion.
 register('fp-char-18', {
