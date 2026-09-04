@@ -1319,7 +1319,20 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
   const fs = state.fellowship;
   const scoreMove = (a: Extract<WotrAction, { kind: 'moveCharacter' }>): number => {
     let s = 0;
-    if (owner === 'shadow' && a.char === 'nazgul' && !fs.hidden && a.to === fs.location) s += 30; // press a revealed Fellowship
+    if (owner === 'shadow' && a.char === 'nazgul' && !fs.hidden && a.to === fs.location) {
+      // Press a revealed Fellowship — with ONE Ringwraith. The Hunt re-roll is
+      // presence-gated, so the second wraith adds nothing; the die-driven chain
+      // used to pile all five on (player report: 'spent [C] to move 5(!) Nazgul
+      // to F&S (including the 1 besieging WR)'). Same gate the card path got.
+      const dest = state.regions[a.to]!;
+      if (dest.nazgul === 0 && !dest.characters.includes('witch-king')) s += 30;
+    }
+    // Never strip a SIEGE of its Leadership to go pouncing: a Nazgûl standing with
+    // our besieging Army is the re-roll dice for the assault.
+    if (owner === 'shadow' && a.char === 'nazgul') {
+      const src = state.regions[a.from]!;
+      if (src.siegeBox && armyHere(state, a.from, 'shadow')) s -= 25;
+    }
     if (owner === 'shadow') s += nazgulStagingBonus(state, a.char, a.to, target);                 // join the army staged on the target
     if (target) s += -(dist(a.to, target) - dist(a.from, target)) * 4;                            // drift toward the target
     return s;

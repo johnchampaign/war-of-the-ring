@@ -93,5 +93,29 @@ const sweepViaAction = (s) => {
   check('with none there, it sends exactly one', pick2.count === 1 && pick2.region === 'fords-of-bruinen', JSON.stringify(pick2));
 }
 
+{
+  console.log('\n=== AI: the CHARACTER-DIE Nazgûl chain also sends one, and never strips a siege ===');
+  // The die-driven twin of the card-chain fix (player report: '[C] to move 5(!)
+  // Nazgul to F&S (including the 1 besieging WR)').
+  const s = startGame(createGame({ seed: 14 }));
+  s.fellowship.location = 'fords-of-bruinen'; s.fellowship.hidden = false;
+  s.regions['fords-of-bruinen'].nazgul = 1;                       // one wraith already on the Fellowship
+  s.regions['woodland-realm'].units = { sauron: { regular: 4, elite: 0 } };
+  s.regions['woodland-realm'].nazgul = 1;                         // the one besieging WR
+  s.regions['woodland-realm'].besieged = true;
+  s.regions['woodland-realm'].siegeBox = { units: { elves: { regular: 1, elite: 0 } }, leaders: 0, nazgul: 0, characters: [] };
+  s.regions['woodland-realm'].control = 'fp';
+  s.pendingChoice = { owner: 'shadow', kind: 'charMove2', data: { chars: [], movedNazgul: {} } };
+  const legal = [
+    { kind: 'moveCharacter', char: 'nazgul', from: 'woodland-realm', to: 'fords-of-bruinen', count: 1 },
+    { kind: 'charMove2', done: true },
+  ];
+  const pick = chooseAction(s, 'shadow', legal, new Rng(3));
+  check('with a wraith already on the Fellowship and this one holding a siege, the chain stops', pick.done === true, JSON.stringify(pick));
+  s.regions['fords-of-bruinen'].nazgul = 0; s.regions['woodland-realm'].siegeBox = undefined; s.regions['woodland-realm'].besieged = false;
+  const pick2 = chooseAction(s, 'shadow', legal, new Rng(3));
+  check('with none there and no siege to hold, it pounces', pick2.kind === 'moveCharacter', JSON.stringify(pick2));
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);
