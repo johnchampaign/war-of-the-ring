@@ -117,5 +117,20 @@ const sweepViaAction = (s) => {
   check('with none there and no siege to hold, it pounces', pick2.kind === 'moveCharacter', JSON.stringify(pick2));
 }
 
+{
+  console.log('\n=== AI: Balrog of Moria stays in hand once Moria is behind the Fellowship ===');
+  const s = startGame(createGame({ seed: 15 }));
+  s.phase = 'actionResolution'; s.currentPlayer = 'shadow'; s.dice.shadow = ['character']; s.dice.fp = [];
+  s.cards.shadow.hand = ['sh-char-17'];
+  const legal = [{ kind: 'playEvent', cardId: 'sh-char-17', die: 'character' }, { kind: 'skipDie', die: 'character' }, { kind: 'pass' }];
+  s.pendingChoice = null;
+  s.fellowship.location = 'lorien'; s.fellowship.hidden = false;   // past Moria
+  const late = chooseAction(s, 'shadow', legal, new Rng(5));
+  check('past Moria (Lórien): the AI does not burn the card', late.kind !== 'playEvent', JSON.stringify(late));
+  s.fellowship.location = 'rivendell';                             // Moria is the road ahead
+  const early = chooseAction(s, 'shadow', legal, new Rng(5));
+  check('at Rivendell: the table play is still on', early.kind === 'playEvent', JSON.stringify(early));
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

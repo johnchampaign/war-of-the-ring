@@ -368,6 +368,13 @@ function undefendedVP(state: GameState, id: RegionId, actor: Side, reach = 2): b
  *  state, so a pair's distance is fixed for the whole process. Without the cache the
  *  per-army targeting below would re-walk the map on every candidate action. */
 const distMemo = new Map<string, number>();
+/** Could the Fellowship's road still run through Moria? False once it is on the
+ *  Mordor track, far off Moria's approaches, or already nearer Mordor than Moria is. */
+function moriaAhead(fs: GameState['fellowship']): boolean {
+  if (fs.mordor !== null) return false;
+  if (dist(fs.location, 'moria') > 3) return false;
+  return dist(fs.location, 'morannon') > dist('moria', 'morannon');
+}
 export function dist(from: RegionId, to: RegionId): number {
   if (from === to) return 0;
   const key = `${from}>${to}`;
@@ -743,6 +750,12 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // report: "SP played Worn with Sorrow & Toil when there were no Companions in the
       // Fellowship. No effect.").
       if (a.cardId === 'sh-char-15' && fs.companions.length === 0) return 1;
+      // Balrog of Moria only fires when the Fellowship moves into/out of/through
+      // Moria. Once Moria is BEHIND the Fellowship (or it is on the Mordor track)
+      // the table half is dead and the card's combat half (Durin's Bane) is its
+      // remaining value — keep it (player report: "AI played Balrog of Moria when I
+      // was well past Moria... removed the ability to play it for combat effect").
+      if (a.cardId === 'sh-char-17' && !moriaAhead(fs)) return 1;
       // Threats and Promises only bars the FP from advancing a PASSIVE Nation with a
       // Muster die — once every FP Nation is active it's a dead table card; keep it
       // for its combat half (Devilry of Orthanc). Same trap as Wormtongue (player
