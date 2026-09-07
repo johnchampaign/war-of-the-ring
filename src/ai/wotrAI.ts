@@ -355,12 +355,30 @@ function enemyNear(state: GameState, id: RegionId, enemy: Side, n: number): bool
  *  change hands — 59% of the FP's losses and 78% of the Shadow's were captured with
  *  zero defenders present, not stormed. Plugging these is worth more than any
  *  battlefield tuning. */
-function undefendedVP(state: GameState, id: RegionId, actor: Side, reach = 2): boolean {
+/** How badly a VP Settlement we hold wants a defender, 0..1: 1 when it stands
+ *  EMPTY with an enemy Army within `reach` (the walk-in case the term was built
+ *  for), 0.5 when ONE unit holds it and an enemy Army of 3+ units is ADJACENT.
+ *  The one-unit case is from the uploaded games (2026-08-25..09-07, 44 human
+ *  military wins over the Shadow AI): the garrison split stopped the free
+ *  walk-ins, and then the human simply stormed the lone figure — Dol Guldur 22x
+ *  '1R', Orthanc, Minas Morgul, Gundabad, Morannon all '1R'/'1E'. Behind walls a
+ *  besieger hits only on 6s, so a second unit is the cheapest defence there is.
+ *  MEASURED AND REVERTED (2000 games x 2 families at 239f96a): the wide version —
+ *  0.6 for one unit, 0.3 for two, any enemy within TWO regions — cost the Shadow
+ *  558->498 and 601->505: the muster dice drained into garrisons every turn an FP
+ *  Army wandered within reach, and both the military and the Hunt game paid for
+ *  it. Hence the narrow trigger: an Army that can attack NEXT action, and only a
+ *  lone defender. */
+function garrisonGap(state: GameState, id: RegionId, actor: Side, reach = 2): number {
   const def = REGIONS[id];
-  if (!def || (def.vp ?? 0) <= 0) return false;
-  if (settlementCtrl(state, id) !== actor) return false;
-  if (unitCount(state, id) > 0) return false;
-  return enemyNear(state, id, actor === 'fp' ? 'shadow' : 'fp', reach);
+  if (!def || (def.vp ?? 0) <= 0) return 0;
+  if (settlementCtrl(state, id) !== actor) return 0;
+  const n = unitCount(state, id);
+  const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
+  if (n === 0) return enemyNear(state, id, enemy, reach) ? 1 : 0;
+  if (n > 1) return 0;
+  const stormer = (REGIONS[id]!.adjacency ?? []).some((a) => armyHere(state, a, enemy) && unitCount(state, a) >= 3);
+  return stormer ? 0.5 : 0;
 }
 
 /** BFS distance between two regions over adjacency (Infinity if unreachable).
@@ -825,7 +843,7 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
   // Scaled by how close the enemy is to their VP threshold: with the board quiet this
   // is exactly the weight measured when the term was introduced, but once they are
   // genuinely closing, covering our own Settlements outranks pressing the attack.
-  if (undefendedVP(state, a.region, actor)) s += ((REGIONS[a.region]!.vp ?? 0) * 20 + 30) * (1 + 1.5 * enemyPressure(state, actor));
+  s += garrisonGap(state, a.region, actor) * ((REGIONS[a.region]!.vp ?? 0) * 20 + 30) * (1 + 1.5 * enemyPressure(state, actor));
   return s;
 }
 
@@ -856,7 +874,7 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // Re-garrison one of our own VP Settlements that is sitting empty within an enemy's
   // reach. Scored BELOW the equivalent capture so the AI still prefers taking ground to
   // sitting on it — this is meant to stop free walk-ins, not to turn the AI turtle.
-  if (undefendedVP(state, to, actor)) s += (REGIONS[to]!.vp * 18 + 12) * (1 + 1.5 * enemyPressure(state, actor));
+  s += garrisonGap(state, to, actor) * (REGIONS[to]!.vp * 18 + 12) * (1 + 1.5 * enemyPressure(state, actor));
   // VACATING a VP Settlement we hold is a cost, not a free move — the score used to
   // weigh only the destination, so a whole-army march out of a Stronghold read as
   // pure profit and the AI walked away from ground it was winning on (player report:
