@@ -148,6 +148,30 @@ uploaded-gamelog win rates. No flag flip to default until the corpus shows it.
   a probe with a decoy army tied because the heuristic walked the other army
   into the win. Timing: ~29 s/game with Shadow=eval at K=3 → 500 games/family
   ≈ 4 h; the stage-4 A/B (6 runs) is an overnight detached chain.
+- **Stage 4 (A/B at 1878022, 2026-09-05/06) — did NOT clear the bar; not
+  shipped.** Shadow=eval vs the heuristic baseline, 500 games per seed family,
+  run Shadow-only first (John: "1 + 3") as a resumable, boot-relaunched systemd
+  user unit after two detached launches died to the nightly reboot.
+
+  | family | baseline Shadow wins | evaluator Shadow wins | delta |
+  |---|---|---|---|
+  | f1 (offset 0) | 144 / 500 | 155 / 500 | +2.2 pts |
+  | f2 (offset 100000) | 136 / 500 | 144 / 500 | +1.6 pts |
+
+  Both families agree on the sign, hygiene gates zero (no view-leaks: the
+  no-peek design held over 1000 games), but +2 pts against a pre-registered
+  +10. The FP half was not run. Per the protocol this is revert-and-record:
+  the evaluator stays in the repo as tournament-only tooling (`--shadow eval`,
+  the probes, `eval-trace.mjs`), nothing is wired into the shipped game, and
+  no "Strong" difficulty ships from it. Reading: a 1-ply lookahead over a
+  heuristic-played cascade mostly re-derives what the heuristic already does;
+  the games it changes are the ones decided by later dice. Timing also argues
+  against it as-is (~35 s/game Shadow, ~80 s/game FP). What would change the
+  picture, in order of cheapness: (a) evaluator weights fitted against the
+  uploaded human games rather than hand-set; (b) K raised only on the few
+  wide decisions that matter (attack/decline, Fellowship declare); (c) a real
+  opponent reply (2-ply) on those same decisions — the async latency budget
+  allows it, the dev-machine A/B budget does not without the Linode worker.
 
 ## Non-goals
 
