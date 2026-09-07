@@ -540,11 +540,22 @@ const SHADOW_PLANS: RegionId[][] = [
   ['minas-tirith', 'pelargir', 'dol-amroth', 'helms-deep', 'edoras', 'lorien'],
   // C (roll 75-99): the northern "DEW line" — Dale, Erebor, Woodland Realm — then south.
   ['dale', 'erebor', 'woodland-realm', 'lorien', 'rivendell'],
+  // D: Gondor, then the North, finishing in the Elven Strongholds — Rohan never
+  // touched. From a BGG session report (Shadow won 10 VP holding Minas Tirith,
+  // Pelargir, Woodland Realm, Dale, Rivendell, Lórien): the Mordor/Southron stacks
+  // take Gondor while the Dol Guldur/Gundabad stacks serve the northern objectives
+  // through the fall-through rule, so two fronts form without a Rohan detour.
+  ['minas-tirith', 'pelargir', 'dol-amroth', 'dale', 'erebor', 'woodland-realm', 'rivendell', 'lorien'],
 ];
+/** Roll bands: A 0-39, B 40-74, C 75-86, D 87-99. D was measured against C on
+ *  C's whole band (2000 games x 2 families at 47cd21a, the other 75% of games
+ *  byte-identical): Shadow 539->543 and 597->614, military wins 43->51 and
+ *  45->51. Not a large edge, so the northern band is shared rather than handed
+ *  over — the roll exists for variety, and both routes earn their place. */
 function shadowPlan(state: GameState): RegionId[] | null {
   const roll = state.shadowPlanRoll;
   if (roll == null) return null;
-  return SHADOW_PLANS[roll < 40 ? 0 : roll < 75 ? 1 : 2]!;
+  return SHADOW_PLANS[roll < 40 ? 0 : roll < 75 ? 1 : roll < 87 ? 2 : 3]!;
 }
 /** The plan's live objectives: targets not yet Shadow-held, in plan order. */
 export function planObjectives(state: GameState): RegionId[] {
