@@ -576,6 +576,16 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
   different-timing effects has one initiative per effect** — e.g. *Mûmakil* is
   printed "Initiative 3-5" (effect at 3, effect at 5), not a single value
   (p.29). Initiative 0 = resolves first (the *Daring Defiance* cancel cards).
+  A card that resolves AFTER a pre-combat retreat never resolves at all: *Scouts*
+  (initiative 1) takes the Free Peoples Army out of the battle before anybody
+  rolls, so a slower card is revealed and discarded but grants nothing **and
+  costs nothing** (`outrunByPreCombatRetreat`). This used to be true of the
+  effects but not of the *cost*: the `cardCost` step runs before the pre-combat
+  pipeline, so *Dread and Despair* (initiative 3) was sized, announced and applied
+  ahead of *Scouts* — player report, 2026-09-06: "Scouts resolves at initiative 1
+  … thus the Shadow player doesn't get a chance to resolve the effects of their
+  Combat card. That's the expected behavior, but now Dread and Despair resolved
+  first." `scripts/probe-siege-destination-and-initiative.mjs`.
 
 ### Fortifications & Cities (p.31)
 First combat round only: attacker hits on **6+** (instead of 5+). Then normal.
@@ -620,6 +630,22 @@ real choice (`siegeExtend`, offered whenever the attacker still has an Elite).
 *Grond* (sh-char-20) / *The Fighting Uruk-hai* (sh-str-02) set `siegeRounds:3` +
 `fpCardLock` (FP gets no Combat card in siege round 0 unless a Companion is in the
 Stronghold).
+
+**Shadow army-movement cards into a besieged region (p.33) — fixed.** *Shadows
+Gather* and *The Shadow Lengthens* end "in a region already occupied by another
+Shadow Army (that must not be under siege)". The engine's siege model puts the
+GARRISON in `siegeBox` and leaves the BESIEGER in the region's open field, and
+`armySide` reads the open field only — so a Shadow Army these cards can see in a
+besieged region is always the one doing the besieging (a legal destination, exactly
+as `moveBlockReason` already allows for a plain Army move under the same 10-unit
+field limit), while a Shadow Army genuinely under siege never appears as a source or
+a destination at all. Both handlers tested `regions[to].besieged`, which banned
+precisely the legal case and could never catch the illegal one *(player report,
+2026-09-06: "I cannot use it to move an army from Moria to Lorien. I have an army in
+Lorien besieging the elves. I am not under siege myself, so it should be legal")*.
+The test is gone, and `moveAllUnits` now calls `liftSiegeIfAbandoned` on the SOURCE
+so a card that marches a besieger out ends the siege on the spot rather than waiting
+for `advance()`'s sweep. `scripts/probe-siege-destination-and-initiative.mjs`.
 
 **Relieving a siege (p.32) — modelled.** An outside army attacking into a besieged
 region fights the besieger in the open as a normal field battle (`startBattle`'s

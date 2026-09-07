@@ -773,6 +773,35 @@ function describeForce(state: GameState, f: Force, side: Side): string {
   return `${parts.join(', ')} (${Math.min(5, forceUnitCount(f))} dice, Leadership ${forceLeadership(state, f, side)})`;
 }
 
+/** True when `side`'s Combat card is OUTRUN by a pre-combat retreat printed on the
+ *  OPPONENT's card: the enemy card resolves first (lower initiative; the defender wins
+ *  ties) and its retreat empties the battle region before anybody rolls, so `side`'s
+ *  card never resolves at all — it is revealed and discarded, but grants nothing and
+ *  costs nothing. The rulebook gives this exact shape as its own initiative example
+ *  (Scouts at 1 beats Durin's Bane at 2, and the Free Peoples Army escapes). Player
+ *  report, 2026-09-06: "Scouts resolves at initiative 1. This immediately ends the
+ *  battle … thus the Shadow player doesn't get a chance to resolve the effects of
+ *  their Combat card. That's the expected behavior, but now Dread and Despair
+ *  resolved first" — Dread and Despair (initiative 3) was being SIZED, announced and
+ *  applied in the `cardCost` step, which runs before the pre-combat pipeline. */
+function outrunByPreCombatRetreat(state: GameState, pc: PendingCombat, side: Side): boolean {
+  const own = side === pc.attacker ? pc.attackerCard : pc.defenderCard;
+  const foeCard = side === pc.attacker ? pc.defenderCard : pc.attackerCard;
+  if (!own || !foeCard) return false;
+  const foeSide: Side = side === pc.attacker ? pc.defender : pc.attacker;
+  const foeIsAttacker = foeSide === pc.attacker;
+  const foeMods = combatModsFor(foeCard, {
+    ownCharacters: (foeIsAttacker ? atkForce(state, pc) : defForce(state, pc)).characters,
+    cost: foeIsAttacker ? pc.atkCardCost : pc.defCardCost,
+  });
+  if (!foeMods?.retreatBeforeCombat) return false;
+  // Only a retreat that can actually happen ends the battle: with no free adjacent
+  // region the card does nothing and the round is fought out as normal.
+  if (freeAdjacentRegions(state, foeIsAttacker ? pc.from : pc.to, foeSide).length === 0) return false;
+  const ini = cardInitiative(own), foeIni = cardInitiative(foeCard);
+  return foeIni < ini || (foeIni === ini && foeSide === pc.defender);
+}
+
 /** Resolve pre-combat-timing card effects (Scouts retreat, Durin's Bane special
  *  attack) in initiative order — lower first, defender wins ties (rules p.29).
  *  A retreat empties the owner's region; a pre-attack damages the enemy. Fully
@@ -1226,7 +1255,9 @@ export function combatStep(state: GameState): void {
         for (const side of [pc.attacker, pc.defender]) {
           const due = unpaidCost(state, pc, side, 'preRoll');
           if (!due) continue;
-          if (due.range.max <= 0) {
+          // Nothing to spend — or the card is outrun by the opponent's pre-combat
+          // retreat and will never resolve, so its owner is not asked to pay for it.
+          if (due.range.max <= 0 || outrunByPreCombatRetreat(state, pc, side)) {
             if (side === pc.attacker) pc.atkCardCost = 0; else pc.defCardCost = 0;
             continue;
           }
@@ -1271,19 +1302,26 @@ export function combatStep(state: GameState): void {
         let aCancelled = false, dCancelled = false;
         if (aMods.cancelEnemyCard && pc.defenderCard && aIni < dIni) { dMods = EMPTY_MODS; dCancelled = true; }
         if (dMods.cancelEnemyCard && pc.attackerCard && dIni <= aIni) { aMods = EMPTY_MODS; aCancelled = true; }
+        // A pre-combat retreat resolves first and ends the battle before the roll, so
+        // the slower card never resolves — same "revealed but does nothing" treatment
+        // as a cancelled card (player report: Scouts@1 vs Dread and Despair@3).
+        let aOutrun = false, dOutrun = false;
+        if (!aCancelled && outrunByPreCombatRetreat(state, pc, pc.attacker)) { aMods = EMPTY_MODS; aOutrun = true; }
+        if (!dCancelled && outrunByPreCombatRetreat(state, pc, pc.defender)) { dMods = EMPTY_MODS; dOutrun = true; }
         // Announce each card WITH what it mechanically does this round, so the dice
         // that follow can be audited against it (player report: a card was played
         // "for an effect without telling me what it did"). Logged after the cancel
         // check so a cancelled card reads as cancelled.
-        const played = (card: string | null, mods: CombatMods, cancelled: boolean) => {
+        const played = (card: string | null, mods: CombatMods, cancelled: boolean, outrun = false) => {
           if (!card) return cardName(card);
           if (cancelled) return `${cardName(card)} — CANCELLED by the opposing card`;
+          if (outrun) return `${cardName(card)} — TOO SLOW: the opposing card retreats its Army first, so this one never resolves`;
           const what = describeCombatMods(mods);
           return `${cardName(card)}${what ? ` — ${what}` : ''}`;
         };
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.attacker)} (attacker) play ${played(pc.attackerCard, aMods, aCancelled)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.attacker)} (attacker) play ${played(pc.attackerCard, aMods, aCancelled, aOutrun)}`);
         if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.defender)} (defender) play ${played(pc.defenderCard, dMods, dCancelled)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.defender)} (defender) play ${played(pc.defenderCard, dMods, dCancelled, dOutrun)}`);
         if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
         // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
         // resolve in initiative order before the normal roll; either can end the

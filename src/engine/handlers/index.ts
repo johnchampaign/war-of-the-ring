@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -89,7 +89,7 @@ type CardMoveSel = { units?: Partial<Record<Nation, { regular?: number; elite?: 
  *  the WHOLE Army moves, so a malformed selection degrades to the old behavior. */
 function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
-  if (sel && moveSelectedUnits(state, from, to, side, sel)) return;
+  if (sel && moveSelectedUnits(state, from, to, side, sel)) { liftSiegeIfAbandoned(state, from); return; }
   // Only `side`'s Nations travel — if enemy units ever share the region (an illegal
   // state a card bug once produced), a card-driven move must not kidnap them (report:
   // "Gondor has stolen my Southron Army").
@@ -107,6 +107,10 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   for (const c of movingChars) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to; // keep the roster index honest
   captureIfEnemySettlement(state, to, side);
+  // A card-driven move may empty a BESIEGER's field (Shadows Gather / The Shadow
+  // Lengthens can now start from a besieging Army). The siege ends the moment the
+  // besieger leaves (p.51), exactly as it does after a plain Army move.
+  liftSiegeIfAbandoned(state, from);
 }
 /** The split half of moveAllUnits: apply a sanitized subset selection. Returns
  *  false when the clamped selection moves no unit (caller falls back to the whole
@@ -625,13 +629,26 @@ register('sh-str-10', {
 });
 // Shadows Gather: move one Shadow Army ≤3 regions, ending where another Shadow
 // Army stands (not besieged). (Path-free-traversal nuance simplified to distance.)
+//
+// "(that must not be under siege)" bars a DESTINATION Army that is itself the boxed
+// garrison — not one standing in the open field of a Stronghold IT is besieging. In
+// this engine's RAW siege model the garrison lives in `siegeBox` and the open field
+// holds the besieger, and `armySide` reads the open field only — so a region listed
+// here as a Shadow Army in a besieged region always names the BESIEGER, and a Shadow
+// Army that is genuinely under siege never appears in the list at all (its field is
+// held by the Free Peoples besieger). Testing `regions[to].besieged` therefore banned
+// exactly the legal case and could never catch the illegal one (player report,
+// 2026-09-06: "I cannot use it to move an army from Moria to Lorien. I have an army in
+// Lorien besieging the elves. I am not under siege myself, so it should be legal").
+// Joining a besieger is a normal merge — `moveBlockReason` already allows it for a
+// plain Army move, under the same 10-unit field limit checked below.
 function shadowsGatherMoves(state: GameState): Array<{ from: string; to: string }> {
   const out: Array<{ from: string; to: string }> = [];
   const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
   for (const from of shadowRegions) {
     for (const to of shadowRegions) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
-      if (from === to || state.regions[to]!.besieged) continue;
+      if (from === to) continue;
       if (regionDist(from, to) <= 3 && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
     }
   }
@@ -653,7 +670,9 @@ function shadowLengthensMoves(state: GameState, applied: EventTarget[] = []): Ev
     if (movedTo.has(from)) continue;
     for (const to of shadowRegions) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
-      if (from === to || state.regions[to]!.besieged) continue;
+      // No `besieged` test on the destination — see shadowsGatherMoves for why an
+      // open-field Shadow Army in a besieged region is the besieger, not the besieged.
+      if (from === to) continue;
       if (regionDist(from, to) <= 2 && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
     }
   }
