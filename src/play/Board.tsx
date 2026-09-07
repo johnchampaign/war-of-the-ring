@@ -106,7 +106,7 @@ const NATION_COLOR: Record<string, string> = {
   dwarves: '#7a5230', elves: '#5fbf6a', gondor: '#2f4f9e', north: '#7fb6e6',
   rohan: '#2e7d4f', isengard: '#c9b037', sauron: '#a83232', southrons: '#d98a3d',
 };
-const regions = (mapData as { regions: Record<string, { name?: string; nation: Nation | null; settlement: string | null; vp: number }> }).regions;
+const regions = (mapData as { regions: Record<string, { name?: string; nation: Nation | null; settlement: string | null; vp: number; adjacency: string[] }> }).regions;
 const rName = (id: RegionId): string => regions[id]?.name ?? id;
 const FP_SET = new Set<string>(FP_NATIONS);
 
@@ -149,6 +149,15 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   const art = useBoardArt(); // map_en.jpg (1920x1324), aligns 1:1 with the polygons
   // Let the player switch to the clean polygon map even when the art is downloaded.
   const [polyOnly, setPolyOnly] = useState(false);
+  // Which region the pointer is over, and the regions it actually BORDERS. WotR's
+  // impassable borders (mountain walls, the Sea) are not drawn anywhere in this port —
+  // they exist only as an absence from the adjacency list — so until you picked up a
+  // unit there was no way to tell a crossable border from a wall (player report,
+  // 2026-09-06: "The default map doesn't show impassable borders, making it hard to
+  // plan your moves until after you have selected a unit for moving"). Hovering any
+  // region now rings its true neighbours, so the walls read as the gaps between them.
+  const [hoverId, setHoverId] = useState<RegionId | null>(null);
+  const neighbours = useMemo(() => new Set<string>(hoverId ? regions[hoverId]?.adjacency ?? [] : []), [hoverId]);
   const boardArt = polyOnly ? null : art;
   // Per-mask fill sampled from the board so the unused printed strips blend in (#7).
   const maskColors = useMaskBlendColors(boardArt);
@@ -270,7 +279,8 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
       ))}
       {regionEls.map((e) => e && (
         <g key={e.id} onClick={() => pickRegion(e.id)}
-          onMouseEnter={() => onHoverRegion?.(e.id)} onMouseLeave={() => onHoverRegion?.(null)}
+          onMouseEnter={() => { onHoverRegion?.(e.id); setHoverId(e.id); }}
+          onMouseLeave={() => { onHoverRegion?.(null); setHoverId(null); }}
           style={{ cursor: onPickRegion ? 'pointer' : 'default' }}>
           <title>{rName(e.id)}{e.def?.settlement ? ` — ${e.def.settlement}${e.def.vp > 0 ? ` (${e.def.vp} VP)` : ''}` : ''}{e.r?.besieged ? ' — UNDER SIEGE' : ''}</title>
           {/* Over the board image the polygons are invisible at rest — used only for
@@ -356,6 +366,37 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           })()}
         </g>
       ))}
+      {/* Adjacency-on-hover: the hovered region in white, every region it genuinely
+          BORDERS ringed in dashed cyan. The information the player is actually after is
+          the NEGATIVE space — a region touching the hovered one but left unringed is
+          across an impassable border (or the Sea) and can never be moved into. Drawn as
+          one overlay above the region groups (rather than folded into each region's own
+          path) so it can never repaint or hide a functional move-highlight, and so a
+          ring is never clipped by a neighbouring region's fill. Regions already carrying
+          a move-highlight keep it: theirs is the stronger signal, and doubling the
+          strokes just muddies both. Pointer-transparent throughout — hit-testing stays
+          with the region paths underneath. */}
+      {hoverId && (
+        <g style={{ pointerEvents: 'none' }}>
+          {regionEls.map((e) => {
+            if (!e) return null;
+            const isHovered = e.id === hoverId;
+            if (!isHovered && !neighbours.has(e.id)) return null;
+            // A functional highlight owns the region's outline — don't fight it.
+            if (!isHovered && (hl.selected === e.id || hl.destinations?.has(e.id) || hl.sources?.has(e.id) || hl.activate?.has(e.id))) return null;
+            const d = polyPath(e.poly);
+            return (
+              <g key={`adj-${e.id}`}>
+                {/* dark under-stroke: the board art runs from snow to desert, and a
+                    single light stroke disappears over the pale regions */}
+                <path d={d} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth={isHovered ? 6 : 5} strokeLinejoin="round" />
+                <path d={d} fill="none" stroke={isHovered ? '#ffffff' : '#7fe3ff'} strokeWidth={isHovered ? 2.5 : 2.5}
+                  strokeDasharray={isHovered ? undefined : '9 6'} strokeLinejoin="round" opacity={isHovered ? 0.95 : 0.9} />
+              </g>
+            );
+          })}
+        </g>
+      )}
       {/* Fellowship marker (last-known position) */}
       <FellowshipMarker view={view} />
     </svg>

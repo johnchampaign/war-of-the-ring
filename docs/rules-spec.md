@@ -439,6 +439,22 @@ Covered by `scripts/probe-siege-recruit-and-card-clauses.mjs`.
 - **Army die**: move up to **2 different** armies one region each (can't move the
   same army twice). **Character die**: move **1** army that contains ≥1
   Leader/Character.
+- **Impassable borders are the adjacency list's silence.** The printed map draws the
+  mountain walls and coastlines as black bars; this port has no such data — a border
+  is crossable iff the two regions appear in each other's `adjacency` (assets/map.json,
+  extracted from the rulebook map, which is the authority). Nothing on screen said so,
+  so a player could not tell a wall from a border until they picked up a unit and saw
+  the legal destinations light up *(player report, 2026-09-06: "The default map doesn't
+  show impassable borders, making it hard to plan your moves until after you have
+  selected a unit for moving")*. **Hovering any region now rings its true neighbours**
+  (`Board.tsx`, dashed cyan; the hovered region in white), so a region that touches the
+  hovered one but stays unringed is across an impassable border. Drawn as one overlay
+  above the region groups so it can never repaint or hide a functional move-highlight,
+  and skipped for regions that already carry one. Deliberately *not* the geometric
+  approach (stroking the shared polygon edge of two touching-but-not-adjacent regions):
+  only 158 of the map's 1113 polygon vertices are shared exactly, so the polygons are
+  not a shared-edge topology and the bars would have to be inferred with a distance
+  tolerance.
 - Who counts as that Leader/Character is ONE shared test, `charDieLeaders`
   (`armies.ts`), used by `legalActions`, both apply paths, `attackError`,
   `moveArmySplit` and the UI die-face hint — they must never disagree, or the UI
