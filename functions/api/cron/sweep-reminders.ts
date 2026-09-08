@@ -8,13 +8,24 @@
 // Authorization: Bearer header. Without RESEND_API_KEY the sweep still runs but
 // the notifier is a no-op (handy for a dry run). More specific than the catch-all
 // [[path]].ts, so this file wins the /api/cron/sweep-reminders route.
+//
+// Budgets. A Pages Function gets ~50 subrequests per request and a caller's
+// fetch survives ~100 s. The sweep is one batched turn lookup plus a clock write
+// per game that moved (framework >=0.46, `budgetMs`), so it fits; but a prune
+// queued AFTER it in the same request was starved of subrequests and never ran
+// — which is why the database kept growing. So: a forced prune is its own
+// request, and on the daily tick the prune goes FIRST.
+//
+//   POST /api/cron/sweep-reminders                 sweep (+ daily prune first at PRUNE_HOUR_UTC)
+//   POST /api/cron/sweep-reminders?prune=1         SQL prune only (dbf_prune_resolved_snapshots)
+//   POST /api/cron/sweep-reminders?prune=finished  framework pruneFinishedGames() only, budgeted;
+//                                                  re-call until truncated is false
 import { makeCronServer, pruneResolvedSnapshots, countSnapshots, type Env } from '../../_lib/server';
 
 // Nudge a seat only once it's been on the clock a good while — async PvP, not a
 // chess clock. The framework marks a turn reminded so it won't re-nag each sweep.
 const OLDER_THAN_MS = 6 * 60 * 60 * 1000; // 6 hours
-// Sweep budget: well inside the ~100 s ceiling a Worker's fetch survives, with room
-// for the prune on its daily run.
+// Sweep budget: well inside the ~100 s a caller's fetch survives.
 const SWEEP_BUDGET_MS = 20_000;
 // 04:00 UTC = 00:00 EDT — the daily resolved-snapshot prune runs on that tick.
 const PRUNE_HOUR_UTC = 4;
@@ -25,60 +36,48 @@ const json = (data: unknown, status = 200): Response =>
 interface Ctx { request: Request; env: Env; }
 
 export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
+  const url = new URL(request.url);
   if (env.CRON_SECRET) {
-    const url = new URL(request.url);
     const provided = request.headers.get('x-cron-key')
       ?? url.searchParams.get('key')
       ?? (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
     if (provided !== env.CRON_SECRET) return json({ error: 'forbidden' }, 403);
   }
   try {
-    const server = makeCronServer(env);
-    // ?prune=finished — one-off size cleanup: collapse every already-resolved
-    // game's history to its final snapshot, per game, through the framework
-    // (no SQL function / grant involved). Idempotent; safe to re-run. Reports
-    // the dbf_snapshots row count before/after so the effect is verifiable.
-    if (new URL(request.url).searchParams.get('prune') === 'finished') {
-      const before = await countSnapshots(env);
-    // Daily prune first, so it has a subrequest budget before the sweep spends it.
-    const prune = pruneDue ? await pruneResolvedSnapshots(env) : { count: null };
-    const pruned = prune.count;
+    const mode = url.searchParams.get('prune');
+
+    // ?prune=1 — the SQL function, alone. One subrequest.
+    if (mode === '1') {
       const t0 = Date.now();
-      // 60 s budget: well inside the ~100 s a request survives; re-call until
-      // truncated is false (each call collapses as many games as fit).
+      const prune = await pruneResolvedSnapshots(env);
+      return json({ ok: true, mode: 'prune-only', ms: Date.now() - t0, prunedSnapshots: prune.count,
+        ...(prune.error ? { pruneError: prune.error } : {}) });
+    }
+
+    const server = makeCronServer(env);
+
+    // ?prune=finished — one-off size cleanup through the framework (no SQL
+    // function / grant), per game, budgeted; reports dbf_snapshots row counts
+    // before/after so the effect is verifiable. Re-call until truncated is false.
+    if (mode === 'finished') {
+      const before = await countSnapshots(env);
+      const t0 = Date.now();
       const r = await server.pruneFinishedGames({ budgetMs: 60_000 });
       const after = await countSnapshots(env);
       return json({ ok: true, mode: 'prune-finished', ms: Date.now() - t0, snapshotsBefore: before, snapshotsAfter: after, ...r });
     }
-    const t0 = Date.now();
-    // Time budget (framework >=0.46): a run returns cleanly instead of being cut at
-    // Cloudflare's proxy limit; clocks already written persist and the next run
-    // continues. Also one batched turn lookup instead of one request per game.
-    const result = await server.sweepTurnReminders({ olderThanMs: OLDER_THAN_MS, budgetMs: SWEEP_BUDGET_MS });
-    const t1 = Date.now();
-    // Housekeeping on the same schedule: trim finished games to their final
-    // snapshot (dbf_prune_resolved_snapshots — see supabase/schema.sql). Best-
-    // effort; a failed prune must never fail the reminder sweep.
-    // The prune is a full dbf_snapshots⋈dbf_games delete-scan — too heavy for every
-    // 30 minutes on this instance, and no longer needed that often: the framework
-    // (>=0.43) collapses a game's history when it resolves. Keep it as a once-a-day
-    // safety net at the quietest hour. ?prune=1 forces it (for a manual run).
-    const url = new URL(request.url);
-    // ?prune=1 — prune ONLY. A Pages Function gets ~50 subrequests per request;
-    // the sweep (batch lookups + clock writes) can use all of them, and a prune
-    // queued after it then fails with "Too many subrequests". So a forced prune
-    // is its own request, and on the daily tick the prune goes FIRST.
-    if (url.searchParams.get('prune') === '1') {
-      const t0 = Date.now();
-      const prune = await pruneResolvedSnapshots(env);
-      return json({ ok: true, mode: 'prune-only', ms: Date.now() - t0, prunedSnapshots: prune.count, ...(prune.error ? { pruneError: prune.error } : {}) });
-    }
+
+    // Normal tick. Daily prune FIRST so it has a subrequest budget.
     const pruneDue = new Date().getUTCHours() === PRUNE_HOUR_UTC;
-    const t2 = Date.now();
-    // Timing per phase — the cron Worker has been erroring (it gives up waiting on
-    // this request); this says which half is slow. Visible via `wrangler pages deployment tail`.
-    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs: t1 - t0, pruneMs: null, ...result, prunedSnapshots: pruned, pruneError: prune.error }));
-    return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, prunedSnapshots: pruned, ...(prune.error ? { pruneError: prune.error } : {}), ...result });
+    const prune = pruneDue ? await pruneResolvedSnapshots(env) : { count: null as number | null };
+
+    const t0 = Date.now();
+    const result = await server.sweepTurnReminders({ olderThanMs: OLDER_THAN_MS, budgetMs: SWEEP_BUDGET_MS });
+    const sweepMs = Date.now() - t0;
+    // Visible via `wrangler pages deployment tail` — which half of a run is slow.
+    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs, pruneDue, ...result, prunedSnapshots: prune.count, pruneError: prune.error }));
+    return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, sweepMs, prunedSnapshots: prune.count,
+      ...(prune.error ? { pruneError: prune.error } : {}), ...result });
   } catch (e) {
     const msg = (e as Error).message ?? 'error';
     return json({ error: msg }, /not configured/i.test(msg) ? 503 : 500);
