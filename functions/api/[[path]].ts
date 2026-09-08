@@ -116,15 +116,19 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
       // Default to this game's reports only — the Supabase project is shared with
       // other games. Pass ?category= (e.g. an empty value via ?category=*) to widen.
       const cat = url.searchParams.get('category');
-      const reports = await server.listReports({
-        unresolved: u === '1' || u === 'true' ? true : undefined,
-        severity: url.searchParams.get('severity') ?? undefined,
-        category: cat === null ? 'wotr' : cat === '*' ? undefined : cat,
-      });
       // ?full=1 additionally includes the move log — but ONLY for 'wotr-gamelog'
       // entries (a finished game's public moves; safe to expose). Never for bug
       // reports, whose client log can carry the reporter's hidden game state.
       const full = url.searchParams.get('full') === '1';
+      const reports = await server.listReports({
+        unresolved: u === '1' || u === 'true' ? true : undefined,
+        severity: url.searchParams.get('severity') ?? undefined,
+        category: cat === null ? 'wotr' : cat === '*' ? undefined : cat,
+        // Only fetch the state blobs when we'll actually return them: without
+        // this the DB detoasts every report's snapshots just to be stripped
+        // by summarizeReport (framework >=0.45; see integration guide).
+        bodies: full,
+      });
       return json({ reports: reports.map((r) => summarizeReport(r, full)) });
     }
     // POST /api/reports/:id/resolve  { note }
@@ -142,7 +146,7 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
       const rid = (url.searchParams.get('reporterId') ?? '').trim();
       if (!/^[a-zA-Z0-9-]{4,64}$/.test(rid)) return json({ ok: false, error: 'bad-reporterId' }, 400, CORS);
       const marker = `<!-- reporter:${rid} -->`;
-      const reports = await server.listReports({ category: 'wotr' });
+      const reports = await server.listReports({ category: 'wotr', bodies: false });
       const responses = reports
         .filter((r) => r.resolution && typeof r.message === 'string' && r.message.includes(marker))
         .map((r) => ({
