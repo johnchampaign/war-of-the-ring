@@ -29,11 +29,17 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
   }
   try {
     const server = makeCronServer(env);
+    const t0 = Date.now();
     const result = await server.sweepTurnReminders({ olderThanMs: OLDER_THAN_MS });
+    const t1 = Date.now();
     // Housekeeping on the same schedule: trim finished games to their final
     // snapshot (dbf_prune_resolved_snapshots — see supabase/schema.sql). Best-
     // effort; a failed prune must never fail the reminder sweep.
     const pruned = await pruneResolvedSnapshots(env);
+    const t2 = Date.now();
+    // Timing per phase — the cron Worker has been erroring (it gives up waiting on
+    // this request); this says which half is slow. Visible via `wrangler pages deployment tail`.
+    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs: t1 - t0, pruneMs: t2 - t1, ...result, prunedSnapshots: pruned }));
     return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, prunedSnapshots: pruned, ...result });
   } catch (e) {
     const msg = (e as Error).message ?? 'error';
