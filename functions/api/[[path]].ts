@@ -1,7 +1,7 @@
 // Cloudflare Pages Function: the /api/* lobby for online async play. Routes map
 // onto the framework GameServer (see _lib/server.ts). Token auth via ?as=TOKEN.
 // Mirrors the integration-guide route table.
-import { makeServer, makeStore, stampLogTime, fetchLogTimes, type Env } from '../_lib/server';
+import { makeServer, makeStore, stampLogTime, fetchLogTimes, type Env, backendStats } from '../_lib/server';
 import { ConflictError, type BugReportRow } from 'digital-boardgame-framework/server';
 import { createGame } from '../../src/engine/setup';
 import { startGame } from '../../src/adapter/wotrAdapter';
@@ -111,6 +111,13 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
     //  • resolve is a routine, reversible triage write (attach a note). The cost
     //    of a wrong write is "we re-open a report", so it needs no token.
     // GET /api/reports[?unresolved=1][&severity=..][&category=..]
+    // GET /api/admin/stats — PUBLIC read, non-PII: row counts for the shared
+    // backend (snapshots, games, reports). Watched by the daily triage routine;
+    // see CLAUDE.md trust tiers. Never returns rows, tokens, or emails.
+    if (seg.length === 2 && seg[0] === 'admin' && seg[1] === 'stats' && method === 'GET') {
+      const stats = await backendStats(env);
+      return json({ ok: true, at: new Date().toISOString(), ...stats });
+    }
     if (seg.length === 1 && seg[0] === 'reports' && method === 'GET') {
       const u = url.searchParams.get('unresolved');
       // Default to this game's reports only — the Supabase project is shared with

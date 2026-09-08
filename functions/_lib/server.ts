@@ -156,6 +156,32 @@ export async function pruneResolvedSnapshots(env: Env): Promise<{ count: number 
   } catch (e) { return { count: null, error: (e as Error).message }; }
 }
 
+/** Non-PII backend stats for monitoring: row counts only (HEAD requests, no
+ *  rows transferred). Public read per the trust-tier rule — nothing here
+ *  identifies a player. This is what a daily routine watches so growth on the
+ *  shared project is noticed in a day, not when the quota alert fires. */
+export async function backendStats(env: Env): Promise<Record<string, number | null>> {
+  const sb = supabase(env);
+  const count = async (table: string, f?: (q: any) => any): Promise<number | null> => {
+    try {
+      let q: any = sb.from(table).select('*', { count: 'exact', head: true });
+      if (f) q = f(q);
+      const { count: c, error } = await q;
+      return error ? null : (c ?? null);
+    } catch { return null; }
+  };
+  const [snapshots, games, activeGames, resolvedGames, reports, unresolvedReports, messages] = await Promise.all([
+    count('dbf_snapshots'),
+    count('dbf_games'),
+    count('dbf_games', (q) => q.eq('resolved', false)),
+    count('dbf_games', (q) => q.eq('resolved', true)),
+    count('dbf_reports'),
+    count('dbf_reports', (q) => q.is('resolution', null)),
+    count('dbf_messages'),
+  ]);
+  return { snapshots, games, activeGames, resolvedGames, reports, unresolvedReports, messages };
+}
+
 /** Row count of dbf_snapshots (HEAD request; no rows transferred). */
 export async function countSnapshots(env: Env): Promise<number | null> {
   try {
