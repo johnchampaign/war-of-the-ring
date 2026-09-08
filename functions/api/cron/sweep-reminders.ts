@@ -41,7 +41,9 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
     if (new URL(request.url).searchParams.get('prune') === 'finished') {
       const before = await countSnapshots(env);
       const t0 = Date.now();
-      const r = await server.pruneFinishedGames();
+      // 60 s budget: well inside the ~100 s a request survives; re-call until
+      // truncated is false (each call collapses as many games as fit).
+      const r = await server.pruneFinishedGames({ budgetMs: 60_000 });
       const after = await countSnapshots(env);
       return json({ ok: true, mode: 'prune-finished', ms: Date.now() - t0, snapshotsBefore: before, snapshotsAfter: after, ...r });
     }
