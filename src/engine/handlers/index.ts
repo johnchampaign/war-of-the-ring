@@ -1349,9 +1349,14 @@ register('sh-char-24', { // The Black Captain Commands
   },
 });
 // The Breaking of the Fellowship — the FREE PEOPLES player chooses which N Companions
-// to separate (to the Fellowship's region). Forbidden on the Mordor Track.
+// to separate (to the Fellowship's region). On the Mordor Track the card still
+// plays: p.43 says a Companion separated there "as the effect of special abilities
+// or Event cards" is removed from play instead of placed — exactly as the FP's own
+// separation cards (I Will Go Alone etc.) already work. The card used to be refused
+// outright on the Track (player report, 2026-09-08: revealed on Mordor step 1 with
+// a Character die, "it won't let me play 'breaking of the fellowship'").
 register('sh-char-14', {
-  canPlay: (state) => state.fellowship.mordor === null && !state.fellowship.hidden && state.fellowship.companions.some((c) => COMPANION_SET.has(c)),
+  canPlay: (state) => !state.fellowship.hidden && state.fellowship.companions.some((c) => COMPANION_SET.has(c)),
   apply(state) {
     const n = drawHuntTileNumber(state);
     if (n === null) { log(state, null, 'event', 'The Breaking of the Fellowship: the tile shows an Eye (or a Fellowship special) — discarded without effect'); return; }

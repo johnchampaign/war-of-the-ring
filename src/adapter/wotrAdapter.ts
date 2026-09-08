@@ -745,7 +745,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'breakingSep', actor); // FP separates a chosen Companion to the Fellowship's region
       const data = state.pendingChoice!.data as { left: number };
       const dest = state.fellowship.location;
-      if (beginSeparation(state, action.companion)) placeSeparatedCompanion(state, action.companion, dest);
+      // On the Mordor Track there is no region to place him in: the Companion is
+      // removed from play (p.43), the same as the FP's own separation cards there.
+      if (state.fellowship.mordor !== null) removeCompanionOnMordorTrack(state, action.companion);
+      else if (beginSeparation(state, action.companion)) placeSeparatedCompanion(state, action.companion, dest);
       data.left -= 1;
       if (data.left > 0 && state.fellowship.companions.some((c) => c !== 'gollum')) break; // re-prompt for the next
       state.pendingChoice = null; break; // the turn already passed when the Event resolved

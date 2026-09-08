@@ -946,7 +946,10 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   abilities or Event cards**"), so both still *work* on the Track — they just remove the
   Companion from the game (`removeCompanionOnMordorTrack`) instead of placing him:
   - **Separation Event cards** (I Will Go Alone fp-char-11, Gwaihir fp-char-15, We Prove
-    the Swifter fp-char-16, There and Back Again fp-char-17) are playable on the Track.
+    the Swifter fp-char-16, There and Back Again fp-char-17) are playable on the Track,
+    and so is the Shadow's **The Breaking of the Fellowship** (sh-char-14): the FP still
+    picks which Companions leave, and each is removed from play instead of placed
+    *(player report, 2026-09-08; `scripts/probe-breaking-on-mordor-track.mjs`)*.
     The card has no destination step there, so the player picks who leaves and stops;
     the card's own effect still happens — the Almanac on "I Will Go Alone": "This card
     may be played on the Mordor Track, but separating Companions from the Fellowship
