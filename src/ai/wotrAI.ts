@@ -113,7 +113,31 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // AND keep the most ground). Analysis: the FP AI was losing the corruption race
     // even vs a random Shadow because it never healed — it just rushed to Mordor.
     const declares = legal.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' }> => a.kind === 'declareFellowship');
-    const closestToMordor = (cands: typeof declares) => cands.reduce((best, a) => (dist(a.target, 'morannon') < dist(best.target, 'morannon') ? a : best), cands[0]!);
+    // Nearest to the Morannon wins; a TIE goes to the target farther from the
+    // Shadow's pieces (Armies, Nazgûl, Shadow-held Strongholds — where the Hunt's
+    // re-rolls and the next turn's pounce come from), then to one adjacent to a
+    // heal spot. Ties used to fall to list order (player report, 2026-09-08:
+    // "declared in N Anduin Vale. I'm not sure why it didn't choose Parth
+    // Celebrant. It's just as close to Mordor; a reveal won't send you thru Dol
+    // Guldur; and you have Lorien and Gondor as healing options").
+    const threatDist = (t: RegionId): number => {
+      let best = 3; // beyond 3 regions the difference stops mattering
+      for (const id of Object.keys(state.regions) as RegionId[]) {
+        const r = state.regions[id]!;
+        const threat = armyHere(state, id, 'shadow') || r.nazgul > 0
+          || (REGIONS[id]?.settlement === 'Stronghold' && settlementCtrl(state, id) === 'shadow');
+        if (threat) best = Math.min(best, dist(t, id));
+      }
+      return best;
+    };
+    const healAdjacent = (t: RegionId): boolean => (REGIONS[t]?.adjacency ?? []).some((a) => isHealSettlement(state, a));
+    const closestToMordor = (cands: typeof declares) => cands.reduce((best, a) => {
+      const da = dist(a.target, 'morannon'), db = dist(best.target, 'morannon');
+      if (da !== db) return da < db ? a : best;
+      const sa = threatDist(a.target), sb = threatDist(best.target);
+      if (sa !== sb) return sa > sb ? a : best;
+      return healAdjacent(a.target) && !healAdjacent(best.target) ? a : best;
+    }, cands[0]!);
     // A declared position feeds the Hunt: ending in a region with a Shadow
     // Stronghold, a Shadow Army, or Nazgûl grants the Shadow a failed-die re-roll
     // on every Hunt there (huntRerollSources) — never end a heal-declare in one
