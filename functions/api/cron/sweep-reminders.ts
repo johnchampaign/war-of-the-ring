@@ -40,6 +40,9 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
     // the dbf_snapshots row count before/after so the effect is verifiable.
     if (new URL(request.url).searchParams.get('prune') === 'finished') {
       const before = await countSnapshots(env);
+    // Daily prune first, so it has a subrequest budget before the sweep spends it.
+    const prune = pruneDue ? await pruneResolvedSnapshots(env) : { count: null };
+    const pruned = prune.count;
       const t0 = Date.now();
       // 60 s budget: well inside the ~100 s a request survives; re-call until
       // truncated is false (each call collapses as many games as fit).
@@ -61,13 +64,20 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
     // (>=0.43) collapses a game's history when it resolves. Keep it as a once-a-day
     // safety net at the quietest hour. ?prune=1 forces it (for a manual run).
     const url = new URL(request.url);
-    const pruneDue = url.searchParams.get('prune') === '1' || new Date().getUTCHours() === PRUNE_HOUR_UTC;
-    const prune = pruneDue ? await pruneResolvedSnapshots(env) : { count: null };
-    const pruned = prune.count;
+    // ?prune=1 — prune ONLY. A Pages Function gets ~50 subrequests per request;
+    // the sweep (batch lookups + clock writes) can use all of them, and a prune
+    // queued after it then fails with "Too many subrequests". So a forced prune
+    // is its own request, and on the daily tick the prune goes FIRST.
+    if (url.searchParams.get('prune') === '1') {
+      const t0 = Date.now();
+      const prune = await pruneResolvedSnapshots(env);
+      return json({ ok: true, mode: 'prune-only', ms: Date.now() - t0, prunedSnapshots: prune.count, ...(prune.error ? { pruneError: prune.error } : {}) });
+    }
+    const pruneDue = new Date().getUTCHours() === PRUNE_HOUR_UTC;
     const t2 = Date.now();
     // Timing per phase — the cron Worker has been erroring (it gives up waiting on
     // this request); this says which half is slow. Visible via `wrangler pages deployment tail`.
-    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs: t1 - t0, pruneMs: t2 - t1, ...result, prunedSnapshots: pruned, pruneError: prune.error }));
+    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs: t1 - t0, pruneMs: null, ...result, prunedSnapshots: pruned, pruneError: prune.error }));
     return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, prunedSnapshots: pruned, ...(prune.error ? { pruneError: prune.error } : {}), ...result });
   } catch (e) {
     const msg = (e as Error).message ?? 'error';
