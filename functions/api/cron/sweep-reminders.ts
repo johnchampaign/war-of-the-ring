@@ -13,6 +13,11 @@ import { makeCronServer, pruneResolvedSnapshots, type Env } from '../../_lib/ser
 // Nudge a seat only once it's been on the clock a good while — async PvP, not a
 // chess clock. The framework marks a turn reminded so it won't re-nag each sweep.
 const OLDER_THAN_MS = 6 * 60 * 60 * 1000; // 6 hours
+// Sweep budget: well inside the ~100 s ceiling a Worker's fetch survives, with room
+// for the prune on its daily run.
+const SWEEP_BUDGET_MS = 20_000;
+// 04:00 UTC = 00:00 EDT — the daily resolved-snapshot prune runs on that tick.
+const PRUNE_HOUR_UTC = 4;
 
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -30,12 +35,21 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
   try {
     const server = makeCronServer(env);
     const t0 = Date.now();
-    const result = await server.sweepTurnReminders({ olderThanMs: OLDER_THAN_MS });
+    // Time budget (framework >=0.46): a run returns cleanly instead of being cut at
+    // Cloudflare's proxy limit; clocks already written persist and the next run
+    // continues. Also one batched turn lookup instead of one request per game.
+    const result = await server.sweepTurnReminders({ olderThanMs: OLDER_THAN_MS, budgetMs: SWEEP_BUDGET_MS });
     const t1 = Date.now();
     // Housekeeping on the same schedule: trim finished games to their final
     // snapshot (dbf_prune_resolved_snapshots — see supabase/schema.sql). Best-
     // effort; a failed prune must never fail the reminder sweep.
-    const pruned = await pruneResolvedSnapshots(env);
+    // The prune is a full dbf_snapshots⋈dbf_games delete-scan — too heavy for every
+    // 30 minutes on this instance, and no longer needed that often: the framework
+    // (>=0.43) collapses a game's history when it resolves. Keep it as a once-a-day
+    // safety net at the quietest hour. ?prune=1 forces it (for a manual run).
+    const url = new URL(request.url);
+    const pruneDue = url.searchParams.get('prune') === '1' || new Date().getUTCHours() === PRUNE_HOUR_UTC;
+    const pruned = pruneDue ? await pruneResolvedSnapshots(env) : null;
     const t2 = Date.now();
     // Timing per phase — the cron Worker has been erroring (it gives up waiting on
     // this request); this says which half is slow. Visible via `wrangler pages deployment tail`.
