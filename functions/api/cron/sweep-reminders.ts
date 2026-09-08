@@ -8,7 +8,7 @@
 // Authorization: Bearer header. Without RESEND_API_KEY the sweep still runs but
 // the notifier is a no-op (handy for a dry run). More specific than the catch-all
 // [[path]].ts, so this file wins the /api/cron/sweep-reminders route.
-import { makeCronServer, pruneResolvedSnapshots, type Env } from '../../_lib/server';
+import { makeCronServer, pruneResolvedSnapshots, countSnapshots, type Env } from '../../_lib/server';
 
 // Nudge a seat only once it's been on the clock a good while — async PvP, not a
 // chess clock. The framework marks a turn reminded so it won't re-nag each sweep.
@@ -34,6 +34,17 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
   }
   try {
     const server = makeCronServer(env);
+    // ?prune=finished — one-off size cleanup: collapse every already-resolved
+    // game's history to its final snapshot, per game, through the framework
+    // (no SQL function / grant involved). Idempotent; safe to re-run. Reports
+    // the dbf_snapshots row count before/after so the effect is verifiable.
+    if (new URL(request.url).searchParams.get('prune') === 'finished') {
+      const before = await countSnapshots(env);
+      const t0 = Date.now();
+      const r = await server.pruneFinishedGames();
+      const after = await countSnapshots(env);
+      return json({ ok: true, mode: 'prune-finished', ms: Date.now() - t0, snapshotsBefore: before, snapshotsAfter: after, ...r });
+    }
     const t0 = Date.now();
     // Time budget (framework >=0.46): a run returns cleanly instead of being cut at
     // Cloudflare's proxy limit; clocks already written persist and the next run
@@ -49,12 +60,13 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
     // safety net at the quietest hour. ?prune=1 forces it (for a manual run).
     const url = new URL(request.url);
     const pruneDue = url.searchParams.get('prune') === '1' || new Date().getUTCHours() === PRUNE_HOUR_UTC;
-    const pruned = pruneDue ? await pruneResolvedSnapshots(env) : null;
+    const prune = pruneDue ? await pruneResolvedSnapshots(env) : { count: null };
+    const pruned = prune.count;
     const t2 = Date.now();
     // Timing per phase — the cron Worker has been erroring (it gives up waiting on
     // this request); this says which half is slow. Visible via `wrangler pages deployment tail`.
-    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs: t1 - t0, pruneMs: t2 - t1, ...result, prunedSnapshots: pruned }));
-    return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, prunedSnapshots: pruned, ...result });
+    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs: t1 - t0, pruneMs: t2 - t1, ...result, prunedSnapshots: pruned, pruneError: prune.error }));
+    return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, prunedSnapshots: pruned, ...(prune.error ? { pruneError: prune.error } : {}), ...result });
   } catch (e) {
     const msg = (e as Error).message ?? 'error';
     return json({ error: msg }, /not configured/i.test(msg) ? 503 : 500);

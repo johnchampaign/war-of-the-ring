@@ -148,9 +148,18 @@ export async function fetchLogTimes(env: Env, gameId: string): Promise<{ seq: nu
 /** Trim every RESOLVED game to its final snapshot (dbf_prune_resolved_snapshots,
  *  supabase/schema.sql). Returns rows removed, or null if the function is
  *  missing / the call failed — best-effort housekeeping, never throws. */
-export async function pruneResolvedSnapshots(env: Env): Promise<number | null> {
+export async function pruneResolvedSnapshots(env: Env): Promise<{ count: number | null; error?: string }> {
   try {
     const { data, error } = await supabase(env).rpc('dbf_prune_resolved_snapshots');
-    return error ? null : (typeof data === 'number' ? data : null);
+    if (error) return { count: null, error: `${error.message}${error.code ? ` [${error.code}]` : ''}` };
+    return { count: typeof data === 'number' ? data : null };
+  } catch (e) { return { count: null, error: (e as Error).message }; }
+}
+
+/** Row count of dbf_snapshots (HEAD request; no rows transferred). */
+export async function countSnapshots(env: Env): Promise<number | null> {
+  try {
+    const { count, error } = await supabase(env).from('dbf_snapshots').select('*', { count: 'exact', head: true });
+    return error ? null : (count ?? null);
   } catch { return null; }
 }
