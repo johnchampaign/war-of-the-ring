@@ -62,7 +62,9 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
     if (mode === 'finished') {
       const before = await countSnapshots(env);
       const t0 = Date.now();
-      const r = await server.pruneFinishedGames({ budgetMs: 60_000 });
+      // maxPrunes 35: ~50 subrequests per request minus the batched lookups and
+      // the two row counts. Already-collapsed games cost nothing (>=0.48).
+      const r = await server.pruneFinishedGames({ budgetMs: 60_000, maxPrunes: 35 });
       const after = await countSnapshots(env);
       return json({ ok: true, mode: 'prune-finished', ms: Date.now() - t0, snapshotsBefore: before, snapshotsAfter: after, ...r });
     }
