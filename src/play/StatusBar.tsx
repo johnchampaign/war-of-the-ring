@@ -1,9 +1,35 @@
 // Top status bar: turn / phase / seat, victory points, the Ring track, dice.
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { GameState } from '../engine/types';
 import { charName, charDef, isMinion } from './charInfo';
 import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, EVENT_BY_ID, type HuntTileDef } from '../engine/data';
 import eventCards from '../../assets/event-cards.json';
+
+/** Keeps a status-bar dropdown inside the window. The panels are left-anchored to
+ *  their pill by default; for a pill near the right edge that pushed the panel past
+ *  the viewport, which gave the whole PAGE a horizontal scrollbar, and the scrollbar
+ *  in turn shoved the right-hand column's layout around (player report 2r2g). When
+ *  left-anchoring would overflow and right-anchoring fits, we flip. Measured off the
+ *  ANCHOR (the wrapping span), never off the panel's own placement, so the decision
+ *  can't oscillate. */
+function useEdgeFlip(open: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [flip, setFlip] = useState(false);
+  useLayoutEffect(() => {
+    if (!open) { setFlip(false); return; }
+    const measure = () => {
+      const el = ref.current;
+      const anchor = el?.parentElement?.getBoundingClientRect();
+      if (!el || !anchor) return;
+      const w = el.offsetWidth;
+      setFlip(anchor.left + w > window.innerWidth - 8 && anchor.right - w > 8);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
+  return { ref, flipStyle: (flip ? { left: 'auto', right: 0 } : {}) as React.CSSProperties };
+}
 
 // Human label for a Hunt tile ("3, reveal" / "Eye" / "die, stop").
 function tileLabel(t: HuntTileDef | undefined): string {
@@ -18,6 +44,7 @@ function tileLabel(t: HuntTileDef | undefined): string {
 // deducible from the fixed tile mix minus the drawn ones.
 function HuntTilesBrowser({ view }: { view: GameState }) {
   const [open, setOpen] = useState(false);
+  const { ref, flipStyle } = useEdgeFlip(open);
   const h = view.hunt;
   const drawn = (h.drawn ?? []).map((i) => tileLabel(STANDARD_TILE_LIST[i]));
   const specialsDrawn = (h.specialsDrawn ?? []).map((id) => `${tileLabel(SPECIAL_TILE_BY_CARD[id])} (${EVENT_BY_ID[id]?.name ?? id})`);
@@ -31,7 +58,7 @@ function HuntTilesBrowser({ view }: { view: GameState }) {
         Hunt tiles {total} {open ? '▴' : '▾'}
       </button>
       {open && (
-        <div style={{ ...roster, maxHeight: 300, overflowY: 'auto', width: 300 }}>
+        <div ref={ref} style={{ ...roster, ...flipStyle, ...wide }}>
           <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5 }}>Drawn (out of the bag)</div>
           {total === 0 && <div style={{ color: '#998', fontSize: 12, padding: '2px 6px' }}>No tiles drawn yet.</div>}
           {[...drawn, ...specialsDrawn].map((s, i) => <div key={i} style={{ fontSize: 12, padding: '1px 6px' }}>{s}</div>)}
@@ -68,6 +95,7 @@ function handSplit(hand: string[] | undefined): string {
 // companions array.
 function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; companions: string[]; onHoverChar?: (id: string | null) => void }) {
   const [open, setOpen] = useState(false);
+  const { ref, flipStyle } = useEdgeFlip(open);
   const ids = companions.includes(guide) ? companions : [guide, ...companions];
   return (
     <span style={{ position: 'relative' }}>
@@ -76,7 +104,7 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
         {companions.length} companion{companions.length === 1 ? '' : 's'} {open ? '▴' : '▾'}
       </button>
       {open && (
-        <div style={roster} onMouseLeave={() => onHoverChar?.(null)}>
+        <div ref={ref} style={{ ...roster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
           {ids.length === 0 && <div style={{ color: '#998', fontSize: 12 }}>No companions remain.</div>}
           {ids.map((id) => {
             const d = charDef(id);
@@ -101,6 +129,7 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
 // display Minion cards when you're the FP?").
 function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id: string | null) => void }) {
   const [open, setOpen] = useState(false);
+  const { ref, flipStyle } = useEdgeFlip(open);
   const entries = Object.entries(view.characters?.inPlay ?? {});
   if (entries.length === 0) return null;
   return (
@@ -110,7 +139,7 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
         On the map {entries.length} {open ? '▴' : '▾'}
       </button>
       {open && (
-        <div style={roster} onMouseLeave={() => onHoverChar?.(null)}>
+        <div ref={ref} style={{ ...roster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
           {entries.map(([id, region]) => {
             const d = charDef(id);
             return (
@@ -134,6 +163,7 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
 // the figure comes off the board where both players can see it.
 function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id: string | null) => void }) {
   const [open, setOpen] = useState(false);
+  const { ref, flipStyle } = useEdgeFlip(open);
   const ids = view.characters?.eliminated ?? [];
   if (ids.length === 0) return null;
   return (
@@ -143,7 +173,7 @@ function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (i
         ☠ Fallen {ids.length} {open ? '▴' : '▾'}
       </button>
       {open && (
-        <div style={roster} onMouseLeave={() => onHoverChar?.(null)}>
+        <div ref={ref} style={{ ...roster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
           {ids.map((id) => {
             const d = charDef(id);
             const shadow = isMinion(id);
@@ -169,6 +199,7 @@ function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (i
 const CARD_NAME = new Map<string, string>((eventCards as { cards: { id: string; name: string }[] }).cards.map((c) => [c.id, c.name]));
 function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: (id: string | null) => void }) {
   const [open, setOpen] = useState(false);
+  const { ref, flipStyle } = useEdgeFlip(open);
   const rows: { side: string; label: string; id: string | null; played: number }[] = [];
   // Global play order comes from the log: each card play logs an entry with `.card`
   // (player report: discards should be sorted in order played, not grouped by player).
@@ -200,7 +231,7 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
         Discards {total} {open ? '▴' : '▾'}
       </button>
       {open && (
-        <div style={{ ...roster, maxHeight: 300, overflowY: 'auto', width: 300 }} onMouseLeave={() => onHoverCard?.(null)}>
+        <div ref={ref} style={{ ...roster, ...flipStyle, ...wide }} onMouseLeave={() => onHoverCard?.(null)}>
           {total === 0 && <div style={{ color: '#998', fontSize: 12 }}>No cards discarded yet.</div>}
           {rows.map((r, i) => (
             <div key={i} onMouseEnter={() => r.id && onHoverCard?.(r.id)}
@@ -265,4 +296,9 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { v
 
 const bar: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 6, padding: 8, background: '#15110b', color: '#eee', fontFamily: 'system-ui', fontSize: 12, alignItems: 'center' };
 const pill: React.CSSProperties = { background: '#33302a', padding: '3px 8px', borderRadius: 10, whiteSpace: 'nowrap' };
-const roster: React.CSSProperties = { position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 70, background: '#1c1710', border: '1px solid #5a4a2a', borderRadius: 8, padding: 6, minWidth: 200, boxShadow: '0 8px 30px #000', whiteSpace: 'nowrap' };
+// Panels wrap their text (they used to be `nowrap`, so a long row overflowed the
+// panel sideways and grew it a horizontal scrollbar of its own — report 2r2g) and
+// are capped at the window width so they can never be the thing that overflows.
+const roster: React.CSSProperties = { position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 70, background: '#1c1710', border: '1px solid #5a4a2a', borderRadius: 8, padding: 6, minWidth: 200, maxWidth: 'calc(100vw - 16px)', boxShadow: '0 8px 30px #000', whiteSpace: 'normal', overflowWrap: 'anywhere' };
+// The two long-list panels (Hunt tiles, Discards) scroll vertically only.
+const wide: React.CSSProperties = { width: 'min(300px, calc(100vw - 16px))', maxHeight: 300, overflowY: 'auto', overflowX: 'hidden' };

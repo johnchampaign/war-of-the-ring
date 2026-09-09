@@ -69,13 +69,17 @@ export function App() {
 
   if (client) {
     const page = <PlayPage client={client} onExit={mode.kind === 'local' ? () => setMode({ kind: 'lobby' }) : undefined} />;
+    // The sign-in bar is CHROME above the play page, so the two share one full-height
+    // flex column: the bar takes its natural height and the page fills the rest. It
+    // used to be a plain sibling of a 100vh page, making the document taller than the
+    // viewport -> a vertical scrollbar and the bottom of the board cut off (report 2t2n).
     return mode.kind === 'online' ? (
-      <>
-        <div style={{ padding: '0 12px' }}>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
+        <div style={{ padding: '0 12px', flexShrink: 0 }}>
           <SignInBar leaderboardHref={LEADERBOARD_URL} />
         </div>
-        {page}
-      </>
+        <div style={{ flex: 1, minHeight: 0 }}>{page}</div>
+      </div>
     ) : page;
   }
   // Starting a new local game abandons any saved one — there is a single slot, and the
@@ -93,6 +97,11 @@ export function App() {
 }
 
 function Lobby({ onStart, onResume }: { onStart: (aiSide?: 'fp' | 'shadow') => void; onResume: () => void }) {
+  // The lobby carries its own sign-in bar, NOT dismissible. It used to live only in
+  // an online game, so from the front page there was no way to sign in (or to change
+  // your display name) before starting a ranked game, and once dismissed in-game
+  // there was no way to get it back at all (player report 6p49).
+  const { signedIn } = useIdentity();
   // A local game in progress, if one was saved. Read once on mount; starting a new game
   // leaves the lobby, so it cannot go stale under us.
   const [saved, setSaved] = useState<SavePeek | null>(() => peekLocalGame(SCHEMA));
@@ -142,7 +151,15 @@ function Lobby({ onStart, onResume }: { onStart: (aiSide?: 'fp' | 'shadow') => v
       <div style={{ textAlign: 'center', maxWidth: 460 }}>
         <h1 style={{ fontVariant: 'small-caps', letterSpacing: 1 }}>War of the Ring</h1>
         <p style={{ color: '#a99' }}>Unofficial digital port · 2-player (Free Peoples vs Shadow)</p>
-        {plays != null && <p style={{ color: '#776', fontSize: 12, marginTop: -6 }}>{plays.toLocaleString()} games played</p>}
+        <div style={{ textAlign: 'left', margin: '0 0 10px' }}>
+          <SignInBar leaderboardHref={LEADERBOARD_URL} dismissible={false} signedInNote="ranked results count" />
+        </div>
+        {/* Always in the layout, merely invisible until the count arrives: rendering it
+            conditionally made every button below it jump down when the hub replied
+            (player report 1o2h). */}
+        <p style={{ color: '#776', fontSize: 12, marginTop: -6, visibility: plays == null ? 'hidden' : 'visible' }}>
+          {(plays ?? 0).toLocaleString()} games played
+        </p>
         {saved && (
           <div style={{ margin: '14px 0 4px', textAlign: 'left', background: '#1a2a1a', border: '1px solid #3a5a3a', padding: 12, borderRadius: 8 }}>
             <div style={{ fontSize: 12, color: '#bfe6bf', marginBottom: 6 }}>Game in progress</div>
@@ -155,7 +172,9 @@ function Lobby({ onStart, onResume }: { onStart: (aiSide?: 'fp' | 'shadow') => v
         <button onClick={() => createVsAi('fp')} disabled={creating} style={{ ...primary, background: '#2f4f9e' }}>{creating ? 'Creating…' : 'Play Free Peoples (vs AI Shadow) — ranked'}</button>
         <button onClick={() => createVsAi('shadow')} disabled={creating} style={{ ...primary, background: '#a83232' }}>{creating ? 'Creating…' : 'Play Shadow (vs AI Free Peoples) — ranked'}</button>
         <div style={{ fontSize: 11, color: '#776', textAlign: 'left', margin: '2px 4px 0' }}>
-          Sign in first so your result counts on the <a href={LEADERBOARD_URL} target="_blank" rel="noreferrer" style={{ color: '#e6b85a' }}>leaderboard</a>.
+          {signedIn
+            ? <>You're signed in — your result counts on the <a href={LEADERBOARD_URL} target="_blank" rel="noreferrer" style={{ color: '#e6b85a' }}>leaderboard</a>.</>
+            : <>Sign in above so your result counts on the <a href={LEADERBOARD_URL} target="_blank" rel="noreferrer" style={{ color: '#e6b85a' }}>leaderboard</a>.</>}
         </div>
         <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Play vs the AI (local, unranked):</div>
         <button onClick={() => startGuarded('shadow')} style={secondary}>Free Peoples (vs AI Shadow)</button>

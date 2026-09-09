@@ -6,8 +6,12 @@
     <title>War of the Ring</title>
     <!-- Reset the default UA body margin so the 100vh app root doesn't overflow the
          viewport (the 8px margin pushed the bottom of the right column off-screen,
-         clipping the hand/hint row). -->
-    <style>html, body { margin: 0; padding: 0; }</style>
+         clipping the hand/hint row).
+         The height:100% chain lets the play page size itself to its PARENT rather
+         than to 100vh: in an online game the sign-in bar sits above it, and a 100vh
+         page under a 34px bar made the document 100vh+34px tall -> both scrollbars
+         and the board pushed off the bottom (player report 2t2n). -->
+    <style>html, body, #root { margin: 0; padding: 0; height: 100%; }</style>
   </head>
   <body>
     <div id="root"></div>

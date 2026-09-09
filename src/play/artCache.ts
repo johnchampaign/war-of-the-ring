@@ -257,8 +257,37 @@ export function useBoardArt(): string | null { return useCardArt(BOARD_ID); }
 const ART_EVENT = 'wotr-art-changed';
 export function notifyArtChanged(): void { window.dispatchEvent(new CustomEvent(ART_EVENT)); }
 
-export function useArtLoaded(): { loaded: boolean; meta: ArtMeta | null; hasBoard: boolean } {
-  const [s, setS] = useState<{ loaded: boolean; meta: ArtMeta | null; hasBoard: boolean }>({ loaded: false, meta: null, hasBoard: false });
+export interface ArtState { loaded: boolean; meta: ArtMeta | null; hasBoard: boolean; ready: boolean }
+
+/** Mirror of the last settled cache state, in localStorage. Reading IndexedDB is
+ *  async, so the very first paint knows nothing; without this the art panel drew
+ *  its "Download the art" branch and then swapped to "Remove cached art" a beat
+ *  later, flashing the wrong button and shifting the page under it (report 1o2h).
+ *  Seeding from here makes a return visit paint the right branch immediately. The
+ *  mirror is only a hint — the real IndexedDB read still lands and corrects it. */
+const ART_HINT_KEY = 'wotr_art_hint';
+
+function readArtHint(): ArtState | null {
+  try {
+    const raw = localStorage.getItem(ART_HINT_KEY);
+    if (!raw) return null;
+    const h = JSON.parse(raw) as { loaded: boolean; meta: ArtMeta | null; hasBoard: boolean };
+    // `loaded` only counts with meta alongside it — the panel reads meta.cardCount
+    // in that branch, so a half-written hint must degrade to "no art", not crash.
+    if (!h?.loaded || !h.meta || typeof h.meta.cardCount !== 'number') return null;
+    return { loaded: true, meta: h.meta, hasBoard: !!h.hasBoard, ready: false };
+  } catch { return null; }
+}
+
+function writeArtHint(s: { loaded: boolean; meta: ArtMeta | null; hasBoard: boolean }): void {
+  try { localStorage.setItem(ART_HINT_KEY, JSON.stringify(s)); } catch { /* private mode / full quota */ }
+}
+
+/** `ready` = the IndexedDB lookup has settled. Until then `loaded`/`meta`/`hasBoard`
+ *  carry the localStorage hint above (a first-ever visit has none, so they read as
+ *  "no art" — which is also the truth in that case). */
+export function useArtLoaded(): ArtState {
+  const [s, setS] = useState<ArtState>(() => readArtHint() ?? { loaded: false, meta: null, hasBoard: false, ready: false });
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
@@ -266,7 +295,9 @@ export function useArtLoaded(): { loaded: boolean; meta: ArtMeta | null; hasBoar
       if (cancelled) return;
       if (meta) await preloadAllArt();
       const hasBoard = await hasBoardArt();
-      if (!cancelled) setS({ loaded: !!meta, meta, hasBoard });
+      if (cancelled) return;
+      writeArtHint({ loaded: !!meta, meta, hasBoard });
+      setS({ loaded: !!meta, meta, hasBoard, ready: true });
     };
     refresh();
     const h = () => refresh();

@@ -504,7 +504,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   };
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
+    // height:100% (not 100vh) so the page fills whatever box its parent gives it --
+    // online, that box is the viewport MINUS the sign-in bar above it (report 2t2n).
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
       {busy && <BusyOverlay />}
       {g.error && <div style={{ background: '#7a1f1f', color: '#fff', padding: 6, fontFamily: 'system-ui', fontSize: 13 }}>⚠ {g.error.message}</div>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -514,15 +516,19 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             padding — the status bar moved into the right column, so the board now spans
             the full viewport height (and widens to match, per its aspect). */}
         <div style={{ width: 'min(74vw, calc((100vh - 16px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
             <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
+            {/* The "you can't do that" warning FLOATS over the bottom of the map rather
+                than sitting in the column's flow: as a flow sibling it stole height from
+                the board, so the whole map visibly shrank and re-grew every time a
+                warning appeared and was dismissed (player report 4s0g). */}
+            {blockMsg && (
+              <div onClick={() => setBlockMsg(null)} title="Click to dismiss"
+                style={{ position: 'absolute', left: 8, right: 8, bottom: 8, zIndex: 20, color: '#f0d090', background: 'rgba(58,42,18,0.95)', border: '1px solid #6a531f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
+                ⚠ {blockMsg}
+              </div>
+            )}
           </div>
-          {blockMsg && (
-            <div onClick={() => setBlockMsg(null)} title="Click to dismiss"
-              style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', margin: '2px 8px', borderRadius: 6, flexShrink: 0, cursor: 'pointer' }}>
-              ⚠ {blockMsg}
-            </div>
-          )}
           {/* The Ents Awake rider: one Character Event playable without a die. Surface
               it — a player couldn't tell why a card was suddenly playable ("I didn't
               have an [E] or [C] die left... so I did"). */}

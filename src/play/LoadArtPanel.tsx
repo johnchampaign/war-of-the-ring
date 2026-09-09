@@ -33,6 +33,9 @@ export function LoadArtPanel() {
   const pct = prog ? Math.round((prog.cardsDone / prog.cardsTotal) * 100) : 0;
 
   return (
+    // `loaded` is seeded from the localStorage hint in useArtLoaded, so the correct
+    // branch paints immediately instead of showing "Download board & card art" and
+    // swapping it for "Remove cached art" a beat later (player report 1o2h).
     <div style={box}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>Card art</div>
       {loaded ? (
