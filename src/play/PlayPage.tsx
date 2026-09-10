@@ -100,6 +100,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [nazPick, setNazPick] = useState<{ from: RegionId; to: RegionId; max: number; card?: string } | null>(null);
   // Why the last attempted move/merge was refused (shown so it isn't a silent no-op).
   const [blockMsg, setBlockMsg] = useState<string | null>(null);
+  // The framework's `error` has no clear() — it stands until the next successful
+  // fetch/submit. Remember the message the player dismissed so the banner can be
+  // clicked away like blockMsg, and forget it the moment the error actually clears
+  // (so the SAME message recurring later is shown again rather than swallowed).
+  const [errorSeen, setErrorSeen] = useState<string | null>(null);
+  const errorMsg = g.error && g.error.message !== errorSeen ? g.error.message : null;
+  useEffect(() => { if (!g.error) setErrorSeen(null); }, [g.error]);
   // Replies to this device's resolved problem reports, fetched once on load.
   // Each unseen one pops a modal; dismissing marks it seen so it won't recur.
   const [responseQueue, setResponseQueue] = useState<{ reportId: string; message: string; response: string }[]>([]);
@@ -523,7 +530,6 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // online, that box is the viewport MINUS the sign-in bar above it (report 2t2n).
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
       {busy && <BusyOverlay />}
-      {g.error && <div style={{ background: '#7a1f1f', color: '#fff', padding: 6, fontFamily: 'system-ui', fontSize: 13 }}>⚠ {g.error.message}</div>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Board column sized to the crop's width at full available height, so the
             board renders LARGE and fills it with no letterbox bars; the info panel
@@ -531,45 +537,66 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             padding — the status bar moved into the right column, so the board now spans
             the full viewport height (and widens to match, per its aspect). */}
         <div style={{ width: 'min(74vw, calc((100vh - 16px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
+          {/* THE MAP'S BOX IS THE COLUMN'S ONLY FLOW CHILD. Every banner below is
+              absolutely positioned inside it, because each one of them used to be a
+              flow sibling that stole height from the board — so the map visibly shrank
+              when a message appeared and grew back when it went away. Three separate
+              follow-up reports came in after the first round of this fix still left
+              banners in the flow: the bottom hint line shrinking the map when its text
+              wrapped and re-growing it when the hint cleared (2a5x360h324z5z0s,
+              4e636e723e532m5p) and the red error banner doing the same from the OUTER
+              column (561d44030f1l3m6s). Nothing that appears and disappears may live in
+              this column's flow — put it in the overlay stack instead. */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
             <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
-            {/* The "you can't do that" warning FLOATS over the bottom of the map rather
-                than sitting in the column's flow: as a flow sibling it stole height from
-                the board, so the whole map visibly shrank and re-grew every time a
-                warning appeared and was dismissed (player report 4s0g). */}
-            {blockMsg && (
-              <div onClick={() => setBlockMsg(null)} title="Click to dismiss"
-                style={{ position: 'absolute', left: 8, right: 8, bottom: 8, zIndex: 20, color: '#f0d090', background: 'rgba(58,42,18,0.95)', border: '1px solid #6a531f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
-                ⚠ {blockMsg}
+            {/* The Ents Awake rider: one Character Event playable without a die. Surface
+                it — a player couldn't tell why a card was suddenly playable ("I didn't
+                have an [E] or [C] die left... so I did"). Pinned TOP so it can never
+                collide with the message stack at the bottom. */}
+            {g.you === 'fp' && g.view.flags?.fpFreeCharEventThisTurn && (
+              <div style={{ position: 'absolute', left: 8, right: 8, top: 8, zIndex: 18, pointerEvents: 'none', color: '#bfe6bf', background: 'rgba(29,47,29,0.95)', border: '1px solid #3a5a3a', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
+                🌳 The Ents Awake: you may play ONE Character Event card without spending a die (your next Character-card play is free).
               </div>
             )}
+            {/* Bottom message stack, most urgent first: the refused-action error, the
+                refusal reason, then the ambient "what to click" hint. A COLUMN, so two
+                of them showing at once stack instead of drawing on top of each other.
+                The container is pointer-transparent and only the dismissable banners
+                take clicks back — otherwise this strip would become a dead band along
+                the bottom of the map where regions can't be clicked. */}
+            <div style={{ position: 'absolute', left: 8, right: 8, bottom: 8, zIndex: 20, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {errorMsg && (
+                <div onClick={() => setErrorSeen(errorMsg)} title="Click to dismiss"
+                  style={{ pointerEvents: 'auto', cursor: 'pointer', color: '#fff', background: 'rgba(122,31,31,0.95)', border: '1px solid #a8413a', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
+                  ⚠ {errorMsg}
+                </div>
+              )}
+              {blockMsg && (
+                <div onClick={() => setBlockMsg(null)} title="Click to dismiss"
+                  style={{ pointerEvents: 'auto', cursor: 'pointer', color: '#f0d090', background: 'rgba(58,42,18,0.95)', border: '1px solid #6a531f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
+                  ⚠ {blockMsg}
+                </div>
+              )}
+              {sources.size > 0 && (
+                <div style={{ color: '#bfe6bf', background: 'rgba(18,26,18,0.92)', border: '1px solid #2f4a2f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
+                  {isCardSep
+                    ? (cardSepActs[0]!.companion === 'nazgul'
+                      ? 'Moving the Nazgûl — click a highlighted region to fly them there.'
+                      : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`)
+                    : isSeparateMove
+                    ? `Separating Companions — click a highlighted region to place the group there (up to Progress + the highest Level in the group). You can first add more Companions to travel together using the buttons on the right.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`
+                    : isReveal
+                    ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
+                    : declareTargets.size > 0
+                      ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`
+                      : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : charName(charPick.char)} — click a highlighted region to move there (or click the piece again to cancel).`
+                        : selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
+                          : isArmyMove2 ? 'Second army move — click a green army to move it (a different army), or “No second army move” on the right.'
+                            : `Click a highlighted (green) region to move an army or a character${musterTargets.size ? ', or to muster in a Settlement' : ''}.`}
+                </div>
+              )}
+            </div>
           </div>
-          {/* The Ents Awake rider: one Character Event playable without a die. Surface
-              it — a player couldn't tell why a card was suddenly playable ("I didn't
-              have an [E] or [C] die left... so I did"). */}
-          {g.you === 'fp' && g.view.flags?.fpFreeCharEventThisTurn && (
-            <div style={{ color: '#bfe6bf', background: '#1d2f1d', border: '1px solid #3a5a3a', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', margin: '2px 8px', borderRadius: 6, flexShrink: 0 }}>
-              🌳 The Ents Awake: you may play ONE Character Event card without spending a die (your next Character-card play is free).
-            </div>
-          )}
-          {sources.size > 0 && (
-            <div style={{ color: '#9c9', fontFamily: 'system-ui', fontSize: 13, padding: '4px 8px', flexShrink: 0 }}>
-              {isCardSep
-                ? (cardSepActs[0]!.companion === 'nazgul'
-                  ? 'Moving the Nazgûl — click a highlighted region to fly them there.'
-                  : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`)
-                : isSeparateMove
-                ? `Separating Companions — click a highlighted region to place the group there (up to Progress + the highest Level in the group). You can first add more Companions to travel together using the buttons on the right.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`
-                : isReveal
-                ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
-                : declareTargets.size > 0
-                  ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`
-                  : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : charName(charPick.char)} — click a highlighted region to move there (or click the piece again to cancel).`
-                    : selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
-                      : isArmyMove2 ? 'Second army move — click a green army to move it (a different army), or “No second army move” on the right.'
-                        : `Click a highlighted (green) region to move an army or a character${musterTargets.size ? ', or to muster in a Settlement' : ''}.`}
-            </div>
-          )}
         </div>
         <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {/* The status bar lives at the top of the right column (may wrap to several
