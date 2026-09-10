@@ -34,6 +34,7 @@ import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId'
 import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction, dieOptions, describeAction, eventChoiceInModal } from './actionText';
 import { moveBlockReason, musterBlockReason } from '../engine/armies';
+import { basicMoveHintsApply } from './blockHints';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { separationActivates } from '../engine/fellowship';
 import { REGIONS, levelOf } from '../engine/data';
@@ -289,6 +290,24 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [g.legalActions, activeDie, g.view, g.you]);
   const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...minionActs.map((a) => a.region)]), [recruitActs, minionActs]);
   const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
+  // The generic "why can't I do that?" hints (moveBlockReason / musterBlockReason)
+  // belong to the BASIC Move / Muster actions during Action Resolution, and nowhere
+  // else. Every other map click is a different question — placing the Ring-bearers on
+  // a reveal, a separation, an Event card picking its own targets — and answering it
+  // with a muster/move rule yields a statement that is TRUE but is not why the click
+  // was refused: a revealed Fellowship clicked onto a besieged Minas Tirith was told
+  // "There is an enemy Army in Minas Tirith", when the actual bar is that the
+  // Ring-bearers may not reveal into an unconquered Free Peoples City or Stronghold
+  // (player report 5f3q6k1f20650635). That report also settles HOW to fix it: Event
+  // cards can drive arbitrary map clicks, so writing a bespoke hint per interaction is
+  // a slippery slope — outside this window the click stays silent, which is what the
+  // other placement flows already did.
+  // armyMove2 / charMove2 ARE the basic move continued on the same die, so they count;
+  // any other pendingChoice means some other machine owns the board right now.
+  const basicMoveWindow = useMemo(() => basicMoveHintsApply(g.view), [g.view]);
+  // A hint already on screen when the window closes is just as misleading as one
+  // raised outside it — drop it as the board changes hands.
+  useEffect(() => { if (!basicMoveWindow) setBlockMsg(null); }, [basicMoveWindow]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -403,20 +422,24 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       beginMove(id, opts[0]!);
       return;
     }
-    // Adjacent-but-illegal (e.g. a refused merge): explain why instead of a silent no-op.
-    if (selected && id !== selected && g.view && REGIONS[selected]?.adjacency.includes(id)) {
-      const reason = moveBlockReason(g.view, selected, id, g.you as Side);
-      if (reason) setBlockMsg(reason);
-    } else if (g.view && g.you && !musterTargets.has(id)) {
-      // Clicked one of your own Settlements and it offered nothing at all: say why it
-      // can't be mustered in (player report: "I can't muster in Lorien while it is
-      // empty"). Every blocker — the Political Track, an enemy Control marker, an
-      // empty reinforcement pool — is otherwise invisible or easy to misread.
-      const reason = musterBlockReason(g.view, id, g.you as Side);
-      if (reason) setBlockMsg(reason);
+    // Nothing on offer here. If we are inside the basic Move / Muster window, say why;
+    // otherwise stay silent — see basicMoveWindow above (report 5f3q6k1f20650635).
+    if (basicMoveWindow) {
+      // Adjacent-but-illegal (e.g. a refused merge): explain why instead of a silent no-op.
+      if (selected && id !== selected && g.view && REGIONS[selected]?.adjacency.includes(id)) {
+        const reason = moveBlockReason(g.view, selected, id, g.you as Side);
+        if (reason) setBlockMsg(reason);
+      } else if (g.view && g.you && !musterTargets.has(id)) {
+        // Clicked one of your own Settlements and it offered nothing at all: say why it
+        // can't be mustered in (player report: "I can't muster in Lorien while it is
+        // empty"). Every blocker — the Political Track, an enemy Control marker, an
+        // empty reinforcement pool — is otherwise invisible or easy to misread.
+        const reason = musterBlockReason(g.view, id, g.you as Side);
+        if (reason) setBlockMsg(reason);
+      }
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
