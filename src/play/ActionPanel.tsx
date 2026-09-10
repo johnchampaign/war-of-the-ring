@@ -25,8 +25,14 @@ function actionHover(a: WotrAction): Hover {
   return null;
 }
 
-export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardActions = 0, selectedDie, onClearDie, compact }: {
-  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null; boardActions?: number; selectedDie?: DieFace | null; onClearDie?: () => void; compact?: boolean;
+export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardHints = [], selectedDie, onClearDie, compact }: {
+  actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null;
+  /** One line per thing the MAP offers that this list doesn't (army moves, siege
+   *  assaults, musters and Minion entries, character moves). Rendered as pointers, and
+   *  counted by the "nothing to do" check below — so stripping a board-driven action
+   *  from the list can never make the panel claim there is nothing to do. */
+  boardHints?: string[];
+  selectedDie?: DieFace | null; onClearDie?: () => void; compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const click = async (a: WotrAction) => { setBusy(true); try { await onAction(a); } finally { setBusy(false); } };
@@ -83,16 +89,17 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
           Pass (do nothing this turn)
         </button>
       )}
-      {/* Army moves/attacks live on the MAP (not in this list) — point the player there. */}
-      {boardActions > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#23341f', border: '1px solid #4a6a3a', borderRadius: 5, padding: '6px 9px', margin: '3px 0', fontSize: 12, color: '#cfe6c0' }}>
-          <span style={{ background: FACE.army.bg, color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>Army</span>
-          <span>Move or attack on the map — click a <b style={{ color: '#9f9' }}>green</b> army.</span>
+      {/* Board-driven actions live on the MAP (not in this list) — point the player
+          there, one line per kind that is actually available right now. */}
+      {boardHints.map((hint) => (
+        <div key={hint} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#23341f', border: '1px solid #4a6a3a', borderRadius: 5, padding: '6px 9px', margin: '3px 0', fontSize: 12, color: '#cfe6c0' }}>
+          <span style={{ background: '#3f5a33', color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>Map</span>
+          <span>{hint}</span>
         </div>
-      )}
+      ))}
       {rest.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
         options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} />)}
-      {rest.length === 0 && boardActions === 0 && (
+      {rest.length === 0 && boardHints.length === 0 && (
         boardPending
           ? <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', fontSize: 13 }}>⚑ {boardPending}</div>
           : <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>

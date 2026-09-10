@@ -32,9 +32,10 @@ import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { isDecisionAction, dieOptions, describeAction, eventChoiceInModal } from './actionText';
+import { isDecisionAction, dieOptions, describeAction } from './actionText';
 import { moveBlockReason, musterBlockReason } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
+import { panelShowsAction, isSpatial } from './panelFilter';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { separationActivates } from '../engine/fellowship';
 import { REGIONS, levelOf } from '../engine/data';
@@ -42,8 +43,6 @@ import { charName } from './charInfo';
 
 const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ? 'Shadow' : s);
 
-type SpatialAction = Extract<WotrAction, { kind: 'moveArmy' | 'attack' }>;
-const isSpatial = (a: WotrAction): a is SpatialAction => a.kind === 'moveArmy' || a.kind === 'attack';
 
 // Die-first filter: when the player has picked a specific die to spend, an action is
 // shown only if that die can pay for it. Free/phase actions (dieOptions empty — Pass,
@@ -232,8 +231,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   );
 
   const armyActs = useMemo(() => {
-    // A siege ASSAULT is an attack from===to; it has no board "destination" to click,
-    // so it's a panel button (below) rather than a confusing click-the-region-twice.
+    // A siege ASSAULT is an attack from===to, so it has no separate destination to
+    // click; it is kept OUT of this list (which feeds `destinations`) and handled by
+    // `assaultActs` below — click the besieged region itself and choose "Assault".
     const acts = g.legalActions.filter(isSpatial).filter((a) => !(a.kind === 'attack' && a.from === a.to));
     return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
   }, [g.legalActions, activeDie, g.view, g.you]);
@@ -273,7 +273,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     return s;
   }, [g.view, canMoveChars, charMoveOk, charMoved, g.you]);
-  const assaultSources = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'attack' }> => a.kind === 'attack' && a.from === a.to).map((a) => a.from), [g.legalActions]);
+  // Siege assaults / sorties (attack with from === to). ONE die-filtered list drives
+  // the highlight, the region click and the panel's pointer, so the three can't
+  // disagree — they used to read raw legalActions while every other board affordance
+  // (army moves, musters, Minion entries) was filtered by the selected die, so picking
+  // a Muster die still offered an assault it could not pay for.
+  const assaultActs = useMemo(() => {
+    const acts = g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'attack' }> => a.kind === 'attack' && a.from === a.to);
+    return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
+  }, [g.legalActions, activeDie, g.view, g.you]);
+  const assaultSources = useMemo(() => assaultActs.map((a) => a.from), [assaultActs]);
   // Board-click MUSTERING (player report: paging the panel's recruit buttons was
   // tedious): eligible Settlements highlight; clicking one opens its bundle menu.
   const recruitActs = useMemo(() => {
@@ -308,6 +317,20 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // A hint already on screen when the window closes is just as misleading as one
   // raised outside it — drop it as the board changes hands.
   useEffect(() => { if (!basicMoveWindow) setBlockMsg(null); }, [basicMoveWindow]);
+  // What the MAP offers that the action list deliberately leaves out. The panel has to
+  // NAME these: army moves, musters, Minion entries, character moves and siege assaults
+  // are all board-driven, so a turn whose only actions are on the map would otherwise
+  // leave the list reading "No actions." with no hint of where to look. The two dedupes
+  // in `panelActionsAll` (reports 6y3j4u31164n1c5r, 2j4j710i000x3k0b) remove the last
+  // two buttons that were covering for this, so the pointer has to be honest now.
+  const boardHints = useMemo(() => {
+    const out: string[] = [];
+    if (boardArmyActs.length) out.push('Move or attack on the map — click a green army.');
+    if (assaultSources.length) out.push('Click the besieged region on the map to assault the Stronghold (or sortie out of it).');
+    if (musterTargets.size) out.push('Muster on the map — click a green Settlement. Minions enter play there too.');
+    if (charSources.size) out.push('Move a character on the map — click its green region.');
+    return out;
+  }, [boardArmyActs, assaultSources, musterTargets, charSources]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -402,7 +425,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const armyHere = boardArmyActs.some((a) => a.from === id);
     // A siege ASSAULT (attack from===to) is board-clickable too (player report):
     // click the besieged region you occupy and choose "Assault".
-    const assaultHere = g.legalActions.some((a) => a.kind === 'attack' && a.from === id && a.to === id);
+    const assaultHere = assaultActs.some((a) => a.from === id);
     const musterHere = musterTargets.has(id);
     const charsHere = (g.view && canMoveChars && charMoveOk && g.you) ? movableCharsAt(g.view, g.you as Side, id, charMoved) : [];
     // ≥2 movable Companions here: offer moving them TOGETHER (group range = the
@@ -439,7 +462,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
@@ -484,29 +507,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     </>
   );
 
-  const panelActionsAll = g.legalActions.filter((a) => (!isSpatial(a) || (a.kind === 'attack' && a.from === a.to)) // siege assaults are panel buttons
-    && !isDecisionAction(a) && a.kind !== 'moveCharacter'
-    // separateMove PLACEMENT (has a target) is a board click; the "also separate X"
-    // group-add option (companion, no target) is a panel button.
-    && !(a.kind === 'separateMove' && !!a.target)
-    // Fellowship-figure placement (declare / revealed-move) is done by clicking the
-    // board (banner + highlighted regions), NOT a panel button — and revealMove has
-    // no readable label, so it would otherwise show as raw JSON in the action list.
-    && a.kind !== 'revealMove' && a.kind !== 'declareFellowship'
-    // The second army move (armyMove2 with from/to) is a board click now; keep only the
-    // "no second move" (done) option in the panel.
-    && !(a.kind === 'armyMove2' && !!a.from)
-    && !(a.kind === 'eventTarget' && !!a.region && !!a.companion) // card-separation destinations go on the board
-    // Simple event-card picks show in the DecisionModal (player report: they went
-    // unnoticed as panel buttons) — keep them out of the panel to avoid duplicates.
-    && !(a.kind === 'eventTarget' && eventChoiceInModal(g.legalActions))
-    // Mustering is board-driven now (player report: the panel's per-Settlement recruit
-    // buttons were tedious to page through): click a highlighted Settlement instead.
-    && a.kind !== 'recruitUnit'
-    && !(a.kind === 'playEvent' && g.view?.pendingChoice?.kind === 'freeCharEvent') // the Ents Awake prompt owns these
-    // Elven Ring uses are not Actions (they cost no die and precede the action);
-    // they sit behind the status bar's Elven Rings pill (player report 5f1r022l2q5t0p0b).
-    && a.kind !== 'useElvenRing');
+  const panelActionsAll = g.legalActions.filter((a) => panelShowsAction(a, g.legalActions, g.view!));
   const elvenActions = g.yourTurn ? g.legalActions.filter((a) => a.kind === 'useElvenRing') : [];
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
@@ -652,7 +653,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             <div style={{ flex: '0 0 44%', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               {/* Action buttons (compact — half height). */}
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
-                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardActions={armyActs.length} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} compact />
+                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardHints={boardHints} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} compact />
               </div>
               {chatClient && g.you && (
                 <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
