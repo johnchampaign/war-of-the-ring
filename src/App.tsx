@@ -168,20 +168,21 @@ function Lobby({ onStart, onResume }: { onStart: (aiSide?: 'fp' | 'shadow') => v
             <button onClick={discard} style={{ ...secondary, margin: '6px 0 0', padding: 8, fontSize: 13, background: '#2a2320' }}>Discard it</button>
           </div>
         )}
-        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Ranked online — vs the leaderboard AI:</div>
-        <button onClick={() => createVsAi('fp')} disabled={creating} style={{ ...primary, background: '#2f4f9e' }}>{creating ? 'Creating…' : 'Play Free Peoples (vs AI Shadow) — ranked'}</button>
-        <button onClick={() => createVsAi('shadow')} disabled={creating} style={{ ...primary, background: '#a83232' }}>{creating ? 'Creating…' : 'Play Shadow (vs AI Free Peoples) — ranked'}</button>
+        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>One player vs the AI — ranked (online, counts on the leaderboard):</div>
+        <button onClick={() => createVsAi('fp')} disabled={creating} style={{ ...primary, background: '#2f4f9e' }}>{creating ? 'Creating…' : 'Play Free Peoples vs the AI'}</button>
+        <button onClick={() => createVsAi('shadow')} disabled={creating} style={{ ...primary, background: '#a83232' }}>{creating ? 'Creating…' : 'Play Shadow vs the AI'}</button>
         <div style={{ fontSize: 11, color: '#776', textAlign: 'left', margin: '2px 4px 0' }}>
           {signedIn
             ? <>You're signed in — your result counts on the <a href={LEADERBOARD_URL} target="_blank" rel="noreferrer" style={{ color: '#e6b85a' }}>leaderboard</a>.</>
             : <>Sign in above so your result counts on the <a href={LEADERBOARD_URL} target="_blank" rel="noreferrer" style={{ color: '#e6b85a' }}>leaderboard</a>.</>}
         </div>
-        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Play vs the AI (local, unranked):</div>
-        <button onClick={() => startGuarded('shadow')} style={secondary}>Free Peoples (vs AI Shadow)</button>
-        <button onClick={() => startGuarded('fp')} style={secondary}>Shadow (vs AI Free Peoples)</button>
+        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>One player vs the AI — unranked (local, works offline):</div>
+        <button onClick={() => startGuarded('shadow')} style={{ ...secondary, boxShadow: 'inset 5px 0 #2f4f9e' }}>Play Free Peoples vs the AI</button>
+        <button onClick={() => startGuarded('fp')} style={{ ...secondary, boxShadow: 'inset 5px 0 #a83232' }}>Play Shadow vs the AI</button>
         <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Two players, one screen:</div>
-        <button onClick={() => startGuarded()} style={secondary}>New hotseat game (2 humans)</button>
-        <button onClick={createOnline} disabled={creating} style={secondary}>{creating ? 'Creating…' : 'New online game'}</button>
+        <button onClick={() => startGuarded()} style={secondary}>Play hotseat</button>
+        <div style={{ fontSize: 12, color: '#887', textAlign: 'left', margin: '14px 4px 4px' }}>Two players, two devices:</div>
+        <button onClick={createOnline} disabled={creating} style={secondary}>{creating ? 'Creating…' : 'Play online'}</button>
         {invites && (
           <div style={{ marginTop: 18, textAlign: 'left', background: '#1a160f', padding: 14, borderRadius: 8 }}>
             <p>Share these seat links (one per player):</p>
