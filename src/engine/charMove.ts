@@ -13,7 +13,7 @@
 import type { GameState, RegionId, Side, Nation } from './types';
 import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS } from './data';
-import { settlementController, armySide } from './armies';
+import { settlementController, armySide, unitCount } from './armies';
 import { activateNation } from './politics';
 import { log } from './log';
 
@@ -57,6 +57,35 @@ function regionDistance(from: RegionId, to: RegionId, stops: ((r: RegionId) => b
   }
   return Infinity;
 }
+/** Every region within `range` steps of `from`, as region -> distance, in ONE BFS.
+ *  Same rules as `regionDistance` (which stays for single-pair checks): `stops` marks
+ *  regions a WALKING figure may enter but not leave, so a stop region gets a distance
+ *  but is never expanded through. A region absent from the map is simply out of range.
+ *
+ *  The enumerators below used to call `regionDistance` once PER CANDIDATE DESTINATION —
+ *  ~100 separate breadth-first searches per piece — which is why they leaned on an
+ *  early-exit cap to stay affordable. One pass makes the full set cheap, so the cap no
+ *  longer has to double as a performance guard.
+ *
+ *  MUST agree with `regionDistance`: one decides what is OFFERED, the other what is
+ *  ACCEPTED, and a disagreement is an offered-then-refused move. Pinned by
+ *  `scripts/probe-char-move-enumeration.mjs`. */
+function reachableWithin(from: RegionId, range: number, stops: ((r: RegionId) => boolean) | null): Map<RegionId, number> {
+  const dist = new Map<RegionId, number>([[from, 0]]);
+  let layer: RegionId[] = [from];
+  for (let d = 1; d <= range && layer.length; d++) {
+    const next: RegionId[] = [];
+    for (const r of layer) {
+      if (stops && r !== from && stops(r)) continue; // entered a stop-region: go no further
+      for (const adj of REGIONS[r]?.adjacency ?? []) {
+        if (!dist.has(adj)) { dist.set(adj, d); next.push(adj); }
+      }
+    }
+    layer = next;
+  }
+  return dist;
+}
+
 /** The p.24 hard stop for walking Companions: a Shadow-controlled, unbesieged
  *  Stronghold region. Nazgûl/Minions never use it (they may not enter FP Strongholds
  *  at all — the canLand rule — and Nazgûl fly besides). */
@@ -234,43 +263,88 @@ export function characterDestinations(state: GameState, side: Side, char: string
   const range = rangeOf(state, char, from, opts);
   if (range <= 0) return [];
   const stops = side === 'fp' ? companionStop(state) : null;
+  const within = reachableWithin(from, range, stops);
   const out: RegionId[] = [];
   for (const to of Object.keys(state.regions)) {
     if (to === from) continue;
-    if (regionDistance(from, to, stops) <= range && canLand(state, to, side, char, opts)) out.push(to);
+    if (within.has(to) && canLand(state, to, side, char, opts)) out.push(to);
   }
   return out;
 }
 
-/** Representative legal character moves for the Character die (a subset, like the
- *  army enumerator): each movable piece toward a small set of useful targets —
- *  the Fellowship's region (Nazgûl hunt there) and the actor's army regions. */
+/** Bounded target set for FAR-RANGING pieces (Nazgûl fly the whole map; the Witch-king
+ *  and the Mouth have long legs): the Fellowship's region, then the actor's OWN Army
+ *  regions, BIGGEST ARMY FIRST. A flier's true destination set is the entire board, and
+ *  the AI's action space has to stay finite, so this list is capped — but which armies
+ *  make the cut is now decided by size rather than by whatever order
+ *  `Object.keys(state.regions)` happens to return. With 6+ of the actor's own army
+ *  regions the old order silently dropped some of them, so whether a Nazgûl could be
+ *  sent to join a given army came down to region-id ordering. */
+function farTargets(state: GameState, side: Side, max = 6): Set<RegionId> {
+  const out = new Set<RegionId>([state.fellowship.location]);
+  const mine = Object.keys(state.regions)
+    .filter((id) => armySide(state, id) === side)
+    // Biggest army first; region id breaks ties so the set is deterministic.
+    .sort((a, b) => unitCount(state, b) - unitCount(state, a) || (a < b ? -1 : a > b ? 1 : 0));
+  for (const id of mine) {
+    if (out.size >= max) break;
+    out.add(id);
+  }
+  return out;
+}
+
+/** Representative legal character moves for the Character die — a bounded SUBSET,
+ *  like the army enumerator. Each movable piece is offered moves toward a small set of
+ *  useful targets (the Fellowship's region, the actor's own Army regions); separated
+ *  Companions, whose range is their Level, are offered every region they can reach.
+ *
+ *  The cap is spread FAIRLY across the pieces. It used to fill one flat array and
+ *  `return` the instant it hit `cap`, so the whole budget went to whichever pieces came
+ *  first in region-key order and the pieces at the back were offered NOTHING — a figure
+ *  with legal moves simply had none in `legalActions`, which for the AI means a piece it
+ *  can never move. A reported Nazgûl position sat on exactly 18 options with the cap at
+ *  18: one more friendly Army region and the Nazgûl in North Anduin Vale would have
+ *  dropped off the list entirely. Now every piece contributes its first destination
+ *  before any piece contributes its second (round-robin), so the cap trims the TAIL of
+ *  each piece's list instead of erasing whole pieces, and the budget can never fall
+ *  below one option per piece. `scripts/probe-char-move-enumeration.mjs`. */
 export function characterMoveOptions(state: GameState, side: Side, cap = 18, excl?: CharMoveState): Array<{ char: string; from: RegionId; to: RegionId }> {
   const pieces = movablePieces(state, side, excl);
   if (!pieces.length) return [];
-  // Restricted target set for FAR-RANGING pieces (Nazgûl/Witch-king/Minion) — toward
-  // the Fellowship or a friendly Army — keeps that (large) action space bounded.
-  const restricted = new Set<RegionId>([state.fellowship.location]);
-  for (const id of Object.keys(state.regions)) {
-    if (restricted.size >= 6) break;
-    if (armySide(state, id) === side) restricted.add(id);
-  }
+  const restricted = farTargets(state, side);
   const isCompanion = (c: string): boolean => side === 'fp' && COMPANION_SET.has(c);
   const allRegions = Object.keys(state.regions);
-  const out: Array<{ char: string; from: RegionId; to: RegionId }> = [];
-  for (const p of pieces) {
+  // Each piece's own destination list, built in full first (one BFS per piece — see
+  // reachableWithin) so the budget below can be shared out instead of raced for.
+  const perPiece = pieces.map((p) => {
     const range = rangeOf(state, p.char, p.from);
     // A separated Companion (small Level range) may move to ANY region in range (RAW);
-    // Nazgûl/Minions (fly / range ≤3 but many destinations) use the restricted set.
+    // Nazgûl/Minions (fly / range <= 3 but many destinations) use the restricted set.
     const candidates: Iterable<RegionId> = isCompanion(p.char) ? allRegions : restricted;
     // Same stop-aware distance the APPLY path uses (moveCharacter), or this offers
     // walks through Moria/Morannon that the engine then refuses — the soak caught
     // exactly that (offer/apply disagreement) the moment the stop rule was added.
     const stops = isCompanion(p.char) ? companionStop(state) : null;
-    for (const to of candidates) {
-      if (out.length >= cap) return out;
-      if (to === p.from) continue;
-      if (regionDistance(p.from, to, stops) <= range && canLand(state, to, side, p.char)) out.push({ char: p.char, from: p.from, to });
+    const within = range > 0 ? reachableWithin(p.from, range, stops) : null;
+    const tos: RegionId[] = [];
+    if (within) {
+      for (const to of candidates) {
+        if (to === p.from) continue;
+        if (within.has(to) && canLand(state, to, side, p.char)) tos.push(to);
+      }
+    }
+    return { piece: p, tos };
+  });
+  // Never budget below one option per piece: a piece with a legal move must always have
+  // one offered, even when there are more pieces than the nominal cap.
+  const budget = Math.max(cap, perPiece.length);
+  const out: Array<{ char: string; from: RegionId; to: RegionId }> = [];
+  const deepest = perPiece.reduce((m, e) => Math.max(m, e.tos.length), 0);
+  for (let i = 0; i < deepest && out.length < budget; i++) {
+    for (const { piece, tos } of perPiece) {
+      if (i >= tos.length) continue;
+      out.push({ char: piece.char, from: piece.from, to: tos[i]! });
+      if (out.length >= budget) break;
     }
   }
   return out;
