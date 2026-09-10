@@ -101,7 +101,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               {decisions.map((a, i) => <DecisionButton key={i} action={a} disabled={busy} onClick={() => click(a)} onHover={setHoverCard} />)}
             </div>
-            <CardBlurb id={hoverCard} />
+            <CardBlurb id={hoverCard ?? (choice?.kind === 'eventTarget' ? (choice.data as { card?: string } | undefined)?.card ?? null : null)} />
           </>
         ) : (
           <div style={{ color: '#cc9', marginTop: 12 }}>Waiting for {sideName(pc ? (choice?.owner ?? pc.attacker) : you)} to decide…</div>
@@ -310,12 +310,17 @@ function DecisionButton({ action, disabled, onClick, onHover }: { action: WotrAc
 
 // Describes the hovered combat card (its Combat box is what matters here, plus the
 // Event text for context) inside the modal, since the modal covers the inspector.
+// While an Event card resolves, this shows THE CARD (art + text) rather than
+// "Hover a card to read its effect" with nothing to hover (player report
+// 1w0z61380p6d094e); hovering another card in the modal still previews that one.
 function CardBlurb({ id }: { id: string | null }) {
   const def = id ? CARD.get(id) : null;
+  const art = useCardArt(id);
   return (
-    <div style={blurb}>
+    <div style={{ ...blurb, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      {def && art && <img src={art} alt="" style={{ height: 120, borderRadius: 4, flexShrink: 0 }} />}
       {def ? (
-        <>
+        <div>
           <div style={{ fontWeight: 700, fontSize: 13 }}>{def.name} <span style={{ color: '#aa9', fontWeight: 400 }}>· {def.side} · init {def.initiative ?? '–'}</span></div>
           {def.combat?.title && <div style={{ fontSize: 12, margin: '3px 0' }}>
             <b>Combat — {def.combat.title}:</b>{' '}
@@ -325,7 +330,7 @@ function CardBlurb({ id }: { id: string | null }) {
             <b>Event:</b>{' '}
             {def.precondition && <span style={req}>[{def.precondition}] </span>}{def.eventText}
           </div>}
-        </>
+        </div>
       ) : (
         <span style={{ color: '#776', fontStyle: 'italic' }}>Hover a card to read its effect.</span>
       )}

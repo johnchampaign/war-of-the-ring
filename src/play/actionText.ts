@@ -8,6 +8,7 @@ import { charDieLeaders } from '../engine/armies';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { charName } from './charInfo';
+import { aFace } from './names';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 const cardName = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.name ?? id;
@@ -82,7 +83,7 @@ export function describeAction(a: WotrAction): string {
     case 'armyMove2': return a.done ? 'No second army move' : `Also move army ${rName(a.from!)} → ${rName(a.to!)}`;
     case 'removeExcess': return `Remove a ${cap(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'}`;
     case 'attack': return a.from === a.to ? `⚔ Assault the siege at ${rName(a.to)}` : `Attack ${rName(a.to)} (from ${rName(a.from)})`;
-    case 'skipDie': return `Discard a ${a.face} die`;
+    case 'skipDie': return `Discard ${aFace(a.face)} die`;
     case 'pass': return 'Pass';
     case 'playCombatCard': return a.cardId ? `Combat card: ${cardName(a.cardId)}` : 'No combat card';
     // The bare action (no `back`) is the button that OPENS the split picker, so it

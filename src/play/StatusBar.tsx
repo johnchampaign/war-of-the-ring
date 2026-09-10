@@ -1,6 +1,7 @@
 // Top status bar: turn / phase / seat, victory points, the Ring track, dice.
 import type { WotrAction } from '../adapter/wotrAction';
 import { describeAction } from './actionText';
+import { phaseLabel } from './names';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GameState } from '../engine/types';
 import { charName, charDef, isMinion } from './charInfo';
@@ -255,7 +256,7 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elven
   return (
     <div style={bar}>
       <span style={pill}>Turn {view.turn}</span>
-      <span style={pill}>Phase: {view.phase}</span>
+      <span style={pill}>Phase: {phaseLabel(view.phase)}</span>
       <span style={pill}>You: {you === 'fp' ? 'Free Peoples' : you === 'shadow' ? 'Shadow' : '—'}</span>
       <span style={{ ...pill, background: '#2f4f9e' }}>Free Peoples VP {view.victoryPoints.fp}</span>
       <span style={{ ...pill, background: '#a83232' }}>Shadow VP {view.victoryPoints.shadow}</span>

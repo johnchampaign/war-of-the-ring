@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import type { GameState, Side } from '../engine/types';
 import { FACE } from './DiceTray';
+import { prettify } from './names';
 import { CardZoom } from './HandStrip';
 
 const KIND_COLOR: Record<string, string> = {
@@ -55,7 +56,7 @@ export function TurnSummary({ view, yourTurn, you, onOpenLog, hold }: { view: Ga
               <li key={i} style={{ fontSize: 13, padding: '3px 0', borderBottom: '1px solid #2a2418', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                 <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 58, marginTop: 1 }}>{e.kind}</span>
                 {e.die && <DieChip face={e.die} />}
-                <span style={{ flex: 1 }}>{e.msg}</span>
+                <span style={{ flex: 1 }}>{prettify(e.msg)}</span>
                 {/* If this entry was a card play, let the player enlarge that card to read
                     its effect and "Play if…" legality (card plays are open information). */}
                 {e.card && <button style={viewCardBtn} onClick={() => setZoom(e.card!)} title="View this card">🔍 card</button>}

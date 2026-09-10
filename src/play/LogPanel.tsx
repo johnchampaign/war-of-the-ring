@@ -7,6 +7,7 @@
 import type { GameState } from '../engine/types';
 import type { LogTime } from '../online/gameClient';
 import { FACE } from './DiceTray';
+import { prettify } from './names';
 
 const KIND_COLOR: Record<string, string> = {
   combat: '#e6857f', army: '#d8cfa8', muster: '#9cc77a', hunt: '#e6a3d0',
@@ -76,8 +77,8 @@ export function LogPanel({ view, times, onHoverCard }: {
               {e.card && onHoverCard
                 ? <span style={{ color: '#cfe0ff', textDecoration: 'underline dotted', textUnderlineOffset: 2, cursor: 'help' }}
                     title="Hover to read this card"
-                    onMouseEnter={() => onHoverCard(e.card!)} onMouseLeave={() => onHoverCard(null)}>{e.msg}</span>
-                : <span style={{ color: '#ddd' }}>{e.msg}</span>}
+                    onMouseEnter={() => onHoverCard(e.card!)} onMouseLeave={() => onHoverCard(null)}>{prettify(e.msg)}</span>
+                : <span style={{ color: '#ddd' }}>{prettify(e.msg)}</span>}
             </div>
             );
           })}
