@@ -57,12 +57,12 @@ Measure every Shadow-AI change on both opponents, two seed families each:
 
 Ship when both gates hold. Record the numbers in the commit message.
 
-## Baseline (Shadow AI at bdb6100 + this commit, 2000 games per family)
+## Baseline (Shadow AI at 1cd3ea2, yardstick with the turn-30 cap, 2000 games per family)
 
 | family | FP wins | Shadow wins | Ring destroyed | corrupted | Shadow 10-VP | FP 4-VP | Mordor entries (mean turn) |
 |---|---|---|---|---|---|---|---|
-| f1 (offset 0) | 1359 | 641 | 1309 | 515 | 104 | 48 | 1869 (8.6) |
-| f2 (offset 100000) | 1310 | 690 | 1262 | 532 | 128 | 45 | 1852 (8.5) |
+| f1 (offset 0) | 1360 | 640 | 1310 | 515 | — | — | 1870 (8.6) |
+| f2 (offset 100000) | 1311 | 689 | 1262 | 532 | — | — | 1853 (8.6) |
 
 Hygiene gates zero in both. For comparison the same Shadow scores ~540-600 / 2000
 against the heuristic FP — the yardstick is the weaker opponent overall (see
@@ -78,3 +78,18 @@ ground here and, when aimed at a human habit, must gain >= 40 in both families.
   gate above Corruption 4" rule waited forever with no heal spot in reach and a
   Shadow that never hunts a stationary Fellowship. Now it holds only when it can
   fall back to a haven; otherwise it defers (enters). Re-run clean — the table above.
+- 2026-09-10 — hunt-the-approach A/B, the first two-gate measurement: seed 926 of
+  the human-like family ran to turn 1020. Replayed (`scripts/replay-seed.mjs`):
+  the yardstick's rest/step habit oscillated forever against a Shadow that hunts
+  the road (heal to 1, step out, take a hit, step back). No human game in the
+  calibration set runs past 25 turns, so the habits now switch off after turn 30
+  (`HABITS_UNTIL_TURN`) and the heuristic finishes the game; seed 926 ends at
+  turn 34. Baseline re-measured with the cap: 640 / 689 (table above; within one
+  game of the uncapped numbers).
+
+## Experiments under the two gates
+
+| change | vs heuristic FP (f1, f2) | vs yardstick (f1, f2) | verdict |
+|---|---|---|---|
+| hunt the approach — 2 Hunt dice while the Fellowship is hidden, on the road, within 6 of the Morannon (`wotrAI.ts` huntAllocation) | 543→606, 597→673 | 640→737, 689→731 | **shipped** 2026-09-10; corruption wins up in all four families |
+

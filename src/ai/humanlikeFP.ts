@@ -36,8 +36,15 @@ const healSpot = (state: GameState, id: RegionId): boolean => {
 const softTargets = (state: GameState): RegionId[] =>
   (Object.keys(state.regions) as RegionId[]).filter((id) => (REGIONS[id]?.vp ?? 0) > 0 && settlementCtrl(state, id) === 'shadow' && unitCount(state, id) <= 1 && !state.regions[id]!.siegeBox);
 
+/** Past this turn the scripted habits switch off and the heuristic plays alone. No
+ *  human game in the calibration set ran past 25 turns; without the cap the REST
+ *  and PATIENCE rules can oscillate forever against a Shadow that hunts the road
+ *  (heal to 1, step out, take a hit, step back, heal...) — seed 926 of the first
+ *  hunt-the-approach A/B reached turn 1020. A human pushes long before that. */
+const HABITS_UNTIL_TURN = 30;
+
 export function chooseActionHumanlike(state: GameState, actor: Side, legal: WotrAction[], rng: Rng): WotrAction {
-  if (actor !== 'fp' || legal.length === 1 || state.pendingChoice) return chooseAction(state, actor, legal, rng);
+  if (actor !== 'fp' || legal.length === 1 || state.pendingChoice || state.turn > HABITS_UNTIL_TURN) return chooseAction(state, actor, legal, rng);
   const fs = state.fellowship;
 
   // --- Fellowship phase: PATIENCE at the gates, REST in a haven ---

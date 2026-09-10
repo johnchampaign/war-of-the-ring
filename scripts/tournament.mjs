@@ -141,7 +141,7 @@ for (let game = 0; game < GAMES; game++) {
   fel.games++;
   fel.peakCorruption.push(peakCorr);
   if (result) { wins[result.winners[0]]++; turnCounts.push(state.turn); reasons[result.reason] = (reasons[result.reason] || 0) + 1; }
-  else if (actions >= MAX_ACTIONS) timeouts++;
+  else if (actions >= MAX_ACTIONS) { timeouts++; console.log(`  timeout: seed ${seed} hit ${MAX_ACTIONS} actions (turn ${state.turn}, phase ${state.phase}, pending ${state.pendingChoice?.kind ?? 'none'})`); }
 }
 
 turnCounts.sort((a, b) => a - b);

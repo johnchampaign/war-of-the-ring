@@ -74,7 +74,18 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // exactly ONCE — so the escalation rungs were dead code and the Shadow drifted
     // through the game at ~0.69 dice.
     const fs = state.fellowship;
-    const raw = (fs.mordor !== null || fs.progress >= 4) ? hi : 0;
+    // HUNT THE APPROACH (shipped 2026-09-10, the first change measured on both
+    // gates — docs/ai-humanlike-yardstick.md). Humans reach Mordor at turn 7 with
+    // ~3 Corruption because nothing is rolled against them on the road; a flat
+    // 2/turn everywhere measured badly (dice thrown at a Fellowship that is resting
+    // or far away). This spends 2 only while the Fellowship is hidden, on the road
+    // (not in a haven where it could heal instead) and within six regions of the
+    // Morannon — the stretch where a hit is hard to walk off. Measured, 2000 games
+    // x 2 families: vs the heuristic FP Shadow 543->606 and 597->673; vs the
+    // human-like yardstick 640->737 and 689->731; corruption wins up in all four.
+    const approach = fs.mordor === null && fs.progress < 4 && fs.hidden
+      && !isHealSettlement(state, fs.location) && dist(fs.location, 'morannon') <= 6;
+    const raw = (fs.mordor !== null || fs.progress >= 4) ? hi : approach ? 2 : 0;
     // On the Mordor Track the Ring is the clock, so max out — but only to what a
     // roll can USE. A Hunt roll rolls `Math.min(5, hunt.box)` dice (hunt.ts), so a
     // 6th/7th die is STRICTLY wasted: it cannot help the Hunt, it only disarms us
