@@ -6,7 +6,7 @@
 // stripping was meant to cure.
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState } from '../engine/types';
-import { isDecisionAction, eventChoiceInModal } from './actionText';
+import { isDecisionAction, eventChoiceInModal, isCardRecruitTarget, isCardArmyMoveTarget } from './actionText';
 
 /** Army moves and attacks: spatial, so they are map clicks, never buttons. */
 export type SpatialAction = Extract<WotrAction, { kind: 'moveArmy' | 'attack' }>;
@@ -30,7 +30,7 @@ export const BOARD_PATH: Record<string, string> = {
   declareFellowship: 'click a highlighted region to declare the Fellowship there',
   revealMove: 'click a highlighted region to place the revealed Ring-bearers',
   separateMove: 'click a highlighted region to place the separated Companion(s)',
-  eventTarget: 'card-driven: board click for region/companion targets, the decision modal for simple picks',
+  eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves via click-army-then-destination, companion placements via the highlighted region; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
   useElvenRing: 'the Elven Rings pill in the status bar',
   playEvent: 'the Ents Awake prompt owns the one free Character-card play',
 };
@@ -59,6 +59,10 @@ export function panelShowsAction(a: WotrAction, legal: WotrAction[], view: GameS
     // "no second move" (done) option as a button.
     && !(a.kind === 'armyMove2' && !!a.from)
     && !(a.kind === 'eventTarget' && !!a.region && !!a.companion) // card-separation destinations go on the board
+    // Card RECRUITS and card ARMY MOVES are board flows too — the same muster menu and
+    // move picker a Muster / Army die uses (player report 2s3p6y0x000k6b70: "Event card
+    // recruitment should use that interface ... likewise all movement affected by cards").
+    && !isCardRecruitTarget(a) && !isCardArmyMoveTarget(a)
     // Simple event-card picks show in the decision modal (player report: they went
     // unnoticed as buttons) — keep them out of the list to avoid duplicates.
     && !(a.kind === 'eventTarget' && eventChoiceInModal(legal))

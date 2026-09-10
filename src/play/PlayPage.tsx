@@ -32,7 +32,7 @@ import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { isDecisionAction, dieOptions, describeAction } from './actionText';
+import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget } from './actionText';
 import { moveBlockReason, musterBlockReason } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial } from './panelFilter';
@@ -297,8 +297,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const acts = g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'bringMinion' }> => a.kind === 'bringMinion');
     return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
   }, [g.legalActions, activeDie, g.view, g.you]);
-  const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...minionActs.map((a) => a.region)]), [recruitActs, minionActs]);
-  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
+  // Card-driven RECRUITS (Riders of Rohan, Imrahil, Faramir's Rangers' Osgiliath half, ...)
+  // join the muster flow: their Settlements highlight and the bundle menu lists them
+  // (player report 2s3p6y0x000k6b70). Card-driven ARMY MOVES likewise join the army
+  // flow below: click the army, then the highlighted destination.
+  const cardRecruitActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => isCardRecruitTarget(a)), [g.legalActions]);
+  const isCardRecruit = cardRecruitActs.length > 0;
+  const cardMoveActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => isCardArmyMoveTarget(a)), [g.legalActions]);
+  const isCardMove = cardMoveActs.length > 0;
+  const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...minionActs.map((a) => a.region), ...cardRecruitActs.map((a) => a.region!)]), [recruitActs, minionActs, cardRecruitActs]);
+  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, cardMoveActs, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
   // The generic "why can't I do that?" hints (moveBlockReason / musterBlockReason)
   // belong to the BASIC Move / Muster actions during Action Resolution, and nowhere
   // else. Every other map click is a different question — placing the Ring-bearers on
@@ -352,8 +360,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     [g.view, charPick, g.you],
   );
   const destinations = useMemo(
-    () => new Set<RegionId>([...boardArmyActs.filter((a) => a.from === selected).map((a) => a.to!), ...charDestinations]),
-    [boardArmyActs, selected, charDestinations],
+    () => new Set<RegionId>([...boardArmyActs.filter((a) => a.from === selected).map((a) => a.to!), ...cardMoveActs.filter((a) => a.from === selected).map((a) => a.to!), ...charDestinations]),
+    [boardArmyActs, cardMoveActs, selected, charDestinations],
   );
 
   const clearMove = () => { setSelected(null); setCharPick(null); setMoveMenu(null); setNazPick(null); setMusterMenu(null); };
@@ -410,6 +418,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // An army move is in progress: click a highlighted destination (army-only set).
     if (selected && destinations.has(id)) {
+      const cardAct = cardMoveActs.find((a) => a.from === selected && a.to === id);
+      if (cardAct) {
+        setSelected(null);
+        // A card ATTACK stays whole (the rearguard flow is the attack action's); a
+        // card MOVE may split (p.28), so it takes the move picker.
+        if (cardAct.mode === 'attack') void submit(cardAct);
+        else setMoveDraft({ from: cardAct.from!, to: cardAct.to!, kind: 'eventMove', base: cardAct });
+        return;
+      }
       const act = boardArmyActs.find((a) => a.from === selected && a.to === id);
       if (act) {
         setSelected(null);
@@ -422,7 +439,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // Clicking a region that has something to do: move an army, assault, muster,
     // move character(s) — or several (menu).
-    const armyHere = boardArmyActs.some((a) => a.from === id);
+    const armyHere = boardArmyActs.some((a) => a.from === id) || cardMoveActs.some((a) => a.from === id);
     // A siege ASSAULT (attack from===to) is board-clickable too (player report):
     // click the besieged region you occupy and choose "Assault".
     const assaultHere = assaultActs.some((a) => a.from === id);
@@ -465,7 +482,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardRecruit || isCardMove || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
@@ -705,7 +722,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 16, borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 280, boxShadow: '0 8px 40px #000' }}
             onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>Muster in {REGIONS[musterMenu]?.name ?? musterMenu}</div>
-            {[...recruitActs, ...minionActs].filter((a) => a.region === musterMenu).map((a, i) => (
+            {[...recruitActs, ...minionActs, ...cardRecruitActs].filter((a) => a.region === musterMenu).map((a, i) => (
               <button key={i} onClick={() => { setMusterMenu(null); void submit(a); }}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
                 {describeAction(a)}

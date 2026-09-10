@@ -185,11 +185,28 @@ export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a
  *  with no board aspect — no move/attack, no board-clickable destination. */
 const simpleEventTarget = (a: WotrAction): boolean =>
   a.kind === 'eventTarget' && !a.from && !a.to && !(a.region && a.companion) && a.mode !== 'move' && a.mode !== 'attack';
+/** A card RECRUIT target ("recruit one Gondor unit in Osgiliath", Riders of Rohan,
+ *  Imrahil, ...): a region plus a nation/figure, no movement, nobody named. These
+ *  take the board's muster flow — click the highlighted Settlement, pick the bundle
+ *  — exactly like a Muster die (player report 2s3p6y0x000k6b70). */
+export const isCardRecruitTarget = (a: WotrAction): boolean =>
+  a.kind === 'eventTarget' && !!a.region && (!!a.nation || !!a.figure) && !a.companion && !a.from && !a.to && !a.done && !a.eye
+  && (a.mode === undefined || a.mode === 'recruit');
+/** A card ARMY MOVE / ATTACK target with a real destination (Shadows Gather, The
+ *  Shadow Lengthens, Corsairs, Grond's march, ...): takes the board's move flow —
+ *  click the army, then the highlighted destination (same report). A from === to
+ *  card assault is not a move and keeps its button. */
+export const isCardArmyMoveTarget = (a: WotrAction): boolean =>
+  a.kind === 'eventTarget' && !!a.from && !!a.to && a.from !== a.to && !a.companion && !a.done;
 /** When EVERY pending event-card target is a simple pick, surface them in the
  *  DecisionModal instead of the quiet panel list — a player report ("played Riders
  *  of Rohan and nothing happened") showed the Regular-vs-Elite pick going unnoticed
  *  as panel buttons. Board-driven card flows (moves, separations) are unaffected. */
 export function eventChoiceInModal(actions: WotrAction[]): boolean {
   const ets = actions.filter((a) => a.kind === 'eventTarget');
+  // A card whose targets are on the BOARD (recruits, army moves) must not raise the
+  // modal at all — its backdrop would sit over the very map the player has to click.
+  // Its leftover simple options ("done", a deck pick) become list buttons instead.
+  if (ets.some((a) => isCardRecruitTarget(a) || isCardArmyMoveTarget(a))) return false;
   return ets.length > 0 && ets.every(simpleEventTarget);
 }
