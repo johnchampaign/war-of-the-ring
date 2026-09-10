@@ -111,13 +111,13 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
         <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
           {attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.'
             : holdBackMode ? `Choose who stays in ${rName(from)}; everyone unticked marches back to ${rName(to)}.${holdBackMustHold ? ' At least one unit must hold the Settlement you just took.' : ' You may bring the whole Army back.'}`
-              : 'Choose what moves; the rest stays behind (split). Move all for a normal move.'}
+              : 'Choose what moves; the rest stays behind (split). Leave everything ticked for a normal move.'}
         </div>
         {!attackMode && destUnits > 0 && (
           <div style={{ fontSize: 12, color: overAll || overSel ? '#f0d090' : '#9c9', marginBottom: 8 }}>
             {rName(to)} already holds {destUnits} unit{destUnits === 1 ? '' : 's'} (limit 10).
-            {overAll > 0 && ` Move all → you'll remove ${overAll} excess.`}
-            {overSel > 0 && overSel !== overAll && ` Move selected → remove ${overSel} excess.`}
+            {overAll > 0 && ` Moving the whole Army → you'll remove ${overAll} excess.`}
+            {overSel > 0 && overSel !== overAll && ` Moving your selection → remove ${overSel} excess.`}
           </div>
         )}
         {nations.map((n) => (
@@ -136,11 +136,18 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
           </label>
         ))}
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-          <button style={primary} onClick={() => onConfirm(make(false))}>{verb} all</button>
-          {/* Hold-back: keeping NOBODY forward is a legal answer (p.31's advance is
+          {/* ONE confirm button. There used to be two — "{verb} all" and "{verb}
+              selected" — but the default selection IS the whole Army, so the second was
+              dead whenever the first was the obvious choice and vice versa (player
+              report 3t0a420x2k1t2m0g: '"Move all" is the same as moving all selected
+              figures, and that is already the default'). An untouched picker still
+              submits the plain whole-army move (no split selection at all); touch a
+              counter and the same button submits the split.
+              Hold-back: keeping NOBODY forward is a legal answer (p.31's advance is
               optional) unless the advance captured the Settlement — every other picker
               still needs at least one moving unit. */}
-          <button style={primary} disabled={(totalUnits < 1 && !(holdBackMode && !holdBackMustHold)) || isWhole} onClick={() => onConfirm(make(true))}>{verb} selected</button>
+          <button style={primary} disabled={!isWhole && totalUnits < 1 && !(holdBackMode && !holdBackMustHold)}
+            onClick={() => onConfirm(make(!isWhole))}>{verb}</button>
           <button style={ghost} onClick={onCancel}>Cancel</button>
         </div>
       </div>

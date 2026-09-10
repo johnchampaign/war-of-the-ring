@@ -36,7 +36,7 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
         <Section title="When the Fellowship moves">
           {onMordor
             ? 'On the Mordor Track there is no roll — one Hunt tile is drawn automatically every move (the special tiles are now in the pool), and standing still costs +1 Corruption.'
-            : `The Shadow rolls ${dice} Hunt ${dice === 1 ? 'die' : 'dice'} (the number in the Hunt Box, capped at 5). Each die hits on a 6+ — a natural 1 always misses${bonus ? `; the +${bonus} box bonus is added to every die` : ''}. Every success draws one Hunt tile.`}
+            : `The Shadow rolls ${dice} Hunt ${dice === 1 ? 'die' : 'dice'} (the number in the Hunt Box, capped at 5). Each die hits on a 6+${bonus ? ` — with the +${bonus} box bonus added to every die, that means a roll of ${Math.max(2, 6 - bonus)}+` : ''} — a natural 1 always misses. Every success draws one Hunt tile.`}
         </Section>
 
         <Section title="Re-rolls (location modifiers)">

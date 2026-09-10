@@ -1121,11 +1121,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // Guide); hunt damage drops by 1, then re-prompt / finish. On the Mordor Track
         // the same ability removes him from the game instead of placing him (p.44).
         // Either way a Companion must actually leave, or the −1 would be free.
+        const guide = state.fellowship.guide;
         const left = state.fellowship.mordor !== null
-          ? removeCompanionOnMordorTrack(state, state.fellowship.guide)
-          : separateCompanion(state, state.fellowship.guide);
+          ? removeCompanionOnMordorTrack(state, guide)
+          : separateCompanion(state, guide);
         if (!left) throw new Error('The Guide cannot use that ability here.');
-        reduceHuntDamageBySeparate(state);
+        reduceHuntDamageBySeparate(state, guide);
       } else {
         resolveHuntDamage(state, action.mode, action.card);
       }
@@ -1164,7 +1165,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // they were passing, the log should mention it"). Passing is already logged; this
       // is its quieter sibling and needs saying just as much. The dispatch tail stamps
       // the die chip, so the message only has to name the act.
-      log(state, null, 'pass', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discard an unusable die`);
+      // "an unusable die" overstated it — a die may be discarded whether or not it has
+      // a legal use, and in this game a die almost always HAS one (player report
+      // 4x501k6r1s450d64). Say what happened, not why we assume it happened.
+      log(state, null, 'pass', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discard a die without using it`);
       passResolutionTurn(state, actor); break;
     case 'pass':
       requirePhase(state, 'actionResolution');

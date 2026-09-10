@@ -113,7 +113,7 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help', background: isGuide ? '#2c2616' : 'transparent' }}>
                 <span style={{ fontWeight: 600, color: isGuide ? '#ffd86a' : '#e9e1cc' }}>{isGuide ? '★ ' : ''}{charName(id)}</span>
-                {d && <span style={{ color: '#b9b29c', fontSize: 11 }}>Lvl {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Lead ${d.leadership}` : ''}</span>}
+                {d && <span style={{ color: '#b9b29c', fontSize: 11 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
               </div>
             );
           })}
@@ -146,7 +146,7 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
                 <span style={{ fontWeight: 600 }}>{charName(id)}</span>
-                <span style={{ color: '#b9b29c', fontSize: 11 }}>{String(region)}{d ? ` · Lvl ${d.level === 'inf' ? '∞' : d.level}${d.leadership ? ` · Lead ${d.leadership}` : ''}` : ''}</span>
+                <span style={{ color: '#b9b29c', fontSize: 11 }}>{String(region)}{d ? ` · Level ${d.level === 'inf' ? '∞' : d.level}${d.leadership ? ` · Leadership ${d.leadership}` : ''}` : ''}</span>
               </div>
             );
           })}
@@ -182,7 +182,7 @@ function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (i
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
                 <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SH' : 'FP'}</span>
                 <span style={{ fontWeight: 600, color: '#c9bfae', textDecoration: 'line-through' }}>{charName(id)}</span>
-                {d && <span style={{ color: '#8d8677', fontSize: 11 }}>Lvl {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Lead ${d.leadership}` : ''}</span>}
+                {d && <span style={{ color: '#8d8677', fontSize: 11 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
               </div>
             );
           })}
@@ -259,8 +259,10 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { v
       <span style={{ ...pill, background: '#6b2d2d' }}>Corruption {fs.corruption}/12</span>
       <span style={pill}>Fellowship: {fs.mordor !== null ? `Mordor ${fs.mordor}/5` : `progress ${fs.progress}`}</span>
       <span style={fs.hidden ? { ...pill, background: '#274027', color: '#bfe6bf' } : { ...pill, background: '#a83232', color: '#fff', fontWeight: 700 }}
-        title={fs.hidden ? 'The Fellowship is hidden — you may move it.' : 'The Fellowship is REVEALED — it cannot move until you hide it again (a Character die).'}>
-        {fs.hidden ? '🙈 Hidden' : '🔴 REVEALED'}
+        title={fs.hidden ? 'The Fellowship is hidden — you may move it.' : 'The Fellowship is revealed — it cannot move until you hide it again (a Character die).'}>
+        {/* The red chip, the red pip and the bold weight already carry the emphasis;
+            ALL CAPS on top of them was just shouting (player report 050o5k5s1h5s2w24). */}
+        {fs.hidden ? '🙈 Hidden' : '🔴 Revealed'}
       </span>
       <span style={pill}>Guide: <span
         onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}

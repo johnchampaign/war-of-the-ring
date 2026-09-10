@@ -153,6 +153,11 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
 export function canRecruitNazgul(state: GameState, id: RegionId): boolean {
   const def = REGIONS[id]!;
   if (def.nation !== 'sauron' || def.settlement !== 'Stronghold') return false;
+  // p.26: reinforcements are recruited only in a Settlement of a Nation that is "At
+  // War". Nazgûl are Sauron Leaders, so the Muster die can place one only once Sauron
+  // is At War — the gate `recruit()` already applies to every other figure, and this
+  // path was simply missing it (player report 1f2q456i4h3b470x).
+  if (!isAtWar(state, 'sauron')) return false;
   if (settlementController(state, id) !== 'shadow') return false;
   if (armySide(state, id) === 'fp' || state.regions[id]!.besieged) return false;
   return (state.reinforcements.sauron as { nazgul?: number }).nazgul! > 0;
@@ -476,6 +481,11 @@ export function removeStackUnit(state: GameState, id: RegionId, nation: Nation, 
 export function captureIfEnemySettlement(state: GameState, id: RegionId, side: Side, viaAttack = false): void {
   const def = REGIONS[id]!;
   if (!def.settlement) return;
+  // A Fortification (Osgiliath, Fords of Isen) is NOT a Settlement (p.10): it is never
+  // captured, never carries a Settlement Control marker, and is worth no Victory
+  // Points. We stamped a marker on it anyway, which showed up on the map as a control
+  // diamond over two regions that can't be controlled (player report 1c0k225r21493a52).
+  if (def.settlement === 'Fortification') return;
   // A Stronghold under siege is still held by its boxed garrison — walking a second
   // (reinforcing) Army into the besieger's region must NOT capture it. Doing so set
   // the control marker early, so the real storm later found the Settlement already
@@ -508,9 +518,9 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
     state.victoryPoints[side] += def.vp;
     log(state, null, 'army', `${side} captured ${id} (+${def.vp} VP, total ${state.victoryPoints[side]})`);
   }
-  // A Fortification (Fords of Isen, Osgiliath) is NOT a Settlement, so capturing it
-  // never advances the owning Nation's political track (rulebook p.36).
-  if (def.nation && def.settlement !== 'Fortification') onSettlementCaptured(state, def.nation, id, viaAttack);
+  // (A Fortification never reaches here — it is not a Settlement and returns above —
+  // so capturing one still never advances the owning Nation's track, rulebook p.36.)
+  if (def.nation) onSettlementCaptured(state, def.nation, id, viaAttack);
 }
 
 /** A siege ends the instant the besieger leaves the region's open field. If `id` is a

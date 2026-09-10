@@ -401,9 +401,13 @@ function repromptOrFinish(state: GameState, damage: number, reveal: boolean, cas
 /** Drop Hunt damage by 1 and re-prompt/finish — called by the adapter after it
  *  separates the Hobbit Guide (separateCompanion lives in fellowship.ts; importing
  *  it here would cycle). The Guide reassigns as part of the separation. */
-export function reduceHuntDamageBySeparate(state: GameState): void {
+export function reduceHuntDamageBySeparate(state: GameState, who?: string): void {
   const d = state.pendingChoice!.data as { damage: number; reveal: boolean };
-  logReduce(state, d.damage, 'The Hobbit Guide leaves the Fellowship to draw off the Hunt');
+  // Name the Companion who actually left. The line used to read "The Hobbit Guide
+  // leaves the Fellowship…", so the log never said whether Merry or Pippin had gone
+  // (player report 37425x0y2j6d545u) — the caller passes the Guide it separated.
+  const name = who ? (characterDef(who)?.name ?? who) : 'The Hobbit Guide';
+  logReduce(state, d.damage, `${name} leaves the Fellowship to draw off the Hunt`);
   repromptOrFinish(state, d.damage - 1, d.reveal);
 }
 

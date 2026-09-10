@@ -249,7 +249,7 @@ function HuntDetail({ view, data, modes, onExplain }: { view: GameState; data?: 
       {fieldRoll && (
         <div style={{ fontSize: 13, color: '#cbbf9a', marginBottom: 6 }}>
           The Shadow rolled <b>{roll!.level}</b> Hunt {roll!.level === 1 ? 'die' : 'dice'} — one per die in the Hunt&nbsp;Box
-          {roll!.bonus ? <>, each <b>+{roll!.bonus}</b> from Free&nbsp;Peoples dice in the box</> : null}. A die hits on <b>6+</b>.
+          {roll!.bonus ? <>, each <b>+{roll!.bonus}</b> from Free&nbsp;Peoples dice in the box</> : null}. A die hits on <b>6+</b>{roll!.bonus ? <> — so a roll of <b>{Math.max(2, 6 - roll!.bonus)}+</b></> : null}.
         </div>
       )}
       {roll && !data.source && <RollLine roll={roll} />}

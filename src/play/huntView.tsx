@@ -71,7 +71,11 @@ export function RollLine({ roll }: { roll: HuntRoll }) {
   }
   return (
     <div style={huntLineStyle}>
-      <div>{roll.level} Hunt {roll.level === 1 ? 'die' : 'dice'}{roll.bonus ? ` · +${roll.bonus} box bonus` : ''} <span style={{ color: '#887' }}>(hits on 6+)</span></div>
+      {/* The to-hit number shown used to be a hard-coded "6+" even when the box bonus
+          (and Flocks of Crebain) had pushed the real threshold down to as little as 2+
+          — player report 5u3m2a5t1s1e4l3d. A die hits on 6 AFTER the bonus and a
+          natural 1 always misses, so the raw number needed is max(2, 6 − bonus). */}
+      <div>{roll.level} Hunt {roll.level === 1 ? 'die' : 'dice'}{roll.bonus ? ` · +${roll.bonus} box bonus` : ''} <span style={{ color: '#887' }}>(hits on {Math.max(2, 6 - roll.bonus)}+)</span></div>
       <div style={{ margin: '4px 0' }}>
         {roll.dice.map((n, i) => <Die key={i} n={n} bonus={roll.bonus} />)}
         {roll.rerolls.length > 0 && <span style={{ color: '#888', margin: '0 4px' }}>re-roll</span>}

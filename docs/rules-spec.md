@@ -42,7 +42,12 @@ base game, 2-player (Free Peoples = **FP**, Shadow = **SH**). Expansions and
   (p.11, p.44).
 - **Settlement control**: starts with the region's nation. Captured → opponent's
   Settlement Control marker (p.32). "Unconquered" = controlled by original owner
-  (p.11).
+  (p.11). A **Fortification is never captured and never carries a control marker** —
+  it is not a Settlement (p.10), so it is worth no VP and nothing flips when an enemy
+  Army walks in. `captureIfEnemySettlement` used to stamp one on Osgiliath / Fords of
+  Isen anyway, which drew a control diamond on the map over two regions that cannot be
+  controlled (player report 1c0k225r21493a52, 2026-09-10). The map now draws no
+  settlement marker on a Fortification at all. `probe-nazgul-muster-and-fortifications`.
 - **Army** = all friendly Army units + Leaders + Characters in one region (p.8,
   p.26). May mix nations. **Stacking limit 10** Army units per region (5 if
   besieged inside a Stronghold) (p.8, p.26, p.31).
@@ -398,9 +403,15 @@ settlements (p.26). The FIRST figure's type never constrains the second: the
 `recruitSecond` choice offers both Regulars and Leaders/Nazgûl, so placing a
 Leader first still allows a Regular second (player report — it used to lock you
 into a second Leader). Cannot recruit in enemy-controlled or besieged settlement, or
-beyond available figures. Nazgûl recruit only in Sauron Strongholds (p.26). Event
-cards may recruit even in not-yet-At-War nations or besieged Strongholds
-(card-specific) (p.27).
+beyond available figures. Nazgûl recruit only in Sauron Strongholds **and only once
+Sauron is At War** — p.26's At-War gate covers every recruited figure, and a Nazgûl is
+a Sauron Leader. `recruit()` had the gate; `canRecruitNazgul` was missing it, so a
+Muster die could fly in a Nazgûl on turn 1 (player report 1f2q456i4h3b470x,
+2026-09-10: "While Nazgûl aren't beholden to Diplomacy rules like Free Peoples
+Leaders, they still require the Sauron Nation to be At War"). Nazgûl remain exempt
+from the FP-Leaders-need-units rule, which names Free Peoples Leaders only.
+`probe-nazgul-muster-and-fortifications`. Event cards may recruit even in
+not-yet-At-War nations or besieged Strongholds (card-specific) (p.27).
 
 #### Event-card recruits at a besieged Stronghold (p.28, p.33)
 

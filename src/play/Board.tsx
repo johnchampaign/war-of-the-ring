@@ -303,13 +303,19 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
               </g>
             );
           })()}
-          {/* settlement marker — control-coloured diamond, the VP value, and a red
-              dashed ring while the Stronghold is under siege (defenders in the box).
+          {/* settlement marker — control-coloured diamond, plus a red dashed ring
+              while the Stronghold is under siege (defenders in the box). It used to
+              carry the Settlement's VP value as a small superscript; that number sat
+              beside the army badges' unit counts and was too easy to misread as one of
+              them (player report 6q2i02034p100p5p) — and a City is always 1 VP, a
+              Stronghold always 2, which the marker itself already tells you. A
+              FORTIFICATION (Osgiliath, Fords of Isen) gets no marker at all: it is not
+              a Settlement, so it can never be controlled (report 1c0k225r21493a52).
               Anchored INSIDE the region (pole of inaccessibility, offset from the army
               spot) — poly[0] is an arbitrary border vertex, which made markers read as
               belonging to the neighbouring region (player report: "a red diamond
               appeared in Druadan Forest"). */}
-          {e.def?.settlement && (() => {
+          {e.def?.settlement && e.def.settlement !== 'Fortification' && (() => {
             const anchor = e.layout?.anchor ?? e.poly[0]!;
             const m = clampToCrop({ x: anchor.x - 16, y: anchor.y - 14 });
             const mx = m.x, my = m.y;
@@ -319,7 +325,6 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
                 <rect x={mx - 5} y={my - 5} width={10} height={10}
                   fill={e.control === 'shadow' ? '#a83232' : e.control === 'fp' ? '#2f4f9e' : '#fff'}
                   stroke="#222" strokeWidth={1} transform={`rotate(45 ${mx} ${my})`} />
-                {e.def.vp > 0 && <text x={mx + 10} y={my - 5} fontSize={11} fontWeight="bold" fill="#ffe08a" stroke="#000" strokeWidth={0.7} paintOrder="stroke" textAnchor="middle">{e.def.vp}</text>}
               </g>
             );
           })()}
@@ -420,6 +425,23 @@ function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number;
   const label = `${nationName}: ${reg} Regular${reg === 1 ? '' : 's'}, ${elite} Elite${elite === 1 ? '' : 's'}` +
     (leaders ? `, ${leaders} Leader${leaders === 1 ? '' : 's'}` : '') + (nazgul ? `, ${nazgul} Nazgûl` : '') +
     (eliteLead ? ` (each Elite is also a Leader — Saruman)` : '');
+  // No Army units here — only Nazgûl (Shadow) or Leader figures (Free Peoples). The
+  // full pill drew as a BLANK coloured slab with a corner pip, which read as "an Army
+  // stands here" (player report 355c1o3d5f2x0z0m). Draw one counted token instead, in
+  // the same idiom as the character discs: Nazgûl black, Free Peoples Leaders cream.
+  if (reg + elite === 0 && special > 0) {
+    const naz = nazgul > 0;
+    const soloLabel = naz
+      ? `${nazgul} Nazgûl (no Army)`
+      : `${leaders} Free Peoples Leader${leaders === 1 ? '' : 's'} (no Army)`;
+    return (
+      <g transform={`translate(${x},${y}) scale(${s})`}>
+        <title>{soloLabel}</title>
+        <circle cx={0} cy={0} r={8.5} fill={naz ? '#141414' : '#f4e7c0'} stroke="#fff" strokeWidth={1.2} />
+        <text x={0} y={3.5} fontSize={11} fontWeight="bold" fill={naz ? '#fff' : '#222'} textAnchor="middle">{special}</text>
+      </g>
+    );
+  }
   return (
     <g transform={`translate(${x},${y}) scale(${s})`}>
       <title>{label}</title>
