@@ -33,6 +33,7 @@ function runRecover(state: GameState): void {
   state.flags.shadowUsedElvenRingThisTurn = false;
   state.flags.mouthMusterUsedThisTurn = false;
   state.flags.fpFreeCharEventThisTurn = false;
+  state.flags.fpFreeCharEventPrompt = false;
   // Draw 2 Event cards each (1 Character, 1 Strategy), trim hands to 6.
   for (const side of ['fp', 'shadow'] as Side[]) drawEventCards(state, side);
 }
@@ -77,7 +78,7 @@ function runActionRoll(state: GameState): void {
   const eyes = shadowRoll.filter((f) => f === 'eye').length;
   state.hunt.box += eyes;
   state.dice.shadow = shadowRoll.filter((f) => f !== 'eye');
-  log(state, null, 'roll', `Rolled FP ${state.dice.fp.length}, Shadow ${state.dice.shadow.length} (+${eyes} eyes, hunt box ${state.hunt.box})`,
+  log(state, null, 'roll', `Rolled Free Peoples ${state.dice.fp.length}, Shadow ${state.dice.shadow.length} (+${eyes} eyes, hunt box ${state.hunt.box})`,
     { fp: [...state.dice.fp], shadow: [...state.dice.shadow], eyes, huntBox: state.hunt.box });
 }
 
@@ -108,6 +109,15 @@ export function advance(state: GameState): void {
   for (;;) {
     if (state.winner) { state.phase = 'gameOver'; return; }
     if (state.pendingChoice) return;              // await the choice owner
+    // The Ents Awake's free Character-card play, offered immediately (card text)
+    // — after the card's own casualty choice, before the Shadow's next action.
+    if (state.flags.fpFreeCharEventPrompt) {
+      state.flags.fpFreeCharEventPrompt = false;
+      if (state.flags.fpFreeCharEventThisTurn && state.phase === 'actionResolution') {
+        state.pendingChoice = { owner: 'fp', kind: 'freeCharEvent', data: {} };
+        return;
+      }
+    }
     // Meriadoc / Peregrin, "Take Them Alive!": the Hobbit taken as a Hunt casualty
     // goes back on the board "as if he was just separated". Raised HERE, once the
     // Hunt (and any Reveal move it triggered) has finished resolving, so the

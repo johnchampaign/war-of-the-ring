@@ -203,7 +203,7 @@ function applyCombatEliminations(state: GameState, e: Force, enemy: RegionId, mo
       log(state, null, 'combat', `Black Breath: ${id} is eliminated at ${enemy}`);
     } else if (e.leaders > 0) {
       e.leaders -= 1;
-      log(state, null, 'combat', `Black Breath: an FP Leader is eliminated at ${enemy}`);
+      log(state, null, 'combat', `Black Breath: a Free Peoples Leader is eliminated at ${enemy}`);
     }
   }
   return hits;

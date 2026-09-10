@@ -1,4 +1,6 @@
 // Top status bar: turn / phase / seat, victory points, the Ring track, dice.
+import type { WotrAction } from '../adapter/wotrAction';
+import { describeAction } from './actionText';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GameState } from '../engine/types';
 import { charName, charDef, isMinion } from './charInfo';
@@ -194,8 +196,9 @@ function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (i
 }
 
 // Browsable discard piles (player report: "no way to see the discarded or used
-// cards"). Played/discarded cards are open information; hand-limit discards are
-// face down — shown as type-only. Newest first. Hover a name for the card.
+// cards"). Played/discarded cards are open information; cards discarded from a
+// hand (hand limit, Worn with Sorrow, the A Power too Great payment) are face
+// down — shown as type-only. Newest first. Hover a name for the card.
 const CARD_NAME = new Map<string, string>((eventCards as { cards: { id: string; name: string }[] }).cards.map((c) => [c.id, c.name]));
 function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: (id: string | null) => void }) {
   const [open, setOpen] = useState(false);
@@ -203,14 +206,14 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
   const rows: { side: string; label: string; id: string | null; played: number }[] = [];
   // Global play order comes from the log: each card play logs an entry with `.card`
   // (player report: discards should be sorted in order played, not grouped by player).
-  // Face-down (hand-limit) discards log no card id, so they can't be interleaved —
+  // Face-down discards log no public card id, so they can't be interleaved —
   // they sink to the oldest end, keeping their pile order.
   const playedAt = new Map<string, number>();
   (view.log ?? []).forEach((e, i) => { if (e.card) playedAt.set(e.card, i); });
   for (const side of ['fp', 'shadow'] as const) {
     const p = view.cards?.[side];
     if (!p) continue;
-    const sideName = side === 'fp' ? 'FP' : 'SH';
+    const sideName = side === 'fp' ? 'Free Peoples' : 'Shadow';
     const at = (id: string | null) => (id != null ? playedAt.get(id) ?? -1 : -1);
     for (const id of [...(p.discard?.character ?? []), ...(p.discard?.strategy ?? [])]) {
       rows.push({ side: sideName, label: CARD_NAME.get(id) ?? id, id, played: at(id) });
@@ -236,25 +239,25 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
           {rows.map((r, i) => (
             <div key={i} onMouseEnter={() => r.id && onHoverCard?.(r.id)}
               style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 6px', borderRadius: 5, cursor: r.id ? 'help' : 'default' }}>
-              <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: r.side === 'FP' ? '#7fa8e6' : '#e6857f' }}>{r.side}</span>
+              <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: r.side === 'Free Peoples' ? '#7fa8e6' : '#e6857f' }}>{r.side}</span>
               <span style={{ fontSize: 12, color: r.id ? '#e9e1cc' : '#998' }}>{r.label}</span>
             </div>
           ))}
-          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Hover a name for its card · hand-limit discards are face down (type only)</div>
+          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Hover a name for its card · cards discarded from a hand are face down (type only)</div>
         </div>
       )}
     </span>
   );
 }
 
-export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void; onHoverCard?: (id: string | null) => void; trailing?: React.ReactNode }) {
+export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elvenActions = [], onAction }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void; onHoverCard?: (id: string | null) => void; elvenActions?: WotrAction[]; onAction?: (a: WotrAction) => void; trailing?: React.ReactNode }) {
   const fs = view.fellowship;
   return (
     <div style={bar}>
       <span style={pill}>Turn {view.turn}</span>
       <span style={pill}>Phase: {view.phase}</span>
       <span style={pill}>You: {you === 'fp' ? 'Free Peoples' : you === 'shadow' ? 'Shadow' : '—'}</span>
-      <span style={{ ...pill, background: '#2f4f9e' }}>FP VP {view.victoryPoints.fp}</span>
+      <span style={{ ...pill, background: '#2f4f9e' }}>Free Peoples VP {view.victoryPoints.fp}</span>
       <span style={{ ...pill, background: '#a83232' }}>Shadow VP {view.victoryPoints.shadow}</span>
       <span style={{ ...pill, background: '#6b2d2d' }}>Corruption {fs.corruption}/12</span>
       <span style={pill}>Fellowship: {fs.mordor !== null ? `Mordor ${fs.mordor}/5` : `progress ${fs.progress}`}</span>
@@ -270,15 +273,34 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { v
       <FellowshipRoster guide={fs.guide} companions={fs.companions} onHoverChar={onHoverChar} />
       <OnMapRoster view={view} onHoverChar={onHoverChar} />
       <FallenRoster view={view} onHoverChar={onHoverChar} />
-      <span style={pill} title="Shadow dice in the Hunt Box (allocated + Eyes). FP dice added this turn (from moving the Fellowship) each add +1 to every Hunt die.">
-        Hunt box {view.hunt.box}{view.hunt.fpDiceInBox ? ` · +${view.hunt.fpDiceInBox} FP` : ''}
+      <span style={pill} title="Shadow dice in the Hunt Box (allocated + Eyes). Free Peoples dice added this turn (from moving the Fellowship) each add +1 to every Hunt die.">
+        Hunt box {view.hunt.box}{view.hunt.fpDiceInBox ? ` · +${view.hunt.fpDiceInBox} Free Peoples` : ''}
       </span>
       <span style={pill} title="Event cards in hand, split Character/Strategy. The opponent's cards are hidden, but their card BACKS (deck type) are open information on the tabletop.">
-        🂠 FP {handSplit(view.cards?.fp?.hand)} · Shadow {handSplit(view.cards?.shadow?.hand)}
+        🂠 Free Peoples {handSplit(view.cards?.fp?.hand)} · Shadow {handSplit(view.cards?.shadow?.hand)}
       </span>
       <DiscardBrowser view={view} onHoverCard={onHoverCard} />
       <HuntTilesBrowser view={view} />
-      <span style={pill} title="The three Elven Rings. Held by the Free Peoples; when the FP use one it flips to the Shadow (who may then use it once), after which it is spent.">
+      <ElvenRingsPill view={view} actions={elvenActions} onAction={onAction} />
+      {/* Dice are shown in the DiceTray (right column) — not duplicated here. */}
+      {trailing}
+    </div>
+  );
+}
+
+// The Elven Rings pill. Using a Ring is not an Action — it costs no die and precedes
+// the action — so its uses live here, behind the pill, instead of padding out the
+// action list (player report 5f1r022l2q5t0p0b: "a giant list in the Action panel").
+function ElvenRingsPill({ view, actions, onAction }: { view: GameState; actions: WotrAction[]; onAction?: (a: WotrAction) => void }) {
+  const [open, setOpen] = useState(false);
+  const { ref, flipStyle } = useEdgeFlip(open);
+  const usable = actions.length > 0 && !!onAction;
+  const counts = { fp: view.elvenRings.filter((r) => r === 'fp').length, shadow: view.elvenRings.filter((r) => r === 'shadow').length, used: view.elvenRings.filter((r) => r === 'used').length };
+  return (
+    <span style={{ position: 'relative' }}>
+      <button onClick={() => usable && setOpen((o) => !o)}
+        style={{ ...pill, border: usable ? '1px solid #7fd0ff' : 'none', cursor: usable ? 'pointer' : 'default', font: 'inherit', color: '#e9e1cc' }}
+        title={usable ? 'You may use an Elven Ring before your action — click to choose' : 'The three Elven Rings. Held by the Free Peoples; when they use one it flips to the Shadow (who may then use it once), after which it is spent.'}>
         Elven Rings:{' '}
         {view.elvenRings.map((r, i) => (
           <span key={i} style={{ fontSize: 14, margin: '0 1px', color: r === 'fp' ? '#7fd0ff' : r === 'shadow' ? '#e6857f' : '#6a6458' }}
@@ -286,13 +308,21 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { v
             {r === 'used' ? '◇' : '◈'}
           </span>
         ))}
-        <span style={{ color: '#998', marginLeft: 4 }}>
-          ({view.elvenRings.filter((r) => r === 'fp').length} FP · {view.elvenRings.filter((r) => r === 'shadow').length} SH · {view.elvenRings.filter((r) => r === 'used').length} used)
-        </span>
-      </span>
-      {/* Dice are shown in the DiceTray (right column) — not duplicated here. */}
-      {trailing}
-    </div>
+        <span style={{ color: '#998', marginLeft: 4 }}>({counts.fp} Free Peoples · {counts.shadow} Shadow · {counts.used} used)</span>
+        {usable && <span style={{ marginLeft: 4 }}>{open ? '▴' : '▾'}</span>}
+      </button>
+      {open && usable && (
+        <div ref={ref} style={{ ...roster, ...flipStyle }}>
+          <div style={{ color: '#b9b29c', fontSize: 11, marginBottom: 4 }}>Use a Ring (before your action, no die spent):</div>
+          {actions.map((a, i) => (
+            <button key={i} onClick={() => { setOpen(false); onAction?.(a); }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', margin: '2px 0', padding: '4px 8px', background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', borderRadius: 5, cursor: 'pointer', font: 'inherit', fontSize: 12 }}>
+              {describeAction(a)}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   );
 }
 

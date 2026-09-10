@@ -143,7 +143,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // Guide to separate, or Gollum's reveal-to-reduce — otherwise apply directly.
   if (fs.companions.length > 0 || huntReductionAvailable(state)) {
     state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, ...(opts.source ? { source: opts.source } : {}) } };
-    log(state, null, 'hunt', `Hunt damage ${damage} pending (FP decision)${opts.source ? ` — ${opts.source}` : ''}`);
+    log(state, null, 'hunt', `Hunt damage ${damage} pending (Free Peoples decision)${opts.source ? ` — ${opts.source}` : ''}`);
   } else {
     fs.corruption = Math.min(12, fs.corruption + damage);
     if (reveal) beginReveal(state);
@@ -242,7 +242,7 @@ export function extraHunt(state: GameState, opts: HuntOpts = {}): void {
   const { tile, ref } = drawTile(state);
   const isEye = tile.value === 'eye';
   const isFpSpecial = 'spec' in ref && ref.spec.startsWith('fp-');
-  if (isEye || isFpSpecial) { log(state, null, 'hunt', `${opts.source ?? 'Extra Hunt'}: tile discarded (Eye / FP special)`); return; }
+  if (isEye || isFpSpecial) { log(state, null, 'hunt', `${opts.source ?? 'Extra Hunt'}: tile discarded (Eye / Free Peoples special)`); return; }
   applyHuntTile(state, tile, Math.min(5, state.hunt.box), opts);
 }
 
@@ -506,17 +506,20 @@ function discardFpCharacterCard(state: GameState): void {
   if (handChars.length) {
     const pick = withRng(state, (rng) => rng.pick(handChars));
     cards.hand.splice(cards.hand.indexOf(pick), 1);
-    cards.discard.character.push(pick);
-    // Name the card and make it hoverable — "(fp-char-13)" read as a mystery
-    // disappearance (player report: "two cards in my hand disappeared").
-    log(state, null, 'event', `Worn with Sorrow and Toil: the Companion casualty costs the Free Peoples a Character card — ${EVENT_BY_ID[pick]?.name ?? pick} is discarded`);
+    // A card discarded from a HAND is discarded face down (p.22): the owner sees
+    // which one went (so a vanished card is not a mystery — player report: "two
+    // cards in my hand disappeared"), the opponent sees only that a Character card
+    // did (player report 3i3v4o2a2w5y3e15). Same treatment as hand-limit discards.
+    (cards.discardFaceDown ??= []).push(pick);
+    log(state, 'fp', 'event', `Worn with Sorrow and Toil: you discard ${EVENT_BY_ID[pick]?.name ?? pick} face down (the Companion casualty's price)`);
     state.log[state.log.length - 1]!.card = pick;
+    log(state, null, 'event', 'Worn with Sorrow and Toil: the Companion casualty costs the Free Peoples a Character card, discarded face down');
     return;
   }
   const ti = cards.table.findIndex(isChar);
   if (ti >= 0) {
     const id = cards.table.splice(ti, 1)[0]!;
     cards.discard.character.push(id);
-    log(state, null, 'event', `Worn with Sorrow and Toil: FP discards a tabled Character card (${id})`);
+    log(state, null, 'event', `Worn with Sorrow and Toil: the Free Peoples discard a tabled Character card (${EVENT_BY_ID[id]?.name ?? id})`);
   }
 }

@@ -461,7 +461,7 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     // region after the crowning (player report).
     delete state.characters.inPlay['strider'];
     state.characters.inPlay['aragorn'] = r;
-    log(state, null, 'muster', `Strider becomes Aragorn at ${r} — Will of the West die (+1 FP die next turn)`);
+    log(state, null, 'muster', `Strider becomes Aragorn at ${r} — Will of the West die (+1 Free Peoples die next turn)`);
     // p.35: a Companion capable of activating a Nation activates it when he "ends his
     // movement OR ENTERS PLAY in one of its Cities or Strongholds". Aragorn can only be
     // crowned at Minas Tirith, Dol Amroth or Pelargir, so the Almanac states it flatly:
@@ -483,7 +483,7 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     // no die, so the adapter's die-chip stamping has nothing to attach and the entry
     // showed only its green MUSTER kind tag — read by a player as "FP used a [M] to
     // bring GtW" when a Will of the West die had in fact been spent (p.21).
-    log(state, null, 'muster', `Gandalf the White enters at ${target} — Will of the West die (+1 FP die next turn)`);
+    log(state, null, 'muster', `Gandalf the White enters at ${target} — Will of the West die (+1 Free Peoples die next turn)`);
     activateOnCompanionLand(state, 'fp', ['gandalf-white'], target); // "…or enters play" (p.35) — an Elven Stronghold rouses the Elves
   }
   return true;

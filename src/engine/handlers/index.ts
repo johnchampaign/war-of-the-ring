@@ -910,7 +910,7 @@ register('sh-str-04', {
     const kept = state.dice.fp.filter((f) => f !== 'will');
     const removed = state.dice.fp.length - kept.length;
     state.dice.fp = kept;
-    log(state, null, 'event', `The Day Without Dawn: discarded ${removed} FP Will die/dice`);
+    log(state, null, 'event', `The Day Without Dawn: discarded ${removed} Free Peoples Will ${removed === 1 ? 'die' : 'dice'}`);
   },
 });
 
@@ -932,7 +932,13 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
         const gw = charRegion(state, 'gandalf-white');
         if (gw && (gw === 'fangorn' || REGIONS[gw]!.nation === 'rohan')) {
           state.flags.fpFreeCharEventThisTurn = true;
-          log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event without a die');
+          // "...you may IMMEDIATELY play another Character Event card" — the prompt is
+          // raised by advance() once the card's own casualty choice (if any) is
+          // settled, BEFORE the Shadow acts (player report 3n1e6o226t0f541b: the
+          // follow-up used to wait for the FP's next action, handing the Shadow a turn
+          // in between).
+          state.flags.fpFreeCharEventPrompt = true;
+          log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event now, without a die');
         }
       };
       // A BESIEGED Army is still IN its region (p.31) — only its units sit in the
@@ -1422,7 +1428,7 @@ register('sh-str-03', { // Denethor's Folly — eliminate an FP Leader in Minas 
   canPlay: (state) => !!state.regions['minas-tirith']?.besieged,
   apply(state) {
     const mt = state.regions['minas-tirith']!;
-    if (mt.leaders > 0) { mt.leaders -= 1; log(state, null, 'event', "Denethor's Folly: an FP Leader in Minas Tirith is eliminated"); }
+    if (mt.leaders > 0) { mt.leaders -= 1; log(state, null, 'event', "Denethor's Folly: a Free Peoples Leader in Minas Tirith is eliminated"); }
   },
 });
 

@@ -116,6 +116,7 @@ export type WotrAction =
   | { kind: 'bonusDraw'; deck: 'character' | 'strategy' | 'none' }
   // Gandalf the Grey Guide draw (FP): take the matching-deck card, or decline.
   | { kind: 'guideDraw'; draw: boolean }
+  | { kind: 'freeCharEvent'; decline: true } // The Ents Awake: decline the immediate free Character-card play
   // Witch-king Sorcerer draw (Shadow): take the matching-deck card after a combat card, or decline.
   | { kind: 'sorcererDraw'; draw: boolean }
   // Lure of the Ring (FP responds): take Corruption equal to the Companion's Level, or eliminate him.

@@ -202,6 +202,15 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'bonusDraw', deck: 'character' }, { kind: 'bonusDraw', deck: 'strategy' }, { kind: 'bonusDraw', deck: 'none' }];
       case 'guideDraw':
         return [{ kind: 'guideDraw', draw: true }, { kind: 'guideDraw', draw: false }];
+      case 'freeCharEvent': {
+        // The Ents Awake: play one Character Event card NOW without a die, or decline.
+        const acts: WotrAction[] = [];
+        for (const cardId of state.cards.fp.hand) {
+          if (EVENT_BY_ID[cardId]?.deck === 'Character' && canPlayCard(state, cardId, 'fp')) acts.push({ kind: 'playEvent', cardId });
+        }
+        acts.push({ kind: 'freeCharEvent', decline: true });
+        return acts;
+      }
       case 'sorcererDraw':
         return [{ kind: 'sorcererDraw', draw: true }, { kind: 'sorcererDraw', draw: false }];
       case 'lureChoice':
@@ -634,6 +643,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       drawOne(state, actor, action.deck, 'Event die'); passResolutionTurn(state, actor); break;
     case 'playEvent': {
       requirePhase(state, 'actionResolution');
+      // Answering the Ents Awake prompt with a card: the prompt is consumed here and
+      // the play below runs as the free one (fpFreeCharEventThisTurn is still set).
+      if (state.pendingChoice?.kind === 'freeCharEvent') {
+        if (actor !== 'fp') throw new Error('Not your choice');
+        state.pendingChoice = null;
+      }
       const hand = state.cards[actor].hand;
       const idx = hand.indexOf(action.cardId);
       if (idx < 0) throw new Error('Card not in hand');
@@ -758,6 +773,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (action.deck !== 'none') drawOne(state, actor, action.deck, 'Palantír of Orthanc');
       state.pendingChoice = null; break; // the turn already passed when the Event resolved
     }
+    case 'freeCharEvent': {
+      requireChoice(state, 'freeCharEvent', actor); // declined the Ents Awake free play — it is "immediately" or not at all
+      state.flags.fpFreeCharEventThisTurn = false;
+      log(state, null, 'event', 'The Ents Awake: the Free Peoples decline the free Character-card play');
+      state.pendingChoice = null; break;
+    }
     case 'guideDraw': {
       requireChoice(state, 'guideDraw', actor); // Gandalf the Grey Guide draw (or decline)
       if (action.draw) drawOne(state, 'fp', (state.pendingChoice!.data as { deck: 'character' | 'strategy' }).deck, 'Gandalf the Grey, Guide');
@@ -817,16 +838,18 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         if (si < 0 || ci2 < 0 || EVENT_BY_ID[action.discardStrategy!]?.deck !== 'Strategy' || EVENT_BY_ID[action.discardCharacter!]?.deck !== 'Character')
           throw new Error('Must discard one Strategy and one Character card from hand');
         if (!consumePreferred(state, 'shadow', [...new Set(state.dice.shadow)], action.die)) throw new Error('No Action die');
-        // Remove the two hand cards (indices re-found after each splice) to their piles.
+        // The two hand cards are discarded FACE DOWN (p.22: cards discarded from
+        // hand are face down) — the Free Peoples learn that a Strategy and a
+        // Character card were paid, not which (player report 3i3v4o2a2w5y3e15).
         hand.splice(hand.indexOf(action.discardStrategy!), 1);
-        state.cards.shadow.discard.strategy.push(action.discardStrategy!);
         hand.splice(hand.indexOf(action.discardCharacter!), 1);
-        state.cards.shadow.discard.character.push(action.discardCharacter!);
+        (state.cards.shadow.discardFaceDown ??= []).push(action.discardStrategy!, action.discardCharacter!);
+        log(state, 'shadow', 'event', `You discard ${EVENT_BY_ID[action.discardStrategy!]?.name ?? action.discardStrategy} and ${EVENT_BY_ID[action.discardCharacter!]?.name ?? action.discardCharacter} face down`);
         // The FP table card goes to the FP discard.
         const ft = state.cards.fp.table;
         ft.splice(ft.indexOf(action.cardId), 1);
         state.cards.fp.discard[EVENT_BY_ID[action.cardId]?.deck === 'Character' ? 'character' : 'strategy'].push(action.cardId);
-        log(state, null, 'event', `Shadow forces ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId} to be discarded (an Action die + two cards from hand)`);
+        log(state, null, 'event', `Shadow forces ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId} to be discarded (an Action die + a Strategy and a Character card from hand, face down)`);
         passResolutionTurn(state, actor); break;
       }
       if (actor !== 'fp') throw new Error('Only the Free Peoples can force-discard a card');

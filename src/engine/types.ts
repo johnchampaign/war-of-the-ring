@@ -308,6 +308,9 @@ export interface GameState {
     mouthMusterUsedThisTurn?: boolean;
     /** The Ents Awake: FP may play one Character Event card without an Action die. */
     fpFreeCharEventThisTurn?: boolean;
+    /** The Ents Awake just granted the free play: raise the FP's "play one now?"
+     *  prompt as soon as no other choice is pending (advance()). */
+    fpFreeCharEventPrompt?: boolean;
     /** The Fellowship's position has already been declared this turn. The
      *  declaration is a ONCE-PER-TURN act (rulebook p.39, Fellowship Phase), and
      *  so is the Corruption it heals in a Free Peoples City/Stronghold — without

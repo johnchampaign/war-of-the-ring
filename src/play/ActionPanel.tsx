@@ -11,7 +11,7 @@ import type { Side, DieFace } from '../engine/types';
 
 /** Small colour-coded chip marking which action die this action spends (matches the
  *  DiceTray colours), so the cost is visible at a glance. */
-function DieTag({ face }: { face: string }) {
+export function DieTag({ face }: { face: string }) {
   const f = FACE[face] ?? { label: face, bg: '#555' };
   return <span style={{ background: f.bg, color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{f.label}</span>;
 }
@@ -130,7 +130,10 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
   return (
     <div>
       <button disabled={disabled} onClick={onMain} {...hov} style={{ ...bstyle, display: 'flex', alignItems: 'center', gap: 8 }}>
-        {tagDie && <DieTag face={tagDie} />}
+        {/* An ambiguous action shows no die tag: the tag used to advertise the die the
+            old auto-pick would have spent, which no longer happens — the player
+            chooses (player report 5z0v4l0v36546w4k). */}
+        {tagDie && !ambiguous && <DieTag face={tagDie} />}
         {art && <img src={art} alt="" style={{ height: compact ? 30 : 48, borderRadius: 3, flexShrink: 0 }} />}
         <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
         {ambiguous && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cb8' }}>choose die ▸</span>}

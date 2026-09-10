@@ -47,6 +47,7 @@ const CHOICE_TITLE: Record<string, string> = {
   crebain: 'Flocks of Crebain — discard for +1 to all Hunt dice this roll?',
   bonusDraw: 'The Palantír of Orthanc — draw a card?',
   guideDraw: 'Gandalf the Grey — draw a card?',
+  freeCharEvent: 'The Ents Awake — play a Character Event card now, without a die?',
   sorcererDraw: 'The Witch-king’s Sorcery — draw a card?',
   lureChoice: 'Lure of the Ring — the Ring tempts a Companion',
   removeExcess: 'Over the 10-unit stacking limit — remove the excess',
@@ -70,7 +71,8 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
   // Simple event-card picks (Regular vs Elite etc.) surface HERE — as quiet panel
   // buttons they went unnoticed ("played Riders of Rohan and nothing happened").
   const evModal = eventChoiceInModal(actions);
-  const decisions = actions.filter((a) => isDecisionAction(a) || (evModal && a.kind === 'eventTarget'));
+  const freeCard = choice?.kind === 'freeCharEvent';
+  const decisions = actions.filter((a) => isDecisionAction(a) || (evModal && a.kind === 'eventTarget') || (freeCard && a.kind === 'playEvent'));
 
   // Show only when there's a live decision (battle in progress, or a decision the
   // viewer owns). If a battle is up but it's the opponent's call, show a wait note.

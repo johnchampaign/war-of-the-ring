@@ -1292,6 +1292,13 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     }
     case 'bonusDraw': // Shadow Palantír: take a Strategy card (army-building)
       return legal.find((a) => a.kind === 'bonusDraw' && a.deck === 'strategy') ?? legal[0]!;
+    case 'freeCharEvent': { // The Ents Awake: a free Character card — play the best one worth playing
+      const plays = legal.filter((a): a is Extract<WotrAction, { kind: 'playEvent' }> => a.kind === 'playEvent');
+      const tgt = campaignTarget(state, 'fp');
+      let best: WotrAction | null = null, bestS = 0;
+      for (const a of plays) { const sc = score(state, 'fp', a, tgt); if (sc > bestS) { bestS = sc; best = a; } }
+      return best ?? legal.find((a) => a.kind === 'freeCharEvent') ?? legal[0]!;
+    }
     case 'guideDraw': // Gandalf the Grey: take the free card
       return legal.find((a) => a.kind === 'guideDraw' && a.draw) ?? legal[0]!;
     case 'sorcererDraw': // Witch-king: take the free card

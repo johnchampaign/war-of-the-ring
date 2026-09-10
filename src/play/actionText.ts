@@ -177,7 +177,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
+const DECISION_KINDS = new Set(['freeCharEvent', 'playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);
 
 /** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)

@@ -14,7 +14,7 @@ import type { GameClientApi, LogTime } from '../online/gameClient';
 import type { GameState, RegionId, Side, DieFace } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import { Board } from './Board';
-import { ActionPanel } from './ActionPanel';
+import { ActionPanel, DieTag } from './ActionPanel';
 import { StatusBar } from './StatusBar';
 import { HandStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
@@ -77,6 +77,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [client, logLen]);
   // Drop a stale selection (die spent / new round) so we never filter to a die you no longer have.
   const activeDie = die && (g.view?.dice[me] ?? []).includes(die) ? die : null;
+  // A map/modal action that more than one die could pay for, clicked with no die
+  // pre-selected: ask, exactly as the panel's card/diplomacy buttons do. The old
+  // auto-pick chose for the player, and a Will of the West is NOT strictly better
+  // than the plain die (The Day Without Dawn discards Will dice only) — player
+  // report 690g3p1z041n6q1g.
+  const [diePick, setDiePick] = useState<WotrAction | null>(null);
   const charDieOk = !activeDie || activeDie === 'character' || activeDie === 'will';
   const [selected, setSelected] = useState<RegionId | null>(null);
   const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' | 'armyMove2' | 'eventMove' | 'holdBack' | 'advance'; base?: WotrAction } | null>(null);
@@ -147,6 +153,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   });
   const submit = useCallback(async (a: WotrAction) => {
     if (inFlight.current) return;
+    if (!activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die && g.view && g.you) {
+      const opts = dieOptions(a, g.view, g.you as Side);
+      if (opts.length > 1) { setDiePick(a); return; }
+    }
     inFlight.current = true;
     // Name the die the player actually picked (see DIE_BEARING).
     const withDie = (activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die)
@@ -462,7 +472,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     && !(a.kind === 'eventTarget' && eventChoiceInModal(g.legalActions))
     // Mustering is board-driven now (player report: the panel's per-Settlement recruit
     // buttons were tedious to page through): click a highlighted Settlement instead.
-    && a.kind !== 'recruitUnit');
+    && a.kind !== 'recruitUnit'
+    && !(a.kind === 'playEvent' && g.view?.pendingChoice?.kind === 'freeCharEvent') // the Ents Awake prompt owns these
+    // Elven Ring uses are not Actions (they cost no die and precede the action);
+    // they sit behind the status bar's Elven Rings pill (player report 5f1r022l2q5t0p0b).
+    && a.kind !== 'useElvenRing');
+  const elvenActions = g.yourTurn ? g.legalActions.filter((a) => a.kind === 'useElvenRing') : [];
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
     : panelActionsAll;
@@ -559,13 +574,23 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {/* The status bar lives at the top of the right column (may wrap to several
               rows). The Undo button rides along at its right end (after Elven Rings). */}
-          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} onHoverCard={onHoverCard} trailing={statusTrailing} />
+          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} onHoverCard={onHoverCard} trailing={statusTrailing} elvenActions={elvenActions} onAction={(a) => void submit(a)} />
           {/* Dice pool and Politics share one row when there's width; when the column
               is narrow they WRAP (Politics drops below the dice, each full-width) so the
               Politics reinforcement pips can't run off the right edge (report 6q0s). */}
           <div style={{ display: 'flex', flexWrap: 'wrap', flexShrink: 0, maxHeight: '42%', overflowY: 'auto', borderBottom: '1px solid #2a2418' }}>
             <div style={{ flex: '1 1 200px', minWidth: 0, overflow: 'auto' }}>
               <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn ? setDie : undefined} />
+              {diePick && g.view && g.you && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, margin: '4px 0', padding: '6px 9px', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, fontSize: 12, color: '#f0d090' }}>
+                  <span>Which die pays for “{describeAction(diePick)}”?</span>
+                  {dieOptions(diePick, g.view, g.you as Side).map((f) => (
+                    <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
+                      style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
+                  ))}
+                  <button onClick={() => setDiePick(null)} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #6a531f', color: '#cb8', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: 11 }}>cancel</button>
+                </div>
+              )}
             </div>
             <div style={{ flex: '1 1 270px', minWidth: 0, overflow: 'auto', borderLeft: '1px solid #2a2418' }}>
               <PoliticsPanel view={g.view} />

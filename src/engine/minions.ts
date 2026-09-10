@@ -65,6 +65,6 @@ export function bringMinion(state: GameState, minion: Minion, region: RegionId):
   state.characters.inPlay[minion] = region;
   state.regions[region]!.characters.push(minion);
   if (minion === 'witch-king') for (const n of FP_NATIONS as Nation[]) activateNation(state, n);
-  log(state, null, 'muster', `${minion} enters play at ${region}` + (minion === 'witch-king' ? ' (all FP Nations activated)' : ''));
+  log(state, null, 'muster', `${minion} enters play at ${region}` + (minion === 'witch-king' ? ' (all Free Peoples Nations activated)' : ''));
   return true;
 }
