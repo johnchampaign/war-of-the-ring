@@ -28,6 +28,7 @@ export const BOARD_PATH: Record<string, string> = {
   recruitUnit: 'click a highlighted Settlement, then the bundle in the muster menu',
   bringMinion: 'click a highlighted region, then the Minion in the muster menu',
   declareFellowship: 'click a highlighted region to declare the Fellowship there',
+  placeGandalf: 'click a highlighted region to place Gandalf the White there',
   revealMove: 'click a highlighted region to place the revealed Ring-bearers',
   separateMove: 'click a highlighted region to place the separated Companion(s)',
   eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves via click-army-then-destination, companion placements via the highlighted region; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
@@ -55,6 +56,8 @@ export function panelShowsAction(a: WotrAction, legal: WotrAction[], view: GameS
     // board (banner + highlighted regions), NOT a button — and revealMove has no
     // readable label, so it would otherwise show as raw JSON in the list.
     && a.kind !== 'revealMove' && a.kind !== 'declareFellowship'
+    // Gandalf the White's entry region is a board click too (player report 2k456c3n0k512v52).
+    && a.kind !== 'placeGandalf'
     // The second army move (armyMove2 with from/to) is a board click now; keep only the
     // "no second move" (done) option as a button.
     && !(a.kind === 'armyMove2' && !!a.from)

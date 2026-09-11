@@ -569,7 +569,7 @@ register('sh-str-11', {
 });
 register('sh-str-19', { // Shadows on the Misty Mountains: 2 Sauron + 1 Nazgûl in Mount Gram or Moria
   canPlay: (s) => ['mount-gram', 'moria'].some((r) => recruitable(s, 'shadow', r)) && (s.reinforcements.sauron.regular > 0 || (s.reinforcements.sauron.nazgul ?? 0) > 0),
-  targets: (s) => ['mount-gram', 'moria'].filter((r) => recruitable(s, 'shadow', r)).map((region) => ({ region })),
+  targets: (s) => ['mount-gram', 'moria'].filter((r) => recruitable(s, 'shadow', r)).map((region) => ({ region, mode: 'recruit' as const })),
   applyTarget: (s, _side, t) => {
     placeForce(s, 'sauron', t.region!, { regular: 2 });
     const k = Math.min(1, s.reinforcements.sauron.nazgul ?? 0);
@@ -579,7 +579,7 @@ register('sh-str-19', { // Shadows on the Misty Mountains: 2 Sauron + 1 Nazgûl 
 register('sh-str-17', { // Many Kings: 2 S&E Regulars in each of three different S&E Settlements
   repeat: 3,
   canPlay: (s) => s.reinforcements.southrons.regular > 0 && seSettlements(s).length > 0,
-  targets: (s, _side, applied = []) => { const used = new Set(applied.map((a) => a.region)); return seSettlements(s).filter((r) => !used.has(r)).map((region) => ({ region })); },
+  targets: (s, _side, applied = []) => { const used = new Set(applied.map((a) => a.region)); return seSettlements(s).filter((r) => !used.has(r)).map((region) => ({ region, mode: 'recruit' as const })); },
   applyTarget: (s, _side, t) => placeForce(s, 'southrons', t.region!, { regular: 2 }),
 });
 function rageTargets(s: GameState): EventTarget[] {
@@ -833,7 +833,7 @@ const pitsStrongholds = (state: GameState): string[] => Object.keys(state.region
 register('sh-str-24', {
   repeat: 3,
   canPlay: (state) => isAtWar(state, 'sauron') && (state.reinforcements.sauron as { regular: number }).regular > 0 && pitsStrongholds(state).length > 0,
-  targets: (state, _side, applied = []) => { const used = new Set(applied.map((a) => a.region)); return pitsStrongholds(state).filter((r) => !used.has(r)).map((region) => ({ region })); },
+  targets: (state, _side, applied = []) => { const used = new Set(applied.map((a) => a.region)); return pitsStrongholds(state).filter((r) => !used.has(r)).map((region) => ({ region, mode: 'recruit' as const })); },
   applyTarget: (state, _side, t) => { recruit(state, 'sauron', t.region!, 2, 0, { ignoreAtWar: true }); },
 });
 // Musterings of Long-planned War: 5 Southrons in Gorgoroth + 5 Sauron in Nurn.
@@ -1839,7 +1839,7 @@ const EAST_EDGE_SE = ['far-harad', 'khand', 'south-rhun'];
 register('sh-str-21', {
   canPlay: (state) => isAtWar(state, 'southrons') && state.reinforcements.southrons.regular > 0
     && EAST_EDGE_SE.some((id) => armySide(state, id) !== 'fp'),
-  targets: (state) => EAST_EDGE_SE.filter((id) => armySide(state, id) !== 'fp').map((region) => ({ region })),
+  targets: (state) => EAST_EDGE_SE.filter((id) => armySide(state, id) !== 'fp').map((region) => ({ region, mode: 'recruit' as const })),
   applyTarget(state, _side, t) { placeUnits(state, 'southrons', t.region!, 5, 0); log(state, null, 'event', `Hordes From the East muster in ${t.region}`); },
 });
 

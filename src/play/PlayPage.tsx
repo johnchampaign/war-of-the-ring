@@ -245,7 +245,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Board-click placement of the Fellowship figure: declaring it (Fellowship phase) or
   // choosing where it moves when revealed by the Hunt (revealMove choice).
   const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' | 'separateMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove' || a.kind === 'separateMove'), [g.legalActions]);
-  const declareTargets = useMemo(() => new Set(placeActs.map((a) => a.target).filter((t): t is RegionId => !!t)), [placeActs]);
+  // Gandalf the White's entry: a board click on one of the card's candidate regions.
+  const gandalfActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'placeGandalf' }> => a.kind === 'placeGandalf'), [g.legalActions]);
+  const isPlaceGandalf = gandalfActs.length > 0;
+  const declareTargets = useMemo(() => new Set([...placeActs.map((a) => a.target).filter((t): t is RegionId => !!t), ...gandalfActs.map((a) => a.region)]), [placeActs, gandalfActs]);
   const isReveal = g.view?.pendingChoice?.kind === 'revealMove';
   const isSeparateMove = g.view?.pendingChoice?.kind === 'separateMove';
   // Continuing a Character-die move (RAW: one die moves all eligible characters).
@@ -399,7 +402,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // Placing the Fellowship figure (declare, or move-on-reveal): click a highlighted region.
     if (declareTargets.has(id)) {
-      const a = placeActs.find((x) => x.target === id);
+      const a = placeActs.find((x) => x.target === id) ?? gandalfActs.find((x) => x.region === id);
       if (a) { clearMove(); void submit(a); }
       return;
     }
@@ -490,7 +493,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardRecruit || isCardMove || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardRecruit || isCardMove || isPlaceGandalf || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 

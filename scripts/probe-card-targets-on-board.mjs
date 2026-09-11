@@ -28,6 +28,9 @@ const move = { kind: 'eventTarget', card: 'sh-str-11', from: 'morannon', to: 'da
 const cardAttack = { kind: 'eventTarget', card: 'sh-char-23', from: 'dagorlad', to: 'osgiliath', mode: 'attack' };
 const assault = { kind: 'eventTarget', card: 'sh-char-14', from: 'minas-tirith', to: 'minas-tirith', mode: 'attack' };
 const strike = { kind: 'eventTarget', card: 'sh-char-19', region: 'osgiliath' };
+// A region-only pick the HANDLER flags as a recruitment (Shadows on the Misty
+// Mountains, Hordes From the East, Many Kings, Pits of Mordor).
+const regionRecruit = { kind: 'eventTarget', card: 'sh-str-19', region: 'moria', mode: 'recruit' };
 const sep = { kind: 'eventTarget', card: 'fp-str-11', region: 'lorien', companion: 'legolas' };
 check('a card recruit is a board muster', isCardRecruitTarget(recruit) && !panelShowsAction(recruit, [recruit, done], view));
 check('...and does not open the modal', !eventChoiceInModal([recruit, done]));
@@ -36,6 +39,7 @@ check('a card army move is a board move', isCardArmyMoveTarget(move) && !panelSh
 check('a card attack with a destination is a board move too', isCardArmyMoveTarget(cardAttack) && !panelShowsAction(cardAttack, [cardAttack], view));
 check('a card siege ASSAULT (from === to) is neither — it keeps its button', !isCardArmyMoveTarget(assault) && panelShowsAction(assault, [assault], view));
 check('a region-only pick (Dreadful Spells) is still a modal pick', !isCardRecruitTarget(strike) && eventChoiceInModal([strike]));
+check('a region-only pick FLAGGED as a recruit is a board muster', isCardRecruitTarget(regionRecruit) && !panelShowsAction(regionRecruit, [regionRecruit], view) && !eventChoiceInModal([regionRecruit]));
 check('a companion placement is neither (it has its own board path)', !isCardRecruitTarget(sep) && !isCardArmyMoveTarget(sep));
 
 console.log('\n=== real games: cards do produce these shapes, and nothing is stranded ===');

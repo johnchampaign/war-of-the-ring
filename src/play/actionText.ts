@@ -215,8 +215,12 @@ const simpleEventTarget = (a: WotrAction): boolean =>
  *  take the board's muster flow — click the highlighted Settlement, pick the bundle
  *  — exactly like a Muster die (player report 2s3p6y0x000k6b70). */
 export const isCardRecruitTarget = (a: WotrAction): boolean =>
-  a.kind === 'eventTarget' && !!a.region && (!!a.nation || !!a.figure) && !a.companion && !a.from && !a.to && !a.done && !a.eye
-  && (a.mode === undefined || a.mode === 'recruit');
+  a.kind === 'eventTarget' && !!a.region && !a.companion && !a.from && !a.to && !a.done && !a.eye
+  // Either the target names what is recruited (nation/figure), or the handler flags
+  // the pick as a recruitment — region-only cards like Shadows on the Misty Mountains,
+  // Hordes From the East, Many Kings and Pits of Mordor (player reports
+  // 4n1w2h4c0u635o1g, 1f595h0r5u0o273v).
+  && ((a.mode === 'recruit') || ((!!a.nation || !!a.figure) && a.mode === undefined));
 /** A card ARMY MOVE / ATTACK target with a real destination (Shadows Gather, The
  *  Shadow Lengthens, Corsairs, Grond's march, ...): takes the board's move flow —
  *  click the army, then the highlighted destination (same report). A from === to
