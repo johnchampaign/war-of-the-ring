@@ -104,7 +104,7 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
         title="Browse the Fellowship — hover a name to see the card">
-        {companions.length} companion{companions.length === 1 ? '' : 's'} {open ? '▴' : '▾'}
+        Fellowship {companions.length} {open ? '▴' : '▾'}
       </button>
       {open && (
         <div ref={ref} style={{ ...roster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>

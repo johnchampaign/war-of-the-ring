@@ -38,7 +38,7 @@ import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial } from './panelFilter';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { separationActivates } from '../engine/fellowship';
-import { REGIONS, levelOf } from '../engine/data';
+import { REGIONS, levelOf, sideOfNation } from '../engine/data';
 import { charName } from './charInfo';
 
 const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ? 'Shadow' : s);
@@ -473,8 +473,17 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         // can't be mustered in (player report: "I can't muster in Lorien while it is
         // empty"). Every blocker — the Political Track, an enemy Control marker, an
         // empty reinforcement pool — is otherwise invisible or easy to misread.
+        //
+        // The FIRST thing to check is whether a muster is even affordable. Leading with
+        // "Rohan is not At War, so it cannot muster" when the player holds no Muster die
+        // implies that fixing the Political Track would have let the click through
+        // (player report 512k2t582f1e2b3r). The die comes first, then the region rule.
+        const def = REGIONS[id];
+        const yours = !!def?.settlement && !!def.nation && sideOfNation(def.nation) === g.you;
         const reason = musterBlockReason(g.view, id, g.you as Side);
-        if (reason) setBlockMsg(reason);
+        if (yours && !(g.view.dice[g.you as Side] ?? []).some((f) => f === 'muster' || f === 'armyMuster' || f === 'will')) {
+          setBlockMsg(`You have no die left that can Muster — that takes a Muster, an Army/Muster or a Will of the West die (p.23).${reason ? ` (Even with one: ${reason})` : ''}`);
+        } else if (reason) setBlockMsg(reason);
       }
     }
     clearMove();

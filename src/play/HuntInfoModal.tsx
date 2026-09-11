@@ -26,7 +26,7 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
         <div style={{ fontSize: 14, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>⊙ The Hunt for the Ring</div>
 
         <div style={box1}>
-          <Row k="Hunt Box" v={`${box} die${box === 1 ? '' : 'ce'}`} note={onMordor ? 'on the Mordor Track — see below' : `the Shadow rolls ${dice} (max 5) when the Fellowship moves`} />
+          <Row k="Hunt Box" v={`${box} ${box === 1 ? 'die' : 'dice'}`} note={onMordor ? 'on the Mordor Track — see below' : `the Shadow rolls ${dice} (max 5) when the Fellowship moves`} />
           {bonus > 0 && <Row k="Box bonus" v={`+${bonus}`} note="Free Peoples dice in the box — added to every Hunt die" />}
           <Row k="Progress" v={onMordor ? `Mordor ${fs.mordor}/5` : `${fs.progress} step${fs.progress === 1 ? '' : 's'}`} />
           <Row k="Fellowship" v={fs.hidden ? '🙈 Hidden' : '🔴 Revealed'} note={fs.hidden ? 'free to move' : 'must hide (Character die) before moving again'} />
