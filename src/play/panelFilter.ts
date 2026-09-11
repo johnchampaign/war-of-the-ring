@@ -35,7 +35,7 @@ export const BOARD_PATH: Record<string, string> = {
   separateMove: 'click a highlighted region to place the separated Companion(s)',
   eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves via click-army-then-destination, companion placements via the highlighted region; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
   useElvenRing: 'the Elven Rings pill in the status bar',
-  playEvent: 'the Ents Awake prompt owns the one free Character-card play',
+  playEvent: 'click the card in your hand (the Ents Awake prompt owns its one free Character-card play)',
 };
 
 /** Whether the right-hand action list shows `a`.
@@ -74,7 +74,10 @@ export function panelShowsAction(a: WotrAction, legal: WotrAction[], view: GameS
     // Mustering is board-driven (player report: the per-Settlement recruit buttons were
     // tedious to page through): click a highlighted Settlement instead.
     && a.kind !== 'recruitUnit'
-    && !(a.kind === 'playEvent' && view.pendingChoice?.kind === 'freeCharEvent') // the Ents Awake prompt owns these
+    // Playing an Event card is done by clicking it in the HAND — that is how card
+    // games work, and the list was half "Play …" buttons (player report
+    // 4b4f6o3p5v066c5o). The Ents Awake free play still belongs to its own prompt.
+    && a.kind !== 'playEvent'
     // Elven Ring uses are not Actions (they cost no die and precede the action); they
     // sit behind the status bar's Elven Rings pill (player report 5f1r022l2q5t0p0b).
     && a.kind !== 'useElvenRing'

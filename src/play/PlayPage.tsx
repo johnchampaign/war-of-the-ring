@@ -249,6 +249,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Board-click placement of the Fellowship figure: declaring it (Fellowship phase) or
   // choosing where it moves when revealed by the Hunt (revealMove choice).
   const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' | 'separateMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove' || a.kind === 'separateMove'), [g.legalActions]);
+  // Playing an Event card is clicking it in your hand (player report
+  // 4b4f6o3p5v066c5o). The die choice rides along unchanged: submit() settles the
+  // trivial Army/Muster case itself and asks for anything else.
+  const playableCards = useMemo(() => {
+    const m = new Map<string, WotrAction>();
+    if (g.yourTurn) for (const a of g.legalActions) if (a.kind === 'playEvent' && !m.has(a.cardId)) m.set(a.cardId, a);
+    return m;
+  }, [g.legalActions, g.yourTurn]);
   // Retreat destinations are board clicks (player report 0f3003342g666741): the
   // battle modal asks Retreat-or-stand, the MAP answers "to where".
   const retreatActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'retreatTo' | 'preCombatRetreat' }> => a.kind === 'retreatTo' || a.kind === 'preCombatRetreat'), [g.legalActions]);
@@ -697,7 +705,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               )}
               {/* Hand (top) + in-play (played) cards (below) — sizes to its content. */}
               <div style={{ flexShrink: 0, borderTop: '1px solid #2a2418' }}>
-                <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} />
+                <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} playable={playableCards} onPlay={(a) => void submit(a)} busy={busy} />
               </div>
             </div>
             {/* The enlarge/inspect area — fills the whole right side of the lower area

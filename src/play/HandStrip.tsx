@@ -5,12 +5,19 @@
 import { useState } from 'react';
 import { useCardArt } from './artCache';
 import type { GameState, Side } from '../engine/types';
+import type { WotrAction } from '../adapter/wotrAction';
 import eventCards from '../../assets/event-cards.json';
 import { CardTypeBadge } from './cardTypeBadge';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
 
-export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Side; onHoverCard?: (id: string | null) => void }) {
+export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
+  view: GameState; you: Side; onHoverCard?: (id: string | null) => void;
+  /** The legal "play this card" action per card id, when it can be played right now.
+   *  Playing a card IS clicking it in your hand — the way every card game works, and
+   *  it gives the action list back a lot of room (player report 4b4f6o3p5v066c5o). */
+  playable?: Map<string, WotrAction>; onPlay?: (a: WotrAction) => void; busy?: boolean;
+}) {
   const hand = view.cards?.[you]?.hand ?? [];
   // "Play on the table" cards are face-up / public for both sides (Mithril Coat,
   // Wizard's Staff, persistent effects, special-tile cards, …).
@@ -24,7 +31,11 @@ export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Si
       {/* Hand on top, played ("in play") cards underneath. */}
       <div style={wrap}>
         <span style={label}>Hand ({hand.length}):</span>
-        {hand.map((id, i) => <HandCard key={i} id={id} onZoom={() => !id.startsWith('hidden') && setZoom(id)} onHover={onHoverCard} />)}
+        {hand.map((id, i) => {
+          const act = playable?.get(id) ?? null;
+          return <HandCard key={i} id={id} onZoom={() => !id.startsWith('hidden') && setZoom(id)} onHover={onHoverCard}
+            play={act && onPlay && !busy ? () => onPlay(act) : null} />;
+        })}
       </div>
       {tabled.length > 0 && (
         <div style={wrap}>
@@ -32,28 +43,50 @@ export function HandStrip({ view, you, onHoverCard }: { view: GameState; you: Si
           {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
         </div>
       )}
-      <div style={{ fontSize: 10, color: '#776', padding: '2px 8px 4px', flexShrink: 0 }}>hover to preview · click to enlarge</div>
+      <div style={{ fontSize: 10, color: '#776', padding: '2px 8px 4px', flexShrink: 0 }}>
+        {playable && playable.size > 0
+          ? <>hover to preview · <b style={{ color: '#9f9' }}>click a lit card to play it</b> · 🔍 to enlarge</>
+          : <>hover to preview · click to enlarge</>}
+      </div>
       {zoom && <CardZoom id={zoom} onClose={() => setZoom(null)} />}
     </div>
   );
 }
 
-function HandCard({ id, onZoom, onHover }: { id: string; onZoom: () => void; onHover?: (id: string | null) => void }) {
+/** The magnifier corner button: on a PLAYABLE card the plain click plays it, so
+ *  enlarging needs its own target. On an unplayable card the whole card still
+ *  enlarges, exactly as before. */
+function ZoomDot({ onZoom }: { onZoom: () => void }) {
+  return (
+    <button onClick={(e) => { e.stopPropagation(); onZoom(); }} title="Enlarge this card"
+      style={{ position: 'absolute', bottom: 1, right: 1, width: 17, height: 17, lineHeight: '15px', textAlign: 'center', padding: 0, fontSize: 10,
+        borderRadius: 4, cursor: 'zoom-in', background: 'rgba(12,10,7,0.82)', color: '#e9e1cc', border: '1px solid #6a5a3a' }}>🔍</button>
+  );
+}
+
+function HandCard({ id, onZoom, onHover, play }: { id: string; onZoom: () => void; onHover?: (id: string | null) => void; play?: (() => void) | null }) {
   const art = useCardArt(id.startsWith('hidden') ? null : id);
   const def = CARD.get(id);
   const hov = { onMouseEnter: () => onHover?.(id), onMouseLeave: () => onHover?.(null) };
+  // A playable card is lit and plays on click; everything else keeps click-to-enlarge.
+  const lit: React.CSSProperties = play
+    ? { outline: '2px solid #6ea84f', outlineOffset: 1, borderRadius: 5, boxShadow: '0 0 8px rgba(110,168,79,0.55)' }
+    : {};
+  const tip = play ? `${def?.name ?? id} — click to PLAY` : `${def?.name ?? id} — click to enlarge`;
   if (art) return (
     // Art card with a small play-type badge overlaid top-left, so the die-type is
     // readable at a glance even on the image (Ira #3).
-    <div style={{ position: 'relative', flexShrink: 0 }} {...hov}>
-      <img src={art} alt={def?.name ?? id} title={`${def?.name ?? id} — click to enlarge`} style={img} onClick={onZoom} />
+    <div style={{ position: 'relative', flexShrink: 0, ...lit }} {...hov}>
+      <img src={art} alt={def?.name ?? id} title={tip} style={{ ...img, cursor: play ? 'pointer' : 'zoom-in' }} onClick={play ?? onZoom} />
+      {play && <ZoomDot onZoom={onZoom} />}
       {!id.startsWith('hidden') && def && <CardTypeBadge deck={def.deck} via={def.playableVia} small style={{ position: 'absolute', top: 2, left: 2, boxShadow: '0 1px 3px #000' }} />}
     </div>
   );
   // Text-card placeholder.
   const side = def?.side === 'Shadow' ? '#5a2222' : '#1f3a5a';
   return (
-    <div style={{ ...textCard, background: side, cursor: 'pointer' }} onClick={onZoom} title={def?.eventText ?? ''} {...hov}>
+    <div style={{ ...textCard, background: side, cursor: play ? 'pointer' : 'zoom-in', position: 'relative', ...lit }} onClick={play ?? onZoom} title={play ? tip : (def?.eventText ?? '')} {...hov}>
+      {play && <ZoomDot onZoom={onZoom} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
         <CardTypeBadge deck={def?.deck} via={def?.playableVia} small />
         <span style={{ fontSize: 9, color: '#ccb' }}>init {def?.initiative ?? '–'}</span>
