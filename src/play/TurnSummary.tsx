@@ -49,7 +49,7 @@ export function TurnSummary({ view, yourTurn, you, onOpenLog, hold }: { view: Ga
       <div style={backdrop} onClick={dismiss}>
         <div style={card} onClick={(e) => e.stopPropagation()}>
           <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>
-            While you waited, {oppName} took {oppActions.length} action{oppActions.length === 1 ? '' : 's'}
+            While you waited — what {oppName} did
           </div>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, textAlign: 'left', maxHeight: '55vh', overflowY: 'auto' }}>
             {items.map((e, i) => (

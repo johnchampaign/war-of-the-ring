@@ -15,12 +15,18 @@ export function NoticePopup({ view, seen, onSeen }: { view: GameState; seen: num
   if (!noticePending(view, seen)) return null;
   const maxSeq = Math.max(...fresh.map((n) => n.seq));
   const dismiss = () => onSeen(maxSeq);
+  // Each notice carries its own heading; the popup used to hardcode "A Nation is
+  // Roused", so Athelas's healing roll announced itself as a nation going to war
+  // (player report 1q205c2371642z0l). Mixed batches — and pre-title saved games —
+  // fall back to a neutral heading.
+  const titles = new Set(fresh.map((n) => n.title ?? ''));
+  const heading = titles.size === 1 ? ([...titles][0] || 'Take Note') : 'Take Note';
 
   return (
     <div style={backdrop} onClick={dismiss}>
       <div style={card} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>
-          ⚑ A Nation is Roused
+          ⚑ {heading}
         </div>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, textAlign: 'left' }}>
           {fresh.map((n) => (

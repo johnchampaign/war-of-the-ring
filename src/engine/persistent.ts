@@ -72,8 +72,20 @@ export const FP_FORCE_DISCARD_CARDS = ['sh-char-21', 'sh-str-03'];
 /** FP table cards the SHADOW can force-discard, per their printed italic clause
  *  (card art, verbatim): "The Shadow player can force [this card] to be discarded
  *  by using any one Action die result and discarding one Army Event card and one
- *  Character Event card from his hand." ("Army Event card" is the card's legacy
- *  deck name — the 2nd-edition Shadow decks are Character and Strategy.) */
+ *  Character Event card from his hand."
+ *
+ *  Two different axes get called the same words, so to be exact (player report
+ *  490t0d5t3u1i3o4a): a card's TYPE is the die icon printed on it — Character, Army
+ *  or Muster (rulebook, the Action die faces: "Play an Army Event card from your
+ *  hand"). A card's CATEGORY is the deck it came from, and BOTH players hold exactly
+ *  two: "his Strategy deck (represented graphically by an army banner) and his
+ *  Character deck (represented graphically by a sword)" (rulebook, Event Decks).
+ *  Strategy is the category over the Army and Muster types; a card back shows only
+ *  the category, which is why discards, draws and Combat-card plays are named by
+ *  category while a play from hand is named by type.
+ *
+ *  NOTE: this clause names the TYPE ("Army Event card"), but the check below accepts
+ *  any Strategy-deck card, so a Muster-type card passes too. Flagged for review. */
 export const SH_FORCE_DISCARD_CARDS = ['fp-str-02', 'fp-str-03'];
 /** The regions the card bars the Shadow from (what a discard would unlock). */
 export const SH_FORCE_DISCARD_UNLOCKS: Record<string, RegionId[]> = {

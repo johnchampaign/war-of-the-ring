@@ -304,7 +304,7 @@ register('fp-char-09', { // Athelas
     const healed = dice.filter((d) => d >= need).length;
     heal(state, healed);
     // Surface the roll (the report: "Athelas should show the rolls in a popup").
-    notify(state, `Athelas — rolled [${dice.join(', ')}], healing on ${need}+${guideIsStrider ? ' (Strider guides)' : ''}: healed ${healed} Corruption (now ${state.fellowship.corruption}/12).`);
+    notify(state, `Rolled [${dice.join(', ')}], healing on ${need}+${guideIsStrider ? ' (Strider guides)' : ''}: healed ${healed} Corruption (now ${state.fellowship.corruption}/12).`, 'Athelas');
     log(state, null, 'event', `Athelas heals ${healed} [${dice.join(',')}]`);
   },
 });
@@ -1460,7 +1460,7 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
       activateNation(state, nation, { viaCompanion: true }); advancePolitical(state, nation, 99);
       const nm = nation.charAt(0).toUpperCase() + nation.slice(1);
       log(state, null, 'event', `A Companion rouses the ${nm} to War`);
-      notify(state, `A Companion in ${trigger.map((r) => REGIONS[r]?.name ?? r).join(' / ')} rouses the ${nm} to war!`);
+      notify(state, `A Companion in ${trigger.map((r) => REGIONS[r]?.name ?? r).join(' / ')} rouses the ${nm} to war!`, 'A Nation is Roused');
     }
   };
   // The trailing GROUP being assembled: consecutive picks (companion, no region, not a
@@ -1678,7 +1678,7 @@ register('fp-char-17', separateViaCard({
       activateNation(state, 'dwarves', { viaCompanion: true }); activateNation(state, 'north', { viaCompanion: true });
       advancePolitical(state, 'dwarves', 1); advancePolitical(state, 'elves', 1); advancePolitical(state, 'north', 1);
       log(state, null, 'event', 'There and Back Again rouses the Dwarves/Elves/North');
-      notify(state, 'There and Back Again rouses the Dwarves, Elves and North to war!');
+      notify(state, 'There and Back Again rouses the Dwarves, Elves and North to war!', 'A Nation is Roused');
     }
   },
 }));

@@ -71,6 +71,18 @@ function sarumanMusterOptions(state: GameState): WotrAction[] {
   if (canSarumanUpgrade(state)) out.push({ kind: 'sarumanMuster', mode: 'upgrade' });
   return out;
 }
+// Die-face names for the log. The face ids are engine data ('armyMuster', 'will');
+// a log line reading "a armyMuster die becomes a character die" is the id leaking
+// through (player report 3m1j735y4d6x3i42). The display layer prettifies REGION and
+// CARD ids, but a face id is neither, so the name is built here at the source.
+const DIE_FACE_NAME: Record<string, string> = {
+  character: 'Character', army: 'Army', muster: 'Muster', armyMuster: 'Army/Muster',
+  event: 'Event', will: 'Will of the West', eye: 'Eye',
+};
+const aDieFace = (f: string): string => {
+  const n = DIE_FACE_NAME[f] ?? f;
+  return `${/^[AEIOU]/.test(n) ? 'an' : 'a'} ${n}`;
+};
 // Elven Rings (rules p.21): once per turn a player may change one of their unused
 // Action dice to another face. FP can't change a die TO Will; SH can't change a die
 // that's already an Eye (changing TO an Eye sends that die straight to the Hunt Box).
@@ -505,6 +517,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
 
   // Snapshot so we can tag this action's log entries with the die it spent (Ira #9).
   const usedBefore = state.usedDice?.[actor]?.length ?? 0;
+  // ...and the die a still-open choice is carrying, so a continuation step (an Army
+  // die's second move) inherits the badge of the die that paid for the whole action.
+  const carriedDie = state.pendingChoice?.owner === actor ? state.pendingChoice.die : undefined;
   // seq-based (not index-based): appendGameLog caps the log, which would shift indices.
   const seqBefore = state.log.length ? state.log[state.log.length - 1]!.seq : 0;
 
@@ -822,7 +837,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // PUBLIC log — the Ring flip and both dice pools are open information, and the
       // opponent otherwise can't reconstruct the swap (player report: "used an elven
       // ring to change the [E] to... something, but nothing is in the log").
-      log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} use an Elven Ring: a ${action.from} die becomes ${actor === 'shadow' && action.to === 'eye' ? 'an Eye (into the Hunt Box)' : `a ${action.to} die`}`);
+      log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} use an Elven Ring: ${aDieFace(action.from)} die becomes ${actor === 'shadow' && action.to === 'eye' ? 'an Eye (into the Hunt Box)' : `${aDieFace(action.to)} die`}`);
       break; // free action — the player still acts this turn (no turn pass)
     }
     case 'forceDiscardCard': {
@@ -1205,11 +1220,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
   // summary, log) can show "which die" the player used. The last face appended to
   // usedDice this dispatch is the die consumed; nothing appended = a free/phase action.
   const used = state.usedDice?.[actor] ?? [];
-  if (used.length > usedBefore) {
-    const spent = used[used.length - 1];
+  const spent = used.length > usedBefore ? used[used.length - 1] : carriedDie;
+  if (spent) {
     for (const e of state.log) {
       if (e.seq > seqBefore && e.die === undefined) e.die = spent;
     }
+    // Carry it onto a choice this action leaves open, so the step that answers that
+    // choice — and everything it logs — is tagged with the same die.
+    if (state.pendingChoice && state.pendingChoice.die === undefined) state.pendingChoice.die = spent;
   }
   // Tag them with the ACTING player too (die or not — free actions included), so the
   // log can lead each line with who acted (player report: the kind tags alone don't

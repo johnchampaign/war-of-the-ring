@@ -41,9 +41,32 @@ const lookup = (id: string): string | null => {
   if (NATION_NAME[id]) return NATION_NAME[id]!;
   return null;
 };
+// "Recruited 0R/1E north in carrock" is spreadsheet notation, and it sits right next
+// to the spelled-out "Recruited a north Leader in carrock" from the very same card
+// (player report 6851284o1n1n151j). Spell the force out instead, keeping the Nation
+// in front of the unit type the way the Leader line already does. Done on the DISPLAY
+// side so every recruit log line — engine muster, Event card, Faramir — reads the
+// same, past games included.
+const RECRUIT = /\b(\d+)R\/(\d+)E(?:\/(\d+)L)?( \+ Leader)?\s+([a-z][a-z-]*)\b/g;
+const an = (name: string): string => (/^[AEIOU]/.test(name) ? 'an' : 'a');
+const unitPhrase = (n: number, nation: string, type: string): string =>
+  (n === 1 ? `${an(nation)} ${nation} ${type}` : `${n} ${nation} ${type}s`);
+function recruitPhrase(regular: number, elite: number, leaders: number, nationId: string): string {
+  const nation = NATION_NAME[nationId] ?? nationId;
+  const parts: string[] = [];
+  if (regular > 0) parts.push(unitPhrase(regular, nation, 'Regular'));
+  if (elite > 0) parts.push(unitPhrase(elite, nation, 'Elite'));
+  if (leaders > 0) parts.push(unitPhrase(leaders, nation, 'Leader'));
+  if (!parts.length) return `nothing for ${nation}`;
+  return parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
 export function prettify(msg: string): string {
   if (!msg) return msg;
-  let out = msg.replace(KEBAB, (t) => lookup(t) ?? t);
+  // Before the id pass, while the Nation is still a bare lowercase id.
+  let out = msg.replace(RECRUIT, (_m, r: string, e: string, l: string | undefined, plusLeader: string | undefined, nation: string) =>
+    recruitPhrase(Number(r), Number(e), Number(l ?? 0) + (plusLeader ? 1 : 0), nation));
+  out = out.replace(KEBAB, (t) => lookup(t) ?? t);
   out = out.replace(WORD, (t) => (NATION_NAME[t] ?? (charDef(t) ? charName(t) : null) ?? (REGION_NAME.has(t) ? REGION_NAME.get(t)! : null)) ?? t);
   return out;
 }

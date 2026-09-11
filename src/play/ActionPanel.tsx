@@ -5,6 +5,7 @@ import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState } from '../engine/types';
 import { useCardArt } from './artCache';
 import { describeAction, actionDie, dieOptions } from './actionText';
+import { aFace } from './names';
 import { FACE } from './DiceTray';
 import type { Hover } from './HoverPreview';
 import type { Side, DieFace } from '../engine/types';
@@ -44,7 +45,12 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
 
   // Pass is promoted to a prominent top button (Ira #8) so it's never lost in the list.
   const pass = actions.find((a) => a.kind === 'pass');
-  const rest = actions.filter((a) => a.kind !== 'pass');
+  // "Discard a die" is a last-resort action and the engine offers one per distinct
+  // face, so a full roll put up to five near-identical lines at the top of the list
+  // (player report 1v1g2y5x095p2m1n). They collapse into ONE button with the same
+  // face picker the other ambiguous actions use.
+  const skips = actions.filter((a) => a.kind === 'skipDie') as Extract<WotrAction, { kind: 'skipDie' }>[];
+  const rest = actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie');
   const sel = selectedDie ?? null;
   const faceLabel = sel ? (FACE[sel]?.label ?? sel) : null;
 
@@ -99,10 +105,40 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       ))}
       {rest.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
         options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} />)}
-      {rest.length === 0 && boardHints.length === 0 && (
+      {skips.length > 0 && <DiscardDieButton skips={skips} disabled={busy} onClick={click} compact={compact} />}
+      {rest.length === 0 && skips.length === 0 && boardHints.length === 0 && (
         boardPending
           ? <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', fontSize: 13 }}>⚑ {boardPending}</div>
           : <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>
+      )}
+    </div>
+  );
+}
+
+// The collapsed "Discard a die" control: one button for every face the engine would
+// have listed separately. A single face submits straight away (there is nothing to
+// choose); more than one opens the face picker.
+function DiscardDieButton({ skips, disabled, onClick, compact }: { skips: Extract<WotrAction, { kind: 'skipDie' }>[]; disabled: boolean; onClick: (a: WotrAction) => void; compact?: boolean }) {
+  const [picking, setPicking] = useState(false);
+  const faces = [...new Set(skips.map((a) => a.face))] as DieFace[];
+  const only = faces.length === 1 ? faces[0]! : null;
+  const bstyle = compact ? { ...btn, margin: '1px 0', padding: '1px 8px', fontSize: 11, lineHeight: 1.2 } : btn;
+  return (
+    <div>
+      <button disabled={disabled} onClick={() => (only ? onClick({ kind: 'skipDie', face: only }) : setPicking((p) => !p))}
+        style={{ ...bstyle, display: 'flex', alignItems: 'center', gap: 8 }}>
+        {only && <DieTag face={only} />}
+        <span style={{ minWidth: 0 }}>{only ? `Discard ${aFace(only)} die` : 'Discard an Action die (no effect)'}</span>
+        {!only && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cb8' }}>choose die ▸</span>}
+      </button>
+      {picking && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '2px 0 6px 10px' }}>
+          <span style={{ fontSize: 11, color: '#998', alignSelf: 'center' }}>discard:</span>
+          {faces.map((f) => (
+            <button key={f} disabled={disabled} onClick={() => { setPicking(false); onClick({ kind: 'skipDie', face: f }); }}
+              style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
+          ))}
+        </div>
       )}
     </div>
   );

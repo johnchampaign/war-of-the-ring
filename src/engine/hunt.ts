@@ -266,8 +266,9 @@ export function challengeOfTheKing(state: GameState): boolean {
   const drew = refs.map((r) => face(r.tile.value)).join(', ');
   const removed = allEyes ? 0 : refs.filter((r) => r.tile.value === 'eye').length;
   notify(state, allEyes
-    ? `Challenge of the King — drew ${drew}: all three are Eyes, so Aragorn/Strider is eliminated.`
-    : `Challenge of the King — drew ${drew}${removed ? `: ${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt` : ': no Eyes drawn, nothing removed'}.`);
+    ? `Drew ${drew}: all three are Eyes, so Aragorn/Strider is eliminated.`
+    : `Drew ${drew}${removed ? `: ${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt` : ': no Eyes drawn, nothing removed'}.`,
+    'Challenge of the King');
   return allEyes;
 }
 

@@ -12,6 +12,9 @@ import { aFace } from './names';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 const cardName = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.name ?? id;
+// The card's COMBAT half is what a Combat-card button plays — 'Scouts', not the
+// Event name 'The Spirit of Mordor' printed on the same card (report 4j520o4i46450w25).
+const combatTitle = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.combat?.title ?? cardName(id);
 const cardDeck = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.deck ?? '';
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -36,7 +39,7 @@ export function describeAction(a: WotrAction): string {
       : 'Voice of Saruman: recruit Isengard in every Settlement';
     case 'bringUpgrade': return a.which === 'aragorn' ? 'Crown Aragorn (Will of the West)' : 'Summon Gandalf the White';
     case 'placeGandalf': return `Place Gandalf the White in ${rName(a.region)}`;
-    case 'drawEvent': return `Draw a ${a.deck} Event card`;
+    case 'drawEvent': return `Draw a ${cap(a.deck)} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
     case 'diplomaticAction': return `Diplomacy: advance ${cap(a.nation)}`;
     case 'recruitUnit': {
@@ -85,7 +88,7 @@ export function describeAction(a: WotrAction): string {
     case 'attack': return a.from === a.to ? `⚔ Assault the siege at ${rName(a.to)}` : `Attack ${rName(a.to)} (from ${rName(a.from)})`;
     case 'skipDie': return `Discard ${aFace(a.face)} die`;
     case 'pass': return 'Pass';
-    case 'playCombatCard': return a.cardId ? `Combat card: ${cardName(a.cardId)}` : 'No combat card';
+    case 'playCombatCard': return a.cardId ? combatTitle(a.cardId) : 'No combat card';
     // The bare action (no `back`) is the button that OPENS the split picker, so it
     // must not promise "the whole Army forward" — that reads as a decision already
     // made, and the picker it opens then looked like a stray second pop-up.
@@ -107,7 +110,7 @@ export function describeAction(a: WotrAction): string {
     case 'siegeExtend': return a.extend ? 'Press the assault (reduce an Elite)' : 'Cease the assault (siege holds)';
     case 'relieveAdvance': return a.advance ? 'Advance into the freed region' : 'Hold position';
     case 'besiegerAdvance': return a.advance ? 'Advance and lay siege' : 'Stay put (no siege)';
-    case 'combatCardCost': return a.amount === 0 ? 'Pay nothing' : `Pay ${a.amount}`;
+    case 'combatCardCost': return a.amount === 0 ? 'None' : `${a.amount}`;
     case 'whiteRider': return a.forfeit ? 'Forfeit Gandalf’s Leadership (negate Nazgûl)' : 'Keep Gandalf’s Leadership';
     case 'balrog': return a.use ? 'Discard Balrog of Moria — draw an extra Hunt tile' : 'Don’t use the Balrog';
     case 'crebain': return a.use ? 'Discard Flocks of Crebain — +1 to all Hunt dice' : 'Save Flocks of Crebain';

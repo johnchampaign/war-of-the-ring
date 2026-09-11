@@ -334,8 +334,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const boardHints = useMemo(() => {
     const out: string[] = [];
     if (boardArmyActs.length) out.push('Move or attack on the map — click a green army.');
-    if (assaultSources.length) out.push('Click the besieged region on the map to assault the Stronghold (or sortie out of it).');
-    if (musterTargets.size) out.push('Muster on the map — click a green Settlement. Minions enter play there too.');
+    if (musterTargets.size) out.push('Muster on the map — click a green region.');
     if (charSources.size) out.push('Move a character on the map — click its green region.');
     return out;
   }, [boardArmyActs, assaultSources, musterTargets, charSources]);

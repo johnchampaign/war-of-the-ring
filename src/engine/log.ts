@@ -34,9 +34,12 @@ export function logCardDraw(state: GameState, side: Side, deck: 'character' | 's
     : `${who} cannot draw — the ${d} deck is empty`);
 }
 
-/** Record a transient informational notice for the UI to pop once (public). */
-export function notify(state: GameState, msg: string): void {
+/** Record a transient informational notice for the UI to pop once (public).
+ *  `title` is the heading the popup wears. It used to be hardcoded "A Nation is
+ *  Roused", so Athelas's healing roll and the Challenge of the King both announced
+ *  themselves as a nation going to war (player report 1q205c2371642z0l). */
+export function notify(state: GameState, msg: string, title?: string): void {
   if (!state.notices) state.notices = [];
   const seq = (state.notices[state.notices.length - 1]?.seq ?? 0) + 1;
-  state.notices.push({ seq, msg });
+  state.notices.push({ seq, msg, ...(title ? { title } : {}) });
 }

@@ -173,6 +173,12 @@ export interface PendingChoice {
   kind: string;
   /** Opaque payload for the handler resolving it. */
   data?: unknown;
+  /** The Action die face whose action opened this choice, if any — display only.
+   *  A multi-step die action (an Army die's SECOND move, a casualty pick) resolves
+   *  in a later dispatch that spends no die of its own, so without this the log
+   *  entries it writes carry no die badge and read as a free action (player report
+   *  2f5z6x5y5z3f6n41). The adapter sets and inherits it; nothing branches on it. */
+  die?: DieFace;
 }
 
 // An interactive battle in progress (rules-spec §7). The combat sub-machine
@@ -336,7 +342,7 @@ export interface GameState {
   /** Transient informational notices for the UI to pop once (e.g. a Companion
    *  rousing a Nation). Public; each has an incrementing seq so a client shows it
    *  exactly once. */
-  notices?: { seq: number; msg: string }[];
+  notices?: { seq: number; msg: string; title?: string }[];
   /** The most recent finished battle, for the battle-outcome popup (public). seq
    *  marks a new battle so the popup shows each once. */
   lastBattle?: {

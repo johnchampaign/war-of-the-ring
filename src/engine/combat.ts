@@ -23,6 +23,10 @@ import { log } from './log';
 const MAX_ROUNDS = 15;
 const clamp = (lo: number, hi: number, v: number): number => Math.max(lo, Math.min(hi, v));
 const other = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
+// A side's NAME for the log. The side ids ('fp'/'shadow') are engine data and must
+// never reach the player's eye — "shadow attacks Minas Tirith" reads like a typo
+// (player reports 0l0v3t532p700f17, 5v2p4r3a5s1i5o5z). Payloads keep the raw id.
+const sideLabel = (s: Side): string => (s === 'fp' ? 'Free Peoples' : 'Shadow');
 
 /** A combat card's initiative for resolution order (lower resolves first). For a
  *  ranged/multi-effect card ("3-5") use its earliest effect (the min). Unknown
@@ -290,7 +294,7 @@ function absorbForced(state: GameState, f: Force, side: Side, hits: number): num
   // skip the log: an invisible casualty reads as a broken battle. Two reports in
   // one day — '2E took my hit and I concluded Shield Wall cancelled it', and 'the
   // log didn't say that' on an Elite reduction — were both this silence.
-  if (taken.length) log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} casualties (forced): ${taken.join('; ')}`);
+  if (taken.length) log(state, null, 'combat', `${sideLabel(side)} casualties (forced): ${taken.join('; ')}`);
   return left;
 }
 const cap1 = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
@@ -735,7 +739,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   // than roll 0 dice and lose the Leaders (player report).
   if (pc.atkUnits0 === 0) {
     if (pc.rearguard) { if (sortie) restoreRearguardInto(box!, pc.rearguard); else restoreRearguard(state, from, pc.rearguard); }
-    log(state, null, 'combat', `${attacker} cannot attack ${to} from ${from}: no unit of a Nation At War`);
+    log(state, null, 'combat', `${sideLabel(attacker)} cannot attack ${to} from ${from}: no unit of a Nation At War`);
     return;
   }
   state.pendingCombat = pc;
@@ -746,7 +750,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   const atkDesc = describeForce(state, atkForce(state, pc), attacker);
   const defDesc = describeForce(state, defForce(state, pc), defender);
   log(state, null, 'combat',
-    `${attacker} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${sortie ? ' (sortie)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`
+    `${sideLabel(attacker)} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${sortie ? ' (sortie)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`
     + ` — attacker ${atkDesc} vs defender ${defDesc}`,
     { from, to, attacker, attackerForce: atkDesc, defenderForce: defDesc, siege: !!pc.siege, sortie });
 }
@@ -830,7 +834,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
         return true; // pause; resolvePreCombatRetreat resumes
       }
       const dest = dests[0] ?? null;
-      if (dest) { noteWithdrawal(state, pc, ef.side); moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${ef.side} retreats ${own}→${dest} before combat`); }
+      if (dest) { noteWithdrawal(state, pc, ef.side); moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${sideLabel(ef.side)} retreats ${own}→${dest} before combat`); }
     } else if (ef.mods.preCombatAttackDice) {
       // Aim at the enemy FORCE, not the enemy REGION. In a siege assault (and a
       // sortie) one side stands in the region while the other is in the siege box —
@@ -894,7 +898,7 @@ export function resolvePreCombatRetreat(state: GameState, region: RegionId): voi
   const side = armySide(state, from);
   const dests = freeAdjacentRegions(state, from, side!);
   const dest = dests.includes(region) ? region : dests[0];
-  if (dest) { noteWithdrawal(state, pc, side!); moveStack(state, from, dest, side!, true, true); log(state, null, 'combat', `${side} retreats ${from}→${dest} before combat`); }
+  if (dest) { noteWithdrawal(state, pc, side!); moveStack(state, from, dest, side!, true, true); log(state, null, 'combat', `${sideLabel(side!)} retreats ${from}→${dest} before combat`); }
 }
 
 /** Move the whole army at `from` into `to` (defender gone), capturing. */
@@ -1286,7 +1290,6 @@ export function combatStep(state: GameState): void {
           const combat = def?.combat?.title, event = def?.name;
           return combat && event && combat !== event ? `'${combat}' (combat half of ${event})` : `'${combat ?? event ?? id}'`;
         };
-        const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
         // Each side's combat card (if any) applies THIS round, then is spent —
         // a fresh card may be played next round (rules-spec §7, p.29).
         const aCtx = { ownCharacters: atkForce(state, pc).characters, cost: pc.atkCardCost };
@@ -1319,9 +1322,9 @@ export function combatStep(state: GameState): void {
           const what = describeCombatMods(mods);
           return `${cardName(card)}${what ? ` — ${what}` : ''}`;
         };
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.attacker)} (attacker) play ${played(pc.attackerCard, aMods, aCancelled, aOutrun)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.attacker)} (attacker) play ${played(pc.attackerCard, aMods, aCancelled, aOutrun)}`);
         if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideName(pc.defender)} (defender) play ${played(pc.defenderCard, dMods, dCancelled, dOutrun)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.defender)} (defender) play ${played(pc.defenderCard, dMods, dCancelled, dOutrun)}`);
         if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
         // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
         // resolve in initiative order before the normal roll; either can end the
@@ -1569,7 +1572,7 @@ export function resolveSiegeExtend(state: GameState, extend: boolean): void {
   const n = (Object.keys(r.units) as Nation[]).find((k) => (r.units[k]?.elite ?? 0) > 0);
   if (!n) { finishCombat(state, false); return; } // no Elite left to spend (shouldn't happen — gated on offer)
   reduceElite(state, r, n, pc.attacker); // Elite figure back to the pool (Shadow) / gone (FP), Regular taken from it
-  log(state, null, 'combat', `${pc.attacker} presses the assault: an Elite is reduced to a Regular for another round`);
+  log(state, null, 'combat', `${sideLabel(pc.attacker)} presses the assault: an Elite is reduced to a Regular for another round`);
   pc.siegeRoundsLeft = 1;
   pc.round += 1;
   pc.step = 'attackerCard'; // advance() re-drives the battle sub-machine
@@ -1640,7 +1643,7 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean): void
     // No besieger, no siege: the garrison returns to the open field it just left.
     if (r.siegeBox) mergeForceInto(state, pc.to, r.siegeBox);
     delete r.siegeBox; r.besieged = false;
-    log(state, null, 'combat', `${pc.defender} fall back into ${REGIONS[pc.to]!.name ?? pc.to}, but ${pc.attacker} does not advance — no siege`);
+    log(state, null, 'combat', `${sideLabel(pc.defender)} fall back into ${REGIONS[pc.to]!.name ?? pc.to}, but ${sideLabel(pc.attacker)} does not advance — no siege`);
     if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
     state.lastBattle = {
       seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
@@ -1657,7 +1660,7 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean): void
     capSiegeBox(state, pc.to); // NOW it comes under siege — garrison capped at 5 (p.31)
     moveStack(state, pc.from, pc.to, pc.attacker, false); // besieger occupies the open field (NO capture — the boxed garrison holds the Settlement)
     r.besieged = true;
-    log(state, null, 'combat', `${pc.defender} withdraws into the siege at ${pc.to}; ${pc.attacker} besieges`);
+    log(state, null, 'combat', `${sideLabel(pc.defender)} withdraws into the siege at ${pc.to}; ${sideLabel(pc.attacker)} besieges`);
     // The rearguard rejoins `from`; record the siege as established; resume the turn.
     if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
     // `pc.round` is 0-based and counts the rounds ALREADY fought, so it is exactly the

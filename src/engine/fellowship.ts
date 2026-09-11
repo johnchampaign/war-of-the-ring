@@ -369,7 +369,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
     activateNation(state, dn, { viaCompanion: true });
     if (wasPassive && state.nations[dn].active) {
       const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-      notify(state, `${COMPANIONS[id]?.name ?? id} activates the ${nm(dn)}.`);
+      notify(state, `${COMPANIONS[id]?.name ?? id} activates the ${nm(dn)}.`, 'A Nation is Roused');
     }
   }
   pruneFellowshipOnTableCards(state);
@@ -392,7 +392,7 @@ export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: 
     activateNation(state, dn, { viaCompanion: true });
     if (wasPassive && state.nations[dn].active) {
       const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-      notify(state, `The Companions activate the ${nm(dn)}.`);
+      notify(state, `The Companions activate the ${nm(dn)}.`, 'A Nation is Roused');
     }
   }
   pruneFellowshipOnTableCards(state);

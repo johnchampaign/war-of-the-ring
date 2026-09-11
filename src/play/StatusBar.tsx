@@ -221,7 +221,7 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
     }
     for (const id of p.discardFaceDown ?? []) {
       const label = id.startsWith('hidden') ? `face-down ${id === 'hidden-character' ? 'Character' : 'Strategy'} card`
-        : `${CARD_NAME.get(id) ?? id} (face down — only you see this)`;
+        : `${CARD_NAME.get(id) ?? id} (face down)`;
       rows.push({ side: sideName, label, id: id.startsWith('hidden') ? null : id, played: at(id.startsWith('hidden') ? null : id) });
     }
     for (const id of p.table ?? []) rows.push({ side: sideName, label: `${CARD_NAME.get(id) ?? id} (in play on the table)`, id, played: at(id) });
