@@ -167,6 +167,22 @@ function forceBelongsTo(f: { units: Record<string, { regular: number; elite: num
   return false;
 }
 
+/** The two die choices that are not really choices: a plain Army die against an
+ *  Army/Muster hybrid, and a plain Muster die against the same hybrid. The hybrid can
+ *  do everything the plain die can and more, so spending it first is strictly worse
+ *  and there is no position where you would want to — the reporter of
+ *  4w2p23491g062m5l looked for one and so did we. Returns the die to spend, or null
+ *  when the choice is real (a Will of the West, a Character die, an Event die: those
+ *  carry costs of their own — The Day Without Dawn discards Will dice — so the player
+ *  is always asked). Used by BOTH the action list and the map, so the two behave the
+ *  same way; that consistency was the point of making them ask in the first place. */
+export function trivialDie(options: DieFace[]): DieFace | null {
+  if (options.length !== 2 || !options.includes('armyMuster')) return null;
+  if (options.includes('army')) return 'army';
+  if (options.includes('muster')) return 'muster';
+  return null;
+}
+
 export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[] {
   const pool = view.dice[you] ?? [];
   const pick = (faces: DieFace[]): DieFace[] => [...new Set(pool.filter((f) => faces.includes(f)))];

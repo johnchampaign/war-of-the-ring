@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState } from '../engine/types';
 import { useCardArt } from './artCache';
-import { describeAction, actionDie, dieOptions } from './actionText';
+import { describeAction, actionDie, dieOptions, trivialDie } from './actionText';
 import { aFace } from './names';
 import { FACE } from './DiceTray';
 import type { Hover } from './HoverPreview';
@@ -162,10 +162,14 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
   // West, or an Army/Muster die paying for a card — show that substitute. Otherwise
   // a muster button advertises a Muster die the player never rolled, which reads as
   // "I can't muster despite nations at war" (reported).
-  const tagDie = forced ?? (die && options.includes(die as DieFace) ? (die as DieFace) : options[0] ?? die);
-  const ambiguous = !forced && options.length > 1;
+  // A plain Army/Muster die against the Army/Muster hybrid is not a real choice:
+  // spend the plain one (trivialDie). Everything else still asks.
+  const trivial = forced ? null : trivialDie(options);
+  const tagDie = forced ?? trivial ?? (die && options.includes(die as DieFace) ? (die as DieFace) : options[0] ?? die);
+  const ambiguous = !forced && options.length > 1 && !trivial;
   const onMain = () => {
     if (forced) onClick({ ...action, die: forced } as WotrAction);
+    else if (trivial) onClick({ ...action, die: trivial } as WotrAction);
     else if (ambiguous) setPicking((p) => !p);
     else onClick(action);
   };

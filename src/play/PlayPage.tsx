@@ -32,7 +32,7 @@ import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget } from './actionText';
+import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, trivialDie } from './actionText';
 import { moveBlockReason, musterBlockReason } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial } from './panelFilter';
@@ -162,7 +162,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (inFlight.current) return;
     if (!activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die && g.view && g.you) {
       const opts = dieOptions(a, g.view, g.you as Side);
-      if (opts.length > 1) { setDiePick(a); return; }
+      // The plain-vs-hybrid case is settled without asking (same rule as the action
+      // list — player report 4w2p23491g062m5l); every other multi-die action asks.
+      const easy = trivialDie(opts);
+      if (easy) a = { ...a, die: easy } as WotrAction;
+      else if (opts.length > 1) { setDiePick(a); return; }
     }
     inFlight.current = true;
     // Name the die the player actually picked (see DIE_BEARING).
