@@ -113,6 +113,12 @@ export interface HuntState {
     /** A Hunt that rolled but scored no successes — recorded so the popup still shows
      *  the roll (dice + box bonus) on a miss, not just on a hit. No tile is drawn. */
     miss?: boolean;
+    /** An Event card's extra draw that came up an Eye / Free Peoples special tile and
+     *  was discarded without effect — recorded so the popup still shows the draw
+     *  (player report 1g6i3l5t05293p4q: Foul Thing drew an Eye and nothing appeared). */
+    discarded?: boolean;
+    /** The card that caused an extra draw (Foul Thing from the Deep, Orc Patrol, ...). */
+    source?: string;
     /** The Hunt roll that produced this draw, for the informational popup (public). */
     roll?: HuntRoll }[];
 }
@@ -257,6 +263,11 @@ export interface PendingCombat {
   /** We Come to Kill's post-casualty extra attack: fired-this-round latch (same
    *  re-entry hazard as greatHostDone). */
   postAtkDone?: boolean;
+  /** Onslaught's counter-attack, deferred from the cost prompt to the 'onslaught'
+   *  step: the self-hits it is paid with may themselves need a casualty choice, and
+   *  the roll must not happen while that prompt is open (player report
+   *  384n4g074t2k4d01 — the hits were auto-applied Regulars-first either way). */
+  onslaughtAttack?: { side: Side; hits: number };
   /** The White Rider battle-start choice: asked once; true if the FP forfeited
    *  Gandalf the White's Leadership to negate all Nazgûl Leadership this battle. */
   whiteRiderAsked?: boolean;

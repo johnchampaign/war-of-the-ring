@@ -45,7 +45,7 @@ export function describeAction(a: WotrAction): string {
     case 'recruitUnit': {
       const fig = a.nazgul ? 'Nazgûl' : a.leader ? 'Leader' : a.elite ? 'Elite' : 'Regular';
       const more = a.then ? ' (+ an optional 2nd figure elsewhere)' : '';
-      return `Recruit ${fig} ${cap(a.nation)} in ${rName(a.region)}${more}`;
+      return `Recruit ${cap(a.nation)} ${fig} in ${rName(a.region)}${more}`; // nation first, as the log says it (report 261i321q390m3a1m)
     }
     case 'recruitSecond':
       return a.done ? 'Muster: no second figure' : `Muster 2nd: ${a.figure === 'leader' ? 'Leader/Nazgûl' : 'Regular'}${a.nation ? ` ${cap(a.nation)}` : ''} in ${rName(a.region!)}`;

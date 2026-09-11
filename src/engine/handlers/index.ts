@@ -796,7 +796,12 @@ const wosesMoves = (state: GameState): Array<{ from: string; to: string }> => {
 register('fp-str-11', {
   canPlay: (state) => isAtWar(state, 'rohan') && wosesMoves(state).length > 0,
   targets: (state) => wosesMoves(state),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp', t.move); log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) {
+    // "Move the Army containing the Companion(s)": a split may leave units behind,
+    // but the part that MOVES must include a Companion (Almanac; player report
+    // 6b3v215v0m1s090m — a split with no Companion in it was allowed to go).
+    if (t.move && !(t.move.characters ?? []).some((c) => COMPANION_SET.has(c))) throw new Error('Through a Day and a Night: the moving part must include a Companion');
+    moveAllUnits(state, t.from!, t.to!, 'fp', t.move); log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
 });
 // Through a Day and a Night: move an FP Army containing a Companion up to 2 regions.
 function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {
@@ -1146,7 +1151,7 @@ for (const id of ['fp-char-01', 'fp-char-02', 'fp-char-03', 'fp-char-04', 'sh-ch
       const h = state.hunt;
       if (h.specialsInPlay.includes(id) || h.specialsInPool.includes(id) || (h.specialsDrawn ?? []).includes(id)) return;
       (state.fellowship.mordor !== null ? h.specialsInPool : h.specialsInPlay).push(id);
-      log(state, null, 'event', `special Hunt tile ${id} now in play`);
+      log(state, null, 'event', `Special Hunt tile ${EVENT_BY_ID[id]?.name ?? id} now in play`);
     },
   });
 }

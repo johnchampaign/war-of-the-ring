@@ -16,7 +16,7 @@
 //     rolled again during the Shadow player's Leader re-roll."
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
-import { startBattle, combatStep, resolvePlayCombatCard, resolveCombatCardCost } from '../src/engine/combat.ts';
+import { startBattle, combatStep, resolvePlayCombatCard, resolveCombatCardCost, pendingCasualtyOptions, resolveCasualtyStep } from '../src/engine/combat.ts';
 import { combatModsFor } from '../src/engine/combatCards.ts';
 
 let failures = 0;
@@ -65,6 +65,15 @@ function runTo(s, kind, { shadowCard, fpCard } = {}) {
     check('up to 2 (the card text), at least 0', ch.data.max === 2 && ch.data.min === 0, JSON.stringify(ch.data));
     const before = s.regions['orthanc'].units.isengard.regular + s.regions['orthanc'].units.isengard.elite;
     resolveCombatCardCost(s, 2);
+    // The card's hits are casualties like any others: the PAYER chooses how they land
+    // (player report 384n4g074t2k4d01), so a mixed stack raises a prompt here instead
+    // of losing Regulars silently. Answer it the way the old auto-application did.
+    let guard = 6;
+    while (s.pendingChoice?.kind === 'combatCasualties' && guard-- > 0) {
+      const opts = pendingCasualtyOptions(s);
+      const reg = opts.find((o) => o.step === 'removeRegular') ?? opts[0];
+      resolveCasualtyStep(s, reg.step, reg.nation);
+    }
     const after = s.regions['orthanc'].units.isengard.regular + s.regions['orthanc'].units.isengard.elite;
     check('paying 2 costs 2 of our own units', before - after === 2, `${before} -> ${after}`);
     check('and buys +2 on the Combat roll', combatModsFor(shadowCard, { cost: 2 })?.rollBonus === 2,

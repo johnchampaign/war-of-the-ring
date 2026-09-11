@@ -262,7 +262,10 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
     </div>
     <svg ref={svgRef} viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet"
       onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
-      style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', cursor: onPickRegion ? 'grab' : 'default' }}>
+      /* userSelect: double-clicking a region used to highlight the unit-count numerals
+         under the cursor (player report 5z535g2r5f0w3b52). The map is a control
+         surface, not a document; the log and side panel stay selectable. */
+      style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', cursor: onPickRegion ? 'grab' : 'default' }}>
       <rect x={0} y={0} width={W} height={H} fill="#9fb8cf" />
       {/* Real board image (first-run download) sits behind the polygons, aligned
           1:1 to their pixel space. When present, region fills go near-transparent

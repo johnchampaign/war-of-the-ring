@@ -3,7 +3,7 @@
 // drives the phase machine, and redacts per-seat views.
 import type { GameAdapter } from 'digital-boardgame-framework';
 import type { GameState, Side } from '../engine/types';
-import type { WotrAction } from './wotrAction';
+import type { WotrAction, MoveSel } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
@@ -23,6 +23,7 @@ import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharM
 import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide, playFacesFor } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, flagValue, type EventTarget } from '../engine/handlers/registry';
+import { characterDef } from '../engine/data';
 import { resolveNazgulStrike } from '../engine/handlers/index';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
 import { redactStateForViewer } from './redact';
@@ -298,14 +299,21 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return acts;
       }
       case 'armyMove2': {
-        const data = state.pendingChoice!.data as { src: string; dest: string };
+        const data = state.pendingChoice!.data as { src: string; dest: string; stayed?: ForceSnapshot };
         const acts: WotrAction[] = [{ kind: 'armyMove2', done: true }];
         for (const [from, to] of moveTargets(state, actor)) {
-          // Only the army that MOVED (now at data.dest) is barred. The stack left in
-          // data.src after a SPLIT is, per RAW p.27, "two different Armies" — its
-          // units never moved, so the die's second move may take it (player report:
-          // split Gorgoroth→Morannon, then couldn't move the remainder).
-          if (from === data.dest) continue;
+          // Only the figures that MOVED (now at data.dest) are barred. The stack left in
+          // data.src after a SPLIT is a different Army (RAW p.27) and may move; and so
+          // may whatever ALREADY stood in data.dest before the arrivals — the second
+          // move from there is a split limited to those figures (validated in dispatch).
+          if (from === data.dest) {
+            // Only what was already there may go, so the offered action carries that
+            // selection (the picker may still narrow it — dispatch allows a subset).
+            const sel = data.stayed ? snapshotToSel(state, data.dest as RegionId, actor, data.stayed) : null;
+            if (!sel) continue;
+            acts.push({ kind: 'armyMove2', from, to, move: sel });
+            continue;
+          }
           acts.push({ kind: 'armyMove2', from, to });
         }
         return acts;
@@ -495,7 +503,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         for (const cardId of SH_FORCE_DISCARD_CARDS) {
           if (!state.cards.fp.table.includes(cardId)) continue;
           const hand = state.cards.shadow.hand;
-          const strat = [...new Set(hand.filter((c) => EVENT_BY_ID[c]?.deck === 'Strategy'))];
+          // "one Strategy (Army) Event card and one Character Event card" — the Strategy
+          // card must carry the ARMY icon; a Muster-icon Strategy card does not pay
+          // (player report 4z4q045w3v532027: Musterings of Long-planned War was accepted).
+          const strat = [...new Set(hand.filter((c) => EVENT_BY_ID[c]?.deck === 'Strategy' && EVENT_BY_ID[c]?.playableVia === 'army'))];
           const chars = [...new Set(hand.filter((c) => EVENT_BY_ID[c]?.deck === 'Character'))];
           for (const s of strat) for (const c of chars) {
             acts.push({ kind: 'forceDiscardCard', cardId, via: 'cards', discardStrategy: s, discardCharacter: c });
@@ -693,7 +704,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const guideDrawsNow = playedWithFace === 'event' || playedWithFace === 'will';
       // Palantír of Orthanc grants a bonus draw — captured BEFORE this play so the
       // card doesn't trigger off its own play.
-      const palantirWasActive = actor === 'shadow' && palantirActive(state);
+      // The Palantír of Orthanc: "After you use an EVENT Action die result to play an
+      // Event card, draw a card" — the icon die (Army / Muster / Character) paying for
+      // a card does not trigger it, nor does a free play (player report 1r3s121k4f42131e:
+      // Pits of Mordor played with an Army die drew a Palantír card).
+      const palantirWasActive = actor === 'shadow' && playedWithFace === 'event' && palantirActive(state);
       // Name the played card in the log (playing an Event reveals it — public info).
       log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} plays ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId}`);
       state.log[state.log.length - 1]!.card = action.cardId; // make it hoverable in the log
@@ -850,8 +865,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         const hand = state.cards.shadow.hand;
         const si = hand.indexOf(action.discardStrategy ?? '');
         const ci2 = hand.indexOf(action.discardCharacter ?? '');
-        if (si < 0 || ci2 < 0 || EVENT_BY_ID[action.discardStrategy!]?.deck !== 'Strategy' || EVENT_BY_ID[action.discardCharacter!]?.deck !== 'Character')
-          throw new Error('Must discard one Strategy and one Character card from hand');
+        if (si < 0 || ci2 < 0 || EVENT_BY_ID[action.discardStrategy!]?.deck !== 'Strategy' || EVENT_BY_ID[action.discardStrategy!]?.playableVia !== 'army' || EVENT_BY_ID[action.discardCharacter!]?.deck !== 'Character')
+          throw new Error('Must discard one Strategy card with the Army icon and one Character card from hand');
         if (!consumePreferred(state, 'shadow', [...new Set(state.dice.shadow)], action.die)) throw new Error('No Action die');
         // The two hand cards are discarded FACE DOWN (p.22: cards discarded from
         // hand are face down) — the Free Peoples learn that a Strategy and a
@@ -952,6 +967,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       else if (consumeArmyDie(state, actor)) viaArmyDie = true;
       else if (leaderArmy && consumeDie(state, actor, 'character')) viaArmyDie = false;
       else throw new Error('No Army die');
+      // What already stood in the destination BEFORE this move: those figures never
+      // moved, so the Army die's second move may still take them (p.27 — "cannot
+      // move the same Army twice" bars the units that just arrived, not the region;
+      // player reports 0y2o4e3n3f5r6871 / 3u2u3b4z0s212i0g).
+      const stayed = ownForceSnapshot(state, action.to, actor);
       const moved = action.move
         ? moveArmySplit(state, action.from, action.to, actor, action.move, !viaArmyDie)
         : moveArmy(state, action.from, action.to, actor);
@@ -963,18 +983,24 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       }
       // An Army die may move a SECOND different army (rulebook p.27); a Character die moves only one.
       // Over-stacking (>10) prompts the player to remove the excess first (p.26).
-      afterMove(state, actor, action.to, viaArmyDie ? { kind: 'armyMove2', src: action.from, dest: action.to } : { kind: 'pass' });
+      afterMove(state, actor, action.to, viaArmyDie ? { kind: 'armyMove2', src: action.from, dest: action.to, stayed } : { kind: 'pass' });
       break;
     }
     case 'armyMove2': {
       requireChoice(state, 'armyMove2', actor);
-      const data = state.pendingChoice!.data as { src: RegionId; dest: RegionId };
+      const data = state.pendingChoice!.data as { src: RegionId; dest: RegionId; stayed?: ForceSnapshot };
       state.pendingChoice = null;
       if (!action.done) {
-        // "Cannot move the same Army twice": only the army that MOVED (at data.dest)
-        // is barred. A split's remainder at data.src is a DIFFERENT army (RAW p.27
-        // "An Army can split itself into two different Armies") and may move second.
-        if (action.from === data.dest) throw new Error('Cannot move the same army twice');
+        // "Cannot move the same Army twice": the figures that MOVED (now at data.dest)
+        // are barred, not the region. A split's remainder at data.src is a different
+        // army (RAW p.27) and may move; so may the figures that already stood in
+        // data.dest — but only those, so a move out of data.dest must be a split
+        // that fits inside what was there before the arrivals.
+        if (action.from === data.dest) {
+          const st = data.stayed;
+          if (!st || st.units <= 0) throw new Error('Cannot move the same army twice');
+          if (!action.move || !selectionWithin(action.move, st)) throw new Error(`Only the figures that were already in ${REGIONS[data.dest]?.name ?? data.dest} before this die's first move may move again — the ones that just arrived cannot.`);
+        }
         const ok2 = action.move
           ? moveArmySplit(state, action.from!, action.to!, actor, action.move, false)
           : moveArmy(state, action.from!, action.to!, actor);
@@ -1160,9 +1186,20 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // the same ability removes him from the game instead of placing him (p.44).
         // Either way a Companion must actually leave, or the −1 would be free.
         const guide = state.fellowship.guide;
-        const left = state.fellowship.mordor !== null
-          ? removeCompanionOnMordorTrack(state, guide)
-          : separateCompanion(state, guide);
+        const fsNow = state.fellowship;
+        let left: boolean;
+        if (fsNow.mordor !== null) left = removeCompanionOnMordorTrack(state, guide);
+        else {
+          // He separates under the normal rules, and the PLAYER places him: up to
+          // Progress + Level from the Fellowship's position, chosen on the board once
+          // the Hunt has finished resolving — the same deferred placement Take Them
+          // Alive uses. separateCompanion() used to pick the region itself (player
+          // report 5b38532p240s6o69: "the move was legal but I had no agency").
+          const level = characterDef(guide)?.level;
+          const range = fsNow.progress + (typeof level === 'number' ? level : 0);
+          left = beginSeparation(state, guide);
+          if (left) state.flags.takenAlive = { companion: guide, from: fsNow.location, range };
+        }
         if (!left) throw new Error('The Guide cannot use that ability here.');
         reduceHuntDamageBySeparate(state, guide);
       } else {
@@ -1412,7 +1449,7 @@ function recruitSecondTargets(state: GameState, side: Side, _figure: 'regular' |
 
 // What happens once a move (and any over-stack removal) is fully resolved: either
 // offer the Army die's optional second move, or pass the resolution turn.
-type MoveNext = { kind: 'armyMove2'; src: RegionId; dest: RegionId } | { kind: 'pass' } | { kind: 'none' };
+type MoveNext = { kind: 'armyMove2'; src: RegionId; dest: RegionId; stayed?: ForceSnapshot } | { kind: 'pass' } | { kind: 'none' };
 
 /** After a move lands, prompt to remove any units over the 10-stacking limit
  *  (rulebook p.26) before continuing; otherwise continue immediately. */
@@ -1424,8 +1461,54 @@ function afterMove(state: GameState, actor: Side, to: RegionId, next: MoveNext):
   applyMoveNext(state, actor, next);
 }
 
+/** The actor's own figures in a region — used to freeze what stood in a move's
+ *  destination before the arrivals, so the Army die's second move can be limited to
+ *  those (per-figure exhaustion, not per-region). */
+type ForceSnapshot = { units: number; byNation: Partial<Record<Nation, { regular: number; elite: number }>>; leaders: number; nazgul: number; characters: string[] };
+const FP_NATION_SET = new Set<string>(['dwarves', 'elves', 'gondor', 'north', 'rohan']);
+const SHADOW_CHAR_SET = new Set<string>(['witch-king', 'saruman', 'mouth-of-sauron']);
+function ownForceSnapshot(state: GameState, id: RegionId, side: Side): ForceSnapshot {
+  const r = state.regions[id]!;
+  const out: ForceSnapshot = { units: 0, byNation: {}, leaders: side === 'fp' ? r.leaders : 0, nazgul: side === 'shadow' ? r.nazgul : 0, characters: r.characters.filter((c) => (side === 'shadow') === SHADOW_CHAR_SET.has(c)) };
+  for (const [n, u] of Object.entries(r.units) as [Nation, { regular: number; elite: number } | undefined][]) {
+    if (!u || (FP_NATION_SET.has(n) !== (side === 'fp'))) continue;
+    out.byNation[n] = { regular: u.regular, elite: u.elite }; out.units += u.regular + u.elite;
+  }
+  return out;
+}
+/** The snapshot as a move SELECTION, clamped to what is actually in the region now
+ *  (an over-stack removal between the two moves can have thinned it). Used so the
+ *  enumerated second move out of the first move's destination is exactly the legal
+ *  one — offering the whole stack there would be an action dispatch then refuses. */
+function snapshotToSel(state: GameState, id: RegionId, side: Side, st: ForceSnapshot): MoveSel | null {
+  const now = ownForceSnapshot(state, id, side);
+  const units: NonNullable<MoveSel['units']> = {};
+  let total = 0;
+  for (const [n, had] of Object.entries(st.byNation) as [Nation, { regular: number; elite: number }][]) {
+    const cur = now.byNation[n]; if (!cur) continue;
+    const reg = Math.min(had.regular, cur.regular), eli = Math.min(had.elite, cur.elite);
+    if (reg > 0 || eli > 0) { units[n] = { ...(reg > 0 ? { regular: reg } : {}), ...(eli > 0 ? { elite: eli } : {}) }; total += reg + eli; }
+  }
+  if (total <= 0) return null;
+  const sel: MoveSel = { units };
+  const leaders = Math.min(st.leaders, now.leaders), nazgul = Math.min(st.nazgul, now.nazgul);
+  if (leaders > 0) sel.leaders = leaders;
+  if (nazgul > 0) sel.nazgul = nazgul;
+  const chars = st.characters.filter((c) => now.characters.includes(c));
+  if (chars.length) sel.characters = chars;
+  return sel;
+}
+function selectionWithin(sel: MoveSel, st: ForceSnapshot): boolean {
+  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number } | undefined][]) {
+    const had = st.byNation[n]; if (!u) continue; if (!had) return false;
+    if ((u.regular ?? 0) > had.regular || (u.elite ?? 0) > had.elite) return false;
+  }
+  if ((sel.leaders ?? 0) > st.leaders || (sel.nazgul ?? 0) > st.nazgul) return false;
+  return (sel.characters ?? []).every((c: string) => st.characters.includes(c));
+}
+
 function applyMoveNext(state: GameState, actor: Side, next: MoveNext): void {
-  if (next.kind === 'armyMove2') state.pendingChoice = { owner: actor, kind: 'armyMove2', data: { src: next.src, dest: next.dest } };
+  if (next.kind === 'armyMove2') state.pendingChoice = { owner: actor, kind: 'armyMove2', data: { src: next.src, dest: next.dest, stayed: next.stayed } };
   else if (next.kind === 'none') return; // caller already settled whose turn it is (post-battle advance)
   else passResolutionTurn(state, actor);
 }

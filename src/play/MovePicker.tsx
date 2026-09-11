@@ -111,7 +111,7 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
         <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
           {attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.'
             : holdBackMode ? `Choose who stays in ${rName(from)}; everyone unticked marches back to ${rName(to)}.${holdBackMustHold ? ' At least one unit must hold the Settlement you just took.' : ' You may bring the whole Army back.'}`
-              : 'Choose what moves; the rest stays behind (split). Leave everything ticked for a normal move.'}
+              : 'Choose what moves.'}
         </div>
         {!attackMode && destUnits > 0 && (
           <div style={{ fontSize: 12, color: overAll || overSel ? '#f0d090' : '#9c9', marginBottom: 8 }}>

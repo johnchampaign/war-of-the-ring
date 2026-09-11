@@ -242,7 +242,15 @@ export function extraHunt(state: GameState, opts: HuntOpts = {}): void {
   const { tile, ref } = drawTile(state);
   const isEye = tile.value === 'eye';
   const isFpSpecial = 'spec' in ref && ref.spec.startsWith('fp-');
-  if (isEye || isFpSpecial) { log(state, null, 'hunt', `${opts.source ?? 'Extra Hunt'}: tile discarded (Eye / Free Peoples special)`); return; }
+  if (isEye || isFpSpecial) {
+    log(state, null, 'hunt', `${opts.source ?? 'Extra Hunt'}: tile discarded (Eye / Free Peoples special)`);
+    // Record the draw anyway, so the Hunt popup shows what came up and why nothing
+    // happened (player report 1g6i3l5t05293p4q).
+    const prev = state.hunt.draws ?? [];
+    const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
+    state.hunt.draws = [...prev, { seq, value: tile.value, damage: 0, reveal: false, stop: false, onMordor: state.fellowship.mordor !== null, discarded: true, source: opts.source ?? 'Extra Hunt' }].slice(-16);
+    return;
+  }
   applyHuntTile(state, tile, Math.min(5, state.hunt.box), opts);
 }
 

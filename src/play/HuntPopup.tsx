@@ -38,7 +38,12 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
           ⊙ The Hunt for the Ring
         </div>
         {roll && <RollLine roll={roll} />}
-        {fresh.every((d) => d.miss) ? (
+        {fresh.every((d) => d.discarded) ? (
+          <div style={{ margin: '12px 0 4px' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#9cc77a' }}>{fresh[0]!.source}: the tile drawn was {fresh[0]!.value === 'eye' ? 'an Eye' : 'a Free Peoples special tile'} — discarded without effect.</div>
+            <div style={{ fontSize: 11, color: '#887', marginTop: 3 }}>An extra draw from an Event card only counts when it shows a number or a Shadow special tile.</div>
+          </div>
+        ) : fresh.every((d) => d.miss) ? (
           <div style={{ margin: '12px 0 4px' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#9cc77a' }}>The Hunt missed — no tile drawn.</div>
             <div style={{ fontSize: 11, color: '#887', marginTop: 3 }}>The Shadow rolled but scored no successes (a die must reach 6+ after the box bonus).</div>

@@ -745,7 +745,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           onClick={() => setMoveMenu(null)}>
           <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 16, borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 240, boxShadow: '0 8px 40px #000' }}
             onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>What do you want to move?</div>
+            <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>What do you want to do here?</div>
             {moveMenu.options.map((o, i) => (
               <button key={i} onClick={() => beginMove(moveMenu.region, o)}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>

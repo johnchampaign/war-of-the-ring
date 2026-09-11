@@ -34,7 +34,10 @@ export function ReportButton({ report, clientBuild }: {
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   };
-  const close = () => { setOpen(false); setMsg(''); setSentId(null); setErr(null); setSev('bug'); };
+  // Closing keeps the draft (only a successful send clears it): players close the
+  // dialog to check something on the board mid-report and lost their text (player
+  // report 1f176r151s725a01).
+  const close = () => { setOpen(false); setSentId(null); setErr(null); };
 
   if (!open) {
     return <button onClick={() => setOpen(true)} style={fab} title="Report a problem or share feedback">⚑ Report</button>;

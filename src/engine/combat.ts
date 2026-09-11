@@ -649,8 +649,19 @@ function payCardCost(state: GameState, pc: PendingCombat, side: Side, vc: Variab
   if (amount <= 0) return;
   if (vc.kind === 'selfHits') {
     const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
-    applyForceCasualties(state, own, side, amount, 'regularsFirst');
     log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} inflict ${amount} hit${amount === 1 ? '' : 's'} on their own units to power the card`);
+    // The card's own hits are casualties like any others: the OWNER chooses how to
+    // absorb them (Regulars removed vs Elites reduced). They used to be applied
+    // Regulars-first with no prompt (player report 384n4g074t2k4d01: "I cannot choose
+    // how to apply casualties for Relentless Assault and Onslaught"). Re-entering the
+    // same step afterwards is safe: the cost is already marked paid.
+    const left = absorbForced(state, own, side, amount);
+    if (meaningfulForceCasualty(own, left)) {
+      state.pendingChoice = { owner: side, kind: 'combatCasualties',
+        data: { region: side === pc.attacker ? pc.from : pc.to, side, hits: left, next: pc.step, boxed: pc.boxed === side } };
+      return;
+    }
+    finishForceCasualties(state, own, side);
   } else {
     log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} forfeit ${amount} point${amount === 1 ? '' : 's'} of Nazgûl Leadership`);
   }
@@ -1433,6 +1444,29 @@ export function combatStep(state: GameState): void {
         pc.step = 'onslaught'; continue;
       }
       case 'onslaught': {
+        // The deferred Onslaught counter-attack (see resolveCombatCardCost): roll one
+        // die per hit inflicted on your own units, each 4+ scoring a hit on the enemy —
+        // and let the VICTIM choose how to absorb them, like any other casualties.
+        if (pc.onslaughtAttack) {
+          const { side: oSide, hits: paid } = pc.onslaughtAttack;
+          pc.onslaughtAttack = undefined;
+          const dice: number[] = [];
+          let oHits = 0;
+          withRng(state, (rng) => { for (let i = 0; i < paid; i++) { const r = rng.rollDie(6); dice.push(r); if (r >= 4) oHits++; } });
+          const enemy = other(oSide);
+          const target = oSide === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
+          log(state, null, 'combat', `Onslaught counter-attack: [${dice.join(' ')}] on 4+ → ${oHits} hit${oHits === 1 ? '' : 's'}`);
+          if (oHits > 0) {
+            const left = absorbForced(state, target, enemy, oHits);
+            if (meaningfulForceCasualty(target, left)) {
+              state.pendingChoice = { owner: enemy, kind: 'combatCasualties',
+                data: { region: enemy === pc.attacker ? pc.from : pc.to, side: enemy, hits: left, next: 'onslaught', boxed: pc.boxed === enemy } };
+              return;
+            }
+            finishForceCasualties(state, target, enemy);
+          }
+          continue;
+        }
         // "AFTER removing casualties from the Combat roll and Leader re-roll, you may
         // inflict and apply up to four additional hits against your units. Roll one die
         // for each hit you inflicted … and score one hit against the enemy on each
@@ -1592,16 +1626,10 @@ export function resolveCombatCardCost(state: GameState, amount: number): void {
   const vc = variableCostFor(d.card)!;
   payCardCost(state, pc, side, vc, paid);
 
-  if (d.postCasualty && paid > 0) {
-    // Onslaught's counter-attack. Hits on 4+, not the 5+ of a normal Combat roll.
-    const dice: number[] = [];
-    let hits = 0;
-    withRng(state, (rng) => { for (let i = 0; i < paid; i++) { const r = rng.rollDie(6); dice.push(r); if (r >= 4) hits++; } });
-    const enemy = other(side);
-    const target = side === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
-    log(state, null, 'combat', `Onslaught counter-attack: [${dice.join(' ')}] on 4+ → ${hits} hit${hits === 1 ? '' : 's'}`);
-    if (hits > 0) applyForceCasualties(state, target, enemy, hits, 'regularsFirst');
-  }
+  // Onslaught's counter-attack is DEFERRED to the 'onslaught' step: paying for it may
+  // have opened a casualty prompt of its own (above), and the roll must not happen
+  // while that prompt is open.
+  if (d.postCasualty && paid > 0) pc.onslaughtAttack = { side, hits: paid };
   // Re-enter the same step so the OTHER side's cost (if any) is asked before moving on.
 }
 

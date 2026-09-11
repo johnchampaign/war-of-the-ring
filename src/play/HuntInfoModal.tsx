@@ -41,7 +41,9 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
 
         <Section title="Re-rolls (location modifiers)">
           The Shadow re-rolls one failed Hunt die for <b>each</b> of these in the Ring-bearers' region: a <b>Shadow-controlled Stronghold</b>, a <b>Shadow Army</b>, and a <b>Nazgûl</b>.
-          {src
+          {onMordor
+            ? <div style={{ marginTop: 4, color: '#998', fontStyle: 'italic' }}>On the Mordor Track no Hunt is rolled, so no re-rolls apply — the Ring-bearers are off the map.</div>
+            : src
             ? (srcList.length
                 ? <div style={{ marginTop: 4, color: '#e88' }}>Right now at {regionName(view, fs.location)}: {srcList.join(', ')} → <b>{srcList.length} re-roll{srcList.length === 1 ? '' : 's'}</b>.</div>
                 : <div style={{ marginTop: 4, color: '#9c9' }}>None apply at {regionName(view, fs.location)} right now.</div>)
