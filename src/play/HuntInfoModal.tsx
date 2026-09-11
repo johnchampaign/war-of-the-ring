@@ -40,7 +40,7 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
         </Section>
 
         <Section title="Re-rolls (location modifiers)">
-          The Shadow re-rolls one failed Hunt die for <b>each</b> of these in the Ring-bearers' region: a <b>Shadow-controlled Stronghold</b>, a <b>Shadow Army</b>, and a <b>Nazgûl</b> (or the Witch-king).
+          The Shadow re-rolls one failed Hunt die for <b>each</b> of these in the Ring-bearers' region: a <b>Shadow-controlled Stronghold</b>, a <b>Shadow Army</b>, and a <b>Nazgûl</b>.
           {src
             ? (srcList.length
                 ? <div style={{ marginTop: 4, color: '#e88' }}>Right now at {regionName(view, fs.location)}: {srcList.join(', ')} → <b>{srcList.length} re-roll{srcList.length === 1 ? '' : 's'}</b>.</div>

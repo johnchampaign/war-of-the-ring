@@ -5,6 +5,7 @@
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState, Side, DieFace } from '../engine/types';
 import { charDieLeaders } from '../engine/armies';
+import { playFacesFor } from '../engine/data';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { charName } from './charInfo';
@@ -15,7 +16,6 @@ const cardName = (id: string): string => (eventCards as any).cards.find((c: any)
 // The card's COMBAT half is what a Combat-card button plays — 'Scouts', not the
 // Event name 'The Spirit of Mordor' printed on the same card (report 4j520o4i46450w25).
 const combatTitle = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.combat?.title ?? cardName(id);
-const cardDeck = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.deck ?? '';
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function describeAction(a: WotrAction): string {
@@ -166,8 +166,12 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
     case 'recruitUnit': case 'diplomaticAction': case 'bringMinion': case 'sarumanMuster': return pick(['muster', 'armyMuster', 'will']);
     case 'drawEvent': return pick(['event', 'will']);
     case 'forceDiscardCard': return a.via === 'will' ? pick(['will']) : [...new Set(pool)]; // any Action die pays 'ring'/'die'
-    // A card plays via its type die (Character / Army-Muster) or the Event/Will wildcards (p.22).
-    case 'playEvent': return pick(cardDeck(a.cardId) === 'Character' ? ['character', 'event', 'will'] : ['army', 'armyMuster', 'muster', 'event', 'will']);
+    // A card plays via the die ICON PRINTED ON IT — Character, Army or Muster — or an
+    // Event/Will wildcard (p.21-22). The Strategy deck holds both Army-icon and
+    // Muster-icon cards, and this used to offer either die for any of them: the picker
+    // let you choose a Muster die for an Army card, then the engine (which reads the
+    // icon) spent the Army die and ignored the choice (player report 013366181q4c5r40).
+    case 'playEvent': return pick(playFacesFor(a.cardId));
     case 'moveArmy': case 'attack': {
       const r = view.regions[a.from];
       // Saruman leads an attack (its units stay put) but not a move; Isengard Elites
