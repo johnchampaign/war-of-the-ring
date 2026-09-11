@@ -29,7 +29,7 @@ const CHOICE_TITLE: Record<string, string> = {
   eventCasualties: 'How does your Army absorb the losses?',
   combatContinue: 'Continue the attack?',
   combatRetreat: 'Retreat or stand?',
-  retreatTo: 'Retreat — choose a destination',
+  retreatTo: 'Retreat — click a highlighted region on the map',
   preCombatRetreat: 'Retreat before combat — choose a destination',
   huntDamage: 'The Hunt strikes!',
   huntPreventDraw: 'Prevent the Hunt tile draw? (you won’t see it)',
@@ -83,7 +83,12 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
   // buttons they went unnoticed ("played Riders of Rohan and nothing happened").
   const evModal = eventChoiceInModal(actions);
   const freeCard = choice?.kind === 'freeCharEvent';
-  const decisions = actions.filter((a) => isDecisionAction(a) || (evModal && a.kind === 'eventTarget') || (freeCard && a.kind === 'playEvent'));
+  // A retreat DESTINATION is picked on the map (the highlighted regions), not from a
+  // list of buttons — the binary Retreat-or-stand choice above it stays here (player
+  // report 0f3003342g666741). The modal keeps its frame so the battle context is
+  // visible while you click.
+  const decisions = actions.filter((a) => (isDecisionAction(a) || (evModal && a.kind === 'eventTarget') || (freeCard && a.kind === 'playEvent'))
+    && a.kind !== 'retreatTo' && a.kind !== 'preCombatRetreat');
 
   // Show only when there's a live decision (battle in progress, or a decision the
   // viewer owns). If a battle is up but it's the opponent's call, show a wait note.

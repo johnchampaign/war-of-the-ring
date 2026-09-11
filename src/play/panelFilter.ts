@@ -29,6 +29,8 @@ export const BOARD_PATH: Record<string, string> = {
   bringMinion: 'click a highlighted region, then the Minion in the muster menu',
   declareFellowship: 'click a highlighted region to declare the Fellowship there',
   placeGandalf: 'click a highlighted region to place Gandalf the White there',
+  retreatTo: 'click a highlighted region to retreat there (after choosing Retreat in the battle modal)'
+    + '; preCombatRetreat is the same, before the battle',
   revealMove: 'click a highlighted region to place the revealed Ring-bearers',
   separateMove: 'click a highlighted region to place the separated Companion(s)',
   eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves via click-army-then-destination, companion placements via the highlighted region; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',

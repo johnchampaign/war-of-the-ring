@@ -245,10 +245,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Board-click placement of the Fellowship figure: declaring it (Fellowship phase) or
   // choosing where it moves when revealed by the Hunt (revealMove choice).
   const placeActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' | 'revealMove' | 'separateMove' }> => a.kind === 'declareFellowship' || a.kind === 'revealMove' || a.kind === 'separateMove'), [g.legalActions]);
+  // Retreat destinations are board clicks (player report 0f3003342g666741): the
+  // battle modal asks Retreat-or-stand, the MAP answers "to where".
+  const retreatActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'retreatTo' | 'preCombatRetreat' }> => a.kind === 'retreatTo' || a.kind === 'preCombatRetreat'), [g.legalActions]);
+  const isRetreatPick = retreatActs.length > 0;
   // Gandalf the White's entry: a board click on one of the card's candidate regions.
   const gandalfActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'placeGandalf' }> => a.kind === 'placeGandalf'), [g.legalActions]);
   const isPlaceGandalf = gandalfActs.length > 0;
-  const declareTargets = useMemo(() => new Set([...placeActs.map((a) => a.target).filter((t): t is RegionId => !!t), ...gandalfActs.map((a) => a.region)]), [placeActs, gandalfActs]);
+  const declareTargets = useMemo(() => new Set([...placeActs.map((a) => a.target).filter((t): t is RegionId => !!t), ...gandalfActs.map((a) => a.region), ...retreatActs.map((a) => a.region)]), [placeActs, gandalfActs, retreatActs]);
   const isReveal = g.view?.pendingChoice?.kind === 'revealMove';
   const isSeparateMove = g.view?.pendingChoice?.kind === 'separateMove';
   // Continuing a Character-die move (RAW: one die moves all eligible characters).
@@ -402,7 +406,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // Placing the Fellowship figure (declare, or move-on-reveal): click a highlighted region.
     if (declareTargets.has(id)) {
-      const a = placeActs.find((x) => x.target === id) ?? gandalfActs.find((x) => x.region === id);
+      const a = placeActs.find((x) => x.target === id) ?? gandalfActs.find((x) => x.region === id) ?? retreatActs.find((x) => x.region === id);
       if (a) { clearMove(); void submit(a); }
       return;
     }
@@ -493,7 +497,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardRecruit || isCardMove || isPlaceGandalf || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardRecruit || isCardMove || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
@@ -785,7 +789,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           picker. The player saw a second pop-up stranded behind the first and the
           game was unresolvable (player report). The picker is now the only thing
           on screen once it opens; cancelling it brings this back. */}
-      <div style={{ display: (peekBoard || moveDraft) ? 'none' : 'contents' }}>
+      {/* A retreat DESTINATION is answered on the map, so the modal steps aside for it
+          (its backdrop would cover the very regions to click) — player report
+          0f3003342g666741. The battle resumes its modal as soon as the click lands. */}
+      <div style={{ display: (peekBoard || moveDraft || isRetreatPick) ? 'none' : 'contents' }}>
         {/* onDecisionAction, not submit: the End of Battle "keep figures back?" call is
             a decision-modal choice, and routing it straight to submit meant its only
             button was "Keep the whole Army forward" — the split picker was unreachable
@@ -804,6 +811,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             background: peekBoard ? '#caa84b' : '#2a2418', color: peekBoard ? '#1a1408' : '#f0e9d8', border: `2px solid ${peekBoard ? '#e6c869' : '#5a4a2a'}` }}>
           {peekBoard ? '↩ Back to choice' : '👁 Peek board'}
         </button>
+      )}
+      {isRetreatPick && (
+        <div style={{ position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 92, padding: '8px 16px', fontSize: 14, fontWeight: 600,
+          borderRadius: 8, background: '#3a2a12', color: '#f0d090', border: '1px solid #6a531f', boxShadow: '0 4px 20px #000' }}>
+          ⚑ Retreat — click a highlighted region to fall back there.
+        </div>
       )}
       <HuntPopup view={g.view} seen={huntSeen} onSeen={setHuntSeen} />
       <BattlePopup view={g.view} seen={battleSeen} onSeen={setBattleSeen} />
