@@ -15,6 +15,7 @@ import type { GameState, RegionId, Side, DieFace } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import { Board } from './Board';
 import { ActionPanel, DieTag } from './ActionPanel';
+import { regionName } from './names';
 import { StatusBar } from './StatusBar';
 import { HandStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
@@ -91,7 +92,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [charPick, setCharPick] = useState<{ from: RegionId; char: string; group?: string[] } | null>(null);
   // When a clicked region offers more than one thing to move (e.g. the army AND its
   // Nazgûl), let the player choose which.
-  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined; chars?: undefined } | { kind: 'assault'; char?: undefined; chars?: undefined } | { kind: 'muster'; char?: undefined; chars?: undefined } | { kind: 'chargroup'; chars: string[]; char?: undefined } | { kind: 'char'; char: string; chars?: undefined }> } | null>(null);
+  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined; chars?: undefined } | { kind: 'assault'; char?: undefined; chars?: undefined } | { kind: 'muster'; char?: undefined; chars?: undefined } | { kind: 'chargroup'; chars: string[]; char?: undefined } | { kind: 'char'; char: string; chars?: undefined } | { kind: 'cardchar'; act: WotrAction; label: string; char?: undefined; chars?: undefined } | { kind: 'cardgroup'; acts: WotrAction[]; char?: undefined; chars?: undefined }> } | null>(null);
   const [musterMenu, setMusterMenu] = useState<RegionId | null>(null); // board-click muster: the chosen Settlement
   // Choosing HOW MANY Nazgûl to move from a stack (RAW: move any number, not the whole group).
   // `card` set = this came from a Nazgûl-moving EVENT CARD, so confirming submits an
@@ -282,6 +283,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const cardSepActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => a.kind === 'eventTarget' && !!a.region && !!a.companion), [g.legalActions]);
   const cardSepTargets = useMemo(() => new Set(cardSepActs.map((a) => a.region!)), [cardSepActs]);
   const isCardSep = cardSepActs.length > 0;
+  // Gwaihir / We Prove the Swifter also MOVE Companions already on the map. Picking
+  // which ones used to be panel buttons; it now works like every other figure move —
+  // click their region and choose from the menu (player report 6f03724h00040z3r).
+  // These targets carry `from` + `companion` and no region; the DESTINATION step
+  // (companion + region) was already a board click, above.
+  const cardCharPicks = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> =>
+    a.kind === 'eventTarget' && !!a.from && !!a.companion && !a.region && !a.done), [g.legalActions]);
+  const cardCharSources = useMemo(() => new Set(cardCharPicks.map((a) => a.from!)), [cardCharPicks]);
+  const isCardCharPick = cardCharPicks.length > 0;
   // Independent characters (Nazgûl/Minion/Companion) are board-movable when a
   // Character (or Will) die is available — detected by any moveCharacter being legal.
   const canMoveChars = useMemo(() => g.legalActions.some((a) => a.kind === 'moveCharacter'), [g.legalActions]);
@@ -325,7 +335,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const cardMoveActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => isCardArmyMoveTarget(a)), [g.legalActions]);
   const isCardMove = cardMoveActs.length > 0;
   const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...minionActs.map((a) => a.region), ...cardRecruitActs.map((a) => a.region!)]), [recruitActs, minionActs, cardRecruitActs]);
-  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets]), [boardArmyActs, cardMoveActs, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
+  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets, ...cardCharSources]), [boardArmyActs, cardMoveActs, cardCharSources, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
   // The generic "why can't I do that?" hints (moveBlockReason / musterBlockReason)
   // belong to the BASIC Move / Muster actions during Action Resolution, and nowhere
   // else. Every other map click is a different question — placing the Ring-bearers on
@@ -386,8 +396,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
 
   // Begin moving whatever was chosen from a region: an army (select for the picker)
   // or a specific independent character (Nazgûl/Minion/Companion).
-  const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }) => {
+  const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }
+    | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] }) => {
     setMoveMenu(null);
+    // A card's Companion pick: submitting it makes the destinations legal, and those
+    // are already board clicks. A group is picked one at a time (the card allows any
+    // number), so the submits run in order.
+    if (opt.kind === 'cardchar') { clearMove(); void submit(opt.act); return; }
+    if (opt.kind === 'cardgroup') { clearMove(); void (async () => { for (const a of opt.acts) await submit(a); })(); return; }
     if (opt.kind === 'army') { setCharPick(null); setSelected(region); }
     else if (opt.kind === 'assault') { setCharPick(null); setSelected(null); setMoveDraft({ from: region, to: region, kind: 'attack' }); } // storm the besieged Stronghold
     else if (opt.kind === 'muster') { setCharPick(null); setSelected(null); setMusterMenu(region); } // pick the bundle for this Settlement
@@ -466,7 +482,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // ≥2 movable Companions here: offer moving them TOGETHER (group range = the
     // highest Level in the group — rulebook p.24).
     const compsHere = g.you === 'fp' ? charsHere.filter((c) => c !== 'nazgul') : [];
-    const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }> = [
+    // A card is asking WHICH Companions travel: offer each, and the group.
+    const cardHere = cardCharPicks.filter((a) => a.from === id);
+    const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }
+      | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] }> = [
+      ...cardHere.map((a) => ({ kind: 'cardchar' as const, act: a, label: charName(a.companion!) })),
+      ...(cardHere.length >= 2 ? [{ kind: 'cardgroup' as const, acts: cardHere as WotrAction[] }] : []),
       ...(armyHere ? [{ kind: 'army' as const }] : []),
       ...(assaultHere ? [{ kind: 'assault' as const }] : []),
       ...(musterHere ? [{ kind: 'muster' as const }] : []),
@@ -509,7 +530,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardRecruit || isCardMove || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || isCardRecruit || isCardMove || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
@@ -658,7 +679,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                     : declareTargets.size > 0
                       ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`
                       : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : charName(charPick.char)} — click a highlighted region to move there (or click the piece again to cancel).`
-                        : selected ? `Selected ${selected} — click a highlighted region to move/attack (or click again to cancel).`
+                        : selected ? `Selected ${regionName(selected)} — click a highlighted region to move/attack (or click again to cancel).`
                           : isArmyMove2 ? 'Second army move — click a green army to move it (a different army), or “No second army move” on the right.'
                             : `Click a highlighted (green) region to move an army or a character${musterTargets.size ? ', or to muster in a Settlement' : ''}.`}
                 </div>
@@ -768,7 +789,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             {moveMenu.options.map((o, i) => (
               <button key={i} onClick={() => beginMove(moveMenu.region, o)}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
-                {o.kind === 'army' ? 'The army' : o.kind === 'assault' ? (sortieForce(g.view!, moveMenu!.region, me) ? '⚔ Sortie against the besiegers' : '⚔ Assault the besieged Stronghold') : o.kind === 'muster' ? '🛡 Muster here' : o.kind === 'chargroup' ? `All Companions together (${o.chars.map(charName).join(', ')})` : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
+                {o.kind === 'army' ? 'The army'
+                  : o.kind === 'assault' ? (sortieForce(g.view!, moveMenu!.region, me) ? '⚔ Sortie against the besiegers' : '⚔ Assault the besieged Stronghold')
+                  : o.kind === 'muster' ? '🛡 Muster here'
+                  : o.kind === 'cardchar' ? `${o.label} (by card)`
+                  : o.kind === 'cardgroup' ? `All of them together, by card (${o.acts.map((a) => charName((a as Extract<WotrAction, { kind: 'eventTarget' }>).companion!)).join(', ')})`
+                  : o.kind === 'chargroup' ? `All Companions together (${o.chars.map(charName).join(', ')})`
+                  : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
               </button>
             ))}
             <button onClick={() => setMoveMenu(null)} style={{ marginTop: 6, padding: '5px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>

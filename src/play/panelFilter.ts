@@ -33,7 +33,7 @@ export const BOARD_PATH: Record<string, string> = {
     + '; preCombatRetreat is the same, before the battle',
   revealMove: 'click a highlighted region to place the revealed Ring-bearers',
   separateMove: 'click a highlighted region to place the separated Companion(s)',
-  eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves via click-army-then-destination, companion placements via the highlighted region; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
+  eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves via click-army-then-destination, companion placements via the highlighted region, a card move of Companions already on the map via their region\'s menu; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
   useElvenRing: 'the Elven Rings pill in the status bar',
   playEvent: 'click the card in your hand (the Ents Awake prompt owns its one free Character-card play)',
 };
@@ -64,6 +64,12 @@ export function panelShowsAction(a: WotrAction, legal: WotrAction[], view: GameS
     // "no second move" (done) option as a button.
     && !(a.kind === 'armyMove2' && !!a.from)
     && !(a.kind === 'eventTarget' && !!a.region && !!a.companion) // card-separation destinations go on the board
+    // ...and so does a card's "which Companions travel?" step, when they are already
+    // on the map: click their region and pick from the menu, exactly like any other
+    // figure move (player report 6f03724h00040z3r). A SEPARATION from the Fellowship
+    // keeps its buttons — the Fellowship's region is secret, so there is nothing to
+    // click.
+    && !(a.kind === 'eventTarget' && !!a.from && !!a.companion && !a.region && !a.done)
     // Card RECRUITS and card ARMY MOVES are board flows too — the same muster menu and
     // move picker a Muster / Army die uses (player report 2s3p6y0x000k6b70: "Event card
     // recruitment should use that interface ... likewise all movement affected by cards").
