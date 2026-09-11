@@ -118,7 +118,14 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               {decisions.map((a, i) => <DecisionButton key={i} action={a} disabled={busy} onClick={() => click(a)} onHover={setHoverCard} />)}
             </div>
-            <CardBlurb id={hoverCard ?? (choice?.kind === 'eventTarget' ? (choice.data as { card?: string } | undefined)?.card ?? null : null)} />
+            {/* With nothing hovered, show the card the prompt is ABOUT: the Event card
+                being resolved, or — in a battle — the Combat card already revealed this
+                round, at a readable size (player reports 1w0z61380p6d094e,
+                1p5e543o6h015i0r: "there is no card to hover over", "the image is
+                hilariously tiny"). The attacker's card is shown when both are up. */}
+            <CardBlurb id={hoverCard
+              ?? (choice?.kind === 'eventTarget' ? (choice.data as { card?: string } | undefined)?.card ?? null : null)
+              ?? (pc ? revealedCard(pc.attacker === you ? pc.attackerCard ?? pc.defenderCard : pc.defenderCard ?? pc.attackerCard) : null)} />
           </>
         ) : (
           <div style={{ color: '#cc9', marginTop: 12 }}>Waiting for {sideName(pc ? (choice?.owner ?? pc.attacker) : you)} to decide…</div>
@@ -204,6 +211,12 @@ function ArmySize({ label, force, side, view }: { label: string; force?: { units
     </div>
   );
 }
+
+/** A Combat card id only if it is actually revealed: a card the opponent has declared
+ *  but not yet turned face up reaches this seat as a 'hidden…' placeholder, and must
+ *  never be resolved to a real card here (RAW p.29). */
+const revealedCard = (id: string | null | undefined): string | null =>
+  (!id || id === 'hidden' || id.startsWith('hidden')) ? null : id;
 
 function PlayedCard({ id, who }: { id: string; who: string }) {
   // 'hidden' = the opponent has DECLARED a Combat card but it's still face down
