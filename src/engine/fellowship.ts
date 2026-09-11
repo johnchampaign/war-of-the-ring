@@ -420,7 +420,15 @@ const ARAGORN_CITIES: RegionId[] = ['minas-tirith', 'dol-amroth', 'pelargir'];
 const GANDALF_WHITE_REGIONS: RegionId[] = ['fangorn', 'grey-havens', 'rivendell', 'lorien', 'woodland-realm'];
 
 export function findCharacterRegion(state: GameState, id: CharacterId): RegionId | null {
-  for (const r of Object.keys(state.regions)) if (state.regions[r]!.characters.includes(id)) return r;
+  for (const r of Object.keys(state.regions)) {
+    const reg = state.regions[r]!;
+    // A besieged Stronghold's garrison is still IN its region (p.31) — only its
+    // figures sit in the Stronghold Box. Searching the open field alone lost every
+    // Companion under siege: Strider inside a besieged Minas Tirith could not be
+    // crowned (player report 84xepmomb9r6lvdn), and Gandalf the Grey inside one could
+    // not be replaced by the White.
+    if (reg.characters.includes(id) || reg.siegeBox?.characters.includes(id)) return r;
+  }
   return null;
 }
 
@@ -454,7 +462,10 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
   if (which === 'aragorn') {
     if (!canBringAragorn(state)) return false;
     const r = findCharacterRegion(state, 'strider')!;
-    const arr = state.regions[r]!.characters;
+    // He is crowned WHERE HE STANDS — which may be inside a besieged Stronghold's
+    // box, not the open field around it (player report 84xepmomb9r6lvdn).
+    const reg = state.regions[r]!;
+    const arr = reg.characters.includes('strider') ? reg.characters : reg.siegeBox!.characters;
     arr.splice(arr.indexOf('strider'), 1); arr.push('aragorn');
     state.characters.entered.push('aragorn');
     // Re-key the on-map index too — the roster read a stale 'strider' at his old
@@ -473,8 +484,18 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     if (!canBringGandalfWhite(state)) return false;
     const grey = findCharacterRegion(state, 'gandalf-grey');
     const target = (dest && gandalfWhiteCandidates(state).includes(dest)) ? dest : gandalfWhiteRegion(state)!;
-    if (grey) { const a = state.regions[grey]!.characters; a.splice(a.indexOf('gandalf-grey'), 1); }
-    state.regions[target]!.characters.push('gandalf-white');
+    // Same for the Grey: he may be standing in a besieged Stronghold's box, and the
+    // White replaces him in place there.
+    let placed = false;
+    if (grey) {
+      const gr = state.regions[grey]!;
+      const a = gr.characters.includes('gandalf-grey') ? gr.characters : gr.siegeBox?.characters;
+      if (a) {
+        a.splice(a.indexOf('gandalf-grey'), 1);
+        if (grey === target && a !== gr.characters) { a.push('gandalf-white'); placed = true; }
+      }
+    }
+    if (!placed) state.regions[target]!.characters.push('gandalf-white');
     state.characters.entered.push('gandalf-white');
     delete state.characters.inPlay['gandalf-grey'];
     state.characters.inPlay['gandalf-white'] = target;

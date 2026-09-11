@@ -156,6 +156,17 @@ export function actionDie(a: WotrAction): string | null {
 /** The distinct dice in the actor's pool that could spend on this action (the
  *  die-picker offers a choice when there's more than one). Mirrors the engine's
  *  consume face-lists. Empty = no choice (free/single-die action). */
+/** Whose figures are these? A siege box holds one side's garrison; its units name
+ *  their Nations, so the side follows from those. */
+const FP_NATIONS_SET = new Set<string>(['dwarves', 'elves', 'gondor', 'north', 'rohan']);
+function forceBelongsTo(f: { units: Record<string, { regular: number; elite: number } | undefined> }, side: Side): boolean {
+  for (const [n, u] of Object.entries(f.units)) {
+    if (!u || (u.regular + u.elite) <= 0) continue;
+    return FP_NATIONS_SET.has(n) === (side === 'fp');
+  }
+  return false;
+}
+
 export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[] {
   const pool = view.dice[you] ?? [];
   const pick = (faces: DieFace[]): DieFace[] => [...new Set(pool.filter((f) => faces.includes(f)))];
@@ -173,7 +184,14 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
     // icon) spent the Army die and ignored the choice (player report 013366181q4c5r40).
     case 'playEvent': return pick(playFacesFor(a.cardId));
     case 'moveArmy': case 'attack': {
-      const r = view.regions[a.from];
+      // A SORTIE (attack from === to out of a besieged Stronghold) is fought by the
+      // figures in the Stronghold Box; the region itself holds the BESIEGER. Reading
+      // the region measured the enemy's Leaders, so a Character die was never offered
+      // for a sortie even though the engine allows it (player report pi96ev7lwj6xzv9h).
+      const reg = view.regions[a.from];
+      const sortie = a.kind === 'attack' && a.from === a.to && reg?.besieged && reg.siegeBox
+        && charDieLeaders(view, reg.siegeBox, you, true) >= 0 && forceBelongsTo(reg.siegeBox, you) ? reg.siegeBox : null;
+      const r = sortie ?? reg;
       // Saruman leads an attack (its units stay put) but not a move; Isengard Elites
       // are Leaders in their own right while he is in play.
       const leader = !!r && charDieLeaders(view, r, you, a.kind === 'attack') > 0;
