@@ -126,8 +126,11 @@ export function CardZoom({ id, onClose }: { id: string; onClose: () => void }) {
 
 const wrap: React.CSSProperties = { display: 'flex', gap: 6, overflowX: 'auto', padding: '5px 8px', background: '#14110b', borderTop: '1px solid #2a2418', alignItems: 'center' };
 const label: React.CSSProperties = { fontSize: 11, color: '#998', alignSelf: 'center', marginRight: 2, whiteSpace: 'nowrap', flexShrink: 0 };
-const img: React.CSSProperties = { height: 76, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', cursor: 'pointer' };
+// A hand card is clicked to PLAY it, so nothing on it should offer a text cursor or
+// swallow the click — the type badge over its corner did both (player report
+// 12295h3l3m5w3y3t).
+const img: React.CSSProperties = { height: 76, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', cursor: 'pointer', userSelect: 'none' };
 const zoomBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.8)', display: 'grid', placeItems: 'center', zIndex: 60, cursor: 'zoom-out' };
 const zoomText: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 10, maxWidth: 440, cursor: 'default' };
 const zoomReq: React.CSSProperties = { color: '#d8b48c', fontStyle: 'italic' };
-const textCard: React.CSSProperties = { width: 58, height: 76, flexShrink: 0, borderRadius: 4, padding: 4, color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443', fontSize: 9 };
+const textCard: React.CSSProperties = { width: 58, height: 76, flexShrink: 0, borderRadius: 4, padding: 4, userSelect: 'none', color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443', fontSize: 9 };

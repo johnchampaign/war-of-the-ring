@@ -15,10 +15,14 @@ export function cardPlayType(deck?: string, via?: string | null): { label: strin
   return { label: deck ?? '?', bg: '#555' };
 }
 
+/** NB the badge is painted OVER a card that is itself clickable (a playable card in
+ *  hand plays on click). It is decoration, so it takes no pointer events and offers
+ *  no text cursor — otherwise the corner it covers is a dead spot that refuses the
+ *  click and shows an I-beam instead (player report 12295h3l3m5w3y3t). */
 export function CardTypeBadge({ deck, via, small, style }: { deck?: string; via?: string | null; small?: boolean; style?: React.CSSProperties }) {
   const t = cardPlayType(deck, via);
   return (
-    <span style={{ background: t.bg, color: '#fff', borderRadius: 4, padding: small ? '0 4px' : '1px 6px', fontSize: small ? 9 : 11, fontWeight: 700, whiteSpace: 'nowrap', ...style }}>
+    <span style={{ background: t.bg, color: '#fff', borderRadius: 4, padding: small ? '0 4px' : '1px 6px', fontSize: small ? 9 : 11, fontWeight: 700, whiteSpace: 'nowrap', pointerEvents: 'none', userSelect: 'none', ...style }}>
       {t.label}
     </span>
   );
