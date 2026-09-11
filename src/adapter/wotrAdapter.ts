@@ -7,7 +7,7 @@ import type { WotrAction, MoveSel } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, MORDOR_INTERIOR } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, MORDOR_INTERIOR, fellowshipPath } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import { log, logCardDraw } from '../engine/log';
 import {
@@ -550,8 +550,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requirePhase(state, 'fellowship');
       if (state.flags.fellowshipDeclaredThisTurn) throw new Error('The Fellowship has already been declared this turn');
       const fromLoc = state.fellowship.location;
-      const stepsBefore = Math.min(state.fellowship.progress, pathTo(fromLoc, action.target).length);
-      const traversed = [fromLoc, ...pathTo(fromLoc, action.target).slice(0, stepsBefore)];
+      // The route is the player's to trace, and nobody walks through a Shadow
+      // Stronghold (or Moria under the Balrog) when a way round is the same length —
+      // fellowshipPath picks that way (player report 384n5a5y63480b3g).
+      const declPath = fellowshipPath(state, fromLoc, action.target, state.fellowship.progress);
+      const stepsBefore = Math.min(state.fellowship.progress, declPath.length);
+      const traversed = [fromLoc, ...declPath.slice(0, stepsBefore)];
       declareFellowship(state, action.target);
       // Declaring keeps the Fellowship HIDDEN, so it draws NO Hunt tile — not even when
       // its traced path crosses (or ends in) a Shadow-controlled Stronghold. The
@@ -1210,7 +1214,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'revealMove', 'fp');
       const fs = state.fellowship;
       const fromLoc = fs.location;
-      const path = pathTo(fromLoc, action.target);
+      const path = fellowshipPath(state, fromLoc, action.target, fs.progress);
       const steps = Math.min(fs.progress, path.length);
       const traversed = [fromLoc, ...path.slice(0, steps)];
       if (steps > 0) fs.location = path[steps - 1]!;

@@ -107,6 +107,82 @@ export const MORDOR_INTERIOR: RegionId[] = ['gorgoroth', 'barad-dur', 'nurn'];
  *  list of regions to step through (excluding `from`, including `to`), or [] if
  *  unreachable. */
 export function pathTo(from: RegionId, to: RegionId): RegionId[] {
+  return pathAvoiding(from, to, new Set());
+}
+
+/** The Fellowship's route: the way that crosses the fewest regions it would rather
+ *  not, using any Progress it has to spare.
+ *
+ *  The traced path is not cosmetic — on a REVEAL it costs one extra Hunt tile per
+ *  Shadow Stronghold crossed (p.39), and Balrog of Moria fires on a path through
+ *  Moria. A player traces the route themselves on the tabletop and would walk round
+ *  rather than through, but plain BFS took the shortest line every time (player report
+ *  384n5a5y63480b3g: "you can never move directly to Morannon from Fords of Bruinen or
+ *  Rivendell without passing through Moria" — going round the Misty Mountains is
+ *  LONGER, so no tie-break could have found it).
+ *
+ *  `budget` is the Progress available: declaring and revealing both reset Progress to
+ *  0 whatever route is walked, so steps not needed to reach the destination are
+ *  use-them-or-lose-them and spending them to dodge a Hunt tile is free. Within that
+ *  budget the order is: fewest crossings first, then fewest steps. Crossing is never
+ *  an advantage, so this needs no prompt — it is the choice every player would make.
+ *  With no budget given, only shortest paths are considered. */
+export function fellowshipPath(state: GameState, from: RegionId, to: RegionId, budget?: number): RegionId[] {
+  const avoid = new Set<RegionId>();
+  for (const id of Object.keys(state.regions) as RegionId[]) {
+    if (REGIONS[id]?.settlement === 'Stronghold' && settlementController(state, id) === 'shadow') avoid.add(id);
+  }
+  if (state.cards.shadow.table.includes('sh-char-17')) avoid.add('moria'); // Balrog of Moria
+  return leastHarmPath(from, to, avoid, budget);
+}
+
+/** Least-harm route from `from` to `to` of at most `budget` steps (default: only the
+ *  shortest). Exact dynamic programming over STEP COUNT: `harm[k][r]` is the fewest
+ *  crossings that reach `r` in exactly k steps, so a route is never discarded for
+ *  being costlier when it is the only one short enough to fit the budget. (A plain
+ *  cheapest-first walk got that wrong: dominating on crossings alone pruned the
+ *  higher-harm-but-shorter route and then found no path at all.) Among equal
+ *  crossings the fewest steps wins. The DESTINATION's own cost is never counted —
+ *  the Fellowship may legally end wherever it is going. */
+function leastHarmPath(from: RegionId, to: RegionId, avoid: ReadonlySet<RegionId>, budget?: number): RegionId[] {
+  if (from === to) return [];
+  const cap = Math.min(budget ?? distanceBetween(from, to), 24);
+  if (!Number.isFinite(cap) || cap <= 0) return [];
+  const cost = (r: string) => (r !== to && avoid.has(r as RegionId) ? 1 : 0);
+  // layer[k] maps region -> { harm, prev } for paths of exactly k steps.
+  const layers: Array<Map<string, { harm: number; prev: string | null }>> = [new Map([[from, { harm: 0, prev: null }]])];
+  for (let k = 1; k <= cap; k++) {
+    const prevLayer = layers[k - 1]!, cur = new Map<string, { harm: number; prev: string | null }>();
+    for (const [r, node] of prevLayer) {
+      for (const n of REGIONS[r]?.adjacency ?? []) {
+        const harm = node.harm + cost(n);
+        const seen = cur.get(n);
+        if (!seen || harm < seen.harm) cur.set(n, { harm, prev: r });
+      }
+    }
+    layers.push(cur);
+  }
+  let bestK = -1, bestHarm = Infinity;
+  for (let k = 1; k <= cap; k++) {
+    const hit = layers[k]!.get(to);
+    if (hit && hit.harm < bestHarm) { bestHarm = hit.harm; bestK = k; }
+  }
+  if (bestK < 0) return [];
+  const path: RegionId[] = [];
+  let cur: string = to;
+  for (let k = bestK; k >= 1; k--) { path.unshift(cur as RegionId); cur = layers[k]!.get(cur)!.prev!; }
+  return path;
+}
+
+/** Plain BFS hop count (Infinity if unreachable) — the default route budget. */
+function distanceBetween(from: RegionId, to: RegionId): number {
+  const p = pathAvoiding(from, to, new Set());
+  return p.length ? p.length : Infinity;
+}
+
+/** BFS shortest path that never steps into `avoid` (the destination itself is
+ *  allowed — the Fellowship may legally end in a Shadow Stronghold's region). */
+function pathAvoiding(from: RegionId, to: RegionId, avoid: ReadonlySet<RegionId>): RegionId[] {
   if (from === to) return [];
   const prev: Record<string, string> = {};
   const seen = new Set([from]);
@@ -116,6 +192,9 @@ export function pathTo(from: RegionId, to: RegionId): RegionId[] {
     for (const r of frontier) {
       for (const n of REGIONS[r]?.adjacency ?? []) {
         if (seen.has(n)) continue;
+        // `avoid` blocks a region as a STEPPING STONE only; the destination is always
+        // reachable (the Fellowship may end its move in a Shadow Stronghold's region).
+        if (avoid.has(n) && n !== to) continue;
         seen.add(n); prev[n] = r;
         if (n === to) {
           const path = [to];
