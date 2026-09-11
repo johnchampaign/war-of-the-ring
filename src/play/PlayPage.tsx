@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGame, ChatPanel } from 'digital-boardgame-framework/client';
 import type { GameClientApi, LogTime } from '../online/gameClient';
-import type { GameState, RegionId, Side, DieFace } from '../engine/types';
+import type { GameState, RegionId, Side, DieFace, Nation } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import { Board } from './Board';
 import { ActionPanel, DieTag } from './ActionPanel';
@@ -34,7 +34,7 @@ import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, trivialDie } from './actionText';
-import { moveBlockReason, musterBlockReason } from '../engine/armies';
+import { moveBlockReason, musterBlockReason, cardPathBlockReason, regionHops } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial } from './panelFilter';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
@@ -54,6 +54,9 @@ const dieAllowsAction = (a: WotrAction, view: GameState, you: Side, die: DieFace
 };
 
 /** Action kinds that accept an explicit `die` — see the header note. */
+/** Which Nations belong to the Free Peoples — used to name the Nations actually
+ *  travelling on a card move, so a split leaves the not-At-War half's restriction behind. */
+const FP_NATION_SET = new Set<Nation>(['dwarves', 'elves', 'gondor', 'north', 'rohan'] as Nation[]);
 const DIE_BEARING = new Set<WotrAction['kind']>([
   'moveFellowship', 'hideFellowship', 'separateCompanion', 'companionMuster', 'sarumanMuster',
   'drawEvent', 'playEvent', 'diplomaticAction', 'recruitUnit', 'bringMinion',
@@ -86,6 +89,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [diePick, setDiePick] = useState<WotrAction | null>(null);
   const charDieOk = !activeDie || activeDie === 'character' || activeDie === 'will';
   const [selected, setSelected] = useState<RegionId | null>(null);
+  // A card that moves an Army "through more than one region" is traced step by step:
+  // each click takes one step, and the route decides what is captured on the way
+  // (p.27 — player report 384n5a5y63480b3g). `route` holds the regions entered so far.
+  const [route, setRoute] = useState<RegionId[]>([]);
   const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' | 'armyMove2' | 'eventMove' | 'holdBack' | 'advance'; base?: WotrAction } | null>(null);
   // Board-driven independent-character (Nazgûl / Minion / Companion) move in progress.
   // `group` (Companions only): move several together — range = highest Level (p.24).
@@ -334,6 +341,33 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const isCardRecruit = cardRecruitActs.length > 0;
   const cardMoveActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => isCardArmyMoveTarget(a)), [g.legalActions]);
   const isCardMove = cardMoveActs.length > 0;
+  // Everything about the in-progress trace: where we stand, how far the card still
+  // reaches, which neighbours are legal next steps, and whether we may stop here.
+  const FP_NATIONS = FP_NATION_SET;
+  const trace = useMemo(() => {
+    if (!selected || !g.view || !g.you) return null;
+    const legs = cardMoveActs.filter((a) => a.from === selected && a.mode !== 'attack');
+    if (!legs.length) return null;
+    // A card that can also ATTACK out of this region keeps the old one-click flow:
+    // an attack is declared from where the Army stands, so it does not compose with
+    // walking a route first.
+    if (cardMoveActs.some((a) => a.from === selected && a.mode === 'attack')) return null;
+    const head = (route.length ? route[route.length - 1] : selected) as RegionId;
+    // The card's reach: the farthest destination it offers from here. A detour may
+    // use every step of it, so that is the budget for the whole route.
+    const budget = Math.max(...legs.map((a) => regionHops(selected as RegionId, a.to!)));
+    const nations = (Object.keys(g.view.regions[selected]?.units ?? {}) as Nation[])
+      .filter((n) => (g.you === 'fp') === FP_NATIONS.has(n));
+    const steps = new Set<RegionId>();
+    if (route.length < budget) {
+      for (const n of REGIONS[head]?.adjacency ?? []) {
+        if (n === selected || route.includes(n as RegionId)) continue;
+        if (!cardPathBlockReason(g.view, selected as RegionId, [...route, n as RegionId], g.you as Side, nations)) steps.add(n as RegionId);
+      }
+    }
+    const finish = legs.find((a) => a.to === head) ?? null;
+    return { head, budget, steps, finish, left: budget - route.length };
+  }, [selected, route, cardMoveActs, g.view, g.you]);
   const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...minionActs.map((a) => a.region), ...cardRecruitActs.map((a) => a.region!)]), [recruitActs, minionActs, cardRecruitActs]);
   const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets, ...cardCharSources]), [boardArmyActs, cardMoveActs, cardCharSources, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
   // The generic "why can't I do that?" hints (moveBlockReason / musterBlockReason)
@@ -382,17 +416,19 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     return set;
   }, [g.view, sepCompanion, isCardSep, cardSepTargets, declareTargets]);
   // The region currently "selected" for highlighting (an army source, a char source, or a menu region).
-  const activeRegion = selected ?? charPick?.from ?? moveMenu?.region ?? null;
+  // While a card route is being traced, the ACTIVE region is where the Army has
+  // walked to, not where it set out — that is the one the next step leaves from.
+  const activeRegion = trace?.head ?? selected ?? charPick?.from ?? moveMenu?.region ?? null;
   const charDestinations = useMemo(
     () => (g.view && charPick && g.you ? new Set(characterDestinations(g.view, g.you as Side, charPick.char, charPick.from)) : new Set<RegionId>()),
     [g.view, charPick, g.you],
   );
   const destinations = useMemo(
-    () => new Set<RegionId>([...boardArmyActs.filter((a) => a.from === selected).map((a) => a.to!), ...cardMoveActs.filter((a) => a.from === selected).map((a) => a.to!), ...charDestinations]),
-    [boardArmyActs, cardMoveActs, selected, charDestinations],
+    () => new Set<RegionId>([...boardArmyActs.filter((a) => a.from === selected).map((a) => a.to!), ...(trace ? trace.steps : cardMoveActs.filter((a) => a.from === selected).map((a) => a.to!)), ...charDestinations]),
+    [boardArmyActs, cardMoveActs, trace, selected, charDestinations],
   );
 
-  const clearMove = () => { setSelected(null); setCharPick(null); setMoveMenu(null); setNazPick(null); setMusterMenu(null); };
+  const clearMove = () => { setSelected(null); setCharPick(null); setMoveMenu(null); setNazPick(null); setMusterMenu(null); setRoute([]); };
 
   // Begin moving whatever was chosen from a region: an army (select for the picker)
   // or a specific independent character (Nazgûl/Minion/Companion).
@@ -451,6 +487,18 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (id === charPick.from) { setCharPick(null); return; } // click the piece again to cancel
     }
     // An army move is in progress: click a highlighted destination (army-only set).
+    // Tracing a card's route: each click takes ONE step. Clicking where we already
+    // stand stops the journey there (if the card can end there), which is how the
+    // player says "done" — the reporter's own suggestion.
+    if (trace) {
+      if (id === trace.head && trace.finish) { const act = trace.finish; const path = [...route];
+        clearMove();
+        if (act.mode === 'attack') void submit({ ...act, path });
+        else setMoveDraft({ from: act.from!, to: act.to!, kind: 'eventMove', base: { ...act, path } });
+        return; }
+      if (trace.steps.has(id)) { setRoute((r) => [...r, id]); return; }
+      if (id === selected && !route.length) { clearMove(); return; }   // click the army again to cancel
+    }
     if (selected && destinations.has(id)) {
       const cardAct = cardMoveActs.find((a) => a.from === selected && a.to === id);
       if (cardAct) {
@@ -654,6 +702,29 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 take clicks back — otherwise this strip would become a dead band along
                 the bottom of the map where regions can't be clicked. */}
             <div style={{ position: 'absolute', left: 8, right: 8, bottom: 8, zIndex: 20, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {trace && (
+                <div style={{ pointerEvents: 'auto', color: '#f0e9d8', background: 'rgba(35,52,31,0.96)', border: '1px solid #6ea84f', fontFamily: 'system-ui', fontSize: 13, padding: '6px 10px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span>
+                    <b>Route:</b> {[selected as RegionId, ...route].map((r) => regionName(r)).join(' → ')}
+                    {trace.left > 0 ? ` · ${trace.left} step${trace.left === 1 ? '' : 's'} left` : ' · no steps left'}
+                  </span>
+                  <span style={{ color: '#b9d6a3' }}>
+                    {trace.steps.size > 0 ? 'Click a highlighted region to walk one step.' : 'Nowhere further to go.'}
+                  </span>
+                  {trace.finish && (
+                    <button onClick={() => { const act = trace.finish!; const path = [...route]; clearMove();
+                      if (act.mode === 'attack') void submit({ ...act, path });
+                      else setMoveDraft({ from: act.from!, to: act.to!, kind: 'eventMove', base: { ...act, path } }); }}
+                      style={{ padding: '3px 10px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: '#2c6a3a', color: '#f0f7ee', border: '1px solid #6ea84f' }}>
+                      ✓ Stop here ({regionName(trace.head)})
+                    </button>
+                  )}
+                  <button onClick={() => clearMove()}
+                    style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 12, borderRadius: 6, cursor: 'pointer', background: 'transparent', color: '#cb8', border: '1px solid #5a4a2a' }}>
+                    cancel
+                  </button>
+                </div>
+              )}
               {errorMsg && (
                 <div onClick={() => setErrorSeen(errorMsg)} title="Click to dismiss"
                   style={{ pointerEvents: 'auto', cursor: 'pointer', color: '#fff', background: 'rgba(122,31,31,0.95)', border: '1px solid #a8413a', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>

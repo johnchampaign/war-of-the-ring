@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -87,8 +87,34 @@ type CardMoveSel = { units?: Partial<Record<Nation, { regular?: number; elite?: 
  *  moving" (deviation D15, now closed). The selection is sanitized against the
  *  region (clamped to available own-side figures); if no unit survives the clamp
  *  the WHOLE Army moves, so a malformed selection degrades to the old behavior. */
-function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel): void {
+function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel, path?: readonly RegionId[]): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
+  // THE ROUTE MATTERS. A card move "through more than one region" enters each region
+  // on the way, and entering an enemy Settlement free of enemy units captures it —
+  // which wakes its Nation (p.27, p.32). A route through Dale takes Dale and rouses
+  // the North; one through the Old Forest Road does neither (player report
+  // 384n5a5y63480b3g). The move used to jump straight from origin to destination, so
+  // nothing en route ever happened.
+  //
+  // `path` is the route the player traced (validated here — an illegal one is
+  // refused rather than quietly straightened). With none given, the QUIET route is
+  // taken: the way round that captures nothing, so no Nation is ever woken by a
+  // choice nobody made. Only a journey with no alternative captures on the way.
+  const movingNations = (Object.keys(sel?.units ?? src.units) as Nation[]).filter((n) => sideOfNation(n) === side);
+  const route = path?.length ? [...path] : quietCardPath(state, from as RegionId, to as RegionId, side, movingNations, regionDist(from, to) + 2);
+  if (path?.length) {
+    const bad = cardPathBlockReason(state, from as RegionId, route, side, movingNations);
+    if (bad) throw new Error(bad);
+    if (route[route.length - 1] !== to) throw new Error('That route does not end where the move does.');
+  }
+  // Everything entered BEFORE the destination is passed through: it is captured (and
+  // its Nation roused) but the Army does not stop, so no stacking check applies.
+  for (const r of route.slice(0, -1)) {
+    if (settlementController(state, r) !== side) {
+      captureIfEnemySettlement(state, r, side);
+      if (settlementController(state, r) === side) log(state, null, 'army', `${REGIONS[r]?.name ?? r} is taken in passing`);
+    }
+  }
   if (sel && moveSelectedUnits(state, from, to, side, sel)) { liftSiegeIfAbandoned(state, from); return; }
   // Only `side`'s Nations travel — if enemy units ever share the region (an illegal
   // state a card bug once produced), a card-driven move must not kidnap them (report:
@@ -622,7 +648,7 @@ register('sh-str-10', {
       log(state, null, 'event', `Corsairs of Umbar: the Umbar Army attacks ${t.to}`);
       startBattle(state, 'shadow', t.from!, t.to!, { noCease: true });
     } else {
-      moveAllUnits(state, t.from!, t.to!, 'shadow', t.move);
+      moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path);
       log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}${t.move ? ' (split)' : ''}`);
     }
   },
@@ -657,7 +683,7 @@ function shadowsGatherMoves(state: GameState): Array<{ from: string; to: string 
 register('sh-str-07', {
   canPlay: (state) => shadowsGatherMoves(state).length > 0,
   targets: shadowsGatherMoves,
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 // The Shadow Lengthens: move TWO (different) Shadow Armies up to two regions each,
 // every move ending where another Shadow Army stands (not besieged). `applied`
@@ -682,7 +708,7 @@ register('sh-str-08', {
   repeat: 2,
   canPlay: (state) => shadowLengthensMoves(state).length > 0,
   targets: (state, _side, applied) => shadowLengthensMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move); log(state, null, 'event', `The Shadow Lengthens: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path); log(state, null, 'event', `The Shadow Lengthens: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 // The Shadow is Moving (all Shadow Nations At War): move up to four DIFFERENT Shadow
 // Armies one region each (to an adjacent region free for movement, merges allowed).
@@ -702,7 +728,7 @@ register('sh-str-09', {
   repeat: 4,
   canPlay: (state) => allAtWar(state, SHADOW_NATIONS) && shadowMovingMoves(state).length > 0,
   targets: (state, _side, applied) => shadowMovingMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move); log(state, null, 'event', `The Shadow is Moving: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path); log(state, null, 'event', `The Shadow is Moving: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 
 // Dead Men of Dunharrow: move Strider/Aragorn (+ Companions in the same region)
@@ -801,7 +827,7 @@ register('fp-str-11', {
     // but the part that MOVES must include a Companion (Almanac; player report
     // 6b3v215v0m1s090m — a split with no Companion in it was allowed to go).
     if (t.move && !(t.move.characters ?? []).some((c) => COMPANION_SET.has(c))) throw new Error('Through a Day and a Night: the moving part must include a Companion');
-    moveAllUnits(state, t.from!, t.to!, 'fp', t.move); log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
+    moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path); log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
 });
 // Through a Day and a Night: move an FP Army containing a Companion up to 2 regions.
 function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {
@@ -819,7 +845,7 @@ function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {
 register('fp-str-12', {
   canPlay: (state) => dayNightMoves(state).length > 0,
   targets: dayNightMoves,
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp', t.move); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 
 // --- Recruit / muster cards in named or chosen regions -----------------------
@@ -1269,7 +1295,7 @@ function applyNazgulArmyAction(state: GameState, t: EventTarget): void {
     // A split of a Nazgûl-led Army must keep the card's qualifying figure with the
     // movers — force ≥1 Nazgûl into the selection (clamped to what's there).
     const sel = t.move ? { ...t.move, nazgul: Math.max(1, t.move.nazgul ?? 0) } : undefined;
-    moveAllUnits(state, t.from!, t.to!, 'shadow', sel);
+    moveAllUnits(state, t.from!, t.to!, 'shadow', sel, t.path);
     log(state, null, 'event', `Nazgûl-led Army moves ${t.from} → ${t.to}${sel ? ' (split)' : ''}`);
   }
 }

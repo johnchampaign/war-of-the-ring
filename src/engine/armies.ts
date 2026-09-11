@@ -268,6 +268,102 @@ export function musterBlockReason(state: GameState, id: RegionId, side: Side): s
  *  is legal. Single source of truth — canMoveArmy and the legal-action enumerator
  *  both derive from this, and the UI surfaces the string so a refused merge/move
  *  explains itself instead of silently doing nothing. Rules: rulebook p.26–27. */
+/** Hop count between two regions over adjacency (Infinity if unreachable). Memoised:
+ *  adjacency is a property of the map, never of the game. */
+const hopMemo = new Map<string, number>();
+export function regionHops(from: RegionId, to: RegionId): number {
+  if (from === to) return 0;
+  const key = `${from}|${to}`;
+  const hit = hopMemo.get(key);
+  if (hit !== undefined) return hit;
+  const seen = new Set([from]);
+  let layer: string[] = [from], d = 0;
+  while (layer.length) {
+    d++;
+    const next: string[] = [];
+    for (const r of layer) for (const n of REGIONS[r]?.adjacency ?? []) {
+      if (seen.has(n)) continue;
+      if (n === to) { hopMemo.set(key, d); return d; }
+      seen.add(n); next.push(n);
+    }
+    layer = next;
+  }
+  hopMemo.set(key, Infinity);
+  return Infinity;
+}
+
+/** Why this multi-region card route is illegal, or null if it is fine.
+ *
+ *  A card that moves an Army "through more than one region" traverses each one, and
+ *  p.27 governs every step, not just the landing: "Any region entered by a moving
+ *  Army must be either a free region or an enemy-controlled Settlement that is free
+ *  of enemy Army units", and a Nation not yet At War may not cross another Nation's
+ *  borders. `movingNations` are the Nations actually travelling (a split may leave
+ *  the not-At-War half behind), which is why this cannot just call moveBlockReason
+ *  per step — that reads the units sitting in each region on the way. */
+export function cardPathBlockReason(state: GameState, from: RegionId, path: readonly RegionId[], side: Side, movingNations: readonly Nation[]): string | null {
+  if (!path.length) return 'That route has no steps.';
+  const seen = new Set<RegionId>([from]);
+  let prev = from;
+  for (const r of path) {
+    if (!REGIONS[prev]?.adjacency.includes(r)) return `${cap1(REGIONS[prev]?.name ?? prev)} and ${cap1(REGIONS[r]?.name ?? r)} are not adjacent.`;
+    if (seen.has(r)) return `The route doubles back through ${REGIONS[r]?.name ?? r}.`;
+    seen.add(r);
+    if (side === 'shadow' && shadowBarredFromRegion(state, r)) return `A card effect bars the Shadow from ${REGIONS[r]?.name ?? r}.`;
+    const occ = armySide(state, r);
+    if (occ !== null && occ !== side) return `${REGIONS[r]?.name ?? r} holds an enemy Army — an Army may not move through one.`;
+    const dn = REGIONS[r]?.nation;
+    for (const nation of movingNations) {
+      if (!isAtWar(state, nation) && dn && dn !== nation) {
+        return `${cap1(nation)} is not At War — its units cannot enter ${cap1(dn)}'s borders (${REGIONS[r]?.name ?? r}).`;
+      }
+    }
+    prev = r;
+  }
+  return null;
+}
+
+/** A legal route of at most `maxSteps` from→to, preferring one that ENTERS NO enemy
+ *  Settlement. Entering one captures it and wakes its Nation (p.27/p.32), which is a
+ *  decision, not a side effect — so when the player has not traced a route the quiet
+ *  way round is taken, and only a route with no alternative captures anything. */
+export function quietCardPath(state: GameState, from: RegionId, to: RegionId, side: Side, movingNations: readonly Nation[], maxSteps: number): RegionId[] {
+  const enemy: Side = side === 'fp' ? 'shadow' : 'fp';
+  const wakes = (r: RegionId) => r !== to && !!REGIONS[r]?.settlement && REGIONS[r]!.settlement !== 'Fortification' && settlementController(state, r) === enemy;
+  const passable = (r: RegionId) => {
+    if (side === 'shadow' && shadowBarredFromRegion(state, r)) return false;
+    const occ = armySide(state, r);
+    if (occ !== null && occ !== side) return false;
+    const dn = REGIONS[r]?.nation;
+    return !movingNations.some((n) => !isAtWar(state, n) && dn && dn !== n);
+  };
+  // Layered DP over step count, fewest captures first then fewest steps — the same
+  // shape as the Fellowship's route (see fellowship.ts), for the same reason.
+  const layers: Array<Map<string, { cost: number; prev: string | null }>> = [new Map([[from, { cost: 0, prev: null }]])];
+  for (let k = 1; k <= Math.min(maxSteps, 12); k++) {
+    const prevLayer = layers[k - 1]!, cur = new Map<string, { cost: number; prev: string | null }>();
+    for (const [r, node] of prevLayer) {
+      for (const n of REGIONS[r]?.adjacency ?? []) {
+        if (!passable(n as RegionId)) continue;
+        const cost = node.cost + (wakes(n as RegionId) ? 1 : 0);
+        const seen = cur.get(n);
+        if (!seen || cost < seen.cost) cur.set(n, { cost, prev: r });
+      }
+    }
+    layers.push(cur);
+  }
+  let bestK = -1, bestCost = Infinity;
+  for (let k = 1; k < layers.length; k++) {
+    const hit = layers[k]!.get(to);
+    if (hit && hit.cost < bestCost) { bestCost = hit.cost; bestK = k; }
+  }
+  if (bestK < 0) return [];
+  const out: RegionId[] = [];
+  let cur: string = to;
+  for (let k = bestK; k >= 1; k--) { out.unshift(cur as RegionId); cur = layers[k]!.get(cur)!.prev!; }
+  return out;
+}
+
 export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side): string | null {
   if (!REGIONS[from]!.adjacency.includes(to)) return 'Those regions are not adjacent.';
   if (armySide(state, from) !== side) return 'You have no Army to move there.';
