@@ -845,7 +845,12 @@ function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {
 register('fp-str-12', {
   canPlay: (state) => dayNightMoves(state).length > 0,
   targets: dayNightMoves,
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) {
+    // "Move the Army containing the Companion(s)": a split may leave units behind, but
+    // "at least one Companion must move along with the Army" (Almanac). Paths of the
+    // Woses already checked this; this card did not (player report 0c2d6s4y07386h19).
+    if (t.move && !(t.move.characters ?? []).some((c) => COMPANION_SET.has(c))) throw new Error('Through a Day and a Night: the moving part must include a Companion');
+    moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 
 // --- Recruit / muster cards in named or chosen regions -----------------------
@@ -919,7 +924,12 @@ register('fp-char-24', {
   applyTarget(state, _side, t) {
     const u = state.regions[t.region!]!.units[t.nation!]!;
     u.regular--; u.elite++;
-    state.reinforcements[t.nation!].regular++; state.reinforcements[t.nation!].elite--;
+    // The card says ELIMINATE the Regular, and a Free Peoples unit that is eliminated
+    // is a casualty — it leaves the game rather than returning to reinforcements.
+    // (Almanac, "The Grey Company": "it goes into casualties, and not into
+    // reinforcements"; player report 06295o08124a2l57 — we were handing the Regular
+    // back to be recruited again.)
+    state.reinforcements[t.nation!].elite--;
   },
   finalize(state) { drawCard(state, 'fp', 'strategy'); drawCard(state, 'fp', 'strategy'); }, // "Then, draw two Strategy Event cards."
 });

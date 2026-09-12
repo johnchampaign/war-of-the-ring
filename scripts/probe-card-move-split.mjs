@@ -65,14 +65,22 @@ function board() {
   state.regions['edoras'].characters = ['boromir'];
   const t = getHandler('fp-str-12').targets(state, 'fp').find((x) => x.from === 'edoras');
   check('an Edoras move is offered', !!t, JSON.stringify(t));
+  // "Move the Army containing the Companion(s)" — the Almanac spells it out: "at least
+  // one Companion must move along with the Army". A split that leaves every Companion
+  // behind is not this card (player report 0c2d6s4y07386h19).
+  let refused = false;
+  try { getHandler('fp-str-12').applyTarget(state, 'fp', { ...t, move: { units: { rohan: { regular: 2 } }, leaders: 0 } }); }
+  catch { refused = true; }
+  check('a split with no Companion among the movers is refused', refused);
   // The selection vacates every unit but claims to leave the Leaders — p.26 says
   // FP Leaders can never stand without units, so they must be dragged along.
-  getHandler('fp-str-12').applyTarget(state, 'fp', { ...t, move: { units: { rohan: { regular: 2 } }, leaders: 0 } });
+  getHandler('fp-str-12').applyTarget(state, 'fp', { ...t, move: { units: { rohan: { regular: 2 } }, leaders: 0, characters: ['boromir'] } });
   check('vacating every unit drags the Leaders along (never stranded)',
     state.regions['edoras'].leaders === 0 && state.regions[t.to].leaders === 2,
     `left behind: ${state.regions['edoras'].leaders}, arrived: ${state.regions[t.to].leaders}`);
-  check('the Companion stays unless selected (Companions may stand alone)',
-    state.regions['edoras'].characters.includes('boromir'));
+  check('the selected Companion travels with the Army',
+    !state.regions['edoras'].characters.includes('boromir') && state.regions[t.to].characters.includes('boromir'),
+    `edoras: ${JSON.stringify(state.regions['edoras'].characters)}, ${t.to}: ${JSON.stringify(state.regions[t.to].characters)}`);
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

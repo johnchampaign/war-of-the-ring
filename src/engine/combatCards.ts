@@ -166,7 +166,7 @@ const BY_TITLE: Record<string, CombatMods> = {
  *  without telling me what it did"). Empty string if nothing is modelled. */
 export function describeCombatMods(mods: CombatMods): string {
   const p: string[] = [];
-  if (mods.rollBonus && mods.rerollBonus) p.push(`+${mods.rollBonus} to Combat roll and Leader re-roll dice${mods.symmetricBonus ? ' for BOTH Armies' : ''}`);
+  if (mods.rollBonus && mods.rerollBonus) p.push(`+${mods.rollBonus} to Combat roll and Leader re-roll dice${mods.symmetricBonus ? ' for both Armies' : ''}`);
   else {
     if (mods.rollBonus) p.push(`+${mods.rollBonus} to Combat roll dice`);
     if (mods.rerollBonus) p.push(`+${mods.rerollBonus} to Leader re-roll dice`);
@@ -183,8 +183,8 @@ export function describeCombatMods(mods: CombatMods): string {
   if (mods.preCombatAttackDice) p.push(`pre-combat attack: ${mods.preCombatAttackDice} dice, hits on 4+`);
   if (mods.extraAttackFrom === 'leadership') p.push('extra attack: one die per point of Leadership (max 5), hits on 5+');
   else if (mods.extraAttackFrom === 'elites') p.push('extra attack: one die per Elite unit (max 5), hits on 5+');
-  if (mods.preCombatAttackFrom) p.push(`BEFORE the Combat roll: an additional attack, one die per ${mods.preCombatAttackFrom === 'leadership' ? 'point of Leadership' : 'Elite unit'} (max 5), applied immediately`);
-  if (mods.postCasualtyAttackFrom) p.push('AFTER casualties: an additional attack, one die per surviving Elite unit (max 5)');
+  if (mods.preCombatAttackFrom) p.push(`Before the Combat roll: an additional attack, one die per ${mods.preCombatAttackFrom === 'leadership' ? 'point of Leadership' : 'Elite unit'} (max 5), applied immediately`);
+  if (mods.postCasualtyAttackFrom) p.push('After casualties: an additional attack, one die per surviving Elite unit (max 5)');
   else if (mods.extraAttackDice) p.push(`extra attack: ${mods.extraAttackDice} dice, hits on 5+`);
   if (mods.guaranteedHits) p.push(`turns ${mods.guaranteedHits} miss into a hit`);
   if (mods.bonusHitsIfAny) p.push(`+${mods.bonusHitsIfAny} hit${mods.bonusHitsIfAny === 1 ? '' : 's'} if it scored any`);

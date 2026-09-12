@@ -15,6 +15,7 @@ import mapData from '../../assets/map.json';
 import { characterSide } from '../engine/data';
 import { forceLeadership } from '../engine/armies';
 import { charName } from './charInfo';
+import { cardSideLine } from './names';
 import eventCards from '../../assets/event-cards.json';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
@@ -350,7 +351,7 @@ function CardBlurb({ id }: { id: string | null }) {
       {def && art && <img src={art} alt="" style={{ height: 120, borderRadius: 4, flexShrink: 0 }} />}
       {def ? (
         <div>
-          <div style={{ fontWeight: 700, fontSize: 13 }}>{def.name} <span style={{ color: '#aa9', fontWeight: 400 }}>· {def.side} · init {def.initiative ?? '–'}</span></div>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>{def.name} <span style={{ color: '#aa9', fontWeight: 400 }}>· {cardSideLine(def.side, def.initiative)}</span></div>
           {def.combat?.title && <div style={{ fontSize: 12, margin: '3px 0' }}>
             <b>Combat — {def.combat.title}:</b>{' '}
             {def.combat.precondition && <span style={req}>[{def.combat.precondition}] </span>}{def.combat.text}

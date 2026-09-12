@@ -18,6 +18,17 @@ const cardName = (id: string): string => (eventCards as any).cards.find((c: any)
 const combatTitle = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.combat?.title ?? cardName(id);
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** What a region-only "recruit here" card target actually places, by card. These
+ *  targets carry no nation/figure — the handler knows the bundle — so the label has to
+ *  come from the card. */
+const CARD_RECRUITS: Record<string, string> = {
+  'sh-char-24': '2 Nazgûl',                          // The Black Captain Commands
+  'sh-str-17': '2 Southron & Easterling Regulars',   // Many Kings to the Service of Mordor
+  'sh-str-19': '2 Sauron Regulars and a Nazgûl',     // Shadows on the Misty Mountains
+  'sh-str-21': '5 Southron & Easterling Regulars',   // Hordes From the East
+  'sh-str-24': '2 Sauron Regulars',                  // Pits of Mordor
+};
+
 export function describeAction(a: WotrAction): string {
   switch (a.kind) {
     case 'skipFellowshipPhase': return 'Skip the Fellowship phase';
@@ -30,14 +41,19 @@ export function describeAction(a: WotrAction): string {
     case 'separateCompanion': return `Separate ${charName(a.companion)}`;
     case 'changeGuide': return `Make ${charName(a.companion)} the Guide`;
     case 'companionMuster': return `${charName(a.companion)}: advance ${cap(a.nation)} (any die)`;
-    case 'useElvenRing': return `Elven Ring: change a ${cap(a.from)} die to ${a.to === 'eye' ? 'an Eye (→ Hunt Box)' : cap(a.to)}`;
+    // Die FACES have proper names and proper articles: "change an Event die to an
+    // Army/Muster die", never "change a Event die to ArmyMuster" (player report
+    // 2a2z6u3v703c445v).
+    case 'useElvenRing': return `Elven Ring: change ${aFace(a.from)} die to ${a.to === 'eye' ? 'an Eye (→ Hunt Box)' : `${aFace(a.to)} die`}`;
     case 'forceDiscardCard': return a.via === 'cards'
       ? `Discard "${cardName(a.cardId)}" (any die + discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
       : `Discard "${cardName(a.cardId)}" (${a.via === 'will' ? 'Will of the West' : a.via === 'ring' ? 'Elven Ring + any die' : 'any die'})`;
     case 'sarumanMuster': return a.mode === 'upgrade'
       ? 'Voice of Saruman: upgrade 2 Orthanc Regulars to Elites'
       : 'Voice of Saruman: recruit Isengard in every Settlement';
-    case 'bringUpgrade': return a.which === 'aragorn' ? 'Crown Aragorn (Will of the West)' : 'Summon Gandalf the White';
+    // The button is already prefixed with the die that pays for it, so naming the die
+    // again in the label is noise (player report 0c3p44321u1w1f1a).
+    case 'bringUpgrade': return a.which === 'aragorn' ? 'Crown Aragorn' : 'Summon Gandalf the White';
     case 'placeGandalf': return `Place Gandalf the White in ${rName(a.region)}`;
     case 'drawEvent': return `Draw a ${cap(a.deck)} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
@@ -61,7 +77,11 @@ export function describeAction(a: WotrAction): string {
       // Dreadful Spells names its victim army and nothing else — say so, or the bare
       // region name reads like a move rather than "these are the troops you hit".
       if (a.card === 'sh-char-19' && a.region) return `${cardName(a.card)}: strike the Free Peoples Army in ${rName(a.region)}`;
-      if (a.mode === 'recruit') return `${cardName(a.card)}: recruit 2 Nazgûl in ${rName(a.region!)}`;
+      // A region-only recruit pick ("choose the Settlement", no nation/figure on the
+      // target). Each such card recruits something different, and this line said
+      // "recruit 2 Nazgûl" for all of them — Many Kings recruits Southron Regulars
+      // (player report h9wdkpkz6cx3xw9e).
+      if (a.mode === 'recruit') return `${cardName(a.card)}: recruit ${CARD_RECRUITS[a.card] ?? 'reinforcements'} in ${rName(a.region!)}`;
       if (a.mode === 'attack' && a.from && a.from === a.to) return `${cardName(a.card)}: ⚔ assault the siege at ${rName(a.to)}`;
       if (a.companion === 'nazgul') return a.region ? `${cardName(a.card)}: move ${a.count ?? ''} Nazgûl ${rName(a.from!)} → ${rName(a.region)}`.replace('move  ', 'move ') : `${cardName(a.card)}: move the Nazgûl in ${rName(a.from!)}`;
       if (a.companion && a.mode === 'none') return `${cardName(a.card)}: deselect (move someone else)`;

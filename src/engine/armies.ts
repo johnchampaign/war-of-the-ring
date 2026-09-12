@@ -8,6 +8,10 @@ import { log } from './log';
 
 export const STACKING_LIMIT = 10;
 
+/** A side's NAME for log text — never its id ("Free Peoples captured Minas Morgul",
+ *  not "fp captured Minas Morgul"; player report 252i1t0s6j6b6o5y). */
+const sideLabel = (s: Side): string => (s === 'fp' ? 'Free Peoples' : 'Shadow');
+
 /** Total Army units (regular + elite, all nations) in a region. */
 export function unitCount(state: GameState, id: RegionId): number {
   return forceUnitCount(state.regions[id]!);
@@ -108,6 +112,24 @@ export function settlementController(state: GameState, id: RegionId): Side | nul
 export function freeForMovement(state: GameState, id: RegionId, side: Side): boolean {
   const occ = armySide(state, id);
   return occ === null || occ === side;
+}
+
+/** A FREE REGION for `side` (p.10) — stricter than "free for the purposes of Army
+ *  movement": no enemy Army AND no enemy-controlled Settlement. "A region containing a
+ *  Stronghold controlled by the enemy is also free for a player when the Stronghold is
+ *  besieged by an Army of that player" (p.10) — when besieged, the garrison sits in the
+ *  siege box and OUR Army holds the open field.
+ *
+ *  Army MOVEMENT may enter an empty enemy Settlement; a RETREAT may not (Almanac,
+ *  "Appendix: Moving and Retreating": "A Free Peoples Army in Dimrill Dale may not
+ *  retreat into an empty and uncaptured Moria … or into an empty and captured Lórien").
+ *  Retreats used the movement test, so an enemy-held Settlement was offered as a
+ *  retreat destination (player report 5u4q1y0m5o1y6l4m: Westemnet). */
+export function freeRegion(state: GameState, id: RegionId, side: Side): boolean {
+  if (!freeForMovement(state, id, side)) return false;
+  const ctrl = settlementController(state, id);
+  if (ctrl === null || ctrl === side) return true;
+  return !!state.regions[id]!.besieged && armySide(state, id) === side;
 }
 
 /** Recruit reinforcements into a free, friendly, At-War Settlement (Muster die,
@@ -604,7 +626,7 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
     state.regions[id]!.besieged = false;
     if (def.vp > 0) {
       state.victoryPoints[enemy] = Math.max(0, state.victoryPoints[enemy] - def.vp);
-      log(state, null, 'army', `${side} recaptured ${id} (−${def.vp} VP from ${enemy}, total ${state.victoryPoints[enemy]})`);
+      log(state, null, 'army', `${sideLabel(side)} recaptured ${id} (−${def.vp} VP from the ${sideLabel(enemy)}, total ${state.victoryPoints[enemy]})`);
     }
     return;
   }
@@ -612,7 +634,7 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
   state.regions[id]!.control = side;
   if (def.vp > 0) {
     state.victoryPoints[side] += def.vp;
-    log(state, null, 'army', `${side} captured ${id} (+${def.vp} VP, total ${state.victoryPoints[side]})`);
+    log(state, null, 'army', `${sideLabel(side)} captured ${id} (+${def.vp} VP, total ${state.victoryPoints[side]})`);
   }
   // (A Fortification never reaches here — it is not a Settlement and returns above —
   // so capturing one still never advances the owning Nation's track, rulebook p.36.)

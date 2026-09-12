@@ -300,7 +300,11 @@ function ElvenRingsPill({ view, actions, onAction }: { view: GameState; actions:
   return (
     <span style={{ position: 'relative' }}>
       <button onClick={() => usable && setOpen((o) => !o)}
-        style={{ ...pill, border: usable ? '1px solid #7fd0ff' : 'none', cursor: usable ? 'pointer' : 'default', font: 'inherit', color: '#e9e1cc' }}
+        // A border that appears and disappears RESIZES the chit, nudging everything
+        // below it by a couple of pixels the moment a Ring is spent (player report
+        // 5f6y1g5s2c4q4710). An inset shadow draws the same ring inside the existing
+        // box, so the chit's size never changes.
+        style={{ ...pill, border: 'none', boxShadow: usable ? 'inset 0 0 0 1px #7fd0ff' : undefined, cursor: usable ? 'pointer' : 'default', font: 'inherit', color: '#e9e1cc' }}
         title={usable ? 'You may use an Elven Ring before your action — click to choose' : 'The three Elven Rings. Held by the Free Peoples; when they use one it flips to the Shadow (who may then use it once), after which it is spent.'}>
         Elven Rings:{' '}
         {view.elvenRings.map((r, i) => (

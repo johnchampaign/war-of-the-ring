@@ -156,7 +156,7 @@
       "adjacency": []
     },
     "barad-dur": {
-      "name": "Barad~Dur",
+      "name": "Barad-dûr",
       "nation": "Sauron",
       "settlement": "Stronghold",
       "vp": 2,
@@ -282,7 +282,7 @@
       "adjacency": []
     },
     "druadan-forest": {
-      "name": "Druadan Forest",
+      "name": "Drúadan Forest",
       "nation": "Gondor",
       "settlement": null,
       "vp": 0,
@@ -296,7 +296,7 @@
       "adjacency": []
     },
     "druwaith-iaur": {
-      "name": "Druwaith Iaur",
+      "name": "Drúwaith Iaur",
       "nation": null,
       "settlement": null,
       "vp": 0,
@@ -338,7 +338,7 @@
       "adjacency": []
     },
     "east-rhun": {
-      "name": "East Rhun",
+      "name": "East Rhûn",
       "nation": "Southron/Easterling",
       "settlement": null,
       "vp": 0,
@@ -716,7 +716,7 @@
       "adjacency": []
     },
     "lorien": {
-      "name": "Lorien",
+      "name": "Lórien",
       "nation": "Elves",
       "settlement": "Stronghold",
       "vp": 2,
@@ -954,7 +954,7 @@
       "adjacency": []
     },
     "north-rhun": {
-      "name": "North Rhun",
+      "name": "North Rhûn",
       "nation": "Southron/Easterling",
       "settlement": "Town",
       "vp": 0,
@@ -1220,7 +1220,7 @@
       "adjacency": []
     },
     "south-rhun": {
-      "name": "South Rhun",
+      "name": "South Rhûn",
       "nation": "Southron/Easterling",
       "settlement": "Town",
       "vp": 0,

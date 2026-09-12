@@ -13,8 +13,18 @@ import { charName, charDef } from './charInfo';
 const REGION_NAME = new Map<string, string>(Object.entries((mapData as { regions: Record<string, { name?: string }> }).regions).map(([id, r]) => [id, r.name ?? id]));
 const CARD_NAME = new Map<string, string>((eventCards as { cards: { id: string; name: string }[] }).cards.map((c) => [c.id, c.name]));
 const NATION_NAME: Record<string, string> = { dwarves: 'Dwarves', elves: 'Elves', gondor: 'Gondor', north: 'North', rohan: 'Rohan', sauron: 'Sauron', isengard: 'Isengard', southrons: 'Southrons' };
+// Not a Nation, but the same job: a lowercase 'shadow' in a log line is the SIDE.
+const SIDE_WORD: Record<string, string> = { shadow: 'Shadow' };
 
 export const regionName = (id: string): string => REGION_NAME.get(id) ?? id;
+
+/** The `side` printed in the card data is an id-ish token ('FreePeoples'). Card views
+ *  showed it raw and upper-cased — "FREEPEOPLES · INIT 4" (player report
+ *  6z0g5z6r476e3j20). */
+export const cardSideName = (side?: string): string => (side === 'Shadow' ? 'Shadow' : side === 'FreePeoples' ? 'Free Peoples' : (side ?? ''));
+/** "Free Peoples · Initiative 4" — the one line every card view shows under the name. */
+export const cardSideLine = (side?: string, initiative?: number): string =>
+  `${cardSideName(side)} · Initiative ${initiative ?? '–'}`;
 export const cardName = (id: string): string => CARD_NAME.get(id) ?? id;
 
 const PHASE_LABEL: Record<string, string> = {
@@ -61,12 +71,19 @@ function recruitPhrase(regular: number, elite: number, leaders: number, nationId
   return parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
+// A side's id is not a word a player should ever read. Engine log lines name the side
+// now, but every game already logged says "fp captured Minas Morgul" / "fp plays combat
+// card …" (player reports 252i1t0s6j6b6o5y, 0l314z0n0j2n3b5q), and the log is replayed
+// from saved state — so the display side fixes those up too.
+const SIDE_ID = /\bfp\b/g;
+
 export function prettify(msg: string): string {
   if (!msg) return msg;
+  msg = msg.replace(SIDE_ID, 'Free Peoples');
   // Before the id pass, while the Nation is still a bare lowercase id.
   let out = msg.replace(RECRUIT, (_m, r: string, e: string, l: string | undefined, plusLeader: string | undefined, nation: string) =>
     recruitPhrase(Number(r), Number(e), Number(l ?? 0) + (plusLeader ? 1 : 0), nation));
   out = out.replace(KEBAB, (t) => lookup(t) ?? t);
-  out = out.replace(WORD, (t) => (NATION_NAME[t] ?? (charDef(t) ? charName(t) : null) ?? (REGION_NAME.has(t) ? REGION_NAME.get(t)! : null)) ?? t);
+  out = out.replace(WORD, (t) => (NATION_NAME[t] ?? SIDE_WORD[t] ?? (charDef(t) ? charName(t) : null) ?? (REGION_NAME.has(t) ? REGION_NAME.get(t)! : null)) ?? t);
   return out;
 }

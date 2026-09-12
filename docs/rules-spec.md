@@ -584,6 +584,16 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
 5. **Cease or retreat**: attacker may **cease** (survivors stay); else defender
    may **retreat** to an adjacent free region (p.30). Eliminating all Army units
    also removes that army's Leaders/Characters (p.30).
+   **"Free region" is the strict sense, not "free for the purposes of Army
+   movement."** A region is free for a player when it holds **no enemy Army *and* no
+   enemy-controlled Settlement**; an enemy Stronghold is nonetheless free for the
+   player whose Army besieges it (p.10). Army *movement* has the looser licence — it
+   may enter an empty enemy Settlement — and retreats were sharing that test, so an
+   empty enemy-held Town was offered as somewhere to fall back to *(player report
+   5u4q1y0m5o1y6l4m: Westemnet, a Shadow-controlled Rohan Town)*. `freeRegion()` in
+   `armies.ts` is the strict test and `freeAdjacentRegions()` (every retreat, the
+   pre-combat *Scouts* retreat included — the Almanac's own examples "apply to the
+   'Scouts' Combat card") now uses it. `scripts/probe-retreat-and-gollum.mjs`.
    **A retreat is not a casualty.** `finishCombat` reports each side's losses by
    diffing its unit count at battle start against what is still standing in the
    battle region — so an Army that marched off alive was booked as annihilated
@@ -920,11 +930,45 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
 - **Multiple tiles** (Stronghold path + Balrog card etc.): resolve the
   reveal-causing tile fully first, then event tiles, then the Stronghold tile
   (p.41).
+- **The reveal is the LAST step of a tile, and the Guide who is standing there then is
+  the one who acts.** The Almanac's Hunt order is: (1) an on-table protection card,
+  (2) the Guide's abilities *then* an optional casualty — "if this results in a new
+  Guide, then repeat this step with the new Guide's abilities", (3) any remaining
+  damage as Corruption, (4) "Reveal the Fellowship if required. If Gollum is the Guide,
+  he may ignore a 'reveal' icon but only on standard numbered tiles." Two consequences
+  the engine now honours:
+  - **Gollum's ignore-the-icon is evaluated at step 4, not when the tile is drawn.**
+    Sacrificing the last Companion mid-Hunt makes Gollum the Guide, and his ignore then
+    applies to the tile already on the table — the Almanac's own worked example.
+    *(Player report l61v0rpyl8vhrpcl: "when sacrificing guide, the next guide ability
+    should be active. This works with the Hobbits, but not Gollum's ignore-reveal.")*
+    The `huntDamage` choice carries the tile's **reveal icon** and whether it was a
+    numbered tile, and re-asks the question at every step instead of carrying a decided
+    `reveal` flag. Eye tiles and red Shadow Special tiles always reveal.
+  - **Gollum's reveal-to-reduce is a FULL reveal**, applied at step 4 like any other:
+    the FP moves the Ring-bearers up to their Progress (never into an FP-controlled
+    City/Stronghold) and Progress resets to 0 (p.39). It used to flip `hidden` in place
+    — the figure never moved and the Progress was never spent *(player report
+    484g5d6e162t361o)*. The Almanac confirms the movement is part of it: Gollum "cannot
+    use his ability to reveal the Fellowship in Lórien … due to the restriction on
+    revealing into an unconquered Free Peoples City or Stronghold", a restriction that
+    only bites on the reveal *move*. Being his own reveal, his ignore cannot cancel it,
+    and he cannot spend it twice. `scripts/probe-retreat-and-gollum.mjs`.
 
 ---
 
 ## 11. Entering Mordor & the Mordor Track (p.43)
 
+- **Gorgoroth, Barad-dûr and Nurn are ordinary regions for the Ring-bearers'
+  figure.** The Mordor Track's circles sit on top of Gorgoroth but "the Mordor Track
+  is not considered a part of the Gorgoroth region" (p.44) — the Track is orthogonal
+  to the map, and nothing in the rules bars the figure from those three regions. We
+  used to exclude all three from every declaration and reveal, on the theory that a
+  figure standing inside Mordor was stranded off the Track (report 681l). It is not:
+  Gorgoroth is adjacent to both entrances, so the figure can always walk back out to
+  Morannon or Minas Morgul and enter Mordor from there. Pointless to go there, but
+  legal, and it matters for Free Peoples military play *(player report
+  6v2x723i4d2d6t12)*. `scripts/probe-retreat-and-gollum.mjs`.
 - When the Fellowship is in **Morannon** or **Minas Morgul** during a Fellowship
   phase, FP **may** enter Mordor: Ring-bearers go to step **0** of the Mordor
   Track; Progress counter no longer advances on the Fellowship Track but still
@@ -1029,6 +1073,21 @@ turn the FP reached 4 and still lost). Regression-tested in
 
 ---
 
+### Card clauses corrected from player reports (2026-09-12)
+
+- **"The Grey Company" (fp-char-24)** — "Eliminate one Regular unit to recruit one Elite
+  unit of the same Nation." A **Free Peoples** unit that is eliminated is a *casualty*:
+  it leaves the game. The Almanac says so twice for this card — "it goes into casualties,
+  and not into reinforcements" — and we were handing the Regular back to the
+  reinforcement pool to be recruited again *(player report 06295o08124a2l57)*.
+- **"Through a Day and a Night" (fp-str-12)** — "Move the Army containing the
+  Companion(s)". A split may leave units behind, but "at least one Companion must move
+  along with the Army" (Almanac). The sibling card *Paths of the Woses* already enforced
+  this; this one let the Army march off and leave every Companion at home *(player report
+  0c2d6s4y07386h19)*. `scripts/probe-card-move-split.mjs`.
+
+---
+
 ## 14. Engine-deviation log
 
 Our policy (CLAUDE.md): **prompt for every genuine player choice.** Only
@@ -1051,7 +1110,7 @@ the seeded `Rng`. Each deviation is listed here, next to its rule.
 | D11 | Splitting an attacking Army (p.28) | The attacker may split into an attacking Army and a **rearguard** that takes no part (each needs ≥1 unit); not-At-War figures **must** stay in the rearguard; a Character-die attack's attacking force needs ≥1 Leader/Character | **Fully modelled (RAW).** `attack` takes an optional `rearguard` selection; `startBattle` holds it aside from the origin region for the battle and `finishCombat` restores it there (it never advances). `attackError` enforces ≥1 attacking unit, the "rearguard needs ≥1 unit" rule, and the Character-die Leader/Character requirement; **not-At-War units are auto-forced into the rearguard** (`fullRearguard`). The UI exposes it via the same picker in "attack" mode (unselected figures become the rearguard). **A Character die may also initiate an attack** with one army that has a Leader/Nazgûl/Character (offered in `legalActions`, spends the Character die), mirroring the Character-die move. | — closed. AI attacks with its whole At-War force (doesn't voluntarily split) — AI-strength, not a rules gap. |
 | D10 | Besieged Stronghold limits (p.31–32) | Garrison in the siege box capped at 5 units (Leaders unlimited); can't muster into a besieged Settlement | **Fully modelled (RAW).** When a Stronghold comes under siege the garrison is capped at **5 Army units** — excess removed (Regulars first) and recycled to reinforcements (`enforceSiegeCap`, `SIEGE_LIMIT`). Mustering into a besieged Stronghold is blocked for Muster-die recruits (`recruit()` checks `besieged`), while Event-card recruits may (p.27). Reinforcing a siege by movement is capped at 5 in `canMoveArmy`. | — closed. |
 
-| D12 | Fellowship revealed by the Hunt (p.39) | On reveal, the FP moves the figure up to Progress regions (its choice; never ending in an FP City/Stronghold), resets Progress, flips to Revealed; **+1 Hunt tile per Shadow Stronghold the traced path crosses** | **Fully modelled (RAW).** On reveal `beginReveal` raises a `revealMove` choice; the **FP picks the destination on the board** (within Progress, never an FP-controlled City/Stronghold), the figure moves there, Progress resets, Revealed. **A Hunt tile is drawn per Shadow Stronghold on the traced path** (`extraHunt`), restoring the cost of revealing through Moria/Mordor. Minor residuals: Gollum's reduce-damage *reveal* reveals in place (no figure-move); and if one Stronghold's tile opens an FP damage choice, any further Strongholds' tiles defer (same as declaration). | — closed. (AI routes toward Morannon and can eat avoidable Stronghold Hunts — an AI-strength gap, not a rules one; a human picks the path.) |
+| D12 | Fellowship revealed by the Hunt (p.39) | On reveal, the FP moves the figure up to Progress regions (its choice; never ending in an FP City/Stronghold), resets Progress, flips to Revealed; **+1 Hunt tile per Shadow Stronghold the traced path crosses** | **Fully modelled (RAW).** On reveal `beginReveal` raises a `revealMove` choice; the **FP picks the destination on the board** (within Progress, never an FP-controlled City/Stronghold), the figure moves there, Progress resets, Revealed. **A Hunt tile is drawn per Shadow Stronghold on the traced path** (`extraHunt`), restoring the cost of revealing through Moria/Mordor. **Gollum's reduce-damage *reveal* is now a full reveal too** (figure-move + Progress reset, at the tile's reveal step — player report 484g5d6e162t361o), and **his ignore-the-icon is asked with the Guide who is standing there at that step**, so a mid-Hunt casualty that promotes him applies it to the tile already drawn (player report l61v0rpyl8vhrpcl). Minor residual: if one Stronghold's tile opens an FP damage choice, any further Strongholds' tiles defer (same as declaration). | — closed. (AI routes toward Morannon and can eat avoidable Stronghold Hunts — an AI-strength gap, not a rules one; a human picks the path.) |
 
 | D13 | "Move any or all Companions/Nazgûl" cards | Move separated Companions / Nazgûl freely, then a conditional effect | **Companion-move cards fully modelled.** *Book of Mazarbul* (fp-str-04) and *Fear! Fire! Foes!* (fp-str-07): the FP moves any/all separated Companions — interactively (pick a Companion, board-click its destination, repeat, or move none) — then if a Companion is in Erebor/Ered Luin (resp. The Shire/Bree) the Dwarves (resp. North) are roused to War (`moveCompanionsCard`, with a not-At-War-guarded rouse checked before AND after the moves). *(This also fixed a real bug: fp-str-04 previously roused the Dwarves UNCONDITIONALLY, skipping the "if a Companion is in Erebor/Ered Luin" check.)* **Nazgûl-reveal cards now fully modelled too.** *Nazgûl Search* (sh-char-09) and *The Nazgûl Strike!* (sh-char-08b): the Shadow moves any or all of the Nazgûl — interactively (pick a Nazgûl group's region, board-click its destination with FLY range, repeat across groups, or move none) — then if at least one Nazgûl shares the Fellowship's region the conditional effect fires: sh-char-09 reveals the Fellowship; sh-char-08b rolls an extra Hunt (`moveNazgulCard`, with the conditional run once in `finalize`). **Both Nazgûl cards are gated ONLY on their printed condition** — "Play if the Fellowship is on step 1 or higher on the Fellowship Track" — plus a Nazgûl existing to move. The reveal/Hunt half is an EFFECT, not a requirement (p.22: effects are "applied to the maximum extent possible"), so the very common play of using either card purely to REPOSITION the Nazgûl is legal. *(Player report 3i1v1v: they were additionally gated on a Nazgûl being able to reach the Fellowship — and, for sh-char-09, on the Fellowship being Hidden — which blocked that play entirely.)* **And sh-char-09's reveal is a real reveal:** it calls `beginReveal`, so the FP must move the figure up to its Progress and the Progress resets to 0 (p.39), exactly like a Hunt reveal — the choice survives because `finalize` runs after the eventTarget resolver clears the card's own pending choice. *(Player report 3k733e: the Fellowship stayed put with its Progress intact.)* `scripts/probe-play-via.mjs`. **sh-char-08b's printed choice is now offered** — "discard one FP Character Event card from the table or roll for the Hunt" raises a real `nazgulStrike` choice for the Shadow whenever both branches are live (no FP Character table card → the Hunt fires directly, so it is never a one-answer question). `scripts/probe-nazgul-strike.mjs`. **"Any or ALL of the Nazgûl" now means a SUBSET of a stack on every card.** *The Ringwraiths Are Abroad* (sh-char-23) and *The Black Captain Commands* (sh-char-24) build their own target lists and still flew the whole stack, while the Character die and the `moveNazgulCard` cards had long asked "how many?"; the same figures thus obeyed two different rules depending on how you moved them. `nazgulFlyTargets` now fans a Nazgûl group out to one target per count on all four cards (the Witch-king is one figure, so no count). *(Player report 0j1x6h3r: "Played Ringwraiths are Abroad … It didn't let me choose how many of them to move.")* **And the "or MOVE" branch of the separation cards is modelled.** *Gwaihir the Windlord* (fp-char-15) and *We Prove the Swifter* (fp-char-16) print "Separate from the Fellowship, **or move**, one Companion or one group of Companions" — that second branch used to be waved off as "folded into the Character-die move", which is wrong on three counts: it costs an **Event** die instead of a Character die, it carries the card's range bonus (Level-as-4 / +2 regions), and with an **empty Fellowship it is the only playable branch at all**. `separateViaCard({ mapMove: true })` now offers on-map Companions as picks tagged with their region (`from`); same-region Companions may join the travelling group (range = the highest Level, p.24) and `finalize` routes the `from`-tagged branch through `moveCompanionGroup`. *I Will Go Alone* (fp-char-11) and *There and Back Again* (fp-char-17) print no such clause and stay separate-only. `scripts/probe-companion-card-move.mjs`. *(Player report 4964174f: "T8: Wanted to spend [E] to play Gwaihir, but was not allowed" — five Companions on the map, none in the Fellowship.)* | Fully closed — D13's last residual (the discard branch) landed with John's call D. |
 

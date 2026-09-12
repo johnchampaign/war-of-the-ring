@@ -31,6 +31,10 @@ export function ReportButton({ report, clientBuild }: {
       // Only confirm on a real, server-issued id — never show a false "thank you".
       if (!r?.reportId) throw new Error("Couldn't save the report. Please try again.");
       setSentId(r.reportId);
+      // Sent — so the draft has done its job and goes. Closing still KEEPS it (that
+      // is the point of the draft), but it used to survive the send too, so the next
+      // report opened pre-filled with the last one (player report 533a0s720m0l5w3j).
+      setMsg('');
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   };

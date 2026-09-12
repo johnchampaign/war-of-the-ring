@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeForMovement, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, type Force, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeForMovement, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods, type VariableCost } from './combatCards';
@@ -50,9 +50,14 @@ function withinRegions(from: RegionId, target: RegionId, n: number): boolean {
   return seen.has(target);
 }
 
-/** All free adjacent regions a `side` army could retreat into. */
+/** All free adjacent regions a `side` army could retreat into. A retreat needs a
+ *  FREE REGION (p.10) — not merely one free for the purposes of Army movement — so an
+ *  enemy-controlled Settlement is out even when empty (Almanac, "Appendix: Moving and
+ *  Retreating"; player report 5u4q1y0m5o1y6l4m offered Westemnet). The Almanac says the
+ *  same examples "apply to the 'Scouts' Combat card", so the pre-combat retreat uses
+ *  this too. */
 function freeAdjacentRegions(state: GameState, regionId: RegionId, side: Side): RegionId[] {
-  return REGIONS[regionId]!.adjacency.filter((adj) => freeForMovement(state, adj, side));
+  return REGIONS[regionId]!.adjacency.filter((adj) => freeRegion(state, adj, side));
 }
 /** The first such region, or null (used for "can retreat?" / pre-combat retreats). */
 const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
@@ -1747,7 +1752,7 @@ function noteWithdrawal(state: GameState, pc: PendingCombat, who: Side): void {
 /** Free regions the defender may retreat into (for the 'retreatTo' choice). A
  *  retreat never runs INTO the attack (p.31): the region the attackers came from is
  *  excluded explicitly. In practice the attacking Army stays there for the battle's
- *  duration, so `freeForMovement` already rules it out — but a player reported a
+ *  duration, so `freeRegion` already rules it out — but a player reported a
  *  retreat onto the attack's origin, and the guarantee should not rest on the
  *  attacker happening to still have units on the square. */
 function retreatOptions(state: GameState, pc: PendingCombat): RegionId[] {
@@ -1888,7 +1893,9 @@ export function resolvePlayCombatCard(state: GameState, cardId: string | null): 
       state.cards[owner].discard[deck].push(cardId);
     }
     if (pc.step === 'attackerCard') pc.attackerCard = cardId; else pc.defenderCard = cardId;
-    log(state, owner, 'combat', `${owner} plays combat card ${EVENT_BY_ID[cardId]?.combat?.title ?? cardId}`);
+    // Name the side, don't print its id: "Free Peoples play…", not "fp plays…"
+    // (player report 0l314z0n0j2n3b5q).
+    log(state, owner, 'combat', `${sideLabel(owner)} play combat card ${EVENT_BY_ID[cardId]?.combat?.title ?? cardId}`);
     state.log[state.log.length - 1]!.card = cardId; // hoverable in the log
   }
   // -> 'cardCost', NOT straight to 'beginRound': a variable-size card (Relentless

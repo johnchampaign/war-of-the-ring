@@ -8,7 +8,7 @@ function win(state: GameState, side: Side, reason: string): void {
   state.winner = side;
   state.winReason = reason;
   state.phase = 'gameOver';
-  log(state, null, 'victory', `${side} wins: ${reason}`);
+  log(state, null, 'victory', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} wins: ${reason}`);
 }
 
 /** Ring-based conditions — checked continuously (after any Corruption/Mordor

@@ -747,7 +747,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                     ? `Separating Companions — click a highlighted region to place the group there (up to Progress + the highest Level in the group). You can first add more Companions to travel together using the buttons on the right.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`
                     : isReveal
                     ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
-                    : declareTargets.size > 0
+                    // Retreats and Gandalf's entry are board clicks too, and they share
+                    // the highlight set with the Fellowship placement — so this banner
+                    // told a retreating player to "Declare the Fellowship" (player report
+                    // 0u36044v452i6p60). Each board-driven placement now names itself.
+                    : isRetreatPick
+                    ? `Retreating — click a highlighted region to fall back there. Only regions free of enemy troops and enemy Settlements can be retreated into.`
+                    : isPlaceGandalf
+                    ? 'Gandalf the White returns — click a highlighted region to place him there.'
+                    : placeActs.length > 0
                       ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`
                       : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : charName(charPick.char)} — click a highlighted region to move there (or click the piece again to cancel).`
                         : selected ? `Selected ${regionName(selected)} — click a highlighted region to move/attack (or click again to cancel).`

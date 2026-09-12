@@ -94,13 +94,16 @@ export function resolveLureChoice(state: GameState, mode: 'corruption' | 'elimin
 
 export const MORDOR_ENTRANCES: RegionId[] = ['morannon', 'minas-morgul'];
 
-/** The dark interior of Mordor, reachable on the map only past the Morannon /
- *  Minas Morgul entrances. The Ring-bearers' figure NEVER stands here: the
- *  journey through Mordor is abstracted onto the Mordor Track, entered at an
- *  entrance (rules-spec §11). The Fellowship therefore cannot be declared into
- *  these regions — doing so used to strand the figure in Mordor with no way onto
- *  the Track and no path to the Crack of Doom (report 681l). */
-export const MORDOR_INTERIOR: RegionId[] = ['gorgoroth', 'barad-dur', 'nurn'];
+// Gorgoroth, Barad-dûr and Nurn are ORDINARY REGIONS for the Ring-bearers' figure.
+// We used to bar the figure from all three, on the theory that a figure inside Mordor
+// was stranded off the Mordor Track (report 681l). It is not: the Mordor Track "is not
+// considered a part of the Gorgoroth region" (p.44) — the Track is orthogonal to the
+// map — and nothing in the rules stops the figure entering these regions, while
+// Gorgoroth is adjacent to both entrances, so the figure can always walk back out to
+// Morannon or Minas Morgul and enter Mordor from there. A pointless place to go, but a
+// legal one, and it matters for Free Peoples military play (player report
+// 6v2x723i4d2d6t12). The figure still cannot cross an impassable black border (p.38),
+// which adjacency already enforces.
 
 /** BFS shortest-path next-hops from `from` to `to` over region adjacency
  *  (impassable borders are already excluded from adjacency). Returns the ordered
@@ -259,7 +262,6 @@ export function declareFellowship(state: GameState, target: RegionId): void {
   // to let the FP declare again and again in place — healing 1 Corruption each
   // time (report 4r4z).
   if (state.flags.fellowshipDeclaredThisTurn) return;
-  if (MORDOR_INTERIOR.includes(target)) return; // never strand the figure inside Mordor (report 681l)
   const path = pathTo(fs.location, target);
   const steps = Math.min(fs.progress, path.length);
   if (steps > 0) fs.location = path[steps - 1]!;

@@ -8,6 +8,7 @@ import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import eventCards from '../../assets/event-cards.json';
 import { CardTypeBadge } from './cardTypeBadge';
+import { cardSideLine } from './names';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
 
@@ -43,7 +44,7 @@ export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
           {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
         </div>
       )}
-      <div style={{ fontSize: 10, color: '#776', padding: '2px 8px 4px', flexShrink: 0 }}>
+      <div style={{ fontSize: 10, color: '#776', padding: '2px 8px 4px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {playable && playable.size > 0
           ? <>hover to preview · <b style={{ color: '#9f9' }}>click a lit card to play it</b> · 🔍 to enlarge</>
           : <>hover to preview · click to enlarge</>}
@@ -89,7 +90,7 @@ function HandCard({ id, onZoom, onHover, play }: { id: string; onZoom: () => voi
       {play && <ZoomDot onZoom={onZoom} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
         <CardTypeBadge deck={def?.deck} via={def?.playableVia} small />
-        <span style={{ fontSize: 9, color: '#ccb' }}>init {def?.initiative ?? '–'}</span>
+        <span style={{ fontSize: 9, color: '#ccb' }}>Ini {def?.initiative ?? '–'}</span>
       </div>
       <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.15 }}>{def?.name ?? id}</div>
     </div>
@@ -109,7 +110,7 @@ export function CardZoom({ id, onClose }: { id: string; onClose: () => void }) {
         <div style={zoomText} onClick={(e) => e.stopPropagation()}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
             <CardTypeBadge deck={def?.deck} via={def?.playableVia} />
-            <span style={{ fontSize: 11, color: '#ccb', textTransform: 'uppercase' }}>{def?.side} · init {def?.initiative}</span>
+            <span style={{ fontSize: 11, color: '#ccb' }}>{cardSideLine(def?.side, def?.initiative)}</span>
           </div>
           <h3 style={{ margin: '4px 0' }}>{def?.name ?? id}</h3>
           {/* Preconditions (the "Play if…" requirement) so the card's legality is readable

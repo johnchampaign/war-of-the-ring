@@ -262,7 +262,7 @@
       ]
     },
     "barad-dur": {
-      "name": "Barad~Dur",
+      "name": "Barad-dûr",
       "nation": "sauron",
       "settlement": "Stronghold",
       "vp": 2,
@@ -400,7 +400,7 @@
       ]
     },
     "druadan-forest": {
-      "name": "Druadan Forest",
+      "name": "Drúadan Forest",
       "nation": null,
       "settlement": null,
       "vp": 0,
@@ -415,7 +415,7 @@
       ]
     },
     "druwaith-iaur": {
-      "name": "Druwaith Iaur",
+      "name": "Drúwaith Iaur",
       "nation": null,
       "settlement": null,
       "vp": 0,
@@ -452,7 +452,7 @@
       ]
     },
     "east-rhun": {
-      "name": "East Rhun",
+      "name": "East Rhûn",
       "nation": "southrons",
       "settlement": null,
       "vp": 0,
@@ -820,7 +820,7 @@
       ]
     },
     "lorien": {
-      "name": "Lorien",
+      "name": "Lórien",
       "nation": "elves",
       "settlement": "Stronghold",
       "vp": 2,
@@ -1065,7 +1065,7 @@
       ]
     },
     "north-rhun": {
-      "name": "North Rhun",
+      "name": "North Rhûn",
       "nation": "southrons",
       "settlement": "Town",
       "vp": 0,
@@ -1345,7 +1345,7 @@
       ]
     },
     "south-rhun": {
-      "name": "South Rhun",
+      "name": "South Rhûn",
       "nation": "southrons",
       "settlement": "Town",
       "vp": 0,

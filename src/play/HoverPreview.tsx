@@ -10,6 +10,7 @@ import eventCards from '../../assets/event-cards.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, Nation } from '../engine/types';
 import { charName, charDef, isMinion } from './charInfo';
+import { cardSideLine } from './names';
 import { CardTypeBadge } from './cardTypeBadge';
 
 export type Hover = { kind: 'region'; id: string } | { kind: 'card'; id: string } | { kind: 'character'; id: string } | null;
@@ -151,7 +152,7 @@ function CardPreview({ id, bottom }: { id: string; bottom?: boolean }) {
     <div style={{ overflowY: 'auto', minWidth: 0, flex: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
         <CardTypeBadge deck={def?.deck} via={def?.playableVia} />
-        <span style={{ fontSize: 11, color: '#ccb', textTransform: 'uppercase' }}>{def?.side} · init {def?.initiative ?? '–'}</span>
+        <span style={{ fontSize: 11, color: '#ccb' }}>{cardSideLine(def?.side, def?.initiative)}</span>
       </div>
       <div style={{ fontSize: 16, fontWeight: 700, margin: '2px 0 6px' }}>{def?.name ?? id}</div>
       {/* The "Play if…" requirement, on HOVER — it used to appear only in the

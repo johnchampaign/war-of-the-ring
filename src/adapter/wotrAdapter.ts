@@ -7,7 +7,7 @@ import type { WotrAction, MoveSel } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, MORDOR_INTERIOR, fellowshipPath } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, fellowshipPath } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
 import { log, logCardDraw } from '../engine/log';
 import {
@@ -332,7 +332,6 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const fs = state.fellowship;
         const acts: WotrAction[] = [];
         for (const r of regionsWithin(fs.location, fs.progress)) {
-          if (MORDOR_INTERIOR.includes(r)) continue; // the figure never stands inside Mordor (report 681l)
           const def = REGIONS[r]!;
           if ((def.settlement === 'City' || def.settlement === 'Stronghold') && settlementController(state, r) === 'fp') continue;
           acts.push({ kind: 'revealMove', target: r });
@@ -381,11 +380,11 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // declare them in that region and heal one Corruption each time" (p.39).
         // (Report: couldn't declare-to-heal at Minas Tirith with Progress 0 — the
         // option was gated on Progress > 0 and never offered the current region.)
-        if (!MORDOR_INTERIOR.includes(fs.location)) acts.push({ kind: 'declareFellowship', target: fs.location });
-        // The figure can be declared up to a Mordor entrance (Morannon / Minas Morgul)
-        // but never into Mordor's interior — that strands it off the Mordor Track (report 681l).
+        acts.push({ kind: 'declareFellowship', target: fs.location });
+        // Gorgoroth, Barad-dûr and Nurn are ordinary regions for the figure — the
+        // Mordor Track is not part of Gorgoroth, and the figure can always walk back
+        // out to an entrance (player report 6v2x723i4d2d6t12).
         for (const r of regionsWithin(fs.location, fs.progress)) {
-          if (MORDOR_INTERIOR.includes(r)) continue;
           acts.push({ kind: 'declareFellowship', target: r });
         }
       }
@@ -981,8 +980,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         : moveArmy(state, action.from, action.to, actor);
       if (!moved) {
         const reason = moveBlockReason(state, action.from, action.to, actor);
+        // Say only what actually barred the move. "at least one Army unit must move" is
+        // a precondition the move menu already enforces, so it can never be the reason
+        // a split failed — and "Leader/Nazgûl/Character" is a slash-pile where "Leader
+        // or Character" reads (player report 61393i6w1p0f1p6o).
         throw new Error(reason ?? (action.move
-          ? 'That split is not legal — a Character-die army move must include a Leader/Nazgûl/Character with the moving units, and at least one Army unit must move.'
+          ? 'That split is not legal — a Character-die army move must take a Leader or Character along with the moving units.'
           : 'Illegal move.'));
       }
       // An Army die may move a SECOND different army (rulebook p.27); a Character die moves only one.
