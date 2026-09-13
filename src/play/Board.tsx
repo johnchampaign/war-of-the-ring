@@ -83,7 +83,7 @@ import type { GameState, RegionId, Nation, Side } from '../engine/types';
 import { HuntIndicator } from './HuntIndicator';
 import { MordorTrack } from './MordorTrack';
 import { RingGlyph } from './RingIcon';
-import { charName } from './charInfo';
+import { charName, charMark } from './charInfo';
 
 // Characters render as small labelled discs near the region anchor so they're
 // findable (a minion or a separated Companion is easy to lose among army badges).
@@ -92,12 +92,12 @@ const MINION_SET = new Set(['witch-king', 'saruman', 'mouth-of-sauron']);
 function charToken(id: string): { label: string; fill: string; rim: string; ink: string; title: string } {
   const name = charName(id);
   const minion = MINION_SET.has(id);
-  const label = id === 'witch-king' ? '👁' : id === 'nazgul' ? 'N' : name.replace(/^the /i, '').charAt(0).toUpperCase();
+  const mark = charMark(id);
   return {
-    label,
+    label: mark?.label ?? name.replace(/^the /i, '').charAt(0).toUpperCase(),
     fill: minion ? '#2a1430' : '#243a5e',
     rim: minion ? '#d4453a' : '#cdbb87',
-    ink: '#fff',
+    ink: mark?.ink ?? '#fff',
     title: name,
   };
 }
@@ -366,8 +366,11 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
               return (
                 <g key={id}>
                   <title>{t.title}</title>
-                  <circle cx={c.x} cy={c.y} r={7} fill={t.fill} stroke={t.rim} strokeWidth={1.5} />
-                  <text x={c.x} y={c.y + 3} fontSize={9} fontWeight="bold" fill={t.ink} textAnchor="middle">{t.label}</text>
+                  <circle cx={c.x} cy={c.y} r={7.5} fill={t.fill} stroke={t.rim} strokeWidth={1.5} />
+                  {/* Two-letter marks are set smaller so they sit inside the disc rather
+                      than spilling over its rim. */}
+                  <text x={c.x} y={c.y + (t.label.length > 1 ? 2.6 : 3)} fontSize={t.label.length > 1 ? 7.5 : 9}
+                    fontWeight="bold" fill={t.ink} textAnchor="middle" style={{ userSelect: 'none' }}>{t.label}</text>
                 </g>
               );
             });
