@@ -180,7 +180,13 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
         {/* An ambiguous action shows no die tag: the tag used to advertise the die the
             old auto-pick would have spent, which no longer happens — the player
             chooses (player report 5z0v4l0v36546w4k). */}
-        {tagDie && !ambiguous && <DieTag face={tagDie} />}
+        {/* A FIXED column for the die chip, so every action's text starts at the same x
+            — the chips are different widths ("Char" vs "Army/Mus") and an ambiguous
+            action shows none at all, which left the list looking ragged (player report
+            1q5s140023682d2j: these lists should be padded the way the log is). */}
+        <span style={{ width: 56, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+          {tagDie && !ambiguous && <DieTag face={tagDie} />}
+        </span>
         {art && <img src={art} alt="" style={{ height: compact ? 30 : 48, borderRadius: 3, flexShrink: 0 }} />}
         <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
         {ambiguous && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cb8' }}>choose die ▸</span>}
