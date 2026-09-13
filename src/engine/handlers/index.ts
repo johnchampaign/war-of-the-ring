@@ -68,7 +68,10 @@ function charRegion(state: GameState, id: string): string | null {
 function drawCard(state: GameState, side: Side, deck: 'character' | 'strategy'): void {
   const p = state.cards[side]; const top = p.draw[deck].shift();
   if (top) p.hand.push(top);
-  logCardDraw(state, side, deck, !!top, 'card text'); // the played card is named on the line above
+  // No reason on the line: the card that ordered the draw is named on the line above.
+  // The placeholder used to print verbatim — "Free Peoples draw a Strategy Event card
+  // (card text)" (player report 2r3b6i6s1h2b4w0v).
+  logCardDraw(state, side, deck, !!top);
   // Over-limit is resolved by the player's discard choice (engine enforceHandLimit).
 }
 /** Region-step distance (BFS), or Infinity. */
@@ -87,7 +90,7 @@ type CardMoveSel = { units?: Partial<Record<Nation, { regular?: number; elite?: 
  *  moving" (deviation D15, now closed). The selection is sanitized against the
  *  region (clamped to available own-side figures); if no unit survives the clamp
  *  the WHOLE Army moves, so a malformed selection degrades to the old behavior. */
-function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel, path?: readonly RegionId[]): void {
+function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel, path?: readonly RegionId[], maxSteps?: number): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
   // THE ROUTE MATTERS. A card move "through more than one region" enters each region
   // on the way, and entering an enemy Settlement free of enemy units captures it —
@@ -103,7 +106,7 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   const movingNations = (Object.keys(sel?.units ?? src.units) as Nation[]).filter((n) => sideOfNation(n) === side);
   const route = path?.length ? [...path] : quietCardPath(state, from as RegionId, to as RegionId, side, movingNations, regionDist(from, to) + 2);
   if (path?.length) {
-    const bad = cardPathBlockReason(state, from as RegionId, route, side, movingNations);
+    const bad = cardPathBlockReason(state, from as RegionId, route, side, movingNations, maxSteps);
     if (bad) throw new Error(bad);
     if (route[route.length - 1] !== to) throw new Error('That route does not end where the move does.');
   }
@@ -667,15 +670,28 @@ register('sh-str-10', {
 // 2026-09-06: "I cannot use it to move an army from Moria to Lorien. I have an army in
 // Lorien besieging the elves. I am not under siege myself, so it should be legal").
 // Joining a besieger is a normal merge — `moveBlockReason` already allows it for a
-// plain Army move, under the same 10-unit field limit checked below.
-function shadowsGatherMoves(state: GameState): Array<{ from: string; to: string }> {
-  const out: Array<{ from: string; to: string }> = [];
+// plain Army move.
+//
+// STACKING IS NOT A GATE ON WHAT IS OFFERED. p.28 ("Using an Event Card to Move
+// Armies"): "If an Army moves through regions containing other friendly Armies,
+// stacking limits are checked only after all the multiple movements have been
+// completed", and the Almanac spells out the resolution - over-stacking goes back to
+// 10 by returning units (any units in the stack, not only the arrivals) to
+// reinforcements. Pre-filtering pairs on `from + to <= 10` therefore hid legal moves,
+// and it hid them SYMMETRICALLY: a full 10-unit stack could neither be moved nor be
+// moved to, so two big southern Armies vanished from the card entirely (player report
+// 57650y0x71235d5f: "I cannot move to or move from the Shadow Armies in West Harondor
+// and South Ithilien"). The over-stack is caught once the card finishes by the
+// adapter's end-of-action sweep, which raises the normal "remove excess" prompt.
+const SHADOWS_GATHER_RANGE = 3;
+function shadowsGatherMoves(state: GameState): EventTarget[] {
+  const out: EventTarget[] = [];
   const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
   for (const from of shadowRegions) {
     for (const to of shadowRegions) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       if (from === to) continue;
-      if (regionDist(from, to) <= 3 && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+      if (regionDist(from, to) <= SHADOWS_GATHER_RANGE) out.push({ from, to, range: SHADOWS_GATHER_RANGE });
     }
   }
   return out;
@@ -683,11 +699,12 @@ function shadowsGatherMoves(state: GameState): Array<{ from: string; to: string 
 register('sh-str-07', {
   canPlay: (state) => shadowsGatherMoves(state).length > 0,
   targets: shadowsGatherMoves,
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, SHADOWS_GATHER_RANGE); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 // The Shadow Lengthens: move TWO (different) Shadow Armies up to two regions each,
 // every move ending where another Shadow Army stands (not besieged). `applied`
 // excludes a just-moved army (now sitting at a prior move's destination).
+const SHADOW_LENGTHENS_RANGE = 2;
 function shadowLengthensMoves(state: GameState, applied: EventTarget[] = []): EventTarget[] {
   const movedTo = new Set(applied.map((a) => a.to));
   const out: EventTarget[] = [];
@@ -699,7 +716,8 @@ function shadowLengthensMoves(state: GameState, applied: EventTarget[] = []): Ev
       // No `besieged` test on the destination — see shadowsGatherMoves for why an
       // open-field Shadow Army in a besieged region is the besieger, not the besieged.
       if (from === to) continue;
-      if (regionDist(from, to) <= 2 && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+      // No stacking pre-filter either - see shadowsGatherMoves.
+      if (regionDist(from, to) <= SHADOW_LENGTHENS_RANGE) out.push({ from, to, range: SHADOW_LENGTHENS_RANGE });
     }
   }
   return out;
@@ -708,7 +726,7 @@ register('sh-str-08', {
   repeat: 2,
   canPlay: (state) => shadowLengthensMoves(state).length > 0,
   targets: (state, _side, applied) => shadowLengthensMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path); log(state, null, 'event', `The Shadow Lengthens: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, SHADOW_LENGTHENS_RANGE); log(state, null, 'event', `The Shadow Lengthens: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 // The Shadow is Moving (all Shadow Nations At War): move up to four DIFFERENT Shadow
 // Armies one region each (to an adjacent region free for movement, merges allowed).
@@ -719,7 +737,10 @@ function shadowMovingMoves(state: GameState, applied: EventTarget[] = []): Event
     if (armySide(state, from) !== 'shadow' || movedTo.has(from)) continue;
     for (const to of REGIONS[from]!.adjacency) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
-      if (freeForMovement(state, to, 'shadow') && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+      // Adjacent-only, so `range: 1` tells the UI there is no route to walk: this card
+      // is a plain one-region Army move (player report 6124175c5o6r2f1r). No stacking
+      // pre-filter - see shadowsGatherMoves.
+      if (freeForMovement(state, to, 'shadow')) out.push({ from, to, range: 1 });
     }
   }
   return out;
@@ -728,7 +749,7 @@ register('sh-str-09', {
   repeat: 4,
   canPlay: (state) => allAtWar(state, SHADOW_NATIONS) && shadowMovingMoves(state).length > 0,
   targets: (state, _side, applied) => shadowMovingMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path); log(state, null, 'event', `The Shadow is Moving: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, 1); log(state, null, 'event', `The Shadow is Moving: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 
 // Dead Men of Dunharrow: move Strider/Aragorn (+ Companions in the same region)
@@ -830,14 +851,17 @@ register('fp-str-11', {
     moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path); log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
 });
 // Through a Day and a Night: move an FP Army containing a Companion up to 2 regions.
-function dayNightMoves(state: GameState): Array<{ from: string; to: string }> {
-  const out: Array<{ from: string; to: string }> = [];
+const DAY_NIGHT_RANGE = 2;
+function dayNightMoves(state: GameState): EventTarget[] {
+  const out: EventTarget[] = [];
   for (const from of Object.keys(state.regions)) {
     if (armySide(state, from) !== 'fp' || !state.regions[from]!.characters.some((c) => COMPANION_SET.has(c))) continue;
     for (const to of Object.keys(state.regions)) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       const d = regionDist(from, to);
-      if (d >= 1 && d <= 2 && freeForMovement(state, to, 'fp') && unitCount(state, from) + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+      // No stacking pre-filter - the Almanac gives this card the same "merge over the
+      // limit, resolve after the movement" allowance as the Shadow move cards.
+      if (d >= 1 && d <= DAY_NIGHT_RANGE && freeForMovement(state, to, 'fp')) out.push({ from, to, range: DAY_NIGHT_RANGE });
     }
   }
   return out;
@@ -850,7 +874,7 @@ register('fp-str-12', {
     // "at least one Companion must move along with the Army" (Almanac). Paths of the
     // Woses already checked this; this card did not (player report 0c2d6s4y07386h19).
     if (t.move && !(t.move.characters ?? []).some((c) => COMPANION_SET.has(c))) throw new Error('Through a Day and a Night: the moving part must include a Companion');
-    moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+    moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, DAY_NIGHT_RANGE); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 
 // --- Recruit / muster cards in named or chosen regions -----------------------
@@ -1869,13 +1893,20 @@ register('fp-char-14', {
   },
 });
 
-// Hordes From the East: recruit five S&E Regulars in a free S&E region adjacent to
-// the eastern map edge (derived from region geometry: Far Harad / Khand / South Rhûn).
-const EAST_EDGE_SE = ['far-harad', 'khand', 'south-rhun'];
+// Hordes From the East: recruit five S&E Regulars in a free S&E region adjacent to the
+// eastern map edge. The list is the Almanac's, verbatim — "the recruitment may only
+// occur in the following regions: East Rhûn, South Rhûn, Khand, or Far Harad". It used
+// to be read off region geometry and came out one region short: East Rhûn touches the
+// eastern edge and was never offered (player report 5j6e5a5o5d403m6f).
+const EAST_EDGE_SE = ['east-rhun', 'south-rhun', 'khand', 'far-harad'];
+// "Free" as every Shadow recruitment card means it (Almanac): a non-Settlement region
+// with no Free Peoples Army in it, or a Settlement the Free Peoples have not captured.
+const hordeRegionFree = (state: GameState, id: string): boolean =>
+  armySide(state, id) !== 'fp' && (!REGIONS[id]?.settlement || settlementController(state, id) !== 'fp');
 register('sh-str-21', {
   canPlay: (state) => isAtWar(state, 'southrons') && state.reinforcements.southrons.regular > 0
-    && EAST_EDGE_SE.some((id) => armySide(state, id) !== 'fp'),
-  targets: (state) => EAST_EDGE_SE.filter((id) => armySide(state, id) !== 'fp').map((region) => ({ region, mode: 'recruit' as const })),
+    && EAST_EDGE_SE.some((id) => hordeRegionFree(state, id)),
+  targets: (state) => EAST_EDGE_SE.filter((id) => hordeRegionFree(state, id)).map((region) => ({ region, mode: 'recruit' as const })),
   applyTarget(state, _side, t) { placeUnits(state, 'southrons', t.region!, 5, 0); log(state, null, 'event', `Hordes From the East muster in ${t.region}`); },
 });
 

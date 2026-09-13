@@ -9,10 +9,14 @@
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { charName, charDef } from './charInfo';
+import { nationName } from '../engine/data';
 
 const REGION_NAME = new Map<string, string>(Object.entries((mapData as { regions: Record<string, { name?: string }> }).regions).map(([id, r]) => [id, r.name ?? id]));
 const CARD_NAME = new Map<string, string>((eventCards as { cards: { id: string; name: string }[] }).cards.map((c) => [c.id, c.name]));
-const NATION_NAME: Record<string, string> = { dwarves: 'Dwarves', elves: 'Elves', gondor: 'Gondor', north: 'North', rohan: 'Rohan', sauron: 'Sauron', isengard: 'Isengard', southrons: 'Southrons' };
+// One source of truth with the engine, which writes Nation names into its own refusal
+// and hint sentences (see nationName in engine/data).
+const NATION_NAME: Record<string, string> = Object.fromEntries(
+  ['dwarves', 'elves', 'gondor', 'north', 'rohan', 'sauron', 'isengard', 'southrons'].map((n) => [n, nationName(n)]));
 // Not a Nation, but the same job: a lowercase 'shadow' in a log line is the SIDE.
 const SIDE_WORD: Record<string, string> = { shadow: 'Shadow' };
 

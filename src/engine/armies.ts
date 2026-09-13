@@ -1,7 +1,7 @@
 // Armies: composition queries, mustering (recruit), and movement with settlement
 // capture (rules-spec §1, §6). Combat is in combat.ts.
 import type { GameState, Nation, RegionId, Side, ArmyUnits } from './types';
-import { REGIONS, sideOfNation, characterDef, characterSide } from './data';
+import { REGIONS, sideOfNation, characterDef, characterSide, nationName } from './data';
 import { isAtWar, onSettlementCaptured, activateNation } from './politics';
 import { shadowBarredFromRegion } from './persistent';
 import { log } from './log';
@@ -276,12 +276,12 @@ export function musterBlockReason(state: GameState, id: RegionId, side: Side): s
   if (armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) return `There is an enemy Army in ${name}.`;
   if (state.regions[id]!.besieged) return `${name} is under siege — no troops can be mustered into a besieged Stronghold (p.27).`;
   if (!isAtWar(state, nation)) {
-    return `${cap1(nation)} is not At War, so it cannot muster (p.26). Advance ${cap1(nation)} to “At War” on the Political Track first.`;
+    return `${nationName(nation)} is not At War, so it cannot muster (p.26). Advance ${nationName(nation)} to “At War” on the Political Track first.`;
   }
   if (unitCount(state, id) >= STACKING_LIMIT) return `${name} already holds ${STACKING_LIMIT} Army units — the stacking limit (p.26).`;
   const pool = state.reinforcements[nation] as { regular: number; elite: number };
   if (pool.regular < 1 && pool.elite < 1) {
-    return `${cap1(nation)} has no units left in reinforcements — every figure is already on the board or lost (p.27).`;
+    return `${nationName(nation)} has no units left in reinforcements — every figure is already on the board or lost (p.27).`;
   }
   return null;
 }
@@ -323,21 +323,25 @@ export function regionHops(from: RegionId, to: RegionId): number {
  *  borders. `movingNations` are the Nations actually travelling (a split may leave
  *  the not-At-War half behind), which is why this cannot just call moveBlockReason
  *  per step — that reads the units sitting in each region on the way. */
-export function cardPathBlockReason(state: GameState, from: RegionId, path: readonly RegionId[], side: Side, movingNations: readonly Nation[]): string | null {
+export function cardPathBlockReason(state: GameState, from: RegionId, path: readonly RegionId[], side: Side, movingNations: readonly Nation[], maxSteps?: number): string | null {
   if (!path.length) return 'That route has no steps.';
-  const seen = new Set<RegionId>([from]);
+  // A route may WALK BACK through a region it has already entered — nothing in p.27
+  // forbids it, and the only restriction the Almanac places on a card move's shape is
+  // that it "cannot end movement in the region that it started from" (which the
+  // enumerators enforce by never offering from === to). Refusing a revisit outright
+  // made legal detours untraceable (player report 306c5v2g003c6332). `maxSteps` is the
+  // card's own allowance ("up to three regions") and is what bounds the route now.
+  if (maxSteps !== undefined && path.length > maxSteps) return `That route is ${path.length} regions long — this card moves up to ${maxSteps}.`;
   let prev = from;
   for (const r of path) {
     if (!REGIONS[prev]?.adjacency.includes(r)) return `${cap1(REGIONS[prev]?.name ?? prev)} and ${cap1(REGIONS[r]?.name ?? r)} are not adjacent.`;
-    if (seen.has(r)) return `The route doubles back through ${REGIONS[r]?.name ?? r}.`;
-    seen.add(r);
     if (side === 'shadow' && shadowBarredFromRegion(state, r)) return `A card effect bars the Shadow from ${REGIONS[r]?.name ?? r}.`;
     const occ = armySide(state, r);
     if (occ !== null && occ !== side) return `${REGIONS[r]?.name ?? r} holds an enemy Army — an Army may not move through one.`;
     const dn = REGIONS[r]?.nation;
     for (const nation of movingNations) {
       if (!isAtWar(state, nation) && dn && dn !== nation) {
-        return `${cap1(nation)} is not At War — its units cannot enter ${cap1(dn)}'s borders (${REGIONS[r]?.name ?? r}).`;
+        return `${nationName(nation)} is not At War — its units cannot enter ${cap1(dn)}'s borders (${REGIONS[r]?.name ?? r}).`;
       }
     }
     prev = r;
@@ -390,14 +394,26 @@ export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, 
   if (!REGIONS[from]!.adjacency.includes(to)) return 'Those regions are not adjacent.';
   if (armySide(state, from) !== side) return 'You have no Army to move there.';
   if (side === 'shadow' && shadowBarredFromRegion(state, to)) return 'A card effect bars the Shadow from that region.';
-  // Enemy units present: that's an attack (handled elsewhere), not a move/merge.
+  // Enemy units present, so the click was an ATTACK, not a move — nobody can "move into"
+  // an occupied region in this UI: clicking one always resolves as an attack. The hint
+  // therefore has to answer "why can't I attack?", and telling the player to "attack the
+  // region instead" answered a question they had not asked (player report
+  // 6q471p5u5r32472c). The real blocker there was that no Nation in the attacking Army
+  // was At War — a Nation not At War cannot attack at all (p.28: an attacking Army must
+  // be split so that only its At-War figures fight) — and the old wording missed it
+  // whenever the target region lay outside any Nation's borders, because it only looked
+  // for a border it could not cross.
   const occ = armySide(state, to);
   if (occ !== null && occ !== side) {
-    const dn = REGIONS[to]!.nation;
-    const blockedNation = (Object.keys(state.regions[from]!.units) as Nation[]).find((n) => !isAtWar(state, n) && dn && dn !== n);
-    return blockedNation
-      ? `Enemy units there, and ${cap1(blockedNation)} is not At War — you can neither attack nor move into that region until ${cap1(blockedNation)} reaches War.`
-      : 'Enemy units there — attack the region instead of moving into it.';
+    const own = (Object.keys(state.regions[from]!.units) as Nation[])
+      .filter((n) => sideOfNation(n) === side && (state.regions[from]!.units[n]!.regular + state.regions[from]!.units[n]!.elite) > 0);
+    const sleeping = own.filter((n) => !isAtWar(state, n));
+    if (own.length > 0 && sleeping.length === own.length) {
+      const names = sleeping.map(nationName);
+      const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+      return `Enemy units there, so this would be an attack — but ${list} ${names.length === 1 ? 'is' : 'are'} not At War, and an Army can only attack with figures of a Nation that is. Advance ${names.length === 1 ? 'it' : 'one of them'} to War on the Political Track first.`;
+    }
+    return 'Enemy units there — clicking an occupied region attacks it; an Army can never move into one.';
   }
   // (RAW siege model: a besieged region's open field holds the BESIEGER under the
   // normal 10-unit limit — joining them is a normal move/merge. The boxed garrison
@@ -406,7 +422,7 @@ export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, 
   const dn = REGIONS[to]!.nation;
   for (const nation of Object.keys(state.regions[from]!.units) as Nation[]) {
     if (!isAtWar(state, nation) && dn && dn !== nation) {
-      return `${cap1(nation)} is not At War — its units cannot enter ${cap1(dn)}'s borders. Advance ${cap1(nation)} to War first (or split off only its At-War units).`;
+      return `${nationName(nation)} is not At War — its units cannot enter ${cap1(dn)}'s borders. Advance ${nationName(nation)} to War first (or split off only its At-War units).`;
     }
   }
   return null;

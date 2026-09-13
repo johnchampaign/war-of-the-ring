@@ -69,8 +69,64 @@ if (s0) {
     check(label, !!err, err ?? 'ACCEPTED');
   };
   bad(['minas-tirith'], 'a jump to a far region is rejected');
-  bad(['dale', 'dale', 'northern-rhovanion'], 'a route that doubles back is rejected');
+  bad(['dale', 'dale', 'northern-rhovanion'], 'a route through a region twice over is rejected (Dale is not adjacent to itself)');
+  // What bounds a route is the CARD'S REACH, not a no-revisits rule: "move one Army up
+  // to three regions" means at most three steps, however they are walked.
+  bad(['dale', 'old-forest-road', 'dale', 'northern-rhovanion'], 'a FOUR-region route is rejected — this card moves up to three');
   bad(['dale'], 'a route that stops somewhere else is rejected');
 }
+
+// A route may WALK BACK through a region it has already entered. Only ENDING where it
+// started is barred (Almanac, "Shadows Gather": "An Army cannot end movement in the
+// region that it started from"), and the engine never offers that destination anyway.
+// The UI used to bar revisits outright, so legal detours could not be traced at all
+// (player report 306c5v2g003c6332).
+console.log('\n=== a route may walk back through a region it came from ===');
+{
+  const s = startGame(createGame({ seed: 131 }));
+  s.phase = 'actionResolution'; s.currentPlayer = 'shadow'; s.pendingChoice = null;
+  s.dice.shadow = ['event']; s.dice.fp = [];
+  s.nations.sauron.active = true; s.nations.sauron.step = 0;
+  s.regions['dale'].units = { sauron: { regular: 4, elite: 0 } };            // the movers
+  s.regions['old-forest-road'].units = { sauron: { regular: 1, elite: 0 } }; // the friendly Army it must end with
+  s.regions['woodland-realm'].units = {};
+  s.regions['woodland-realm'].besieged = false; delete s.regions['woodland-realm'].siegeBox;
+  s.cards.shadow.hand = ['sh-str-07'];
+  const play = wotrAdapter.legalActions(s, 'shadow').find((a) => a.kind === 'playEvent' && a.cardId === 'sh-str-07');
+  const s1 = play ? wotrAdapter.applyAction(s, { ...play, die: 'event' }, 'shadow') : null;
+  const move = s1 && wotrAdapter.legalActions(s1, 'shadow').find((a) => a.kind === 'eventTarget' && a.from === 'dale' && a.to === 'old-forest-road');
+  check('the move is offered', !!move, JSON.stringify(move ?? null));
+  if (move) {
+    let err = null, out = null;
+    try { out = wotrAdapter.applyAction(s1, { ...move, path: ['woodland-realm', 'dale', 'old-forest-road'] }, 'shadow'); } catch (e) { err = e.message; }
+    check('Dale → Woodland Realm → back through Dale → Old Forest Road is accepted', !err, err ?? '');
+    if (out) check('...and the Army arrives', (out.regions['old-forest-road'].units.sauron?.regular ?? 0) === 5, String(out.regions['old-forest-road'].units.sauron?.regular ?? 0));
+  }
+}
+// Stacking is NOT a gate on what the card offers. p.28: "If an Army moves through
+// regions containing other friendly Armies, stacking limits are checked only after all
+// the multiple movements have been completed." The old pre-filter (from + to <= 10)
+// hid a full 10-unit Army as BOTH a source and a destination, so two big Armies
+// vanished from the card entirely (player report 57650y0x71235d5f).
+console.log('\n=== a full Army is still offered — over-stacking is resolved afterwards ===');
+{
+  const s = startGame(createGame({ seed: 131 }));
+  s.phase = 'actionResolution'; s.currentPlayer = 'shadow'; s.pendingChoice = null;
+  s.dice.shadow = ['event']; s.dice.fp = [];
+  s.nations.sauron.active = true; s.nations.sauron.step = 0;
+  s.regions['dale'].units = { sauron: { regular: 10, elite: 0 } };           // at the limit
+  s.regions['old-forest-road'].units = { sauron: { regular: 10, elite: 0 } }; // and so is the partner
+  s.cards.shadow.hand = ['sh-str-07'];
+  const play = wotrAdapter.legalActions(s, 'shadow').find((a) => a.kind === 'playEvent' && a.cardId === 'sh-str-07');
+  const s1 = play ? wotrAdapter.applyAction(s, { ...play, die: 'event' }, 'shadow') : null;
+  const move = s1 && wotrAdapter.legalActions(s1, 'shadow').find((a) => a.kind === 'eventTarget' && a.from === 'dale' && a.to === 'old-forest-road');
+  check('a 10-unit Army may still move onto another 10-unit Army', !!move, JSON.stringify(move ?? null));
+  if (move) {
+    const out = wotrAdapter.applyAction(s1, move, 'shadow');
+    check('the merged stack raises the remove-excess prompt', out.pendingChoice?.kind === 'removeExcess', out.pendingChoice?.kind ?? 'none');
+    check('...pointed at the over-stacked region', out.pendingChoice?.data?.region === 'old-forest-road', String(out.pendingChoice?.data?.region));
+  }
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

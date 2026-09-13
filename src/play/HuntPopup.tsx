@@ -41,6 +41,12 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
         {fresh.every((d) => d.discarded) ? (
           <div style={{ margin: '12px 0 4px' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#9cc77a' }}>{fresh[0]!.source}: the tile drawn was {fresh[0]!.value === 'eye' ? 'an Eye' : 'a Free Peoples special tile'} — discarded without effect.</div>
+            {/* A tile that does nothing is still a tile that came out of the bag, and the
+                player wants to SEE it, exactly as they see every other draw (player
+                report 6m4w0z462s3a1n0s). */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4, margin: '8px 0 2px' }}>
+              {fresh.map((d) => <HuntTileFace key={d.seq} draw={d} />)}
+            </div>
             <div style={{ fontSize: 11, color: '#887', marginTop: 3 }}>An extra draw from an Event card only counts when it shows a number or a Shadow special tile.</div>
           </div>
         ) : fresh.every((d) => d.miss) ? (

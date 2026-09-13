@@ -36,7 +36,9 @@ const CHOICE_TITLE: Record<string, string> = {
   huntPreventDraw: 'Prevent the Hunt tile draw? (you won’t see it)',
   huntRedraw: 'Redraw the Hunt tile?',
   siegeWithdraw: 'Withdraw into the siege, or fight in the open?',
-  siegeExtend: 'Press the assault? (reduce one Elite to a Regular for another round)',
+  // The buttons below already spell out the cost; repeating it in the heading is noise
+  // (player report 133g2j5e39573409).
+  siegeExtend: 'Press the assault?',
   advanceHoldBack: 'You took the region — keep any figures back where you attacked from?',
   advanceChoice: 'The field is yours — advance into the region?',
   nazgulStrike: 'The Nazgûl find the Fellowship — discard one Free Peoples card from the table, or roll for the Hunt?',
@@ -368,13 +370,20 @@ function CardBlurb({ id }: { id: string | null }) {
   );
 }
 
-// Anchor near the top (not vertically centred) so the card blurb growing on hover
-// extends the modal DOWNWARD instead of re-centring it — otherwise the buttons slide
-// out from under the cursor and you can't click them.
-const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.72)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '7vh', boxSizing: 'border-box', zIndex: 50 };
+// CENTRED, like every other dialog and menu in the game — a decision modal that opened
+// high while the muster menu, the move picker and the notices all opened in the middle
+// read as a different kind of window (player report 5l583q162o3m4j6a).
+//
+// It used to be anchored near the top for a reason: the card blurb grew on hover, and
+// a centred modal would re-centre under the cursor and slide its buttons away. That
+// reason is gone — the blurb now has a FIXED height and the modal a FIXED width (see
+// below), so hovering a card cannot change this modal's size at all. `margin: auto` on
+// the modal does the centring, which means a modal taller than the window still starts
+// at the top and scrolls, instead of having its head cut off above the viewport.
+const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.72)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '3vh 8px', overflowY: 'auto', boxSizing: 'border-box', zIndex: 50 };
 // Fixed width — a content-driven width made the modal reshape when the hover blurb
 // filled in, sliding the card buttons out from under the cursor (player report).
-const modal: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #5a4a2a', width: 560, maxWidth: '92vw', boxSizing: 'border-box', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 8px 40px #000' };
+const modal: React.CSSProperties = { margin: 'auto', background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #5a4a2a', width: 560, maxWidth: '92vw', boxSizing: 'border-box', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 8px 40px #000' };
 const dbtn: React.CSSProperties = { background: '#7a1f1f', color: '#fff', border: '1px solid #944', borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontSize: 13, minWidth: 110 };
 // FIXED height (scrolls internally) so hovering a card never changes the modal's
 // size at all — a growing blurb moved the buttons under the cursor (player report).

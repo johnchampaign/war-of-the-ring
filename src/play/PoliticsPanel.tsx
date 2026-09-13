@@ -9,10 +9,15 @@ const NATION_COLOR: Record<Nation, string> = {
   dwarves: '#7a5230', elves: '#5fbf6a', gondor: '#2f4f9e', north: '#7fb6e6',
   rohan: '#2e7d4f', isengard: '#c9b037', sauron: '#a83232', southrons: '#d98a3d',
 };
+// The Nation is "Southrons & Easterlings" — "Southrons" alone is not its name (player
+// report 1s2u180x0p6e5i0f). The full name cannot fit this track's 52px label column, so
+// the row wears the abbreviation the reporter suggested and carries the full name as a
+// tooltip; everywhere the game has room (log lines, modals) it is spelled out in full.
 const NATION_LABEL: Record<Nation, string> = {
   dwarves: 'Dwarves', elves: 'Elves', gondor: 'Gondor', north: 'North', rohan: 'Rohan',
-  sauron: 'Sauron', isengard: 'Isengard', southrons: 'Southrons',
+  sauron: 'Sauron', isengard: 'Isengard', southrons: 'S&E',
 };
+const NATION_FULL: Record<Nation, string> = { ...NATION_LABEL, southrons: 'Southrons & Easterlings' };
 const TRACK_MAX = 3; // display 3 → 2 → 1 → War
 
 export function PoliticsPanel({ view }: { view: GameState }) {
@@ -70,7 +75,7 @@ function NationRow({ n, ns, reinf }: { n: Nation; ns: GameState['nations'][Natio
       {/* flexShrink:0 keeps every label exactly 52px wide. Without it, rows that carry a
           "passive" tag flex-shrink the label ~3px narrower than active rows (e.g. Elves),
           so the progress tracks start at different x and the rows look misaligned. */}
-      <span style={{ width: 52, flexShrink: 0, fontSize: 11, color: atWar ? '#ffd23f' : '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{NATION_LABEL[n]}</span>
+      <span title={NATION_FULL[n]} style={{ width: 52, flexShrink: 0, fontSize: 11, color: atWar ? '#ffd23f' : '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{NATION_LABEL[n]}</span>
       {/* Left-anchored progress bar toward War: filled cells = steps mobilized, so a
           nation advancing reads as "more progress", never as a row knocked out of
           alignment (the old single-moving-dot design). The rightmost cell is War. */}

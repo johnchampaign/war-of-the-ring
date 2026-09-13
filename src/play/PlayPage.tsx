@@ -353,15 +353,29 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // walking a route first.
     if (cardMoveActs.some((a) => a.from === selected && a.mode === 'attack')) return null;
     const head = (route.length ? route[route.length - 1] : selected) as RegionId;
-    // The card's reach: the farthest destination it offers from here. A detour may
-    // use every step of it, so that is the budget for the whole route.
-    const budget = Math.max(...legs.map((a) => regionHops(selected as RegionId, a.to!)));
+    // The card's REACH, as the card states it ("move one Army up to three regions") —
+    // not the distance to the nearest thing it happens to offer. Guessing the budget
+    // from the offered destinations made the same pair of Armies walkable one way and
+    // not the other: from an Army whose only partner was two regions off, the budget
+    // came out 2, so the three-region detour that reached it the other way was refused
+    // (player report 1y683v3l5s0z3o1u, "I can move from Eastemnet via Folde to Dead
+    // Marshes, but not from Dead Marshes via Folde to Eastemnet"). The old guess stays
+    // as the fallback for cards that don't state a range.
+    const budget = Math.max(...legs.map((a) => a.range ?? regionHops(selected as RegionId, a.to!)));
+    // A ONE-REGION card move is an ordinary Army move — there is no route to trace, so
+    // hand it back to the plain click-the-destination flow rather than making the
+    // player walk a single step and then confirm it (player report 6124175c5o6r2f1r,
+    // about The Shadow is Moving).
+    if (budget <= 1) return null;
     const nations = (Object.keys(g.view.regions[selected]?.units ?? {}) as Nation[])
       .filter((n) => (g.you === 'fp') === FP_NATIONS.has(n));
     const steps = new Set<RegionId>();
     if (route.length < budget) {
       for (const n of REGIONS[head]?.adjacency ?? []) {
-        if (n === selected || route.includes(n as RegionId)) continue;
+        // A route MAY walk back through a region it has already entered (only ENDING
+        // where it started is barred, and the engine never offers that destination) —
+        // barring revisits here made legal detours impossible to trace (player report
+        // 306c5v2g003c6332).
         if (!cardPathBlockReason(g.view, selected as RegionId, [...route, n as RegionId], g.you as Side, nations)) steps.add(n as RegionId);
       }
     }
@@ -538,9 +552,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       ...(cardHere.length >= 2 ? [{ kind: 'cardgroup' as const, acts: cardHere as WotrAction[] }] : []),
       ...(armyHere ? [{ kind: 'army' as const }] : []),
       ...(assaultHere ? [{ kind: 'assault' as const }] : []),
-      ...(musterHere ? [{ kind: 'muster' as const }] : []),
       ...(compsHere.length >= 2 ? [{ kind: 'chargroup' as const, chars: compsHere }] : []),
       ...charsHere.map((c) => ({ kind: 'char' as const, char: c })),
+      // Muster goes LAST, below the figures — everything above it moves something, so
+      // the list reads as one group of movers and then the odd one out (player report
+      // 182f552y4v5r6f1n).
+      ...(musterHere ? [{ kind: 'muster' as const }] : []),
     ];
     if (opts.length > 1) { clearMove(); setMoveMenu({ region: id, options: opts }); return; }
     if (opts.length === 1) {
@@ -870,7 +887,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
                 {o.kind === 'army' ? 'The army'
                   : o.kind === 'assault' ? (sortieForce(g.view!, moveMenu!.region, me) ? '⚔ Sortie against the besiegers' : '⚔ Assault the besieged Stronghold')
-                  : o.kind === 'muster' ? '🛡 Muster here'
+                  // "Muster here" under a heading that already says "here" (player
+                  // report 4j5g4c352b5u476e).
+                  : o.kind === 'muster' ? '🛡 Muster'
                   : o.kind === 'cardchar' ? `${o.label} (by card)`
                   : o.kind === 'cardgroup' ? `All of them together, by card (${o.acts.map((a) => charName((a as Extract<WotrAction, { kind: 'eventTarget' }>).companion!)).join(', ')})`
                   : o.kind === 'chargroup' ? `All Companions together (${o.chars.map(charName).join(', ')})`

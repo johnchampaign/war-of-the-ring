@@ -105,7 +105,11 @@ export type WotrAction =
   // Stop the Character-die move chain (RAW: one die may move all eligible characters).
   | { kind: 'charMove2'; done: true }
   // Follow-up target choice for an interactive event card (fields per card).
-  | { kind: 'eventTarget'; card: string; path?: RegionId[]; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; done?: boolean; count?: number; move?: MoveSel }
+  /** `range` is a UI hint enumerated with the target: how many regions THE CARD lets
+   *  the Army walk, so the board's route tracer knows its budget instead of guessing
+   *  it from the nearest destination on offer. The engine re-states the range itself
+   *  when it validates `path`, so a client that inflates this field gains nothing. */
+  | { kind: 'eventTarget'; card: string; path?: RegionId[]; range?: number; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; done?: boolean; count?: number; move?: MoveSel }
   // Stormcrow (FP responds): choose which unit of the targeted Nation to eliminate.
   | { kind: 'stormcrowLoss'; region: RegionId; nation: Nation; figure: 'regular' | 'elite' | 'leader' }
   // The Breaking of the Fellowship (FP responds): choose which Companion to separate.

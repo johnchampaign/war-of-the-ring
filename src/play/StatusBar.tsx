@@ -1,7 +1,7 @@
 // Top status bar: turn / phase / seat, victory points, the Ring track, dice.
 import type { WotrAction } from '../adapter/wotrAction';
 import { describeAction } from './actionText';
-import { phaseLabel } from './names';
+import { phaseLabel, regionName } from './names';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GameState } from '../engine/types';
 import { charName, charDef, isMinion } from './charInfo';
@@ -115,7 +115,7 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
             return (
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help', background: isGuide ? '#2c2616' : 'transparent' }}>
-                <span style={{ fontWeight: 600, color: isGuide ? '#ffd86a' : '#e9e1cc' }}>{isGuide ? '★ ' : ''}{charName(id)}</span>
+                <span style={{ ...charNameCell, color: isGuide ? '#ffd86a' : '#e9e1cc' }}>{isGuide ? '★ ' : ''}{charName(id)}</span>
                 {d && <span style={{ color: '#b9b29c', fontSize: 11 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
               </div>
             );
@@ -148,8 +148,11 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
             return (
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
-                <span style={{ fontWeight: 600 }}>{charName(id)}</span>
-                <span style={{ color: '#b9b29c', fontSize: 11 }}>{String(region)}{d ? ` · Level ${d.level === 'inf' ? '∞' : d.level}${d.leadership ? ` · Leadership ${d.leadership}` : ''}` : ''}</span>
+                <span style={charNameCell}>{charName(id)}</span>
+                {/* The region is an engine id here; the player should read its NAME
+                    ("Western Emyn Muil", not western-emyn-muil — player report
+                    5l706l6q120i354l). */}
+                <span style={{ color: '#b9b29c', fontSize: 11 }}>{regionName(String(region))}{d ? ` · Level ${d.level === 'inf' ? '∞' : d.level}${d.leadership ? ` · Leadership ${d.leadership}` : ''}` : ''}</span>
               </div>
             );
           })}
@@ -184,7 +187,7 @@ function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (i
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
                 <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SH' : 'FP'}</span>
-                <span style={{ fontWeight: 600, color: '#c9bfae', textDecoration: 'line-through' }}>{charName(id)}</span>
+                <span style={{ ...charNameCell, color: '#c9bfae', textDecoration: 'line-through' }}>{charName(id)}</span>
                 {d && <span style={{ color: '#8d8677', fontSize: 11 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
               </div>
             );
@@ -224,14 +227,16 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
         : `${CARD_NAME.get(id) ?? id} (face down)`;
       rows.push({ side: sideName, label, id: id.startsWith('hidden') ? null : id, played: at(id.startsWith('hidden') ? null : id) });
     }
-    for (const id of p.table ?? []) rows.push({ side: sideName, label: `${CARD_NAME.get(id) ?? id} (in play on the table)`, id, played: at(id) });
+    // Cards ON THE TABLE are not discards, and the side panel already shows them under
+    // "In play" — listing them here too was the same card said twice (player report
+    // 431m0a703i0k544h).
   }
   rows.sort((a, b) => b.played - a.played); // newest play first; unlogged (face-down) last
   const total = rows.length;
   return (
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
-        title="Browse discarded / played / on-table Event cards (open information)">
+        title="Browse discarded and played Event cards (open information)">
         Discards {total} {open ? '▴' : '▾'}
       </button>
       {open && (
@@ -240,7 +245,10 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
           {rows.map((r, i) => (
             <div key={i} onMouseEnter={() => r.id && onHoverCard?.(r.id)}
               style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 6px', borderRadius: 5, cursor: r.id ? 'help' : 'default' }}>
-              <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: r.side === 'Free Peoples' ? '#7fa8e6' : '#e6857f' }}>{r.side}</span>
+              {/* A fixed column for the side, so every card name starts at the same x
+                  whether it is prefixed "Free Peoples" or "Shadow" (player report
+                  1q5s140023682d2j: these lists should line up the way the log does). */}
+              <span style={{ flexShrink: 0, width: 66, fontSize: 10, fontWeight: 700, color: r.side === 'Free Peoples' ? '#7fa8e6' : '#e6857f' }}>{r.side}</span>
               <span style={{ fontSize: 12, color: r.id ? '#e9e1cc' : '#998' }}>{r.label}</span>
             </div>
           ))}
@@ -333,9 +341,16 @@ function ElvenRingsPill({ view, actions, onAction }: { view: GameState; actions:
 
 const bar: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 6, padding: 8, background: '#15110b', color: '#eee', fontFamily: 'system-ui', fontSize: 12, alignItems: 'center' };
 const pill: React.CSSProperties = { background: '#33302a', padding: '3px 8px', borderRadius: 10, whiteSpace: 'nowrap' };
+// A Character's NAME column in the roster panels. `overflowWrap: 'anywhere'` on the
+// panel (which a long card title needs) was breaking names mid-word — "Saruma / n" —
+// and, because each name is a different length, the detail that follows started at a
+// different x on every row (player report 1q5s140023682d2j). A nowrap column with a
+// floor under it fixes both: short names pad out to the same width, long ones simply
+// push the detail right instead of being hyphen-free-wrapped into nonsense.
+const charNameCell: React.CSSProperties = { fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap', minWidth: 104 };
 // Panels wrap their text (they used to be `nowrap`, so a long row overflowed the
 // panel sideways and grew it a horizontal scrollbar of its own — report 2r2g) and
 // are capped at the window width so they can never be the thing that overflows.
-const roster: React.CSSProperties = { position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 70, background: '#1c1710', border: '1px solid #5a4a2a', borderRadius: 8, padding: 6, minWidth: 200, maxWidth: 'calc(100vw - 16px)', boxShadow: '0 8px 30px #000', whiteSpace: 'normal', overflowWrap: 'anywhere' };
+const roster: React.CSSProperties = { position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 70, background: '#1c1710', border: '1px solid #5a4a2a', borderRadius: 8, padding: 6, minWidth: 240, maxWidth: 'calc(100vw - 16px)', boxShadow: '0 8px 30px #000', whiteSpace: 'normal', overflowWrap: 'anywhere' };
 // The two long-list panels (Hunt tiles, Discards) scroll vertically only.
 const wide: React.CSSProperties = { width: 'min(300px, calc(100vw - 16px))', maxHeight: 300, overflowY: 'auto', overflowX: 'hidden' };

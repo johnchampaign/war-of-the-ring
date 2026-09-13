@@ -36,6 +36,16 @@ export const REGIONS: Record<string, RegionDef> = mapData.regions;
 export const NATIONS_DEF: Record<Nation, NationDef> = mapData.nations;
 export const REGION_IDS: string[] = Object.keys(REGIONS);
 
+/** Display names for the eight Nations. The engine's ids are not words a player should
+ *  read, and one of them is not even a name: the Nation is "Southrons & Easterlings",
+ *  never "Southrons" (player report 1s2u180x0p6e5i0f). Engine-authored sentences (block
+ *  hints, refusals) reach the player verbatim, so they name Nations through this. */
+const NATION_NAME: Record<string, string> = {
+  dwarves: 'Dwarves', elves: 'Elves', gondor: 'Gondor', north: 'North', rohan: 'Rohan',
+  sauron: 'Sauron', isengard: 'Isengard', southrons: 'Southrons & Easterlings',
+};
+export const nationName = (n: string): string => NATION_NAME[n] ?? n;
+
 export const sideOfNation = (n: Nation): Side =>
   NATIONS_DEF[n].side === 'Shadow' ? 'shadow' : 'fp';
 

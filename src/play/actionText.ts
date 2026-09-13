@@ -48,9 +48,14 @@ export function describeAction(a: WotrAction): string {
     case 'forceDiscardCard': return a.via === 'cards'
       ? `Discard "${cardName(a.cardId)}" (any die + discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
       : `Discard "${cardName(a.cardId)}" (${a.via === 'will' ? 'Will of the West' : a.via === 'ring' ? 'Elven Ring + any die' : 'any die'})`;
+    // Both labels used to describe the ability in shorthand that reads as something
+    // else: "recruit Isengard" is not a thing you recruit, and "Orthanc Regulars" names
+    // a Nation that does not exist (player report 3v6m502j4k3z161y). Say what the card
+    // actually does — Isengard Regulars, in Isengard Settlements; and the upgrade is a
+    // REPLACEMENT of two Regulars standing in Orthanc.
     case 'sarumanMuster': return a.mode === 'upgrade'
-      ? 'Voice of Saruman: upgrade 2 Orthanc Regulars to Elites'
-      : 'Voice of Saruman: recruit Isengard in every Settlement';
+      ? 'Voice of Saruman: replace 2 Isengard Regulars in Orthanc with Elites'
+      : 'Voice of Saruman: recruit an Isengard Regular in every Isengard Settlement';
     // The button is already prefixed with the die that pays for it, so naming the die
     // again in the label is noise (player report 0c3p44321u1w1f1a).
     case 'bringUpgrade': return a.which === 'aragorn' ? 'Crown Aragorn' : 'Summon Gandalf the White';
