@@ -4,38 +4,10 @@
 // and the result. Combat is public info, so it shows for both players.
 import type { GameState, Side } from '../engine/types';
 import mapData from '../../assets/map.json';
+import { RollRow } from './combatDice';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
-
-// A combat die: a hit is a 6, or ≥ the to-hit target (never a 1).
-function CDie({ n, target }: { n: number; target: number }) {
-  const hit = n === 6 || (n !== 1 && n >= target);
-  return (
-    <span style={{
-      display: 'inline-grid', placeItems: 'center', width: 22, height: 22, margin: '0 2px',
-      borderRadius: 4, fontSize: 13, fontWeight: 700,
-      background: hit ? '#caa84b' : '#2a2418', color: hit ? '#1a1408' : '#b9b09a',
-      border: `1px solid ${hit ? '#e6c869' : '#4a4332'}`,
-    }}>{n}</span>
-  );
-}
-
-function RollRow({ label, roll, color }: { label: string; roll?: { dice: number[]; rerolls: number[]; target: number; rerollTarget?: number }; color: string }) {
-  if (!roll || (roll.dice.length === 0 && roll.rerolls.length === 0)) return null;
-  // A Combat card can bonus the Combat roll and the Leader re-roll separately, so
-  // the re-roll may hit on a different number — label it when it differs.
-  const rt = roll.rerollTarget ?? roll.target;
-  return (
-    <div style={{ margin: '3px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-      <span style={{ width: 64, fontSize: 12, color }}>{label}</span>
-      <span style={{ fontSize: 11, color: '#887', marginRight: 4 }}>(hits {roll.target}+)</span>
-      {roll.dice.map((n, i) => <CDie key={i} n={n} target={roll.target} />)}
-      {roll.rerolls.length > 0 && <span style={{ color: '#887', margin: '0 4px', fontSize: 11 }}>re-roll{rt !== roll.target ? ` (${rt}+)` : ''}</span>}
-      {roll.rerolls.map((n, i) => <CDie key={`r${i}`} n={n} target={rt} />)}
-    </div>
-  );
-}
 
 /** Is there a battle result the player hasn't clicked through yet? (PlayPage holds
  *  the cursor so the opponent's recap can wait for it.) */
@@ -57,11 +29,9 @@ export function BattlePopup({ view, seen, onSeen }: { view: GameState; seen: num
           <b style={{ color: b.attacker === 'fp' ? '#7fb6e6' : '#e6857f' }}>{sideName(b.attacker)}</b> attacked{' '}
           <b>{rName(b.to)}</b> <span style={{ color: '#998' }}>(from {rName(b.from)})</span>
         </div>
-        <div style={{ background: '#15110b', border: '1px solid #2a2418', borderRadius: 8, padding: '8px 10px' }}>
-          <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Final round</div>
-          <RollRow label="Attacker" roll={b.atkRoll} color="#e6857f" />
-          <RollRow label="Defender" roll={b.defRoll} color="#7fb6e6" />
-        </div>
+        {/* The rounds themselves are shown LIVE in the battle modal now, dice and all,
+            so repeating the last one here was just noise (same report). What belongs
+            here is the outcome: what it cost and who holds the ground. */}
         <div style={{ fontSize: 13, margin: '8px 0', color: '#cbbf9a' }}>
           {/* UNITS REMOVED, which is not the same as hits scored: an Elite absorbs a
               hit by being reduced to a Regular and stays on the board (p.30). A player

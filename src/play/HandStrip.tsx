@@ -22,29 +22,24 @@ export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
   const hand = view.cards?.[you]?.hand ?? [];
   // "Play on the table" cards are face-up / public for both sides (Mithril Coat,
   // Wizard's Staff, persistent effects, special-tile cards, …).
-  const tabled = [...(view.cards?.fp?.table ?? []), ...(view.cards?.shadow?.table ?? [])];
   const [zoom, setZoom] = useState<string | null>(null);
-  if (hand.length === 0 && tabled.length === 0) return null;
+  if (hand.length === 0) return null;
   // A compact card row (in-play cards, divider, then the hand), with the hint on its
   // own line underneath so it doesn't steal horizontal space.
   return (
     <div style={{ display: 'flex', flexDirection: 'column', background: '#14110b' }}>
-      {/* Hand on top, played ("in play") cards underneath. */}
+      {/* The cards get the full width. The "Hand (N)" label used to sit to their left
+          and eat horizontal space the cards wanted; it has moved into the line
+          underneath (player report 572i6e714m1d2j3t). */}
       <div style={wrap}>
-        <span style={label}>Hand ({hand.length}):</span>
         {hand.map((id, i) => {
           const act = playable?.get(id) ?? null;
           return <HandCard key={i} id={id} onZoom={() => !id.startsWith('hidden') && setZoom(id)} onHover={onHoverCard}
             play={act && onPlay && !busy ? () => onPlay(act) : null} />;
         })}
       </div>
-      {tabled.length > 0 && (
-        <div style={wrap}>
-          <span style={label}>In play:</span>
-          {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
-        </div>
-      )}
       <div style={{ fontSize: 10, color: '#776', padding: '2px 8px 4px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <b style={{ color: '#998' }}>Hand ({hand.length})</b> ·{' '}
         {playable && playable.size > 0
           ? <>hover to preview · <b style={{ color: '#9f9' }}>click a lit card to play it</b> · 🔍 to enlarge</>
           : <>hover to preview · click to enlarge</>}
@@ -62,6 +57,24 @@ function ZoomDot({ onZoom }: { onZoom: () => void }) {
     <button onClick={(e) => { e.stopPropagation(); onZoom(); }} title="Enlarge this card"
       style={{ position: 'absolute', bottom: 1, right: 1, width: 17, height: 17, lineHeight: '15px', textAlign: 'center', padding: 0, fontSize: 10,
         borderRadius: 4, cursor: 'zoom-in', background: 'rgba(12,10,7,0.82)', color: '#e9e1cc', border: '1px solid #6a5a3a' }}>🔍</button>
+  );
+}
+
+/** The cards face-up ON THE TABLE, both sides' — public information, and nothing you
+ *  can play, so they sit with the board state rather than crowding the cards that are
+ *  yours (player report 572i6e714m1d2j3t). */
+export function TabledStrip({ view, onHoverCard }: { view: GameState; onHoverCard?: (id: string | null) => void }) {
+  const tabled = [...(view.cards?.fp?.table ?? []), ...(view.cards?.shadow?.table ?? [])];
+  const [zoom, setZoom] = useState<string | null>(null);
+  if (tabled.length === 0) return null;
+  return (
+    <div style={{ background: '#14110b' }}>
+      <div style={wrap}>
+        <span style={label}>In play:</span>
+        {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
+      </div>
+      {zoom && <CardZoom id={zoom} onClose={() => setZoom(null)} />}
+    </div>
   );
 }
 
@@ -92,7 +105,7 @@ function HandCard({ id, onZoom, onHover, play }: { id: string; onZoom: () => voi
         <CardTypeBadge deck={def?.deck} via={def?.playableVia} small />
         <span style={{ fontSize: 9, color: '#ccb' }}>Ini {def?.initiative ?? '–'}</span>
       </div>
-      <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.15 }}>{def?.name ?? id}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.2 }}>{def?.name ?? id}</div>
     </div>
   );
 }
@@ -130,8 +143,8 @@ const label: React.CSSProperties = { fontSize: 11, color: '#998', alignSelf: 'ce
 // A hand card is clicked to PLAY it, so nothing on it should offer a text cursor or
 // swallow the click — the type badge over its corner did both (player report
 // 12295h3l3m5w3y3t).
-const img: React.CSSProperties = { height: 76, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', cursor: 'pointer', userSelect: 'none' };
+const img: React.CSSProperties = { height: 104, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', cursor: 'pointer', userSelect: 'none' };
 const zoomBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.8)', display: 'grid', placeItems: 'center', zIndex: 60, cursor: 'zoom-out' };
 const zoomText: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 10, maxWidth: 440, cursor: 'default' };
 const zoomReq: React.CSSProperties = { color: '#d8b48c', fontStyle: 'italic' };
-const textCard: React.CSSProperties = { width: 58, height: 76, flexShrink: 0, borderRadius: 4, padding: 4, userSelect: 'none', color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443', fontSize: 9 };
+const textCard: React.CSSProperties = { width: 76, height: 104, flexShrink: 0, borderRadius: 4, padding: 4, userSelect: 'none', color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443', fontSize: 9 };

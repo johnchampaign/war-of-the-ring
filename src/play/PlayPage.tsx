@@ -17,7 +17,7 @@ import { Board } from './Board';
 import { ActionPanel, DieTag } from './ActionPanel';
 import { regionName } from './names';
 import { StatusBar } from './StatusBar';
-import { HandStrip } from './HandStrip';
+import { HandStrip, TabledStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal } from './DecisionModal';
 import { MovePicker } from './MovePicker';
@@ -806,6 +806,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             </div>
             <div style={{ flex: '1 1 270px', minWidth: 0, overflow: 'auto', borderLeft: '1px solid #2a2418' }}>
               <PoliticsPanel view={g.view} />
+              {/* Cards in play belong with the board state, not wedged against the
+                  player's hand — they are not yours to play and they were crowding out
+                  the cards that are (player report 572i6e714m1d2j3t). */}
+              <TabledStrip view={g.view} onHoverCard={onHoverCard} />
             </div>
           </div>
           {/* Lower area: action buttons + hand on the LEFT, the big enlarge/inspect
@@ -814,7 +818,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             <div style={{ flex: '0 0 44%', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               {/* Action buttons (compact — half height). */}
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
-                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardHints={boardHints} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} compact />
+                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardHints={boardHints} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} />
               </div>
               {chatClient && g.you && (
                 <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"

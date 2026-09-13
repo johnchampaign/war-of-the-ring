@@ -9,6 +9,7 @@ import { describeAction, isDecisionAction, eventChoiceInModal } from './actionTe
 import { RollLine, CorruptionLine, describeDraw, HuntTileFace } from './huntView';
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt } from './artCache';
+import { RollRow } from './combatDice';
 import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import mapData from '../../assets/map.json';
@@ -173,10 +174,27 @@ function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']
         <ArmySize label={atkBoxed ? 'Attacker (sortie, from the Stronghold)' : 'Attacker'} force={atk} side={pc.attacker} view={view} />
         <ArmySize label={defBoxed ? 'Defender (in siege)' : atkBoxed ? 'Defender (besieging)' : 'Defender'} force={def} side={pc.defender} view={view} />
       </div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
-        <Hits label="Attacker hits" n={pc.atkHits} />
-        <Hits label="Defender hits" n={pc.defHits} />
-      </div>
+      {/* The round's dice, as DICE. This used to be two numbers in small text while
+          the end-of-battle popup had the good display — the reporter of
+          2p2w0k6c5m2p6z4n asked for them to trade places, and they were right. */}
+      {(pc.atkRoll || pc.defRoll) ? (
+        <div style={{ background: '#15110b', border: '1px solid #2a2418', borderRadius: 8, padding: '6px 9px', marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
+            Round {pc.round + 1} roll
+          </div>
+          <RollRow label="Attacker" roll={pc.atkRoll} color="#e6857f" />
+          <RollRow label="Defender" roll={pc.defRoll} color="#7fb6e6" />
+          <div style={{ display: 'flex', gap: 16, marginTop: 2 }}>
+            <Hits label="Attacker hits" n={pc.atkHits} />
+            <Hits label="Defender hits" n={pc.defHits} />
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+          <Hits label="Attacker hits" n={pc.atkHits} />
+          <Hits label="Defender hits" n={pc.defHits} />
+        </div>
+      )}
       {(pc.attackerCard || pc.defenderCard) && (
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
           {pc.attackerCard && <PlayedCard id={pc.attackerCard} who="Attacker" />}
