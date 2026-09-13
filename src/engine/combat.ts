@@ -690,7 +690,7 @@ function strongholdWithdrawAvailable(state: GameState, pc: PendingCombat): boole
 /** Begin a battle: political reactions, then set up the sub-machine. The driver
  *  (combatStep, run from advance) takes it from here. */
 export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId,
-  opts: { siegeRounds?: number; fpCardLock?: boolean; defenderDicePenalty?: number; rearguard?: MoveSelection; noCease?: boolean } = {}): void {
+  opts: { siegeRounds?: number; fpCardLock?: boolean; defenderDicePenalty?: number; rearguard?: MoveSelection; noCease?: boolean; mustAdvance?: boolean } = {}): void {
   const dReg = REGIONS[to]!;
   const defender = other(attacker);
   const box = state.regions[to]!.siegeBox;
@@ -721,6 +721,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
     step: 'attackerCard', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0,
     defDicePenalty: opts.defenderDicePenalty,
     noCease: opts.noCease,
+    mustAdvance: opts.mustAdvance,
     atkUnits0: sortie ? forceUnitCount(box!) : unitCount(state, from),
     defUnits0: assault ? forceUnitCount(box!) : unitCount(state, to),
   };
@@ -1068,6 +1069,16 @@ function finishCombat(state: GameState, advance: boolean): void {
       owner: reliefAdvance.owner, kind: 'relieveAdvance',
       data: { from: reliefAdvance.from, to: reliefAdvance.to, rearguard: pc.rearguard ?? null },
     };
+  } else if (advanceOffer && pc.mustAdvance) {
+    // The Army was already IN the region before the battle (Corsairs of Umbar moves
+    // first, then fights), so there is nothing to decide: it cannot hold back what it
+    // never held back, and it does not withdraw to where it came from. The choice is
+    // raised and answered in the same breath — resolveAdvanceChoice reads it from
+    // pendingChoice, and going through it keeps the capture and logging identical to
+    // every other advance.
+    state.pendingChoice = { owner: advanceOffer.owner, kind: 'advanceChoice',
+      data: { from: advanceOffer.from, to: advanceOffer.to, rearguard: pc.rearguard ?? null } };
+    resolveAdvanceChoice(state, { advance: true });
   } else if (advanceOffer) {
     state.pendingChoice = { owner: advanceOffer.owner, kind: 'advanceChoice',
       data: { from: advanceOffer.from, to: advanceOffer.to, rearguard: pc.rearguard ?? null } };

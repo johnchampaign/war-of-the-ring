@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, forceSide } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -647,12 +647,33 @@ register('sh-str-10', {
     // split picker for what resolves as a battle (applyTarget re-checks armySide).
     .map((to): EventTarget => ({ from: 'umbar', to, mode: armySide(state, to) === 'fp' ? 'attack' : 'move' })),
   applyTarget(state, _side, t) {
+    // THE ARMY MOVES, THEN FIGHTS — the card says so, and it matters (player report
+    // 5l014y5s1w3p1c1k, John's call 2026-09-13). Two consequences the old
+    // "attack out of Umbar" reading could not produce: the whole force is committed
+    // before the dice, so on victory it simply stays (no advance-or-hold question);
+    // and landing where a Shadow Army already BESIEGES a Stronghold merges with it,
+    // so the combined force assaults the garrison.
+    //
+    // Neither needs two Armies sharing an open field — the board model has no room
+    // for that, and advance() actively repairs it. A besieged Stronghold already
+    // keeps the sides apart (garrison boxed, besieger in the field), so that case is
+    // a plain move followed by a plain assault; and on a DEFENDED coast the landing
+    // and the battle are one indivisible act, so committing everything and forcing
+    // the advance reaches the same board without the illegal moment in between.
     if (armySide(state, t.to!) === 'fp') {
-      log(state, null, 'event', `Corsairs of Umbar: the Umbar Army attacks ${t.to}`);
-      startBattle(state, 'shadow', t.from!, t.to!, { noCease: true });
-    } else {
-      moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path);
-      log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}${t.move ? ' (split)' : ''}`);
+      log(state, null, 'event', `Corsairs of Umbar: the Umbar Army lands at ${t.to} and gives battle`);
+      startBattle(state, 'shadow', t.from!, t.to!, { noCease: true, mustAdvance: true });
+      return;
+    }
+    moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path);
+    log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}${t.move ? ' (split)' : ''}`);
+    // "If there is a Free Peoples Army in the region, a battle starts" — a boxed
+    // garrison IS a Free Peoples Army in the region (p.31), so landing alongside the
+    // besiegers presses the assault, with no option to cease.
+    const box = state.regions[t.to!]!.siegeBox;
+    if (box && forceUnitCount(box) > 0 && forceSide(box) === 'fp') {
+      log(state, null, 'event', `Corsairs of Umbar: the landing joins the siege of ${t.to} and assaults`);
+      startBattle(state, 'shadow', t.to!, t.to!, { noCease: true });
     }
   },
 });

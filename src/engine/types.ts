@@ -257,6 +257,10 @@ export interface PendingCombat {
   /** Corsairs of Umbar: "The attacking Shadow Army cannot cease the attack" — the
    *  continue/cease decision is skipped and each round presses on automatically. */
   noCease?: boolean;
+  /** The attacking Army is ALREADY standing in the region it is fighting for, so on
+   *  victory it stays — there is no "advance or hold?" to ask (Corsairs of Umbar,
+   *  whose card moves the Army before the battle). */
+  mustAdvance?: boolean;
   /** Great Host's post-casualty 2:1 automatic hit has been evaluated THIS round
    *  (the onslaught step is re-entered after its casualty prompt resolves). */
   greatHostDone?: boolean;

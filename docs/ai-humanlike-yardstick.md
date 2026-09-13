@@ -93,4 +93,5 @@ ground here and, when aimed at a human habit, must gain >= 40 in both families.
 |---|---|---|---|
 | hunt the approach — 2 Hunt dice while the Fellowship is hidden, on the road, within 6 of the Morannon (`wotrAI.ts` huntAllocation) | 543→606, 597→673 | 640→737, 689→731 | **shipped** 2026-09-10; corruption wins up in all four families |
 | card army moves traverse their route, capturing what they enter (`handlers/index.ts` moveAllUnits + `armies.ts` quietCardPath) | 609→608, 672→674 | 741→741, 750→751 | **shipped** 2026-09-11; a rules fix, not a strength change — the quiet default route captures nothing, so play is unchanged within noise (≤2 games of 2000 in all four families), gates zero |
+| Corsairs of Umbar moves BEFORE the battle (`handlers/index.ts` sh-str-10 + `combat.ts` mustAdvance) | 606→606, 671→671 | 729→729, 769→768 | **shipped** 2026-09-13; a rules fix. Three of the four families came back byte-identical and the fourth differs by one game, which says the AI seldom plays this card into a contested coast — the correctness rests on `probe-corsairs-landing.mjs`, not on this soak |
 
