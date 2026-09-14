@@ -32,7 +32,10 @@ project's `docs/new-game-playbook.md` once; this file is the game-specific brief
 
 ## Hard rules (inherited from the framework playbook)
 
-- **Backups before anything.** Private remote `johnchampaign/war-of-the-ring`.
+- **Backups before anything.** Remote `johnchampaign/war-of-the-ring` is **public**
+  (confirmed with John 2026-09-14). Anything committed is world-readable, so the
+  art/PDF rule below is load-bearing, secrets stay in Cloudflare/Supabase only, and playtesters may be
+  reading the same source you are.
   Commit + push before the second hour. New commits, never `--amend`/force-push.
 - **Never `git add -A`** — stage files by name.
 - **Never commit or deploy publisher art or rulebook PDFs.** `.gitignore`
