@@ -115,9 +115,9 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
         </div>
         {!attackMode && destUnits > 0 && (
           <div style={{ fontSize: 12, color: overAll || overSel ? '#f0d090' : '#9c9', marginBottom: 8 }}>
-            {rName(to)} already holds {destUnits} unit{destUnits === 1 ? '' : 's'} (limit 10).
-            {overAll > 0 && ` Moving the whole Army → you'll remove ${overAll} excess.`}
-            {overSel > 0 && overSel !== overAll && ` Moving your selection → remove ${overSel} excess.`}
+            {/* Only what the CURRENT selection does (player report 5j706y1s5j1w2r4n). */}
+            {rName(to)} already contains {destUnits} unit{destUnits === 1 ? '' : 's'} (limit 10).
+            {overSel > 0 && ` You'll remove ${overSel} excess after moving.`}
           </div>
         )}
         {nations.map((n) => (

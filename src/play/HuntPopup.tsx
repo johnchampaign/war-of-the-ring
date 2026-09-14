@@ -47,7 +47,8 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4, margin: '8px 0 2px' }}>
               {fresh.map((d) => <HuntTileFace key={d.seq} draw={d} />)}
             </div>
-            <div style={{ fontSize: 11, color: '#887', marginTop: 3 }}>An extra draw from an Event card only counts when it shows a number or a Shadow special tile.</div>
+            {/* Stated per tile kind, not as a base-game-only generalization (player report 0l5o3w4k2y5t6s33). */}
+            <div style={{ fontSize: 11, color: '#887', marginTop: 3 }}>{fresh[0]!.value === 'eye' ? 'Eye tiles drawn by Event cards are discarded without effect.' : `Free Peoples special tiles drawn by ${fresh[0]!.source} are discarded without effect.`}</div>
           </div>
         ) : fresh.every((d) => d.miss) ? (
           <div style={{ margin: '12px 0 4px' }}>

@@ -3,7 +3,7 @@
 // caller (the AI pushes toward Mordor).
 import type { GameState, RegionId, CharacterId, Nation } from './types';
 import { FP_NATIONS } from './types';
-import { REGIONS, levelOf, COMPANIONS } from './data';
+import { REGIONS, levelOf, COMPANIONS, nationName } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
 import { activateNation } from './politics';
 import { settlementController, figureForce } from './armies';
@@ -452,8 +452,8 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
     const wasPassive = !state.nations[dn].active;
     activateNation(state, dn, { viaCompanion: true });
     if (wasPassive && state.nations[dn].active) {
-      const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-      notify(state, `${COMPANIONS[id]?.name ?? id} activates the ${nm(dn)}.`, 'A Nation is Roused');
+      // A Nation's name takes no article: "activates Rohan" (player report 686c616m692n5104).
+      notify(state, `${COMPANIONS[id]?.name ?? id} activates ${nationName(dn)}.`, 'A Nation is Roused');
     }
   }
   pruneFellowshipOnTableCards(state);
@@ -475,8 +475,7 @@ export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: 
     const wasPassive = !state.nations[dn].active;
     activateNation(state, dn, { viaCompanion: true });
     if (wasPassive && state.nations[dn].active) {
-      const nm = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-      notify(state, `The Companions activate the ${nm(dn)}.`, 'A Nation is Roused');
+      notify(state, `The Companions activate ${nationName(dn)}.`, 'A Nation is Roused');
     }
   }
   pruneFellowshipOnTableCards(state);

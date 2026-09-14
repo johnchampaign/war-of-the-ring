@@ -341,7 +341,7 @@ export function cardPathBlockReason(state: GameState, from: RegionId, path: read
     const dn = REGIONS[r]?.nation;
     for (const nation of movingNations) {
       if (!isAtWar(state, nation) && dn && dn !== nation) {
-        return `${nationName(nation)} is not At War — its units cannot enter ${cap1(dn)}'s borders (${REGIONS[r]?.name ?? r}).`;
+        return `${nationName(nation)} is not At War — its units cannot enter another Nation's borders (${REGIONS[r]?.name ?? r}).`;
       }
     }
     prev = r;
@@ -422,7 +422,9 @@ export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, 
   const dn = REGIONS[to]!.nation;
   for (const nation of Object.keys(state.regions[from]!.units) as Nation[]) {
     if (!isAtWar(state, nation) && dn && dn !== nation) {
-      return `${nationName(nation)} is not At War — its units cannot enter ${cap1(dn)}'s borders. Advance ${nationName(nation)} to War first (or split off only its At-War units).`;
+      // "another Nation's", not the id possessive — that read "Southrons's borders"
+      // (player report 5j5m3419102n5o1g).
+      return `${nationName(nation)} is not At War — its units cannot enter another Nation's borders. Advance ${nationName(nation)} to War first (or split off only its At-War units).`;
     }
   }
   return null;

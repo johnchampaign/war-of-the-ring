@@ -92,7 +92,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       {pass && (
         <button disabled={busy} onClick={() => click(pass)}
           style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 3px' : '0 0 8px', padding: compact ? '3px 10px' : '9px 10px', background: '#4a3a1a', color: '#ffe08a', border: '1px solid #7a5f24', borderRadius: 6, cursor: 'pointer', fontSize: compact ? 11 : 14, fontWeight: 700 }}>
-          Pass (do nothing this turn)
+          Pass
         </button>
       )}
       {/* Board-driven actions live on the MAP (not in this list) — point the player

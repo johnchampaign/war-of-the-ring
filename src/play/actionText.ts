@@ -40,14 +40,17 @@ export function describeAction(a: WotrAction): string {
     case 'hideFellowship': return 'Hide the Fellowship';
     case 'separateCompanion': return `Separate ${charName(a.companion)}`;
     case 'changeGuide': return `Make ${charName(a.companion)} the Guide`;
-    case 'companionMuster': return `${charName(a.companion)}: advance ${cap(a.nation)} (any die)`;
+    // The die chip / picker already says which dice can pay (player report 5d682g3j3s4i221d).
+    case 'companionMuster': return `${charName(a.companion)}: advance ${cap(a.nation)}`;
     // Die FACES have proper names and proper articles: "change an Event die to an
     // Army/Muster die", never "change a Event die to ArmyMuster" (player report
     // 2a2z6u3v703c445v).
     case 'useElvenRing': return `Elven Ring: change ${aFace(a.from)} die to ${a.to === 'eye' ? 'an Eye (→ Hunt Box)' : `${aFace(a.to)} die`}`;
     case 'forceDiscardCard': return a.via === 'cards'
       ? `Discard "${cardName(a.cardId)}" (any die + discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
-      : `Discard "${cardName(a.cardId)}" (${a.via === 'will' ? 'Will of the West' : a.via === 'ring' ? 'Elven Ring + any die' : 'any die'})`;
+      // The Will of the West variant's chip already shows the die (player report 240x236w5m3e3b4p).
+      : a.via === 'will' ? `Discard "${cardName(a.cardId)}"`
+      : `Discard "${cardName(a.cardId)}" (${a.via === 'ring' ? 'Elven Ring + any die' : 'any die'})`;
     // Both labels used to describe the ability in shorthand that reads as something
     // else: "recruit Isengard" is not a thing you recruit, and "Orthanc Regulars" names
     // a Nation that does not exist (player report 3v6m502j4k3z161y). Say what the card
