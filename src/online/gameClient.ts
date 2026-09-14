@@ -23,9 +23,9 @@ export interface ViewResult {
 export interface LogTime { seq: number; at: string }
 
 /** Whether an undo is currently available, and whether it would cross a random
- *  outcome the player has already seen ("foreknowledge"). In a 2-player game a
- *  foreknowledge undo is disallowed (canUndo:false, with a reason); vs the AI it's
- *  allowed but flagged so the UI can warn + the engine can log it. */
+ *  outcome the player has already seen ("foreknowledge"). A foreknowledge undo is
+ *  allowed in local play (vs AI and hotseat) but flagged so the UI can warn + the
+ *  engine can log it; `reason` explains a canUndo:false. */
 export interface UndoStatus { canUndo: boolean; foreknowledge: boolean; reason?: string }
 
 /** How this game is being played — stamped onto uploaded game logs so the

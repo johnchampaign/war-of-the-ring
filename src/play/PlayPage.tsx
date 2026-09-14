@@ -187,8 +187,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [g, activeDie]);
 
   // Undo (local hotseat / vs-AI only — the online client has no undo()). A
-  // foreknowledge undo (one that crosses a dice roll / card draw) is blocked outright
-  // in 2-player and requires an explicit confirm vs the AI.
+  // foreknowledge undo (one that crosses a dice roll / card draw) requires an explicit
+  // confirm, and the game log records it.
   const [undoConfirm, setUndoConfirm] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   // "Already clicked through" cursors for the three result popups (Hunt, battle,
@@ -915,7 +915,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #7a5f24', maxWidth: 440, boxShadow: '0 8px 40px #000' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#ffe08a', marginBottom: 8 }}>⚠ Foreknowledge undo</div>
             <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 10px' }}>
-              This undo crosses a <b>dice roll or card draw</b>, so you’ll be re-deciding while already knowing a random outcome you wouldn’t normally have seen. It’s allowed against the AI, but it will be <b>recorded in the game log</b>.
+              This undo crosses a <b>dice roll or card draw</b>, so you’ll be re-deciding while already knowing a random outcome you wouldn’t normally have seen. It’s allowed, but it will be <b>recorded in the game log</b>.
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setUndoConfirm(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', color: '#cb9', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>

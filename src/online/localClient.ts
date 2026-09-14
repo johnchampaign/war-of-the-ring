@@ -166,23 +166,25 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
       const prev = history[history.length - 1];
       if (!prev) return { canUndo: false, foreknowledge: false };
       const foreknowledge = prev.fp !== fingerprint(state);
-      // 2-player (hotseat): a foreknowledge undo would leak hidden info — disallow it.
-      // vs AI: always allowed, but flagged so the UI warns and the engine logs it.
-      if (!aiSide && foreknowledge) {
-        return { canUndo: false, foreknowledge: true, reason: 'Undoing past a dice roll or card draw would reveal hidden information in a 2-player game.' };
-      }
+      // Allowed in every local mode — vs AI and hotseat alike (John, 2026-09-14: a
+      // hotseat player testing lines wants it; both players share the screen, so the
+      // re-decision happens in plain sight). Flagged so the UI warns and the log records it.
       return { canUndo: true, foreknowledge };
     },
     undo: async () => {
       const prev = history[history.length - 1];
       if (!prev) return snapshot();
       const foreknowledge = prev.fp !== fingerprint(state);
-      if (!aiSide && foreknowledge) return snapshot();    // never permitted in 2-player
       history.pop();
       state = prev.state;
       // Record a foreknowledge undo on the (restored) log so it's visible that the
       // player re-decided after seeing a random outcome.
-      if (foreknowledge) log(state, human, 'undo', `${sideName(human)} used a foreknowledge undo — re-deciding after seeing a random outcome (dice/cards).`);
+      // In hotseat the undoer is whoever is to act in the restored state, not the fixed
+      // `human` seat (which is always Free Peoples there). The entry is PUBLIC (side
+      // null): a side-tagged entry is secret to that seat, which would hide the record
+      // from exactly the hotseat opponent it exists to inform. It names no hidden info.
+      const undoer: Side = aiSide ? human : ((wotrAdapter.currentActor(state) as Side | null) ?? human);
+      if (foreknowledge) log(state, null, 'undo', `${sideName(undoer)} used a foreknowledge undo — re-deciding after seeing a random outcome (dice/cards).`);
       oppLogStart = state.log.length;
       opened = true;
       stampNow(); // also prunes stamps past the restored log's end
