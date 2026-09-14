@@ -13,7 +13,7 @@
 import type { GameState, RegionId, Side, Nation } from './types';
 import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS } from './data';
-import { settlementController, armySide, unitCount } from './armies';
+import { settlementController, armySide, unitCount, figureForce } from './armies';
 import { activateNation } from './politics';
 import { log } from './log';
 
@@ -28,7 +28,12 @@ export interface CharMoveState { chars: string[]; movedNazgul: Record<RegionId, 
 
 /** Nazgûl in `from` still free to move this die (total minus already-moved). */
 export function availableNazgul(state: GameState, from: RegionId, excl?: CharMoveState): number {
-  return (state.regions[from]?.nazgul ?? 0) - (excl?.movedNazgul[from] ?? 0);
+  if (!state.regions[from]) return 0;
+  // Nazgûl garrisoning a besieged Shadow Stronghold sit in the siege box, and they may
+  // still fly out (p.25: the FP-Stronghold rule is "the only restriction" on Nazgûl
+  // flight). Reading the open field alone showed zero and grounded them — player report
+  // "Nazgul should be able to move from friendly Strongholds under siege".
+  return figureForce(state, from, 'shadow').nazgul - (excl?.movedNazgul[from] ?? 0);
 }
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 const enemyOf = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
@@ -115,6 +120,20 @@ const NAZGUL_FIGURE = new Set(['nazgul', 'witch-king']);
  *  Both sides, though, are sealed OUT of their own besieged Stronghold (p.24/p.25) —
  *  Gwaihir / We Prove the Swifter print the exception ("allowed to end in a Stronghold
  *  under siege"), which arrives as `opts.siegeOk`. */
+/** The LEAVE half of the p.24/p.25 seal: a Companion (and, p.25, the Mouth of Sauron)
+ *  "can never leave or enter a region containing a friendly Stronghold besieged by an
+ *  enemy Army". Nazgûl and the Witch-king fly out freely (p.25 makes the FP-Stronghold
+ *  rule the only restriction on their flight).
+ *
+ *  This used to need no code: a boxed figure was simply invisible to the enumerators,
+ *  so it could not be picked in the first place. That accident also grounded the Nazgûl
+ *  who ARE allowed out and hid boxed Companions from every menu, so `figureForce` now
+ *  makes boxed figures visible — and the rule has to be stated outright instead. */
+function canLeave(state: GameState, from: RegionId, side: Side, char?: string): boolean {
+  if (char && NAZGUL_FIGURE.has(char)) return true;
+  return !friendlyStrongholdBesieged(state, from, side);
+}
+
 function canLand(state: GameState, to: RegionId, side: Side, char?: string, opts: RangeOpts = {}): boolean {
   const nazgul = !!char && NAZGUL_FIGURE.has(char);
   if (!nazgul && !opts.siegeOk && friendlyStrongholdBesieged(state, to, side)) return false;
@@ -158,7 +177,7 @@ function rangeOf(state: GameState, char: string, from: RegionId, opts: RangeOpts
   const bonus = opts.extraMove ?? 0;
   if (opts.levelOverride !== undefined) return opts.levelOverride + bonus;
   if (char === 'gandalf-white') {
-    const others = state.regions[from]!.characters.filter((c) => c !== 'gandalf-white' && COMPANION_SET.has(c));
+    const others = figureForce(state, from, 'fp').characters.filter((c) => c !== 'gandalf-white' && COMPANION_SET.has(c));
     const aloneOrOneHobbit = others.length === 0 || (others.length === 1 && HOBBITS.has(others[0]!));
     return (aloneOrOneHobbit ? 4 : levelOf('gandalf-white')) + bonus;
   }
@@ -173,8 +192,12 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
   if (range <= 0) return false;
   const stops = side === 'fp' ? companionStop(state) : null; // walking Companions stop at Shadow Strongholds (p.24)
   if (regionDistance(from, to, stops) > range) return false;
+  if (!canLeave(state, from, side, char)) return false;
   if (!canLand(state, to, side, char)) return false;
-  const src = state.regions[from]!, dst = state.regions[to]!;
+  // Both ends go through `figureForce`: a figure garrisoning a besieged friendly
+  // Stronghold is in its siege box, and a figure ARRIVING in a region whose friendly
+  // Stronghold is besieged joins that garrison — never the besieger holding the field.
+  const src = figureForce(state, from, side), dst = figureForce(state, to, side);
 
   if (char === 'nazgul') {
     if (side !== 'shadow' || src.nazgul <= 0) return false;
@@ -205,7 +228,7 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
  *  Hobbit travels with a Level-4 Gandalf. Returns false if illegal. */
 export function moveCompanionGroup(state: GameState, side: Side, from: RegionId, to: RegionId, chars: string[], opts: RangeOpts = {}): boolean {
   if (side !== 'fp' || from === to || !REGIONS[to] || chars.length === 0) return false;
-  const src = state.regions[from]!;
+  const src = figureForce(state, from, side);
   let range = 0;
   for (const c of chars) {
     if (!COMPANION_SET.has(c) || !src.characters.includes(c)) return false;
@@ -214,8 +237,12 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
   // Companion GROUPS walk too: the p.24 Shadow-Stronghold stop applies (side is
   // always 'fp' here — the guard above rejects anything else).
   if (range <= 0 || regionDistance(from, to, companionStop(state)) > range) return false;
+  if (!canLeave(state, from, side, chars[0])) return false;
   if (!canLand(state, to, side, chars[0], opts)) return false;
-  const dst = state.regions[to]!;
+  // Gwaihir / We Prove the Swifter (`opts.siegeOk`) are exactly the cards that land
+  // Companions in a friendly besieged Stronghold: they belong with the garrison inside,
+  // not in the open field the besieging Shadow Army holds (player report).
+  const dst = figureForce(state, to, side);
   for (const c of chars) {
     src.characters.splice(src.characters.indexOf(c), 1);
     dst.characters.push(c);
@@ -231,11 +258,20 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
 function movablePieces(state: GameState, side: Side, excl?: CharMoveState): Array<{ char: string; from: RegionId }> {
   const out: Array<{ char: string; from: RegionId }> = [];
   for (const id of Object.keys(state.regions)) {
-    const r = state.regions[id]!;
     if (side === 'shadow' && availableNazgul(state, id, excl) > 0) out.push({ char: 'nazgul', from: id });
+    // The actor's figures may be boxed in a besieged friendly Stronghold; `figureForce`
+    // picks the side of the region they actually stand on. Reading `r.characters` alone
+    // made a boxed Companion vanish from every move/attack menu the moment the siege
+    // began (player report: "my Companions in Moria … disappeared").
+    const r = figureForce(state, id, side);
     for (const c of r.characters) {
       if (rangeOf(state, c, id) <= 0) continue; // Saruman / level-0
       if (excl?.chars.includes(c)) continue;    // already moved this die
+      // Sealed inside his own besieged Stronghold (p.24/p.25) — he is on the board and
+      // drawn there, he simply has no legal move, so he must not be OFFERED one. The
+      // modal used to list him and light up destinations, then the engine refused the
+      // move (player report 1a3800000w2k534x, Gandalf boxed in Moria).
+      if (!canLeave(state, id, side, c)) continue;
       const isShadowChar = c === 'witch-king' || c === 'mouth-of-sauron';
       if ((side === 'shadow' && isShadowChar) || (side === 'fp' && COMPANION_SET.has(c))) out.push({ char: c, from: id });
     }
@@ -262,6 +298,10 @@ export function remainingCharMoves(state: GameState, side: Side, excl?: CharMove
 export function characterDestinations(state: GameState, side: Side, char: string, from: RegionId, opts: RangeOpts = {}): RegionId[] {
   const range = rangeOf(state, char, from, opts);
   if (range <= 0) return [];
+  // MUST agree with moveCharacter/moveCompanionGroup — one decides what is OFFERED,
+  // the other what is ACCEPTED (player report: the modal highlighted regions for a
+  // Gandalf boxed in Moria, then the engine silently refused the move).
+  if (!canLeave(state, from, side, char)) return [];
   const stops = side === 'fp' ? companionStop(state) : null;
   const within = reachableWithin(from, range, stops);
   const out: RegionId[] = [];

@@ -5,7 +5,7 @@
 import type { GameState, Nation, RegionId } from './types';
 import { FP_NATIONS } from './types';
 import { REGIONS } from './data';
-import { settlementController, armySide } from './armies';
+import { settlementController, armyForceOf, figureForce } from './armies';
 import { activateNation, isAtWar } from './politics';
 import { log } from './log';
 
@@ -13,8 +13,16 @@ export type Minion = 'witch-king' | 'saruman' | 'mouth-of-sauron';
 export const MINION_IDS: Minion[] = ['witch-king', 'saruman', 'mouth-of-sauron'];
 
 const allFpAtWar = (state: GameState): boolean => FP_NATIONS.every((n) => isAtWar(state, n));
-const hasSauronUnit = (state: GameState, id: RegionId): boolean => {
-  const u = state.regions[id]!.units.sauron;
+/** A Shadow Army with at least one Sauron unit standing in `id` — the Witch-king's
+ *  entry condition. Read through `armyForceOf`, not the region's open field: while a
+ *  Shadow Stronghold is besieged the garrison (Sauron units and all) sits in the siege
+ *  box and the FIELD belongs to the Free Peoples besieger, so the open field reported
+ *  an enemy army and the Witch-king could not join his own boxed troops. Player report:
+ *  "Saruman was musterable in a friendly Orthanc under siege… not the Witch-king". */
+const shadowArmyWithSauronUnit = (state: GameState, id: RegionId): boolean => {
+  const f = armyForceOf(state, id, 'shadow');
+  if (!f) return false;
+  const u = f.units.sauron;
   return !!u && (u.regular + u.elite) > 0;
 };
 
@@ -38,7 +46,7 @@ export function canBringMinion(state: GameState, minion: Minion): boolean {
 export function entryRegions(state: GameState, minion: Minion): RegionId[] {
   if (minion === 'saruman') return settlementController(state, 'orthanc') === 'shadow' ? ['orthanc'] : [];
   if (minion === 'witch-king') {
-    return Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow' && hasSauronUnit(state, id));
+    return Object.keys(state.regions).filter((id) => shadowArmyWithSauronUnit(state, id));
   }
   // Mouth of Sauron: any unconquered Sauron Stronghold.
   return Object.keys(state.regions).filter((id) => {
@@ -63,7 +71,10 @@ export function bringMinion(state: GameState, minion: Minion, region: RegionId):
   // holds. Every other site already reads/updates inPlay for minions; only entry
   // was missing.
   state.characters.inPlay[minion] = region;
-  state.regions[region]!.characters.push(minion);
+  // A Minion entering a friendly Stronghold under siege joins the GARRISON inside it.
+  // Pushing into the region's open field handed him to the besieging enemy Army —
+  // player report: "Saruman joined the Free Peoples Army".
+  figureForce(state, region, 'shadow').characters.push(minion);
   if (minion === 'witch-king') for (const n of FP_NATIONS as Nation[]) activateNation(state, n);
   log(state, null, 'muster', `${minion} enters play at ${region}`);
   return true;

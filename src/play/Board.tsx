@@ -174,7 +174,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
     // characters, or a settlement marker. A character in an army-less region used
     // to fall back to poly[0] (a border vertex), so its disc read as sitting in the
     // NEIGHBOURING region (player report: Gandalf "in Lorien" while in Fangorn).
-    const layout = (armies.length || (r?.characters.length ?? 0) > 0 || def?.settlement)
+    const layout = (armies.length || (r?.characters.length ?? 0) > 0 || (r?.siegeBox?.characters.length ?? 0) > 0 || def?.settlement)
       ? layoutTokensInPolygon(poly, Math.max(1, armies.length), { tokenRadius: 22 }) : null;
     // Where each nation's badge sits. Clamping is per-point, and a polygon that runs
     // off the crop (Gorgoroth reaches x=1920, past the crop edge at 1751) can map two
@@ -356,16 +356,26 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           {/* separated companions / minions / Witch-king present in the region —
               one labelled disc each, fanned above the region anchor so they're
               findable rather than a single anonymous dot hidden under army badges */}
-          {e.r && e.r.characters.length > 0 && (() => {
+          {e.r && (e.r.characters.length > 0 || (e.r.siegeBox?.characters.length ?? 0) > 0) && (() => {
             const ax = e.layout?.anchor.x ?? e.poly[0]!.x;
             const ay = e.layout?.anchor.y ?? e.poly[0]!.y;
-            const n = e.r.characters.length;
-            return e.r.characters.map((id, i) => {
+            // Characters inside a besieged Stronghold used to render nowhere at all —
+            // only the region's open field was read, and a boxed garrison's Characters
+            // live in the siege box (player report: "the Character blips on the map
+            // aren't visible when the Army that contains them is under siege"). They are
+            // drawn BELOW the anchor, each in the same dashed gold ring the boxed army
+            // badges wear, so "inside the walls" reads at a glance.
+            const rows: Array<{ ids: string[]; dy: number; boxed: boolean }> = [];
+            if (e.r.characters.length > 0) rows.push({ ids: e.r.characters, dy: -18, boxed: false });
+            const inBox = e.r.siegeBox?.characters ?? [];
+            if (inBox.length > 0) rows.push({ ids: inBox, dy: 20, boxed: true });
+            return rows.flatMap(({ ids, dy, boxed }) => ids.map((id, i) => {
               const t = charToken(id);
-              const c = clampToCrop({ x: ax + (i - (n - 1) / 2) * 15, y: ay - 18 });
+              const c = clampToCrop({ x: ax + (i - (ids.length - 1) / 2) * 15, y: ay + dy });
               return (
-                <g key={id}>
-                  <title>{t.title}</title>
+                <g key={`${boxed ? 'box-' : ''}${id}`}>
+                  <title>{boxed ? `${t.title} — inside the besieged Stronghold` : t.title}</title>
+                  {boxed && <circle cx={c.x} cy={c.y} r={10} fill="none" stroke="#caa84b" strokeWidth={1} strokeDasharray="2 1.5" />}
                   <circle cx={c.x} cy={c.y} r={7.5} fill={t.fill} stroke={t.rim} strokeWidth={1.5} />
                   {/* Two-letter marks are set smaller so they sit inside the disc rather
                       than spilling over its rim. */}
@@ -373,7 +383,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
                     fontWeight="bold" fill={t.ink} textAnchor="middle" style={{ userSelect: 'none' }}>{t.label}</text>
                 </g>
               );
-            });
+            }));
           })()}
         </g>
       ))}

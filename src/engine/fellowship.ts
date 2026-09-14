@@ -6,7 +6,7 @@ import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
 import { activateNation } from './politics';
-import { settlementController, armySide } from './armies';
+import { settlementController, armySide, figureForce } from './armies';
 import { activateOnCompanionLand } from './charMove';
 import { MINION_IDS } from './minions';
 import { log, notify } from './log';
@@ -439,7 +439,10 @@ export function removeCompanionOnMordorTrack(state: GameState, id: CharacterId):
 export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest: RegionId): void {
   const fs = state.fellowship;
   state.characters.inPlay[id] = dest;
-  state.regions[dest]!.characters.push(id);
+  // If a friendly Stronghold in `dest` is under siege, the Fellowship is inside it with
+  // the garrison, so a Companion separating there joins the garrison — not the besieging
+  // Army holding the open field (player report). `figureForce` picks the right one.
+  figureForce(state, dest, 'fp').characters.push(id);
   const nations = activatableNations(id);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
@@ -464,7 +467,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
  *  enforced by the caller. */
 export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: RegionId): void {
   const fs = state.fellowship;
-  for (const id of ids) { state.characters.inPlay[id] = dest; state.regions[dest]!.characters.push(id); }
+  for (const id of ids) { state.characters.inPlay[id] = dest; figureForce(state, dest, 'fp').characters.push(id); }
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')
     && ids.some((id) => activatableNations(id).includes(dn))) {
@@ -576,7 +579,7 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
         if (grey === target && a !== gr.characters) { a.push('gandalf-white'); placed = true; }
       }
     }
-    if (!placed) state.regions[target]!.characters.push('gandalf-white');
+    if (!placed) figureForce(state, target, 'fp').characters.push('gandalf-white');
     state.characters.entered.push('gandalf-white');
     delete state.characters.inPlay['gandalf-grey'];
     state.characters.inPlay['gandalf-white'] = target;

@@ -383,6 +383,44 @@ die already showing an Eye.
   *(Found while checking a player report that a Nazgûl could not join an Army
   conducting a siege — that flight is legal and was, and still is, offered.)*
   No residual — character movement is now fully RAW.
+- **Where a figure STANDS in a besieged region (`figureForce`) — fixed 2026-09-14.** A
+  player report put the principle exactly right: *"figures inside a Stronghold under
+  siege are in fact in the region containing the Stronghold for all observable purposes.
+  The distinction of figures being inside or outside the Stronghold does not necessarily
+  make so much sense, except for … visually displaying those figures."* Our model splits
+  a besieged region in two — garrison in `region.siegeBox`, besieger in the open field —
+  and every site that reached past that split straight to `region.characters` /
+  `region.nazgul` picked the wrong force. Symptoms, all reported: a Nazgûl flying into a
+  besieged Orthanc landed with the **FP besiegers**; Saruman mustered there "joined the
+  Free Peoples Army"; the **Witch-king** could not enter at all (his "Shadow Army with a
+  Sauron unit" condition read the field, which is the enemy's); *Gwaihir* / *We Prove the
+  Swifter* dropped Companions into the besieger's arms; Companions separating inside did
+  the same; and boxed figures were invisible to every enumerator, which grounded the
+  Nazgûl who ARE free to fly out (p.25: the FP-Stronghold rule is "the only restriction"
+  on their flight). `armies.ts` now exports **`figureForce(state, id, side)`** — the box
+  when `side` is the one under siege there, else the open field — and it is the single
+  seam for placing or finding a figure. (It differs from `armyForceOf`, which answers
+  "does `side` have an ARMY here?" and returns null when it has none: a lone Character
+  entering a friendly Stronghold whose garrison is down to zero units still belongs
+  inside. Which side is boxed is decided by the box's units, falling back to the
+  Stronghold's controller — p.33, the garrison keeps control while the besieger holds
+  the field.) Minion entry (`minions.ts`) reads `armyForceOf` for the Witch-king's
+  condition and places through `figureForce`; separation (`placeSeparatedCompanion` /
+  `placeSeparatedGroup` / Gandalf the White) and both halves of the Character-die move
+  place through it too.
+  **Consequence: the "may never LEAVE" half now needs stating outright.** p.24/p.25 seal
+  a Companion (and the Mouth of Sauron) both ways — "they can never leave or enter a
+  region containing a **friendly** Stronghold besieged by an enemy Army" — and we used
+  to get LEAVE for free, because a boxed figure was invisible and so unpickable. That
+  accident is gone, so `canLeave` states the rule, `movablePieces` drops a sealed figure
+  from the offer entirely, and `characterDestinations` returns an empty set for one
+  (a player reported the modal lighting up destinations for a Gandalf boxed in Moria and
+  then silently refusing the move). Nazgûl and the Witch-king are exempt; the Mouth is
+  not. Gwaihir / *We Prove the Swifter*'s `siegeOk` is an ENTER exception only — the card
+  says "allowed to **end** in a Stronghold under siege" — so it does not unseal leaving.
+  The board draws boxed Characters below the region anchor in the same dashed-gold ring
+  the boxed army badges wear; they used to render nowhere at all.
+  `scripts/probe-siege-figure-force.mjs`.
 - **Event cards that move Companions already on the map** (*Gwaihir the Windlord*,
   *We Prove the Swifter*) are a distinct action from the Character-die move: they
   spend an **Event** die, they grant the card's range bonus, and they are the card's

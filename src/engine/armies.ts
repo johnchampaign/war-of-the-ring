@@ -727,6 +727,38 @@ export function armyForceOf(state: GameState, id: RegionId, side: Side): Force |
   return null;
 }
 
+/** WHERE `side`'s figures in region `id` belong: the boxed garrison when `side` is
+ *  the one under siege there, otherwise the region's open field. This is the single
+ *  seam for "put a figure in this region" / "find a figure of mine in this region".
+ *
+ *  Unlike `armyForceOf` (which answers "does `side` have an ARMY here?" and returns
+ *  null when it has none), this always returns a Force: a lone Character entering a
+ *  friendly Stronghold whose garrison has been reduced to zero units still belongs in
+ *  the box, not out in the field with the besieger.
+ *
+ *  Reaching past this helper straight to `region.characters` / `region.nazgul` is what
+ *  produced a whole family of player reports: a Nazgûl flying into a besieged Orthanc
+ *  landed with the FP besiegers instead of the garrison; Saruman mustered into that
+ *  same Orthanc "joined the Free Peoples Army"; Gwaihir / We Prove the Swifter dropped
+ *  Companions into a friendly besieged Stronghold's open field (i.e. into the enemy's
+ *  arms); Companions separating inside one did the same; and figures already boxed were
+ *  invisible to every enumerator, so a Nazgûl could not fly OUT of a friendly besieged
+ *  Stronghold (legal — p.25 makes the FP-Stronghold rule "the only restriction" on
+ *  Nazgûl flight). As the reporter put it: figures inside a Stronghold under siege are
+ *  in the region for all observable purposes; only the display differs.
+ *
+ *  Which side is boxed: the box's own units decide, and when the box holds no units
+ *  (Characters alone) the Stronghold's controller does — p.33, the garrison keeps
+ *  control of the Stronghold while the besieger holds the field.
+ *  `scripts/probe-siege-figure-force.mjs`. */
+export function figureForce(state: GameState, id: RegionId, side: Side): Force {
+  const r = state.regions[id]!;
+  const box = r.siegeBox;
+  if (!r.besieged || !box) return r;
+  const boxedSide = forceSide(box) ?? settlementController(state, id);
+  return boxedSide === side ? box : r;
+}
+
 /** Which side's units make up a Force (siege box or region), if any. */
 export function forceSide(f: Force): Side | null {
   for (const n of Object.keys(f.units) as Nation[]) {
