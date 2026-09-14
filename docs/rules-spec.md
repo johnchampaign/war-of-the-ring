@@ -420,6 +420,16 @@ die already showing an Eye.
   says "allowed to **end** in a Stronghold under siege" — so it does not unseal leaving.
   The board draws boxed Characters below the region anchor in the same dashed-gold ring
   the boxed army badges wear; they used to render nowhere at all.
+  **Gandalf the White may enter a BESIEGED Elven Stronghold.** His card says "place
+  Gandalf the White in Fangorn or in an **unconquered** Elven Stronghold" — unconquered,
+  not "free of enemy units", and a besieged Stronghold is still unconquered (p.33: the
+  garrison keeps control until it is actually captured). `gandalfWhiteCandidates` carried
+  an extra `armySide !== 'shadow'` test the card never prints, and since a besieged
+  region's open field holds the BESIEGER it fired on exactly the case the card allows —
+  the White could not come to the aid of a besieged Lórien. A Shadow Army can only stand
+  in an unconquered Elven Stronghold's region by besieging it, so dropping the test lets
+  nothing else in. (Aragorn's crowning was already right: his card's test is likewise
+  "that Settlement is unconquered".)
   `scripts/probe-siege-figure-force.mjs`.
 - **Event cards that move Companions already on the map** (*Gwaihir the Windlord*,
   *We Prove the Swifter*) are a distinct action from the Character-die move: they

@@ -6,7 +6,7 @@ import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
 import { activateNation } from './politics';
-import { settlementController, armySide, figureForce } from './armies';
+import { settlementController, figureForce } from './armies';
 import { activateOnCompanionLand } from './charMove';
 import { MINION_IDS } from './minions';
 import { log, notify } from './log';
@@ -528,7 +528,16 @@ export function canBringAragorn(state: GameState): boolean {
 export function gandalfWhiteCandidates(state: GameState): RegionId[] {
   const grey = findCharacterRegion(state, 'gandalf-grey');
   if (grey) return [grey]; // replace him in place — no choice
-  return GANDALF_WHITE_REGIONS.filter((r) => REGIONS[r] && settlementController(state, r) !== 'shadow' && armySide(state, r) !== 'shadow');
+  // The card says "place Gandalf the White in Fangorn or in an UNCONQUERED Elven
+  // Stronghold" — unconquered, not "free of enemy units". A besieged Elven Stronghold
+  // is still unconquered: the garrison keeps control until it is actually captured
+  // (p.33). The extra `armySide !== 'shadow'` test was an invented restriction, and
+  // since a besieged region's open field holds the BESIEGER it fired on exactly the
+  // case the card allows — the White could not come to the aid of a besieged Lórien
+  // (player report: "All Characters should be able to enter play in friendly Stronghold
+  // under siege"). A Shadow Army can only stand in an unconquered Elven Stronghold's
+  // region by besieging it, so dropping the test lets in nothing else.
+  return GANDALF_WHITE_REGIONS.filter((r) => REGIONS[r] && settlementController(state, r) !== 'shadow');
 }
 function gandalfWhiteRegion(state: GameState): RegionId | null {
   return gandalfWhiteCandidates(state)[0] ?? null;

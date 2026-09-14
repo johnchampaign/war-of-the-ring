@@ -33,7 +33,7 @@ import { startGame } from '../src/adapter/wotrAdapter.ts';
 import { figureForce, armyForceOf } from '../src/engine/armies.ts';
 import { characterDestinations, moveCharacter, moveCompanionGroup, availableNazgul, movableCharsAt } from '../src/engine/charMove.ts';
 import { entryRegions, bringMinion } from '../src/engine/minions.ts';
-import { placeSeparatedCompanion } from '../src/engine/fellowship.ts';
+import { placeSeparatedCompanion, gandalfWhiteCandidates, bringUpgrade } from '../src/engine/fellowship.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -126,6 +126,33 @@ function fpBesieged({ chars = [] } = {}) {
   check('armyForceOf sees the boxed Shadow Army', !!armyForceOf(wk, 'orthanc', 'shadow'));
   check('the Witch-king may enter the besieged Orthanc', entryRegions(wk, 'witch-king').includes('orthanc'));
   check('bringMinion places him in the box', bringMinion(wk, 'witch-king', 'orthanc') && wk.regions['orthanc'].siegeBox.characters.includes('witch-king'));
+}
+
+{
+  console.log('\n=== 0u1d480y5f594l6k: Gandalf the White enters a BESIEGED Elven Stronghold ===');
+  // Card text: "place Gandalf the White in Fangorn or in an UNCONQUERED Elven
+  // Stronghold" — unconquered, not "free of enemy units". A besieged Lorien is still
+  // unconquered, and the region's open field holds the Shadow besieger, so the old
+  // no-Shadow-army test fired on exactly the case the card allows.
+  const state = startGame(createGame({ seed: 21 }));
+  const r = state.regions['lorien'];
+  r.units = { sauron: { regular: 5, elite: 1 } };   // the Shadow besieger, in the field
+  r.leaders = 0; r.nazgul = 0; r.characters = [];
+  r.besieged = true;
+  r.siegeBox = { units: { elves: { regular: 2, elite: 1 } }, leaders: 1, nazgul: 0, characters: [] };
+  // Gandalf the Grey is gone and a Minion is in play — the card's preconditions.
+  state.fellowship.companions = state.fellowship.companions.filter((c) => c !== 'gandalf-grey');
+  state.characters.eliminated.push('gandalf-grey');
+  state.characters.entered.push('saruman');
+  check('besieged Lorien is still an offered destination', gandalfWhiteCandidates(state).includes('lorien'));
+  check('a CONQUERED Elven Stronghold is not', (() => {
+    const conq = { ...state, regions: { ...state.regions } };
+    state.regions['grey-havens'].control = 'shadow';
+    return !gandalfWhiteCandidates(state).includes('grey-havens') && !!conq;
+  })());
+  check('he arrives INSIDE, with the Elven garrison', bringUpgrade(state, 'gandalf-white', 'lorien')
+    && state.regions['lorien'].siegeBox.characters.includes('gandalf-white'));
+  check('not in the field with the besiegers', !state.regions['lorien'].characters.includes('gandalf-white'));
 }
 
 {
