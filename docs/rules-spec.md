@@ -335,6 +335,19 @@ die already showing an Eye.
   recomputes the legal set each step (excluding a just-moved Army via `applied`), and
   a synthetic `{done:true}` option lets the player stop early once ≥1 target is applied
   (cards read "up to"). The card is held out of hand until the loop ends, then discarded.
+  **Recruitment is not "up to".** A card that says "Recruit …" recruits to the maximum
+  extent possible, and the Almanac is explicit that "choosing to partially recruit,
+  leaving one unit behind in reinforcements is not permitted when playing an Event
+  card". Those handlers set `noDone` (the named-region helper `recruitChoiceCard`,
+  *Many Kings to the Service of Mordor*, *Pits of Mordor*, and *Faramir's Rangers*'
+  "Then … recruit"; `placeChoiceCard` already did), and their `targets` offer only
+  picks that place something, so the loop ends by itself when reinforcements or room
+  run out. *Pits of Mordor* places one Regular where only one fits or remains, instead
+  of refusing the pair. Cards that print "up to" or "may" keep `done` — *Rage of the
+  Dunlendings*' follow-up moves, *Hill-trolls*. A **Muster Action die** may still
+  recruit partially (Almanac), so its second-recruit step keeps its Done *(player
+  report 4f0y2f2r4k315b68; John, 2026-09-14: follow the rules)*.
+  Regression: `scripts/probe-event-recruit-no-done.mjs`.
 
 ---
 

@@ -233,6 +233,11 @@ const recruitable = (state: GameState, side: Side, region: string): boolean => {
 /** Units in the stack an event recruit for `side` would join at `region` (the boxed
  *  garrison under a siege, otherwise the region itself). Used to tell "did the recruit
  *  land?" apart from "the stack was full". */
+/** Whether an event-recruit destination exists here and still has room. */
+const hasEventRoom = (state: GameState, region: string, side: Side): boolean => {
+  const dest = eventRecruitTarget(state, region, side);
+  return !!dest && forceUnitCount(dest.force) < dest.limit;
+};
 const recruitStackSize = (state: GameState, region: string, side: Side): number => {
   const dest = eventRecruitTarget(state, region, side);
   return dest ? forceUnitCount(dest.force) : 0;
@@ -266,6 +271,10 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
     canPlay: opts.canPlay ?? ((state) => slots.some((_, i) => slotOptions(state, i).length > 0)),
     apply: opts.apply,
     repeat: slots.length,
+    // "Recruit …" is mandatory, to the maximum extent possible (p.23; Almanac: partial
+    // recruitment "is not permitted when playing an Event card") — no stopping early.
+    // The loop still ends on its own when no slot is recruitable any more.
+    noDone: true,
     targets(state, _side, applied = []) {
       const done = new Set(applied.map((t) => t.slot));
       for (let i = 0; i < slots.length; i++) {
@@ -607,8 +616,15 @@ register('sh-str-19', { // Shadows on the Misty Mountains: 2 Sauron + 1 Nazgûl 
 });
 register('sh-str-17', { // Many Kings: 2 S&E Regulars in each of three different S&E Settlements
   repeat: 3,
+  noDone: true, // mandatory to the maximum extent — Almanac (player report 4f0y2f2r4k315b68)
   canPlay: (s) => s.reinforcements.southrons.regular > 0 && seSettlements(s).length > 0,
-  targets: (s, _side, applied = []) => { const used = new Set(applied.map((a) => a.region)); return seSettlements(s).filter((r) => !used.has(r)).map((region) => ({ region, mode: 'recruit' as const })); },
+  // Offer only picks that place something: once the pool is empty (or no Settlement has
+  // room) the list is empty and the card resolves, instead of forcing no-op picks.
+  targets: (s, _side, applied = []) => {
+    if (s.reinforcements.southrons.regular <= 0) return [];
+    const used = new Set(applied.map((a) => a.region));
+    return seSettlements(s).filter((r) => !used.has(r) && hasEventRoom(s, r, 'shadow')).map((region) => ({ region, mode: 'recruit' as const }));
+  },
   applyTarget: (s, _side, t) => placeForce(s, 'southrons', t.region!, { regular: 2 }),
 });
 function rageTargets(s: GameState): EventTarget[] {
@@ -908,9 +924,16 @@ const pitsStrongholds = (state: GameState): string[] => Object.keys(state.region
 });
 register('sh-str-24', {
   repeat: 3,
+  noDone: true, // mandatory to the maximum extent — Almanac (player report 4f0y2f2r4k315b68)
   canPlay: (state) => isAtWar(state, 'sauron') && (state.reinforcements.sauron as { regular: number }).regular > 0 && pitsStrongholds(state).length > 0,
-  targets: (state, _side, applied = []) => { const used = new Set(applied.map((a) => a.region)); return pitsStrongholds(state).filter((r) => !used.has(r)).map((region) => ({ region, mode: 'recruit' as const })); },
-  applyTarget: (state, _side, t) => { recruit(state, 'sauron', t.region!, 2, 0, { ignoreAtWar: true }); },
+  targets: (state, _side, applied = []) => {
+    if (state.reinforcements.sauron.regular <= 0) return []; // pool spent: the card resolves
+    const used = new Set(applied.map((a) => a.region));
+    return pitsStrongholds(state).filter((r) => !used.has(r)).map((region) => ({ region, mode: 'recruit' as const }));
+  },
+  // placeForce, not recruit(): recruit() refuses the whole pair when only one Regular
+  // (or one space) is left, but the card recruits to the maximum extent possible (p.23).
+  applyTarget: (state, _side, t) => placeForce(state, 'sauron', t.region!, { regular: 2 }),
 });
 // Musterings of Long-planned War: 5 Southrons in Gorgoroth + 5 Sauron in Nurn.
 register('sh-str-23', {
@@ -1099,6 +1122,7 @@ register('fp-str-06', {
     || (faramirRecruits(state).length > 0
       || (armySide(state, 'osgiliath') === 'fp' && recruitable(state, 'fp', 'osgiliath') && state.reinforcements.gondor.leader > 0)),
   repeat: 2, // the attack target, then the Gondor recruit
+  noDone: true, // "Then … recruit" is not optional — no stopping after the strike
   targets(state, _side, applied = []) {
     // The strike, when there is something in Ithilien/Osgiliath to shoot at...
     if (applied.length === 0 && faramirStrikes(state).length > 0) return faramirStrikes(state).map((region) => ({ region }));
