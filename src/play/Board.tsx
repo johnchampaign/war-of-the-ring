@@ -418,8 +418,13 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           })}
         </g>
       )}
-      {/* Fellowship marker (last-known position) */}
-      <FellowshipMarker view={view} />
+      {/* Fellowship marker (last-known position). It is drawn over every region, so it
+          must hand its clicks and hovers to the region it stands in — otherwise it eats
+          them, and the middle of Rivendell (where the Fellowship starts, and where
+          Kindred of Glorfindel recruits) could not be clicked at all (player report
+          1v2i0j6o2l2d4917: "Cant continue Play"). */}
+      <FellowshipMarker view={view} onPick={pickRegion}
+        onHover={(id) => { onHoverRegion?.(id); setHoverId(id); }} />
     </svg>
     </div>
   );
@@ -483,7 +488,9 @@ function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number;
   );
 }
 
-function FellowshipMarker({ view }: { view: GameState }) {
+function FellowshipMarker({ view, onPick, onHover }: {
+  view: GameState; onPick?: (id: RegionId) => void; onHover?: (id: RegionId | null) => void;
+}) {
   const fs = view.fellowship;
   const poly = regionPolygon(fs.location);
   if (!poly) return null;
@@ -494,7 +501,11 @@ function FellowshipMarker({ view }: { view: GameState }) {
   // but stamp it with the step so it can't be misread as "still at Morannon".
   const onTrack = fs.mordor !== null;
   return (
-    <g>
+    // A click or hover on the marker is a click or hover on its region: the marker sits
+    // inside that region's polygon, over the spot a player naturally aims for.
+    <g onClick={() => onPick?.(fs.location)}
+      onMouseEnter={() => onHover?.(fs.location)} onMouseLeave={() => onHover?.(null)}
+      style={{ cursor: onPick ? 'pointer' : 'default' }}>
       <title>{onTrack ? `Ring-bearers — Mordor Track step ${fs.mordor}/5 (see the track, lower right)` : 'The Fellowship'}</title>
       <circle cx={anchor.x} cy={anchor.y} r={13} fill="#f2e6c2" stroke="#7a5a1e" strokeWidth={2}
         opacity={onTrack ? 0.5 : 1} />
