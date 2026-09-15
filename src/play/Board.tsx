@@ -84,6 +84,7 @@ import { HuntIndicator } from './HuntIndicator';
 import { MordorTrack } from './MordorTrack';
 import { RingGlyph } from './RingIcon';
 import { charName, charMark } from './charInfo';
+import { regionOccupants, fellowshipMarkerPoint } from './tokenPlacement';
 
 // Characters render as small labelled discs near the region anchor so they're
 // findable (a minion or a separated Companion is easy to lose among army badges).
@@ -193,7 +194,24 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
     // Boxed garrison of a besieged Stronghold (RAW siege: defenders in the box, the
     // besieger occupies the region's open field above).
     const boxed = r?.siegeBox ? presentArmies(r.siegeBox as unknown as GameState['regions'][string], sarumanLead) : [];
-    return { id, poly, fill, def, armies, layout, control, r, boxed, armyPoints };
+    // The Fellowship marker takes a spot clear of this region's other tokens — it used
+    // to sit on the anchor, right on top of a lone Nazgûl or army badge (player report
+    // 43732p5u0j71692t). Only computed for the region the Fellowship stands in.
+    const markerPoint = id === view.fellowship.location ? clampToCrop(fellowshipMarkerPoint(
+      poly,
+      layout?.anchor ?? layoutTokensInPolygon(poly, 1, { tokenRadius: 9 }).anchor,
+      regionOccupants({
+        anchor: layout?.anchor ?? poly[0]!,
+        armyPoints,
+        armySolo: armies.map((a) => a.reg + a.elite === 0 && a.leaders + a.nazgul + (a.eliteLead ?? 0) > 0),
+        scale: layout?.scale ?? 1,
+        settlement: !!def?.settlement && def.settlement !== 'Fortification',
+        boxedCount: boxed.length,
+        charCount: r?.characters.length ?? 0,
+        boxedCharCount: r?.siegeBox?.characters.length ?? 0,
+      }),
+    )) : null;
+    return { id, poly, fill, def, armies, layout, control, r, boxed, armyPoints, markerPoint };
   }), [view]);
 
   // --- Zoom / pan (the whole map is detailed; let the player get close to read it).
@@ -424,7 +442,8 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           Kindred of Glorfindel recruits) could not be clicked at all (player report
           1v2i0j6o2l2d4917: "Cant continue Play"). */}
       <FellowshipMarker view={view} onPick={pickRegion}
-        onHover={(id) => { onHoverRegion?.(id); setHoverId(id); }} />
+        onHover={(id) => { onHoverRegion?.(id); setHoverId(id); }}
+        at={regionEls.find((e) => e?.id === view.fellowship.location)?.markerPoint ?? undefined} />
     </svg>
     </div>
   );
@@ -488,13 +507,15 @@ function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number;
   );
 }
 
-function FellowshipMarker({ view, onPick, onHover }: {
+function FellowshipMarker({ view, onPick, onHover, at }: {
   view: GameState; onPick?: (id: RegionId) => void; onHover?: (id: RegionId | null) => void;
+  /** Where to draw it: a spot clear of the region's other tokens (tokenPlacement.ts). */
+  at?: { x: number; y: number };
 }) {
   const fs = view.fellowship;
   const poly = regionPolygon(fs.location);
   if (!poly) return null;
-  const anchor = clampToCrop(layoutTokensInPolygon(poly, 1, { tokenRadius: 9 }).anchor);
+  const anchor = at ?? clampToCrop(layoutTokensInPolygon(poly, 1, { tokenRadius: 9 }).anchor);
   const x = anchor.x - 12, y = anchor.y - 12;
   // On the Mordor Track the figure has LEFT the map — it stands on the track, not
   // on the entrance region. Keep a marker at the entrance so the route is readable,
