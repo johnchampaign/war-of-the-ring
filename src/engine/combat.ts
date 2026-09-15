@@ -299,10 +299,13 @@ function absorbForced(state: GameState, f: Force, side: Side, hits: number): num
   // skip the log: an invisible casualty reads as a broken battle. Two reports in
   // one day — '2E took my hit and I concluded Shield Wall cancelled it', and 'the
   // log didn't say that' on an Elite reduction — were both this silence.
-  if (taken.length) log(state, null, 'combat', `${sideLabel(side)} casualties (forced): ${taken.join('; ')}`);
+  if (taken.length) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties (forced): ${taken.join('; ')}`);
   return left;
 }
 const cap1 = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
+// Casualties dealt by an Event card outside a battle (Dreadful Spells, The Ents
+// Awake, …) were tagged COMBAT in the log (player report 153x114o2d4a0u73).
+const casualtyLogKind = (state: GameState): string => (state.pendingCombat ? 'combat' : 'event');
 
 /** True when the owner still has a real decision to make about these hits. */
 function meaningfulForceCasualty(f: Force, hits: number): boolean {
@@ -356,8 +359,17 @@ function finishForceCasualties(state: GameState, f: Force, side: Side): void {
     if (!state.characters.eliminated.includes(c)) state.characters.eliminated.push(c);
     delete state.characters.inPlay[c];
   }
-  if (mine.length) log(state, null, 'combat', `${mine.join(', ')} eliminated with the destroyed Army`);
+  const kind = casualtyLogKind(state);
+  if (mine.length) log(state, null, kind, `${mine.join(', ')} eliminated with the destroyed Army`);
   f.characters = f.characters.filter((c) => characterSide(c) !== side);
+  // The Leaders / Nazgûl that fall with the Army were removed without a log line
+  // (player report 704v015z0b68545p: Dreadful Spells took Osgiliath's last unit and
+  // its Leader silently).
+  const lost = side === 'fp' ? f.leaders : f.nazgul;
+  if (lost > 0) {
+    const what = side === 'fp' ? `Free Peoples Leader${lost === 1 ? '' : 's'}` : `Nazgûl`;
+    log(state, null, kind, `${lost === 1 ? 'a' : lost} ${what} ${lost === 1 ? 'is' : 'are'} eliminated with the destroyed Army`);
+  }
   if (side === 'fp') {
     f.leaders = 0;                              // FP Leaders are permanent losses
   } else {

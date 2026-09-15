@@ -262,9 +262,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // trivial Army/Muster case itself and asks for anything else.
   const playableCards = useMemo(() => {
     const m = new Map<string, WotrAction>();
-    if (g.yourTurn) for (const a of g.legalActions) if (a.kind === 'playEvent' && !m.has(a.cardId)) m.set(a.cardId, a);
+    // A card lights only if the selected die can pay for it, like the panel's list
+    // (player report 1e2v5l5f0q5d6h0v).
+    if (g.yourTurn) for (const a of g.legalActions) {
+      if (a.kind !== 'playEvent' || m.has(a.cardId)) continue;
+      if (activeDie && g.view && g.you && !dieAllowsAction(a, g.view, g.you as Side, activeDie)) continue;
+      m.set(a.cardId, a);
+    }
     return m;
-  }, [g.legalActions, g.yourTurn]);
+  }, [g.legalActions, g.yourTurn, activeDie, g.view, g.you]);
   // Retreat destinations are board clicks (player report 0f3003342g666741): the
   // battle modal asks Retreat-or-stand, the MAP answers "to where".
   const retreatActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'retreatTo' | 'preCombatRetreat' }> => a.kind === 'retreatTo' || a.kind === 'preCombatRetreat'), [g.legalActions]);
@@ -638,7 +644,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   );
 
   const panelActionsAll = g.legalActions.filter((a) => panelShowsAction(a, g.legalActions, g.view!));
-  const elvenActions = g.yourTurn ? g.legalActions.filter((a) => a.kind === 'useElvenRing') : [];
+  // With a die selected, an Elven Ring offers only to change THAT die (player report
+  // 4k5u2p3c37693s0l).
+  const elvenActions = g.yourTurn
+    ? g.legalActions.filter((a) => a.kind === 'useElvenRing' && (!activeDie || a.from === activeDie))
+    : [];
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
     : panelActionsAll;

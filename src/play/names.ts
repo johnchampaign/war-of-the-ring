@@ -87,6 +87,10 @@ export function prettify(msg: string): string {
   // Before the id pass, while the Nation is still a bare lowercase id.
   let out = msg.replace(RECRUIT, (_m, r: string, e: string, l: string | undefined, plusLeader: string | undefined, nation: string) =>
     recruitPhrase(Number(r), Number(e), Number(l ?? 0) + (plusLeader ? 1 : 0), nation));
+  // One verb for every muster line: the Nazgûl/Minion lines already say "Mustered",
+  // and "Recruited …" beside them read as two different things (player report
+  // 6m0p596r4v3c3m56).
+  out = out.replace(/^Recruited\b/, 'Mustered');
   out = out.replace(KEBAB, (t) => lookup(t) ?? t);
   out = out.replace(WORD, (t) => (NATION_NAME[t] ?? SIDE_WORD[t] ?? (charDef(t) ? charName(t) : null) ?? (REGION_NAME.has(t) ? REGION_NAME.get(t)! : null)) ?? t);
   return out;
