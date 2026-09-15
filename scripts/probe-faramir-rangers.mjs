@@ -89,7 +89,7 @@ const h = getHandler('fp-str-06');
   state.reinforcements.gondor.elite = 0;
   check('the card is still playable', canPlayCard(state, 'fp-str-06', 'fp'));
   check('no unit target to choose', h.targets(state, 'fp', []).length === 0);
-  h.apply(state, 'fp'); // playEvent's path when there are no targets
+  h.finalize(state, 'fp', []); // playEvent's path when a card resolves with no targets
   check('the Leader is recruited anyway', state.regions['osgiliath'].leaders === 1, String(state.regions['osgiliath'].leaders));
 
   // ...and with no Leaders left either, there is nothing to apply.

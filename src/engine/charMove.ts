@@ -168,7 +168,10 @@ const HOBBITS = new Set(['meriadoc', 'peregrin']);
  *  never boosts a flier. */
 export interface RangeOpts { extraMove?: number; levelOverride?: number;
   /** Gwaihir / We Prove the Swifter: "allowed to end in a Stronghold under siege". */
-  siegeOk?: boolean }
+  siegeOk?: boolean;
+  /** The Companions travelling TOGETHER on this move. Only Shadowfax reads it (see
+   *  rangeOf); defaults to the moving figure on its own. */
+  group?: readonly string[] }
 /** The movement range of a piece: Nazgûl/Witch-king fly; Saruman 0; others by Level.
  *  Gandalf the White's Shadowfax: Level 4 when alone or with a single Hobbit. */
 function rangeOf(state: GameState, char: string, from: RegionId, opts: RangeOpts = {}): number {
@@ -177,7 +180,11 @@ function rangeOf(state: GameState, char: string, from: RegionId, opts: RangeOpts
   const bonus = opts.extraMove ?? 0;
   if (opts.levelOverride !== undefined) return opts.levelOverride + bonus;
   if (char === 'gandalf-white') {
-    const others = figureForce(state, from, 'fp').characters.filter((c) => c !== 'gandalf-white' && COMPANION_SET.has(c));
+    // Shadowfax reads the company he keeps ON THE ROAD ("if he is alone or accompanied
+    // by only one Hobbit"), not the company he leaves behind. This used to read every
+    // Companion standing in the origin region, so Gandalf could not ride out four
+    // regions while Boromir & co. stayed put (player report 0s3m315p1k6m6d3u).
+    const others = (opts.group ?? [char]).filter((c) => c !== 'gandalf-white' && COMPANION_SET.has(c));
     const aloneOrOneHobbit = others.length === 0 || (others.length === 1 && HOBBITS.has(others[0]!));
     return (aloneOrOneHobbit ? 4 : levelOf('gandalf-white')) + bonus;
   }
@@ -232,7 +239,7 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
   let range = 0;
   for (const c of chars) {
     if (!COMPANION_SET.has(c) || !src.characters.includes(c)) return false;
-    range = Math.max(range, rangeOf(state, c, from, opts));
+    range = Math.max(range, rangeOf(state, c, from, { ...opts, group: chars }));
   }
   // Companion GROUPS walk too: the p.24 Shadow-Stronghold stop applies (side is
   // always 'fp' here — the guard above rejects anything else).

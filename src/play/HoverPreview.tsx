@@ -10,7 +10,7 @@ import eventCards from '../../assets/event-cards.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, Nation } from '../engine/types';
 import { charName, charDef, isMinion } from './charInfo';
-import { cardSideLine } from './names';
+import { cardSideLine, forcePhrase, nationLabel } from './names';
 import { CardTypeBadge } from './cardTypeBadge';
 
 export type Hover = { kind: 'region'; id: string } | { kind: 'card'; id: string } | { kind: 'character'; id: string } | null;
@@ -24,7 +24,6 @@ const NATION_COLOR: Record<string, string> = {
 };
 const polyPath = (poly: { x: number; y: number }[]) =>
   poly.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + ' Z';
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function HoverPreview({ hover, view, bottom }: { hover: Hover; view: GameState; bottom?: boolean }) {
   // Bottom bar: a wide horizontal inspector (thumbnail + readable text) that fills
@@ -116,7 +115,7 @@ function RegionPreview({ id, view, bottom }: { id: string; view: GameState; bott
       </div>
       {nationLines.map((nl) => (
         <div key={nl.nation} style={{ color: NATION_COLOR[nl.nation] ?? '#ccc', fontSize: 12, fontWeight: 600 }}>
-          {cap(nl.nation)}: {nl.reg}R / {nl.elite}E
+          {nationLabel(nl.nation)}: {forcePhrase(nl.reg, nl.elite)}
         </div>
       ))}
       {(r?.leaders ?? 0) > 0 && <div style={{ color: '#cfd8e6', fontSize: 12 }}>{r!.leaders} Free Peoples Leader{r!.leaders > 1 ? 's' : ''}</div>}
@@ -129,7 +128,7 @@ function RegionPreview({ id, view, bottom }: { id: string; view: GameState; bott
           <div style={{ marginTop: 4, borderTop: '1px solid #3a342a', paddingTop: 3 }}>
             <div style={{ color: '#caa84b', fontSize: 11, fontVariant: 'small-caps', letterSpacing: 0.5 }}>⚔ In the siege box (garrison)</div>
             {Object.entries(box.units ?? {}).filter(([, u]) => (u?.regular ?? 0) + (u?.elite ?? 0) > 0).map(([n, u]) => (
-              <div key={n} style={{ color: NATION_COLOR[n as Nation] ?? '#ccc', fontSize: 12, fontWeight: 600 }}>{cap(n)}: {u!.regular}R / {u!.elite}E</div>
+              <div key={n} style={{ color: NATION_COLOR[n as Nation] ?? '#ccc', fontSize: 12, fontWeight: 600 }}>{nationLabel(n)}: {forcePhrase(u!.regular, u!.elite)}</div>
             ))}
             {(box.leaders ?? 0) > 0 && <div style={{ color: '#cfd8e6', fontSize: 12 }}>{box.leaders} Free Peoples Leader{box.leaders > 1 ? 's' : ''}</div>}
             {(box.nazgul ?? 0) > 0 && <div style={{ color: '#e6857f', fontSize: 12 }}>{box.nazgul} Nazgûl</div>}
@@ -199,7 +198,7 @@ function CharacterPreview({ id, bottom }: { id: string; bottom?: boolean }) {
       <div style={{ color: '#d9c98a', fontSize: 12 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</div>
       {isMinion(id)
         ? <div style={{ color: '#e0a06a', fontSize: 12 }}><b>Enters play (Muster die):</b> {MINION_ENTRY[id] ?? 'when its card condition is met.'}</div>
-        : d.nation && <div style={{ color: '#9cc77a', fontSize: 12 }}>Activates: {d.nation === 'any' ? 'any Nation' : cap(d.nation)} <span style={{ color: '#887' }}>(when separated to its City/Stronghold)</span></div>}
+        : d.nation && <div style={{ color: '#9cc77a', fontSize: 12 }}>Activates: {d.nation === 'any' ? 'any Nation' : nationLabel(d.nation)} <span style={{ color: '#887' }}>(when separated to its City/Stronghold)</span></div>}
       {d.guide && <p style={{ fontSize: 12, margin: '4px 0' }}><b>Guide:</b> {d.guide}</p>}
       {d.becomesGuide && <p style={{ fontSize: 12, margin: '4px 0' }}><b>Becomes Guide:</b> {d.becomesGuide}</p>}
       {d.abilities?.map((a, i) => <p key={i} style={{ fontSize: 12, margin: '4px 0' }}><b>{a.name}:</b> {a.text}</p>)}

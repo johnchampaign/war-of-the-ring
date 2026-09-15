@@ -26,14 +26,14 @@ function actionHover(a: WotrAction): Hover {
   return null;
 }
 
-export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardHints = [], selectedDie, onClearDie, compact }: {
+export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardHints = [], selectedDie, compact }: {
   actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null;
   /** One line per thing the MAP offers that this list doesn't (army moves, siege
    *  assaults, musters and Minion entries, character moves). Rendered as pointers, and
    *  counted by the "nothing to do" check below — so stripping a board-driven action
    *  from the list can never make the panel claim there is nothing to do. */
   boardHints?: string[];
-  selectedDie?: DieFace | null; onClearDie?: () => void; compact?: boolean;
+  selectedDie?: DieFace | null; compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const click = async (a: WotrAction) => { setBusy(true); try { await onAction(a); } finally { setBusy(false); } };
@@ -80,21 +80,23 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // ordinary action menu (the caller filters those out before passing actions).
   return (
     <div style={panel}>
-      {sel && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 6px', fontSize: 12, color: '#e8dcb8' }}>
-          <span>Actions for the <DieTag face={sel} /> die:</span>
-          <button onClick={onClearDie} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #5a4a2a', color: '#cb8', borderRadius: 5, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>← show all dice</button>
-        </div>
-      )}
+      {/* No "Actions for the … die" header: it appeared and vanished with the
+          selection and shoved the whole list up and down, and the dice tray above
+          already says "click a die to see its actions / click again to show all"
+          (player report 563w3w120q5v372d). */}
       {chainNote && (
         <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '6px 9px', margin: '2px 0 6px', fontSize: 12 }}>⚑ {chainNote}</div>
       )}
       {pass && (
         // Picking a die means you are acting with it, so Pass is off until you clear
         // the selection (player report 111g4j5g2n4q3x2g).
-        <button disabled={busy || !!sel} title={sel ? 'Clear the die selection to pass' : undefined} onClick={() => click(pass)}
-          style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 3px' : '0 0 8px', padding: compact ? '3px 10px' : '9px 10px', background: '#4a3a1a', color: '#ffe08a', border: '1px solid #7a5f24', borderRadius: 6, cursor: 'pointer', fontSize: compact ? 11 : 14, fontWeight: 700 }}>
-          Pass
+        // ...and it has to LOOK off, not just be off — a full-brightness button that
+        // silently ignores the click reads as a broken game (player report
+        // 2p206p523z253b02).
+        <button disabled={busy || !!sel} title={sel ? 'Click your selected die again (or pick another) to pass' : undefined} onClick={() => click(pass)}
+          style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 3px' : '0 0 8px', padding: compact ? '3px 10px' : '9px 10px', borderRadius: 6, fontSize: compact ? 11 : 14, fontWeight: 700,
+            background: sel ? '#241f16' : '#4a3a1a', color: sel ? '#6d6455' : '#ffe08a', border: `1px solid ${sel ? '#3a342a' : '#7a5f24'}`, cursor: sel ? 'not-allowed' : 'pointer' }}>
+          Pass{sel ? ' (a die is selected)' : ''}
         </button>
       )}
       {/* Board-driven actions live on the MAP (not in this list) — point the player

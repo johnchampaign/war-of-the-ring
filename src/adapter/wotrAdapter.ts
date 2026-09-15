@@ -669,7 +669,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'drawEvent':
       requirePhase(state, 'actionResolution');
       if (!consumePreferred(state, actor, ['event', 'will'], action.die)) throw new Error('No Event die');
-      drawOne(state, actor, action.deck, 'Event die'); passResolutionTurn(state, actor); break;
+      // No reason on the line: the log row already carries the die that paid for it
+      // (player report 2x490j3u6r2z4w20 — "(Event die)" said it twice).
+      drawOne(state, actor, action.deck); passResolutionTurn(state, actor); break;
     case 'playEvent': {
       requirePhase(state, 'actionResolution');
       // Answering the Ents Awake prompt with a card: the prompt is consumed here and
@@ -732,7 +734,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       else state.cards[actor].discard[deck].push(action.cardId);
       if (palantirWasActive) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
       if (guideDrawsNow) guideEventDraw(state, actor, deck); // Gandalf the Grey's Guide ability
-      passResolutionTurn(state, actor); break;
+      passResolutionTurn(state, actor);
+      // A card whose target list is empty still has to follow its OTHER instructions —
+      // "Recruit … then draw one Strategy Event card" with nothing recruitable is still
+      // a draw (Almanac, common points on recruitment cards). `finalize` only ever ran
+      // off the eventTarget path, so those riders were silently dropped; it goes last
+      // here for the same reason it does there (its own PendingChoice must survive).
+      h.finalize?.(state, actor, []);
+      break;
     }
     case 'eventTarget': {
       requireChoice(state, 'eventTarget', actor);

@@ -114,6 +114,7 @@ export function advance(state: GameState): void {
     if (state.flags.fpFreeCharEventPrompt) {
       state.flags.fpFreeCharEventPrompt = false;
       if (state.flags.fpFreeCharEventThisTurn && state.phase === 'actionResolution') {
+        log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event now, without a die');
         state.pendingChoice = { owner: 'fp', kind: 'freeCharEvent', data: {} };
         return;
       }

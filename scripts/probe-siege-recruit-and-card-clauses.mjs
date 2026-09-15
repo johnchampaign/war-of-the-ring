@@ -77,8 +77,15 @@ function resolveCard(state, id, side) {
   const r = besiege(state, 'dol-amroth',
     { units: { southrons: { regular: 2, elite: 0 } } },
     { units: { gondor: { regular: 5, elite: 0 } } });
-  check('a full Stronghold cannot take another card recruit', !canPlayCard(state, 'fp-str-18', 'fp'));
-  check('nothing was placed', forceUnitCount(r.siegeBox) === 5);
+  // The card is still playable — p.31 caps ARMY UNITS at five inside a besieged
+  // Stronghold and says Leaders are not affected, so Imrahil's Gondor Leader can
+  // still join a full garrison. What must not happen is a sixth unit.
+  check('the card is playable for its Leader alone', canPlayCard(state, 'fp-str-18', 'fp'));
+  const leaders0 = state.reinforcements.gondor.leader;
+  resolveCard(state, 'fp-str-18', 'fp');
+  check('no sixth Army unit went in', forceUnitCount(r.siegeBox) === 5, String(forceUnitCount(r.siegeBox)));
+  check('the Leader did', r.siegeBox.leaders === 1 && state.reinforcements.gondor.leader === leaders0 - 1,
+    `${leaders0} -> ${state.reinforcements.gondor.leader}`);
 }
 
 {

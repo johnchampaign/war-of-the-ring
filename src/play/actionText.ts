@@ -31,7 +31,9 @@ const CARD_RECRUITS: Record<string, string> = {
 
 export function describeAction(a: WotrAction): string {
   switch (a.kind) {
-    case 'skipFellowshipPhase': return 'Skip the Fellowship phase';
+    // "Skip" reads as "nothing happened" — the phase is over either way, and the
+    // Fellowship may well have moved in it (player report 454t6b484u0v0k0c).
+    case 'skipFellowshipPhase': return 'End the Fellowship phase';
     case 'declareFellowship': return `Declare Fellowship (toward ${rName(a.target)})`;
     case 'enterMordor': return 'Enter Mordor';
     case 'revealMove': return `Move the revealed Fellowship to ${rName(a.target)}`;

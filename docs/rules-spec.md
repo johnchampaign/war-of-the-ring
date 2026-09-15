@@ -329,6 +329,23 @@ die already showing an Eye.
   text; the Leader (no choice to make, and not subject to stacking) rides along in
   `finalize`, or in `apply` when the unit half has no legal target at all.
   Regression: `scripts/probe-faramir-rangers.mjs`.
+  **A recruitment card with nothing to recruit is still playable for the rest of its
+  text.** Almanac, "Points common to all Free Peoples recruitment cards": "These cards
+  may still be played if recruitment is impossible (e.g., if the required Settlement has
+  been captured or if no units are left in reinforcements); just follow the other
+  instructions on the card in that case (such as the card draw for *King Brand's Men*)."
+  So `recruitChoiceCard`'s default `canPlay` also passes on a placeable Leader or on the
+  card's `then`/`apply` rider, and *King Brand's Men* (fp-str-19) no longer gates on Dale
+  being free — it just skips the recruit and draws. Two supporting fixes came with it:
+  `playEvent` now runs `finalize` when a card resolves with **no targets at all** (that
+  path used to drop the rider silently, which is why *Faramir's Rangers* had to place its
+  Leader from `apply`), and the Leader half of `recruitChoiceCard` goes through
+  `recruitable` so it can't be smuggled into an enemy-captured Settlement. A besieged
+  Stronghold's five-unit cap (p.31) binds ARMY UNITS only, so a full garrison still takes
+  Imrahil's Gondor Leader. *(Player report 550r3w1c6s3v3b28 — Kindred of Glorfindel stuck
+  in hand with Rivendell besieged and the Elven reinforcements empty; the besieged half of
+  that rule was already right.)* Regression:
+  `scripts/probe-shadowfax-and-recruit-riders.mjs`.
   **Multi-target cards** (`EventHandler.repeat = N`, e.g. *The Shadow Lengthens* = 2,
   *The Shadow is Moving* = 4) re-prompt the same `eventTarget` choice up to N times:
   the choice persists (`data.left`/`data.applied`), `targets(state, side, applied)`
@@ -433,6 +450,15 @@ die already showing an Eye.
   says "allowed to **end** in a Stronghold under siege" — so it does not unseal leaving.
   The board draws boxed Characters below the region anchor in the same dashed-gold ring
   the boxed army badges wear; they used to render nowhere at all.
+  **Shadowfax reads the travelling party, not the region left behind.** Gandalf the
+  White "can move up to 4 regions if he is alone or accompanied by only one Hobbit
+  Companion" — "accompanied" is about who rides WITH him. `rangeOf` used to count every
+  Companion standing in his origin region, so a Gandalf setting out alone from a region
+  that also held Boromir and Legolas was capped at his printed Level 3 *(player report
+  0s3m315p1k6m6d3u)*. The moving group now travels in `RangeOpts.group` (defaulting to
+  the figure on its own), so `moveCompanionGroup`, the board's destination highlighting
+  and the card-driven group moves all measure the same company. Regression:
+  `scripts/probe-shadowfax-and-recruit-riders.mjs`.
   **Gandalf the White may enter a BESIEGED Elven Stronghold.** His card says "place
   Gandalf the White in Fangorn or in an **unconquered** Elven Stronghold" — unconquered,
   not "free of enemy units", and a besieged Stronghold is still unconquered (p.33: the

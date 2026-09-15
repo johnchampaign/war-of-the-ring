@@ -267,8 +267,23 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
     if (room > 0 && pool.elite > 0) o.push({ nation: sl.nation, region: sl.region, figure: 'elite', slot: i });
     return o;
   };
+  // Can the card's Leader half still land? Leaders don't take stacking room, so a full
+  // (or unit-less) stack doesn't stop one — but an enemy-held region does.
+  const leaderPlaceable = (state: GameState): boolean => (opts.leaders ?? []).some((l) =>
+    recruitable(state, side, l.region) && !!eventRecruitTarget(state, l.region, side)
+    && ((state.reinforcements[l.nation] as { leader?: number }).leader ?? 0) > 0);
   return {
-    canPlay: opts.canPlay ?? ((state) => slots.some((_, i) => slotOptions(state, i).length > 0)),
+    // Almanac, "Points common to all Free Peoples recruitment cards": "These cards may
+    // still be played if recruitment is impossible (e.g., if the required Settlement has
+    // been captured or if no units are left in reinforcements); just follow the other
+    // instructions on the card in that case (such as the card draw for 'King Brand's
+    // Men')." So a card that also draws (`then`) is playable for the draw alone, and a
+    // unit+Leader card is playable for whichever half can still happen — the same
+    // "maximum extent possible" rule the Imrahil example states (p.23). The reporter of
+    // 550r3w1c6s3v3b28 had Kindred of Glorfindel stuck in hand with Rivendell besieged
+    // and the Elven reinforcements empty.
+    canPlay: opts.canPlay ?? ((state) => slots.some((_, i) => slotOptions(state, i).length > 0)
+      || leaderPlaceable(state) || !!opts.then || !!opts.apply),
     apply: opts.apply,
     repeat: slots.length,
     // "Recruit …" is mandatory, to the maximum extent possible (p.23; Almanac: partial
@@ -293,6 +308,9 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
     },
     finalize(state) {
       for (const l of opts.leaders ?? []) {
+        // The region gate the unit half already goes through: `eventRecruitTarget` alone
+        // would happily drop a Leader into an empty Settlement the enemy has captured.
+        if (!recruitable(state, side, l.region)) continue;
         const dest = eventRecruitTarget(state, l.region, side);
         const before = dest ? dest.force.leaders : 0;
         placeForce(state, l.nation, l.region, { leader: 1 });
@@ -383,7 +401,12 @@ register('fp-str-14', recruitChoiceCard('fp', [{ nation: 'gondor', region: 'mina
 register('fp-str-15', recruitChoiceCard('fp', [{ nation: 'elves', region: 'lorien' }], { then: (s) => drawCard(s, 'fp', 'strategy') })); // Celeborn's Galadhrim
 register('fp-str-17', recruitChoiceCard('fp', [{ nation: 'north', region: 'carrock' }], { leaders: [{ nation: 'north', region: 'carrock' }] })); // Grimbeorn the Old
 register('fp-str-18', recruitChoiceCard('fp', [{ nation: 'gondor', region: 'dol-amroth' }], { leaders: [{ nation: 'gondor', region: 'dol-amroth' }] })); // Imrahil of Dol Amroth
-register('fp-str-19', { canPlay: (s) => recruitable(s, 'fp', 'dale'), apply: (s) => { placeForce(s, 'north', 'dale', { regular: 2 }); drawCard(s, 'fp', 'strategy'); } }); // King Brand's Men (2 Regulars — no choice)
+// King Brand's Men (2 Regulars — no choice — then draw). The Almanac names THIS card
+// when it says a recruitment card "may still be played if recruitment is impossible …
+// just follow the other instructions on the card in that case (such as the card draw
+// for 'King Brand's Men')", so the draw alone is a legal reason to play it; the recruit
+// still needs Dale free of the enemy.
+register('fp-str-19', { apply: (s) => { if (recruitable(s, 'fp', 'dale')) placeForce(s, 'north', 'dale', { regular: 2 }); drawCard(s, 'fp', 'strategy'); } });
 register('fp-str-22', recruitChoiceCard('fp', [{ nation: 'dwarves', region: 'erebor' }], { leaders: [{ nation: 'dwarves', region: 'erebor' }] })); // Dáin Ironfoot's Guard
 register('fp-str-24', recruitChoiceCard('fp', [{ nation: 'elves', region: 'woodland-realm' }], { then: (s) => drawCard(s, 'fp', 'strategy') })); // Thranduil's Archers
 
@@ -1047,7 +1070,9 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
           // follow-up used to wait for the FP's next action, handing the Shadow a turn
           // in between).
           state.flags.fpFreeCharEventPrompt = true;
-          log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event now, without a die');
+          // The LOG line is written where the prompt is actually raised (advance()), so
+          // it lands after this card's own hits and casualties instead of ahead of them
+          // (player report 4533406k6q0e4d4a: the offer read as happening first).
         }
       };
       // A BESIEGED Army is still IN its region (p.31) — only its units sit in the
@@ -1141,10 +1166,10 @@ register('fp-str-06', {
     if (hits > 0) applyCasualties(state, t.region!, 'shadow', hits, 'regularsFirst');
     log(state, null, 'event', `Faramir's Rangers: ${hits} hit(s) on ${t.region}`);
   },
-  // Leader-only case: nothing to strike and no Gondor unit placeable leaves no target
-  // to choose, so the card resolves straight out of playEvent and finalize (which only
-  // runs off the eventTarget path) never fires — place the Leader here instead.
-  apply(state) { if (faramirStrikes(state).length === 0 && faramirRecruits(state).length === 0) faramirLeader(state); },
+  // Leader-only case: nothing to strike and no Gondor unit placeable leaves no target to
+  // choose. That used to skip `finalize` entirely (it only ran off the eventTarget path)
+  // and the Leader was placed from `apply` instead; playEvent now finalizes a card that
+  // resolves with no targets, so the one call covers both routes.
   finalize(state) { faramirLeader(state); },
 });
 // The Eagles are Coming!: eliminate Nazgûl near an FP Army containing a Companion.
@@ -1611,7 +1636,7 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
         // (a) other Companions in the SAME region to join the group, and (b) a deselect.
         const from = state.characters.inPlay[group[0]!]!;
         const leader = group.reduce((best, c) => (levelOf(c) > levelOf(best) ? c : best), group[0]!);
-        const out: EventTarget[] = characterDestinations(state, 'fp', leader, from).map((region) => ({ companion: leader, region }));
+        const out: EventTarget[] = characterDestinations(state, 'fp', leader, from, { group }).map((region) => ({ companion: leader, region }));
         for (const [c, r] of seps(state)) if (r === from && !group.includes(c) && !done.has(c)) out.push({ companion: c });
         out.push({ companion: group[0], mode: 'none' });          // deselect (player report)
         return out;
@@ -1696,7 +1721,7 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
     // A group travels at the highest Level among its members (p.24) — with a
     // levelOverride they are all equal, so the leader only matters for the +N cards.
     const leader = group.reduce((best, c) => (levelOf(c) > levelOf(best) ? c : best), group[0]!);
-    return characterDestinations(state, 'fp', leader, from, opts);
+    return characterDestinations(state, 'fp', leader, from, { ...opts, group });
   };
   const canMapMove = (state: GameState): boolean =>
     !!opts.mapMove && onMap(state).some(([c, from]) => mapDests(state, [c], from).length > 0);

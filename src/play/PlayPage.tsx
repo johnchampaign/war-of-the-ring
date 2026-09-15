@@ -408,6 +408,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // A hint already on screen when the window closes is just as misleading as one
   // raised outside it — drop it as the board changes hands.
   useEffect(() => { if (!basicMoveWindow) setBlockMsg(null); }, [basicMoveWindow]);
+  // Peeking is a look at the board DURING one blocking prompt; once that prompt is gone
+  // the peek has to end with it, or the toggle stays latched on and hides the NEXT
+  // modal before the player has seen it.
+  const peekable = !!moveDraft || !!g.view?.pendingCombat || g.legalActions.some(isDecisionAction);
+  useEffect(() => { if (!peekable) setPeekBoard(false); }, [peekable]);
   // What the MAP offers that the action list deliberately leaves out. The panel has to
   // NAME these: army moves, musters, Minion entries, character moves and siege assaults
   // are all board-driven, so a turn whose only actions are on the map would otherwise
@@ -416,9 +421,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // two buttons that were covering for this, so the pointer has to be honest now.
   const boardHints = useMemo(() => {
     const out: string[] = [];
-    if (boardArmyActs.length) out.push('Move or attack on the map — click a green army.');
-    if (musterTargets.size) out.push('Muster on the map — click a green region.');
-    if (charSources.size) out.push('Move a character on the map — click its green region.');
+    if (boardArmyActs.length) out.push('Move or attack — click a highlighted region on the map.');
+    if (musterTargets.size) out.push('Muster — click a highlighted region on the map.');
+    if (charSources.size) out.push('Move a character — click its highlighted region on the map.');
     return out;
   }, [boardArmyActs, assaultSources, musterTargets, charSources]);
   // The Companion currently being separated (Character-die or card), if any.
@@ -440,7 +445,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // walked to, not where it set out — that is the one the next step leaves from.
   const activeRegion = trace?.head ?? selected ?? charPick?.from ?? moveMenu?.region ?? null;
   const charDestinations = useMemo(
-    () => (g.view && charPick && g.you ? new Set(characterDestinations(g.view, g.you as Side, charPick.char, charPick.from)) : new Set<RegionId>()),
+    // `group` matters for Gandalf the White: Shadowfax's four regions depend on who
+    // rides WITH him, so the highlighted destinations must know the travelling party.
+    () => (g.view && charPick && g.you ? new Set(characterDestinations(g.view, g.you as Side, charPick.char, charPick.from, charPick.group ? { group: charPick.group } : {})) : new Set<RegionId>()),
     [g.view, charPick, g.you],
   );
   const destinations = useMemo(
@@ -783,7 +790,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                     : isPlaceGandalf
                     ? 'Gandalf the White returns — click a highlighted region to place him there.'
                     : placeActs.length > 0
-                      ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "Skip the Fellowship phase" on the right.`
+                      ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "End the Fellowship phase" on the right.`
                       : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : charName(charPick.char)} — click a highlighted region to move there (or click the piece again to cancel).`
                         : selected ? `Selected ${regionName(selected)} — click a highlighted region to move/attack (or click again to cancel).`
                           : isArmyMove2 ? 'Second army move — click a green army to move it (a different army), or “No second army move” on the right.'
@@ -828,7 +835,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             <div style={{ flex: '0 0 44%', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               {/* Action buttons (compact — half height). */}
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
-                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardHints={boardHints} selectedDie={activeDie} onClearDie={activeDie ? () => setDie(null) : undefined} />
+                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardHints={boardHints} selectedDie={activeDie} />
               </div>
               {chatClient && g.you && (
                 <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
@@ -955,7 +962,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       {/* Floating "Peek board" toggle (top-left) — shown whenever a blocking choice
           modal (move picker / combat-hunt decision) covers the board; lives outside
           the hidden wrappers so it stays clickable while peeking. */}
-      {(!!moveDraft || !!g.view.pendingCombat || g.legalActions.some(isDecisionAction)) && (
+      {/* Not during a retreat pick: that prompt already stepped the modal aside, so the
+          board is fully visible and the toggle did nothing at all when clicked (player
+          report 313y6r5o19701p42). */}
+      {!isRetreatPick && peekable && (
         <button onClick={() => setPeekBoard((p) => !p)}
           title="Temporarily hide this prompt to study the board, then click again to go back and choose"
           style={{ position: 'fixed', top: 10, left: 10, zIndex: 90, padding: '6px 12px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', boxShadow: '0 4px 16px #000a',

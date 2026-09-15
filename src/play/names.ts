@@ -65,6 +65,20 @@ const RECRUIT = /\b(\d+)R\/(\d+)E(?:\/(\d+)L)?( \+ Leader)?\s+([a-z][a-z-]*)\b/g
 const an = (name: string): string => (/^[AEIOU]/.test(name) ? 'an' : 'a');
 const unitPhrase = (n: number, nation: string, type: string): string =>
   (n === 1 ? `${an(nation)} ${nation} ${type}` : `${n} ${nation} ${type}s`);
+/** "3 Regulars and 1 Elite" — a force spelled out, with no Nation in front (the
+ *  caller already names it). The hover inspector used spreadsheet notation for units
+ *  ("North: 3R / 0E") one line above the spelled-out "1 Free Peoples Leader", which
+ *  read as two different games (player report 636j153g5z020808); there is no width
+ *  pressure in that panel, so it says the words. */
+export function forcePhrase(regular: number, elite: number): string {
+  const parts: string[] = [];
+  if (regular > 0) parts.push(`${regular} Regular${regular === 1 ? '' : 's'}`);
+  if (elite > 0) parts.push(`${elite} Elite${elite === 1 ? '' : 's'}`);
+  return parts.join(' and ');
+}
+/** A Nation's display name, for UI that labels a stack or a track row. */
+export const nationLabel = (id: string): string => NATION_NAME[id] ?? id;
+
 function recruitPhrase(regular: number, elite: number, leaders: number, nationId: string): string {
   const nation = NATION_NAME[nationId] ?? nationId;
   const parts: string[] = [];
