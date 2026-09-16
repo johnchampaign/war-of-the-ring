@@ -1249,30 +1249,42 @@ for (const id of ['sh-char-05', 'sh-char-06', 'sh-char-07']) { // Orc Patrol / I
   });
 }
 
-// --- Stormcrow: set back an FP Nation (with the Fellowship/a Companion) + a loss
+// --- Stormcrow: set back an FP Nation (with the Fellowship/a Companion) + a loss.
+// When more than one Nation qualifies, the SHADOW player chooses which (Almanac:
+// "the Shadow Player chooses the Nation that will be moved back"); it used to take the
+// first match silently (player report 2r3060480g063o5c). The Free Peoples then choose
+// the Leader or unit to lose — raised in finalize so that choice survives the card's
+// own cleanup.
 register('sh-str-06', {
-  canPlay: (state) => stormcrowNation(state) !== null,
-  apply(state) {
-    const n = stormcrowNation(state); if (!n) return;
+  canPlay: (state) => stormcrowNations(state).length > 0,
+  targets: (state, _side, applied) => (applied?.length ? [] : stormcrowNations(state).map((nation) => ({ nation }))),
+  applyTarget(state, _side, t) {
+    const n = t.nation!;
     state.nations[n].step = Math.min(3, state.nations[n].step + 1); // move back one step
     log(state, null, 'event', `Stormcrow: ${n} set back one step on the Political Track`);
-    // The FREE PEOPLES player chooses which unit of that Nation to eliminate.
+  },
+  finalize(state, _side, applied) {
+    const n = applied[0]?.nation; if (!n) return;
     const hasUnit = Object.values(state.regions).some((r) => { const u = r.units[n]; return !!u && (u.regular > 0 || u.elite > 0); });
-    if (hasUnit) state.pendingChoice = { owner: 'fp', kind: 'stormcrowLoss', data: { nation: n } };
+    // A Palantír of Orthanc draw already pending waits until the loss is chosen, rather
+    // than one choice overwriting the other.
+    const thenBonusDraw = state.pendingChoice?.kind === 'bonusDraw';
+    if (hasUnit) state.pendingChoice = { owner: 'fp', kind: 'stormcrowLoss', data: { nation: n, ...(thenBonusDraw ? { thenBonusDraw } : {}) } };
   },
 });
-/** An FP Nation, not yet At War, whose region holds the Fellowship or a Companion. */
-function stormcrowNation(state: GameState): Nation | null {
+/** Every FP Nation, not yet At War, whose borders hold the Fellowship or a Companion. */
+function stormcrowNations(state: GameState): Nation[] {
   const inRegion = (id: string): Nation | null => {
     const def = REGIONS[id]!; const n = def.nation as Nation | null;
     return n && isFpNation(n) && state.nations[n].step > 0 ? n : null;
   };
+  const out = new Set<Nation>();
   const fellow = inRegion(state.fellowship.location);
-  if (fellow) return fellow;
+  if (fellow) out.add(fellow);
   for (const id of Object.keys(state.regions)) {
-    if (state.regions[id]!.characters.some((c) => COMPANION_SET.has(c))) { const n = inRegion(id); if (n) return n; }
+    if (state.regions[id]!.characters.some((c) => COMPANION_SET.has(c))) { const n = inRegion(id); if (n) out.add(n); }
   }
-  return null;
+  return [...out];
 }
 
 // --- Special Hunt tiles: the card brings a tile "into play"; it joins the Hunt
@@ -1589,11 +1601,17 @@ const canSeparateOnMordorTrack = (state: GameState): boolean =>
  *  checked both before (already-positioned) and after the moves (idempotent via the
  *  not-At-War guard). */
 function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
+  // Only an UNCAPTURED trigger region rouses the Nation: the Almanac, on both cards —
+  // "Does not permit advancing the Political Track or activating the … Nation if the
+  // Companion ends movement at a captured (i.e., Shadow controlled) region" (player
+  // report 3a3e73174f1m1s4b).
+  const rousing = (state: GameState): boolean => trigger.some((r) => settlementController(state, r) !== 'shadow'
+    && (state.regions[r]?.characters ?? []).some((c) => COMPANION_SET.has(c)));
   const seps = (state: GameState): [string, RegionId][] => Object.entries(state.characters.inPlay).filter(([c]) => COMPANION_SET.has(c)) as [string, RegionId][];
   const canMove = (state: GameState, c: string, from: RegionId): boolean => characterDestinations(state, 'fp', c, from).length > 0;
   const checkRouse = (state: GameState): void => {
     if (isAtWar(state, nation)) return;
-    if (trigger.some((r) => (state.regions[r]?.characters ?? []).some((c) => COMPANION_SET.has(c)))) {
+    if (rousing(state)) {
       activateNation(state, nation, { viaCompanion: true }); advancePolitical(state, nation, 99);
       const nm = nation.charAt(0).toUpperCase() + nation.slice(1);
       log(state, null, 'event', `A Companion rouses the ${nm} to War`);
@@ -1626,7 +1644,7 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
     return done;
   };
   return {
-    canPlay: (state) => seps(state).some(([c, from]) => canMove(state, c, from)) || (!isAtWar(state, nation) && trigger.some((r) => (state.regions[r]?.characters ?? []).some((c) => COMPANION_SET.has(c)))),
+    canPlay: (state) => seps(state).some(([c, from]) => canMove(state, c, from)) || (!isAtWar(state, nation) && rousing(state)),
     apply: (state) => checkRouse(state),     // rouse from an already-positioned Companion
     repeat: 24,
     optionalFromStart: true,                  // "any or ALL" — moving zero is allowed
@@ -1811,7 +1829,10 @@ register('fp-char-17', separateViaCard({
   extraMove: 1,
   after: (state) => {
     const trig = ['dale', 'erebor', 'woodland-realm'];
-    if (['gimli', 'legolas'].some((c) => trig.includes(charRegion(state, c) ?? ''))) {
+    // …and only while that region is uncaptured (Almanac: "this card does not permit
+    // activating Nations or advancing them … if the region they are standing at is
+    // captured"; player report 3a3e73174f1m1s4b).
+    if (['gimli', 'legolas'].some((c) => { const r = charRegion(state, c); return !!r && trig.includes(r) && settlementController(state, r) !== 'shadow'; })) {
       activateNation(state, 'dwarves', { viaCompanion: true }); activateNation(state, 'north', { viaCompanion: true });
       advancePolitical(state, 'dwarves', 1); advancePolitical(state, 'elves', 1); advancePolitical(state, 'north', 1);
       log(state, null, 'event', 'There and Back Again rouses the Dwarves/Elves/North');

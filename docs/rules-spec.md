@@ -37,6 +37,23 @@ base game, 2-player (Free Peoples = **FP**, Shadow = **SH**). Expansions and
   containing units of that Nation is attacked" (p.35), which reads the units, not
   the ground. The other Fortification, **Fords of Isen, IS a Rohan region**.
   Player report (2026-08-13) corrected us on this; probe: `probe-osgiliath-neutral`.
+  **Drúadan Forest IS a Gondor region** (no Settlement) — Almanac, *Boromir*: "the
+  Gondor region … can be a Settlement or in a region without a Settlement icon (i.e.,
+  Drúadan Forest, Erech, or Anfalas)". The map data had it neutral, letting a
+  not-At-War Rohan Army walk in. Player report 4h564p406i0b6l11 (2026-09-16); probe:
+  `probe-rules-batch-0916`.
+- **Reveal destinations** (p.39): the revealed Fellowship's move "can never end in a
+  region containing a Free Peoples Stronghold or City controlled by the Free Peoples"
+  — a Settlement of a *Free Peoples Nation* that is uncaptured (Almanac: "an
+  unconquered Free Peoples City or Stronghold"). A Shadow Stronghold the Free Peoples
+  have captured (Moria) is not one, so the Fellowship may end there. Player report
+  51605i2q17082f2s; `probe-rules-batch-0916`.
+- **Stormcrow** (sh-str-06): when the Fellowship/Companions stand in more than one
+  qualifying Nation, the Shadow player chooses (Almanac); the Free Peoples then choose
+  the Leader or unit lost. **Book of Mazarbul / Fear! Fire! Foes! / There and Back
+  Again** rouse or advance a Nation only from an uncaptured trigger region (Almanac:
+  no activation "if the Companion ends movement at a captured … region"). Player
+  reports 2r3060480g063o5c, 3a3e73174f1m1s4b; `probe-rules-batch-0916`.
 - **Settlements**: Town, City, Stronghold. **Fortifications**: Osgiliath, Fords
   of Isen (p.10–11). City = 1 VP to the opponent if captured; Stronghold = 2 VP
   (p.11, p.44).

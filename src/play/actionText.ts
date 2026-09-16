@@ -103,6 +103,7 @@ export function describeAction(a: WotrAction): string {
       if (a.companion && !a.region) return `${cardName(a.card)}: separate ${charName(a.companion)} (joins the travelling group)`;
       if (a.figure && a.region && !a.nation && !a.to) return `${cardName(a.card)}: upgrade a Regular to Elite in ${rName(a.region)}`;
       if (a.figure) return `${cardName(a.card)}: recruit a${a.nation ? ` ${nationName(a.nation)}` : ''} ${a.figure === 'elite' ? 'Elite' : 'Regular'}${a.region ? ` in ${rName(a.region)}` : ''}`;
+      if (a.nation && a.card === 'sh-str-06') return `${cardName(a.card)}: set ${nationName(a.nation)} back one step`;
       if (a.nation) return `${cardName(a.card)}: activate ${nationName(a.nation)} (advance 1 step)`;
       const dest = a.companion ? charName(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
       const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';

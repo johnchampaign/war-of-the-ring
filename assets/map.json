@@ -401,7 +401,7 @@
     },
     "druadan-forest": {
       "name": "Drúadan Forest",
-      "nation": null,
+      "nation": "gondor",
       "settlement": null,
       "vp": 0,
       "setup": null,

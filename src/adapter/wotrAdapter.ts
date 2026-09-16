@@ -327,13 +327,17 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return acts;
       }
       case 'revealMove': {
-        // The FP chooses where the figure moves (up to Progress); never ending in an
-        // FP-controlled City/Stronghold (rulebook p.39).
+        // The FP chooses where the figure moves (up to Progress); never ending in "a Free
+        // Peoples Stronghold or City controlled by the Free Peoples" (rulebook p.39) —
+        // an UNCONQUERED Free Peoples one (Almanac). A Shadow Stronghold the Free Peoples
+        // have captured, like Moria, is still a Shadow Stronghold, so the Fellowship may
+        // reveal into it (player report 51605i2q17082f2s).
         const fs = state.fellowship;
         const acts: WotrAction[] = [];
         for (const r of regionsWithin(fs.location, fs.progress)) {
           const def = REGIONS[r]!;
-          if ((def.settlement === 'City' || def.settlement === 'Stronghold') && settlementController(state, r) === 'fp') continue;
+          if ((def.settlement === 'City' || def.settlement === 'Stronghold') && !!def.nation
+            && sideOfNation(def.nation as Nation) === 'fp' && settlementController(state, r) === 'fp') continue;
           acts.push({ kind: 'revealMove', target: r });
         }
         return acts.length ? acts : [{ kind: 'revealMove', target: fs.location }]; // fallback: reveal in place
@@ -781,7 +785,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         if (u && u[action.figure] > 0) { u[action.figure] -= 1; state.reinforcements[action.nation][action.figure] += 1; }
       }
       log(state, null, 'event', `Stormcrow: Free Peoples lose a ${action.nation} ${action.figure === 'leader' ? 'Leader' : action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
-      state.pendingChoice = null; break; // the turn already passed when the Event resolved
+      // The turn already passed when the Event resolved; a Palantír draw held back
+      // behind this loss comes up now.
+      state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw
+        ? { owner: 'shadow', kind: 'bonusDraw', data: {} } : null;
+      break;
     }
     case 'discardCard': {
       requireChoice(state, 'discardCard', actor); // discard down to the 6-card limit (player's choice)
@@ -808,12 +816,20 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       else if (beginSeparation(state, action.companion)) placeSeparatedCompanion(state, action.companion, dest);
       data.left -= 1;
       if (data.left > 0 && state.fellowship.companions.some((c) => c !== 'gollum')) break; // re-prompt for the next
-      state.pendingChoice = null; break; // the turn already passed when the Event resolved
+      // The turn already passed when the Event resolved; a Palantír draw held back
+      // behind this loss comes up now.
+      state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw
+        ? { owner: 'shadow', kind: 'bonusDraw', data: {} } : null;
+      break;
     }
     case 'bonusDraw': {
       requireChoice(state, 'bonusDraw', actor); // Palantír of Orthanc bonus draw (or decline)
       if (action.deck !== 'none') drawOne(state, actor, action.deck, 'Palantír of Orthanc');
-      state.pendingChoice = null; break; // the turn already passed when the Event resolved
+      // The turn already passed when the Event resolved; a Palantír draw held back
+      // behind this loss comes up now.
+      state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw
+        ? { owner: 'shadow', kind: 'bonusDraw', data: {} } : null;
+      break;
     }
     case 'freeCharEvent': {
       requireChoice(state, 'freeCharEvent', actor); // declined the Ents Awake free play — it is "immediately" or not at all
