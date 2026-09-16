@@ -99,5 +99,32 @@ console.log('\n=== Rage of the Dunlendings keeps its Done — the moves after th
   check('after the recruit the optional moves offer Done', resolving(s, 'sh-str-11') && hasDone(s, 'shadow'));
 }
 
+console.log('\n=== Hill-trolls: "Replace two" — no Done, besieged Regulars count, ends when none are left ===');
+{
+  // Reports 3b156u441e4m3i6a (a Done button on a mandatory card) and 3n4q1b5m6n5y4d2g
+  // (Dol Guldur's Regulars, besieged in their Stronghold, could not be picked).
+  let s = board('shadow');
+  s.nations.sauron.active = true; s.nations.sauron.step = 0;
+  const dg = s.regions['dol-guldur'];
+  dg.siegeBox = { units: { sauron: { regular: 3, elite: 1 } }, leaders: 0, nazgul: 0, characters: [] };
+  dg.units = { elves: { regular: 1, elite: 2 } }; dg.nazgul = 0; dg.besieged = true;
+  s = play(s, 'shadow', 'sh-str-15');
+  check('the card asks which Regular to replace', !!s && resolving(s, 'sh-str-15'), s?.pendingChoice?.kind ?? 'not playable');
+  check('no Done before the first pick', !hasDone(s, 'shadow'));
+  check('the besieged Dol Guldur garrison is a target', legal(s, 'shadow').some((a) => a.kind === 'eventTarget' && a.region === 'dol-guldur'));
+  s = pickFirst(s, 'shadow', (a) => a.region === 'dol-guldur');
+  check('the boxed Regular became an Elite', s.regions['dol-guldur'].siegeBox.units.sauron.regular === 2 && s.regions['dol-guldur'].siegeBox.units.sauron.elite === 2);
+  check('no Done after the first pick (the report)', resolving(s, 'sh-str-15') && !hasDone(s, 'shadow'));
+
+  // Only ONE Sauron Regular on the whole board: the card replaces it and ends by itself.
+  let t = board('shadow');
+  t.nations.sauron.active = true; t.nations.sauron.step = 0;
+  for (const r of Object.values(t.regions)) if (r.units.sauron) r.units.sauron.regular = 0;
+  t.regions['barad-dur'].units.sauron = { regular: 1, elite: 0 };
+  t = play(t, 'shadow', 'sh-str-15');
+  t = pickFirst(t, 'shadow', (a) => a.region === 'barad-dur');
+  check('with nothing left to replace the card ends on its own', !!t && !resolving(t, 'sh-str-15'), t?.pendingChoice?.kind ?? 'resolved');
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');
 process.exit(failures ? 1 : 0);

@@ -361,7 +361,10 @@ die already showing an Eye.
   picks that place something, so the loop ends by itself when reinforcements or room
   run out. *Pits of Mordor* places one Regular where only one fits or remains, instead
   of refusing the pair. Cards that print "up to" or "may" keep `done` — *Rage of the
-  Dunlendings*' follow-up moves, *Hill-trolls*. A **Muster Action die** may still
+  Dunlendings*' follow-up moves. *Hill-trolls* prints "Replace **two**" (Card Text
+  Reference), not "up to", so it has no Done either and ends when no Sauron Regular or
+  reinforcement Elite is left; a besieged garrison's Regulars count *(player reports
+  3b156u441e4m3i6a, 3n4q1b5m6n5y4d2g)*. A **Muster Action die** may still
   recruit partially (Almanac), so its second-recruit step keeps its Done *(player
   report 4f0y2f2r4k315b68; John, 2026-09-14: follow the rules)*.
   Regression: `scripts/probe-event-recruit-no-done.mjs`.

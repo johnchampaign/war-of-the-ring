@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, forceSide, activateOnCompanionLand } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, forceSide, figureForce, activateOnCompanionLand } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -2046,22 +2046,30 @@ register('fp-str-09', recruitChoiceCard('fp', [{ nation: 'rohan', region: 'edora
   leaders: [{ nation: 'rohan', region: 'edoras' }],
 }));
 
-// --- Hill-Trolls: replace up to two Sauron Regulars on the board with Elites ---
+// --- Hill-Trolls: replace two Sauron Regulars on the board with Elites ------------
+// The card says "Replace two", not "up to two": Event effects are mandatory and apply
+// to the maximum extent possible (p.22), so there is no stop-early "done" — the card
+// ends on its own once no Regular (or no Elite in reinforcements) is left (player
+// report 3b156u441e4m3i6a). A garrison besieged in its Stronghold is still on the
+// board, so its Regulars count too (player report 3n4q1b5m6n5y4d2g: Dol Guldur under
+// siege could not be picked).
+const sauronRegularsAt = (state: GameState, id: RegionId): number =>
+  figureForce(state, id, 'shadow').units.sauron?.regular ?? 0;
 register('sh-str-15', {
   canPlay: (state) => isAtWar(state, 'sauron') && state.reinforcements.sauron.elite > 0
-    && Object.values(state.regions).some((r) => (r.units.sauron?.regular ?? 0) > 0),
-  // "Replace up to two Sauron Regulars with Elites" — the player chooses WHICH
-  // Regulars (board-click a region with one), not an arbitrary first-found pair.
-  repeat: 2, optionalFromStart: true,
+    && Object.keys(state.regions).some((id) => sauronRegularsAt(state, id) > 0),
+  // The player chooses WHICH Regulars (board-click a region with one), not an
+  // arbitrary first-found pair.
+  repeat: 2, noDone: true,
   targets(state) {
     if (state.reinforcements.sauron.elite <= 0) return [];
     return Object.keys(state.regions)
-      .filter((id) => (state.regions[id]!.units.sauron?.regular ?? 0) > 0)
+      .filter((id) => sauronRegularsAt(state, id) > 0)
       .map((region) => ({ region, figure: 'elite' as const }));
   },
   applyTarget(state, _side, t) {
     if (!t.region) return;
-    const u = state.regions[t.region]!.units.sauron;
+    const u = figureForce(state, t.region, 'shadow').units.sauron;
     if (!u || u.regular <= 0 || state.reinforcements.sauron.elite <= 0) return;
     u.regular--; u.elite++; state.reinforcements.sauron.regular++; state.reinforcements.sauron.elite--;
     log(state, null, 'event', `Hill-Trolls: upgraded a Sauron Regular to Elite in ${t.region}`);

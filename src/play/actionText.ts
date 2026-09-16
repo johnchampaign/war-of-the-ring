@@ -163,7 +163,11 @@ export function describeAction(a: WotrAction): string {
     case 'discardCard': return `Discard "${cardName(a.card)}"`;
     case 'huntPreventDraw': return a.prevent ? 'Discard Wizard’s Staff — no Hunt tile' : 'Let the Shadow draw';
     case 'huntRedraw': return a.redraw ? 'Discard Mithril Coat — redraw the tile' : 'Keep the drawn tile';
-    default: return JSON.stringify(a);
+    // The Ents Awake's decline had no label, so the button showed raw action data
+    // (player reports xs3bbc2rum6kcaq4, 4p4m4x285o2c200m).
+    case 'freeCharEvent': return 'Don’t play a Character Event card';
+    // Exhaustive: a new action kind without a label is a type error, not raw JSON on a button.
+    default: { const unlabeled: never = a; return JSON.stringify(unlabeled); }
   }
 }
 

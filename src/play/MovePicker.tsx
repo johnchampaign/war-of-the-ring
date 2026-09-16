@@ -6,7 +6,7 @@ import { useState } from 'react';
 import type { GameState, Nation, Side } from '../engine/types';
 import type { MoveSel, WotrAction } from '../adapter/wotrAction';
 import { characterSide, sideOfNation } from '../engine/data';
-import { sortieForce } from '../engine/combat';
+import { attackError, sortieForce } from '../engine/combat';
 import { charName } from './charInfo';
 import mapData from '../../assets/map.json';
 
@@ -87,6 +87,17 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
     if (left.length) rg.characters = left;
     return rg;
   };
+  // An attack split the engine would refuse (e.g. a rearguard of Leaders with no unit)
+  // used to submit anyway and fail silently with only a console error (player report
+  // 2r1m6q3i35365j1a). Check it here and say why, instead of letting the click vanish.
+  // The Character-die Leader requirement depends on the die, so the engine still
+  // owns that one.
+  const SPLIT_HINTS: Record<string, string> = {
+    'A rearguard must contain at least one unit': 'Leaders or Characters left behind need at least one unit to stay with them — keep a unit back, or send them into the attack',
+    'The attacking army must keep at least one unit': 'The attacking Army needs at least one unit',
+  };
+  const rawSplitError = attackMode && !isWhole ? attackError(view, from, you, buildRearguard()) : null;
+  const splitError = rawSplitError && (SPLIT_HINTS[rawSplitError] ?? rawSplitError);
   const make = (split: boolean): WotrAction =>
     kind === 'advance' ? { kind: 'advanceChoice', advance: true, move: split ? buildSel() : undefined }
       : kind === 'holdBack' ? { kind: 'advanceHoldBack', back: split ? buildRearguard() : undefined }
@@ -135,6 +146,7 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
             <span style={{ flex: 1 }}>{charName(c)}</span>
           </label>
         ))}
+        {splitError && <div style={{ fontSize: 12, color: '#f0a080', marginTop: 8 }}>{splitError}.</div>}
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
           {/* ONE confirm button. There used to be two — "{verb} all" and "{verb}
               selected" — but the default selection IS the whole Army, so the second was
@@ -146,7 +158,7 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
               Hold-back: keeping NOBODY forward is a legal answer (p.31's advance is
               optional) unless the advance captured the Settlement — every other picker
               still needs at least one moving unit. */}
-          <button style={primary} disabled={!isWhole && totalUnits < 1 && !(holdBackMode && !holdBackMustHold)}
+          <button style={primary} disabled={!!splitError || (!isWhole && totalUnits < 1 && !(holdBackMode && !holdBackMustHold))}
             onClick={() => onConfirm(make(!isWhole))}>{verb}</button>
           <button style={ghost} onClick={onCancel}>Cancel</button>
         </div>
