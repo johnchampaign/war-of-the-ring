@@ -5,7 +5,7 @@
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState, Side, DieFace } from '../engine/types';
 import { charDieLeaders } from '../engine/armies';
-import { playFacesFor } from '../engine/data';
+import { playFacesFor, nationName } from '../engine/data';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { charName } from './charInfo';
@@ -43,7 +43,7 @@ export function describeAction(a: WotrAction): string {
     case 'separateCompanion': return `Separate ${charName(a.companion)}`;
     case 'changeGuide': return `Make ${charName(a.companion)} the Guide`;
     // The die chip / picker already says which dice can pay (player report 5d682g3j3s4i221d).
-    case 'companionMuster': return `${charName(a.companion)}: advance ${cap(a.nation)}`;
+    case 'companionMuster': return `${charName(a.companion)}: advance ${nationName(a.nation)}`;
     // Die FACES have proper names and proper articles: "change an Event die to an
     // Army/Muster die", never "change a Event die to ArmyMuster" (player report
     // 2a2z6u3v703c445v).
@@ -67,14 +67,14 @@ export function describeAction(a: WotrAction): string {
     case 'placeGandalf': return `Place Gandalf the White in ${rName(a.region)}`;
     case 'drawEvent': return `Draw a ${cap(a.deck)} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
-    case 'diplomaticAction': return `Diplomacy: advance ${cap(a.nation)}`;
+    case 'diplomaticAction': return `Diplomacy: advance ${nationName(a.nation)}`;
     case 'recruitUnit': {
       const fig = a.nazgul ? 'Nazgûl' : a.leader ? 'Leader' : a.elite ? 'Elite' : 'Regular';
       const more = a.then ? ' (+ an optional 2nd figure elsewhere)' : '';
-      return `Recruit ${cap(a.nation)} ${fig} in ${rName(a.region)}${more}`; // nation first, as the log says it (report 261i321q390m3a1m)
+      return `Recruit ${nationName(a.nation)} ${fig} in ${rName(a.region)}${more}`; // nation first, as the log says it (report 261i321q390m3a1m)
     }
     case 'recruitSecond':
-      return a.done ? 'Muster: no second figure' : `Muster 2nd: ${a.figure === 'leader' ? 'Leader/Nazgûl' : 'Regular'}${a.nation ? ` ${cap(a.nation)}` : ''} in ${rName(a.region!)}`;
+      return a.done ? 'Muster: no second figure' : `Muster 2nd: ${a.figure === 'leader' ? 'Leader/Nazgûl' : 'Regular'}${a.nation ? ` ${nationName(a.nation)}` : ''} in ${rName(a.region!)}`;
     case 'bringMinion': return `Bring ${charName(a.minion)} into play in ${rName(a.region)}`;
     case 'eventTarget': {
       if (a.done) return `${cardName(a.card)}: done`;
@@ -102,8 +102,8 @@ export function describeAction(a: WotrAction): string {
       if (a.companion && a.from) return `${cardName(a.card)}: move ${charName(a.companion)} (on the map, in ${rName(a.from)})`;
       if (a.companion && !a.region) return `${cardName(a.card)}: separate ${charName(a.companion)} (joins the travelling group)`;
       if (a.figure && a.region && !a.nation && !a.to) return `${cardName(a.card)}: upgrade a Regular to Elite in ${rName(a.region)}`;
-      if (a.figure) return `${cardName(a.card)}: recruit a${a.nation ? ` ${cap(a.nation)}` : ''} ${a.figure === 'elite' ? 'Elite' : 'Regular'}${a.region ? ` in ${rName(a.region)}` : ''}`;
-      if (a.nation) return `${cardName(a.card)}: activate ${cap(a.nation)} (advance 1 step)`;
+      if (a.figure) return `${cardName(a.card)}: recruit a${a.nation ? ` ${nationName(a.nation)}` : ''} ${a.figure === 'elite' ? 'Elite' : 'Regular'}${a.region ? ` in ${rName(a.region)}` : ''}`;
+      if (a.nation) return `${cardName(a.card)}: activate ${nationName(a.nation)} (advance 1 step)`;
       const dest = a.companion ? charName(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
       const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';
       return `${cardName(a.card)}: ${verb}${a.from ? `${rName(a.from)} → ` : ''}${dest}`;
@@ -114,7 +114,7 @@ export function describeAction(a: WotrAction): string {
       return a.companion ? `Also separate ${charName(a.companion)} (travel with the group)` : `Place the group in ${rName(a.target!)}`;
     case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;
     case 'armyMove2': return a.done ? 'No second army move' : `Also move army ${rName(a.from!)} → ${rName(a.to!)}`;
-    case 'removeExcess': return `Remove a ${cap(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'}`;
+    case 'removeExcess': return `Remove a ${nationName(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'}`;
     case 'attack': return a.from === a.to ? `⚔ Assault the siege at ${rName(a.to)}` : `Attack ${rName(a.to)} (from ${rName(a.from)})`;
     case 'skipDie': return `Discard ${aFace(a.face)} die`;
     case 'pass': return 'Pass';
@@ -158,7 +158,7 @@ export function describeAction(a: WotrAction): string {
     case 'guideDraw': return a.draw ? 'Gandalf: draw a card' : 'Gandalf: don’t draw';
     case 'sorcererDraw': return a.draw ? 'Sorcerer: draw a card' : 'Sorcerer: don’t draw';
     case 'lureChoice': return a.mode === 'corruption' ? 'Lure: take Corruption' : 'Lure: eliminate the Companion';
-    case 'stormcrowLoss': return `Lose ${cap(a.nation)} ${a.figure === 'leader' ? 'Leader' : a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
+    case 'stormcrowLoss': return `Lose ${nationName(a.nation)} ${a.figure === 'leader' ? 'Leader' : a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
     case 'breakingSep': return `Separate ${charName(a.companion)} from the Fellowship`;
     case 'discardCard': return `Discard "${cardName(a.card)}"`;
     case 'huntPreventDraw': return a.prevent ? 'Discard Wizard’s Staff — no Hunt tile' : 'Let the Shadow draw';

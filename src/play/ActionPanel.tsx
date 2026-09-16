@@ -5,7 +5,7 @@ import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState } from '../engine/types';
 import { useCardArt } from './artCache';
 import { describeAction, actionDie, dieOptions, trivialDie } from './actionText';
-import { aFace } from './names';
+import { aFace, inNationOrder } from './names';
 import { FACE } from './DiceTray';
 import type { Hover } from './HoverPreview';
 import type { Side, DieFace } from '../engine/types';
@@ -55,7 +55,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // (player report 1v1g2y5x095p2m1n). They collapse into ONE button with the same
   // face picker the other ambiguous actions use.
   const allSkips = actions.filter((a) => a.kind === 'skipDie') as Extract<WotrAction, { kind: 'skipDie' }>[];
-  const rest = actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie');
+  const rest = inNationOrder(actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie'));
   const sel = selectedDie ?? null;
   // A die picked in the tray decides which die "Discard" spends, like every other
   // action (player report: the discard button still asked which die).

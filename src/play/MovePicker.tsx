@@ -142,7 +142,7 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
         {maxNazgul > 0 && <Step label="Nazgûl" val={nazgul} max={maxNazgul} set={setNazgul} />}
         {myChars.map((c) => (
           <label key={c} style={{ ...row, cursor: 'pointer' }}>
-            <input type="checkbox" checked={chars.has(c)} onChange={(e) => { const s = new Set(chars); e.target.checked ? s.add(c) : s.delete(c); setChars(s); }} />
+            <input type="checkbox" name={`move-char-${c}`} checked={chars.has(c)} onChange={(e) => { const s = new Set(chars); e.target.checked ? s.add(c) : s.delete(c); setChars(s); }} />
             <span style={{ flex: 1 }}>{charName(c)}</span>
           </label>
         ))}

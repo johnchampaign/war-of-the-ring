@@ -3,7 +3,11 @@
 // marker) must be activated before they can reach At War. This mirrors the
 // board's political track so the player can read war-readiness at a glance.
 import type { GameState, Nation } from '../engine/types';
-import { FP_NATIONS, SHADOW_NATIONS } from '../engine/types';
+import { FP_NATIONS } from '../engine/types';
+import { NATION_DISPLAY_ORDER } from './names';
+
+// Rulebook order: Isengard, Sauron, Southrons & Easterlings (player report 1t2o400j3g3t286i).
+const SHADOW_ROWS = NATION_DISPLAY_ORDER.slice(5) as unknown as Nation[];
 
 const NATION_COLOR: Record<Nation, string> = {
   dwarves: '#7a5230', elves: '#5fbf6a', gondor: '#2f4f9e', north: '#7fb6e6',
@@ -24,11 +28,11 @@ export function PoliticsPanel({ view }: { view: GameState }) {
   return (
     <div style={panel}>
       <div style={{ fontWeight: 600, fontSize: 13 }}>
-        Politics <span style={{ fontSize: 9.5, fontWeight: 400, color: '#887' }}>· pool left to recruit: <b style={{ color: '#cbbf9a' }}>R</b>egular <b style={{ color: '#cbbf9a' }}>E</b>lite <b style={{ color: '#cbbf9a' }}>L</b>eader/<b style={{ color: '#cbbf9a' }}>N</b>azgûl</span>
+        Politics <span style={{ fontSize: 9.5, fontWeight: 400, color: '#887' }}>· pool left to recruit: <b style={{ color: '#cbbf9a' }}>R</b>egular <b style={{ color: '#cbbf9a' }}>E</b>lite <b style={{ color: '#cbbf9a' }}>L</b>eader</span>
       </div>
       <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
         <NationGroup view={view} nations={FP_NATIONS} label="Free Peoples" />
-        <NationGroup view={view} nations={SHADOW_NATIONS} label="Shadow" />
+        <NationGroup view={view} nations={SHADOW_ROWS} label="Shadow" />
       </div>
     </div>
   );
@@ -45,7 +49,7 @@ function NationGroup({ view, nations, label }: { view: GameState; nations: Natio
 
 // The reinforcement pool still available to recruit for a Nation. A 0 reads dim-red
 // so a depleted pool (the usual reason "I can't recruit here" — every figure is
-// already on the board) is obvious at a glance. Sauron shows Nazgûl; others a Leader.
+// already on the board) is obvious at a glance. Sauron's Leader count is its Nazgûl.
 function ReinfPips({ r }: { r: GameState['reinforcements'][Nation] }) {
   const cell = (label: string, val: number, title: string) => (
     <span title={title} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, fontSize: 10, color: val === 0 ? '#9a5a5a' : '#cdbf95' }}>
@@ -56,7 +60,9 @@ function ReinfPips({ r }: { r: GameState['reinforcements'][Nation] }) {
     <span style={{ display: 'inline-flex', gap: 5, marginLeft: 'auto', paddingLeft: 4 }}>
       {cell('R', r.regular, 'Regular units left in the reinforcement pool')}
       {cell('E', r.elite, 'Elite units left in the reinforcement pool')}
-      {r.nazgul != null ? cell('N', r.nazgul, 'Nazgûl available to recruit') : cell('L', r.leader, 'Leaders left in the reinforcement pool')}
+      {/* One letter for every Nation, so the numbers line up in a column: Sauron's
+          Leaders are its Nazgûl, and the tooltip says so (player report 4l731f6o5d0m4k2f). */}
+      {r.nazgul != null ? cell('L', r.nazgul, 'Nazgûl (Sauron’s Leaders) available to recruit') : cell('L', r.leader, 'Leaders left in the reinforcement pool')}
     </span>
   );
 }

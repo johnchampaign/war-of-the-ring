@@ -69,7 +69,8 @@ export function ReportButton({ report, clientBuild }: {
                 </button>
               ))}
             </div>
-            <textarea autoFocus value={msg} onChange={(e) => setMsg(e.target.value)} rows={5}
+            {/* id + name: Chrome flags a nameless form field in the console (player report 455i1o4y485o4a0n). */}
+            <textarea id="wotr-report-message" name="report-message" aria-label="Describe the problem" autoFocus value={msg} onChange={(e) => setMsg(e.target.value)} rows={5}
               placeholder="What happened? What did you expect? The more detail, the better."
               style={textarea} />
             {err && <div style={{ color: '#e98', fontSize: 12, margin: '4px 0' }}>⚠ {err}</div>}

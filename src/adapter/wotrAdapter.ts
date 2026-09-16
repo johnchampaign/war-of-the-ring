@@ -11,7 +11,7 @@ import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separat
 import { extraHunt } from '../engine/hunt';
 import { log, logCardDraw } from '../engine/log';
 import {
-  recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
+  recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, splitBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders,
 } from '../engine/armies';
 import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
@@ -988,14 +988,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         ? moveArmySplit(state, action.from, action.to, actor, action.move, !viaArmyDie)
         : moveArmy(state, action.from, action.to, actor);
       if (!moved) {
-        const reason = moveBlockReason(state, action.from, action.to, actor);
-        // Say only what actually barred the move. "at least one Army unit must move" is
-        // a precondition the move menu already enforces, so it can never be the reason
-        // a split failed — and "Leader/Nazgûl/Character" is a slash-pile where "Leader
-        // or Character" reads (player report 61393i6w1p0f1p6o).
-        throw new Error(reason ?? (action.move
-          ? 'That split is not legal — a Character-die army move must take a Leader or Character along with the moving units.'
-          : 'Illegal move.'));
+        // Say only what actually barred the move: a split names the split rule it broke
+        // (player reports 61393i6w1p0f1p6o, 5j5j6p09554n1q5s).
+        const reason = action.move
+          ? splitBlockReason(state, action.from, action.to, actor, action.move, !viaArmyDie)
+          : moveBlockReason(state, action.from, action.to, actor);
+        throw new Error(reason ?? 'Illegal move.');
       }
       // An Army die may move a SECOND different army (rulebook p.27); a Character die moves only one.
       // Over-stacking (>10) prompts the player to remove the excess first (p.26).
@@ -1021,7 +1019,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
           ? moveArmySplit(state, action.from!, action.to!, actor, action.move, false)
           : moveArmy(state, action.from!, action.to!, actor);
         if (!ok2) {
-          const reason = moveBlockReason(state, action.from!, action.to!, actor);
+          const reason = action.move
+            ? splitBlockReason(state, action.from!, action.to!, actor, action.move, false)
+            : moveBlockReason(state, action.from!, action.to!, actor);
           throw new Error(reason ?? 'That second move is not legal (check the stacking limit and the moving nation\'s political status).');
         }
         afterMove(state, actor, action.to!, { kind: 'pass' }); // the 2nd move may also over-stack

@@ -183,7 +183,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       : a;
     setBusy(true);
     await paint();
-    try { await g.submit(withDie); setDie(null); } finally { inFlight.current = false; setBusy(false); }
+    // A rejected action is already surfaced: useGame re-syncs, sets g.error (the hint
+    // banner shows it) and then rethrows. Every caller fires and forgets, so letting
+    // that rethrow escape only put an "Uncaught (in promise)" in the console (player
+    // report 2b2u0a575e5u3a70). Resolve false instead so a chained caller can stop.
+    try { await g.submit(withDie); setDie(null); return true; }
+    catch { return false; }
+    finally { inFlight.current = false; setBusy(false); }
   }, [g, activeDie]);
 
   // Undo (local hotseat / vs-AI only — the online client has no undo()). A
@@ -466,7 +472,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // are already board clicks. A group is picked one at a time (the card allows any
     // number), so the submits run in order.
     if (opt.kind === 'cardchar') { clearMove(); void submit(opt.act); return; }
-    if (opt.kind === 'cardgroup') { clearMove(); void (async () => { for (const a of opt.acts) await submit(a); })(); return; }
+    if (opt.kind === 'cardgroup') { clearMove(); void (async () => { for (const a of opt.acts) if (await submit(a) === false) break; })(); return; }
     if (opt.kind === 'army') { setCharPick(null); setSelected(region); }
     else if (opt.kind === 'assault') { setCharPick(null); setSelected(null); setMoveDraft({ from: region, to: region, kind: 'attack' }); } // storm the besieged Stronghold
     else if (opt.kind === 'muster') { setCharPick(null); setSelected(null); setMusterMenu(region); } // pick the bundle for this Settlement

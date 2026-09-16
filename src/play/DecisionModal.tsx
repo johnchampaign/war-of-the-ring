@@ -16,7 +16,7 @@ import mapData from '../../assets/map.json';
 import { characterSide } from '../engine/data';
 import { forceLeadership } from '../engine/armies';
 import { charName } from './charInfo';
-import { cardSideLine } from './names';
+import { cardSideLine, inNationOrder } from './names';
 import eventCards from '../../assets/event-cards.json';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
@@ -91,7 +91,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
   // list of buttons — the binary Retreat-or-stand choice above it stays here (player
   // report 0f3003342g666741). The modal keeps its frame so the battle context is
   // visible while you click.
-  const decisions = actions.filter((a) => (isDecisionAction(a) || (evModal && a.kind === 'eventTarget') || (freeCard && a.kind === 'playEvent'))
+  const decisions = inNationOrder(actions).filter((a) => (isDecisionAction(a) || (evModal && a.kind === 'eventTarget') || (freeCard && a.kind === 'playEvent'))
     && a.kind !== 'retreatTo' && a.kind !== 'preCombatRetreat');
 
   // Show only when there's a live decision (battle in progress, or a decision the

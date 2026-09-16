@@ -468,6 +468,49 @@ export function activateOnCompanionLand(state: GameState, side: Side, chars: str
   }
 }
 
+/** Why moveArmySplit refused a selection — the same checks, in the same order, each
+ *  with its own sentence. The adapter used to name the Character-die rule for EVERY
+ *  failed split, so a Will-of-the-West move that left an FP Leader behind with no
+ *  combat units was blamed on "a Character-die army move" (player report
+ *  5j5j6p09554n1q5s). Null when the selection is legal. */
+export function splitBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side, sel: MoveSelection, viaCharacterDie = false): string | null {
+  const src = state.regions[from]!;
+  if (!REGIONS[from]!.adjacency.includes(to)) return 'Those regions are not adjacent.';
+  if (armySide(state, from) !== side) return 'You have no Army to move there.';
+  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return 'A card effect bars the Shadow from that region.';
+  if (!freeForMovement(state, to, side)) return moveBlockReason(state, from, to, side) ?? 'That region is not free for your Army to enter.';
+  let movingUnits = 0;
+  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
+    const have = src.units[n] ?? { regular: 0, elite: 0 };
+    const mr = u.regular ?? 0, me = u.elite ?? 0;
+    if (mr < 0 || me < 0 || mr > have.regular || me > have.elite) return 'Those figures are not in that Army.';
+    movingUnits += mr + me;
+  }
+  if (movingUnits < 1) return 'At least one Army unit must move.';
+  const movingLeaders = sel.leaders ?? 0, movingNazgul = sel.nazgul ?? 0;
+  const chars = (sel.characters ?? []).filter((c) => c !== 'saruman');
+  if (movingLeaders < 0 || movingLeaders > src.leaders || movingNazgul < 0 || movingNazgul > src.nazgul) return 'Those figures are not in that Army.';
+  if (side === 'fp' ? movingNazgul > 0 : movingLeaders > 0) return 'You can only move your own Leaders.';
+  for (const c of chars) if (!src.characters.includes(c) || characterSide(c) !== side) return 'Those figures are not in that Army.';
+  const dn = REGIONS[to]!.nation;
+  for (const n of Object.keys(sel.units ?? {}) as Nation[]) {
+    if (!isAtWar(state, n) && dn && dn !== n) {
+      return `${nationName(n)} is not At War — its units cannot enter another Nation's borders. Advance ${nationName(n)} to War first (or leave its units behind).`;
+    }
+  }
+  const remainingUnits = unitCount(state, from) - movingUnits;
+  if (side === 'fp' && remainingUnits === 0 && src.leaders - movingLeaders > 0) {
+    return 'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.';
+  }
+  const movingSel = { units: sel.units ?? {}, leaders: movingLeaders, nazgul: movingNazgul, characters: chars };
+  if (viaCharacterDie && charDieLeaders(state, movingSel, side, false) < 1) {
+    return side === 'fp'
+      ? 'A Character-die Army move must take a Leader or Companion along with the moving units.'
+      : 'A Character-die Army move must take a Leader or Character (a Nazgûl or Minion) along with the moving units.';
+  }
+  return null;
+}
+
 /** Validate + apply a SPLIT move: only the selected figures move; the rest stay as
  *  a separate Army (rulebook p.27). Enforces the same movement legality as
  *  canMoveArmy plus the split rules: ≥1 unit moves, FP Leaders can't be left with no

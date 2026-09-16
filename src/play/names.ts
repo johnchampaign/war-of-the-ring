@@ -20,6 +20,29 @@ const NATION_NAME: Record<string, string> = Object.fromEntries(
 // Not a Nation, but the same job: a lowercase 'shadow' in a log line is the SIDE.
 const SIDE_WORD: Record<string, string> = { shadow: 'Shadow' };
 
+/** The rulebook's order for the Nations (its component list: the Free Peoples, then
+ *  Isengard, Sauron, Southrons & Easterlings). The engine's own Nation order puts Sauron
+ *  first, so every UI list that names several Nations sorts by this instead (player
+ *  report 1t2o400j3g3t286i). */
+export const NATION_DISPLAY_ORDER = ['dwarves', 'elves', 'gondor', 'north', 'rohan', 'isengard', 'sauron', 'southrons'] as const;
+const NATION_RANK = new Map<string, number>(NATION_DISPLAY_ORDER.map((n, i) => [n, i]));
+
+/** Reorder the entries of each action kind that name a Nation into rulebook order,
+ *  leaving every other entry (and each kind's slots) where it was. */
+export function inNationOrder<T extends { kind: string }>(items: T[]): T[] {
+  const out = items.slice();
+  const slots = new Map<string, number[]>();
+  items.forEach((a, i) => {
+    const n = (a as { nation?: unknown }).nation;
+    if (typeof n === 'string' && NATION_RANK.has(n)) slots.set(a.kind, [...(slots.get(a.kind) ?? []), i]);
+  });
+  for (const idx of slots.values()) {
+    const sorted = idx.map((i) => items[i]!).sort((x, y) => NATION_RANK.get((x as unknown as { nation: string }).nation)! - NATION_RANK.get((y as unknown as { nation: string }).nation)!);
+    idx.forEach((i, k) => { out[i] = sorted[k]!; });
+  }
+  return out;
+}
+
 export const regionName = (id: string): string => REGION_NAME.get(id) ?? id;
 
 /** The `side` printed in the card data is an id-ish token ('FreePeoples'). Card views
