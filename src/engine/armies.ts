@@ -1,7 +1,8 @@
 // Armies: composition queries, mustering (recruit), and movement with settlement
 // capture (rules-spec §1, §6). Combat is in combat.ts.
 import type { GameState, Nation, RegionId, Side, ArmyUnits } from './types';
-import { REGIONS, sideOfNation, characterDef, characterSide, nationName } from './data';
+import { FP_NATIONS } from './types';
+import { REGIONS, sideOfNation, characterDef, characterSide, nationName, COMPANIONS } from './data';
 import { isAtWar, onSettlementCaptured, activateNation } from './politics';
 import { shadowBarredFromRegion } from './persistent';
 import { log } from './log';
@@ -81,7 +82,10 @@ export function armySide(state: GameState, id: RegionId): Side | null {
 /** Combat Strength = unit count capped at 5 dice. */
 export const combatStrength = (state: GameState, id: RegionId): number => Math.min(5, unitCount(state, id));
 
-/** Leadership = Leaders/Nazgûl + Character leadership ratings present, capped 5. */
+/** Leadership = Leaders/Nazgûl + Character leadership ratings present. NOT capped: the
+ *  five-dice limit is on the Leader re-roll (p.28), so it is applied at the roll, after
+ *  forfeits and penalties (player report: Leadership 6 minus a forfeited point showed 5
+ *  but re-rolled only 4, because the cap had already cut 6 to 5 before the forfeit). */
 export function leadership(state: GameState, id: RegionId, side: Side): number {
   return forceLeadership(state, state.regions[id]!, side);
 }
@@ -98,7 +102,7 @@ export function forceLeadership(state: GameState, f: Force, side: Side): number 
   if (side === 'shadow' && state.characters.entered.includes('saruman') && !state.characters.eliminated.includes('saruman')) {
     l += f.units.isengard?.elite ?? 0;
   }
-  return Math.min(5, l);
+  return l;
 }
 
 /** Who controls a region's Settlement (the marker side, or the original owner). */
@@ -443,6 +447,27 @@ export interface MoveSelection {
   characters?: string[];
 }
 
+const FP_NATION_SET = new Set<string>(FP_NATIONS);
+/** RAW p.34: a Companion (or group) that ENDS its movement in a City/Stronghold of a
+ *  Free Peoples Nation it can activate — and not enemy-controlled — activates that
+ *  Nation (presence only; never advances the track). Mirrors the separation rule; the
+ *  Character-die move path previously skipped it (report: Gandalf into The Shire).
+ *  The same rule reads "ends his movement OR ENTERS PLAY", so bringUpgrade calls this
+ *  too when Aragorn is crowned / Gandalf the White arrives. A Companion moving WITH an
+ *  Army ends his movement too, so every Army move calls it as well (player report:
+ *  Strider marched an Army into The Shire and the North stayed passive). */
+export function activateOnCompanionLand(state: GameState, side: Side, chars: string[], to: RegionId): void {
+  if (side !== 'fp') return;
+  const dn = REGIONS[to]?.nation as Nation | undefined;
+  const st = REGIONS[to]?.settlement;
+  if (!dn || !FP_NATION_SET.has(dn) || (st !== 'City' && st !== 'Stronghold')) return;
+  if (settlementController(state, to) === 'shadow') return; // "unless controlled by the enemy"
+  for (const c of chars) {
+    const cn = COMPANIONS[c]?.nation; // 'any' companion (Gandalf/Aragorn-line) activates any FP Nation
+    if (!cn || cn === 'any' || cn === dn) { activateNation(state, dn, { viaCompanion: true }); return; }
+  }
+}
+
 /** Validate + apply a SPLIT move: only the selected figures move; the rest stay as
  *  a separate Army (rulebook p.27). Enforces the same movement legality as
  *  canMoveArmy plus the split rules: ≥1 unit moves, FP Leaders can't be left with no
@@ -499,6 +524,7 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   captureIfEnemySettlement(state, to, side);
   liftSiegeIfAbandoned(state, from); // a besieger that vacates the field lifts the siege
   if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
+  activateOnCompanionLand(state, side, chars, to);
   log(state, null, 'army', `Split army ${from} -> ${to} (${movingUnits} unit${movingUnits > 1 ? 's' : ''})`);
   return true;
 }
@@ -529,6 +555,7 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
   // with no Settlement, where capture wouldn't fire.
   const dn = REGIONS[to]!.nation;
   if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
+  activateOnCompanionLand(state, side, movingChars, to);
   log(state, null, 'army', `Moved army ${from} -> ${to}`);
   return true;
 }

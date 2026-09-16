@@ -17,6 +17,11 @@ export function DieTag({ face }: { face: string }) {
   return <span style={{ background: f.bg, color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{f.label}</span>;
 }
 
+// The fixed die column every action button starts with: the die it spends, or a
+// "choose die" pointer when more than one die could pay.
+const DIE_COL = { width: 62, flexShrink: 0, display: 'flex', alignItems: 'center' } as const;
+const CHOOSE_DIE = <span style={{ fontSize: 10, color: '#cb8', whiteSpace: 'nowrap' }}>choose die ▸</span>;
+
 /** What an action references for the hover inspector (a Companion/Minion or a card). */
 function actionHover(a: WotrAction): Hover {
   if ((a.kind === 'changeGuide' || a.kind === 'separateCompanion' || a.kind === 'companionMuster') && a.companion) return { kind: 'character', id: a.companion };
@@ -49,9 +54,12 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // face, so a full roll put up to five near-identical lines at the top of the list
   // (player report 1v1g2y5x095p2m1n). They collapse into ONE button with the same
   // face picker the other ambiguous actions use.
-  const skips = actions.filter((a) => a.kind === 'skipDie') as Extract<WotrAction, { kind: 'skipDie' }>[];
+  const allSkips = actions.filter((a) => a.kind === 'skipDie') as Extract<WotrAction, { kind: 'skipDie' }>[];
   const rest = actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie');
   const sel = selectedDie ?? null;
+  // A die picked in the tray decides which die "Discard" spends, like every other
+  // action (player report: the discard button still asked which die).
+  const skips = sel ? allSkips.filter((a) => a.face === sel) : allSkips;
   const faceLabel = sel ? (FACE[sel]?.label ?? sel) : null;
 
   // A board-placement choice (e.g. the Fellowship was revealed by the Hunt and must be
@@ -131,9 +139,8 @@ function DiscardDieButton({ skips, disabled, onClick, compact }: { skips: Extrac
     <div>
       <button disabled={disabled} onClick={() => (only ? onClick({ kind: 'skipDie', face: only }) : setPicking((p) => !p))}
         style={{ ...bstyle, display: 'flex', alignItems: 'center', gap: 8 }}>
-        {only && <DieTag face={only} />}
+        <span style={DIE_COL}>{only ? <DieTag face={only} /> : CHOOSE_DIE}</span>
         <span style={{ minWidth: 0 }}>{only ? `Discard ${aFace(only)} die` : 'Discard an Action die (no effect)'}</span>
-        {!only && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cb8' }}>choose die ▸</span>}
       </button>
       {picking && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '2px 0 6px 10px' }}>
@@ -188,12 +195,13 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
             — the chips are different widths ("Char" vs "Army/Mus") and an ambiguous
             action shows none at all, which left the list looking ragged (player report
             1q5s140023682d2j: these lists should be padded the way the log is). */}
-        <span style={{ width: 56, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-          {tagDie && !ambiguous && <DieTag face={tagDie} />}
+        {/* An ambiguous action's "choose die" sits in that same column, where its die
+            would otherwise be (player report 3k081r652z44460p). */}
+        <span style={DIE_COL}>
+          {ambiguous ? CHOOSE_DIE : tagDie && <DieTag face={tagDie} />}
         </span>
         {art && <img src={art} alt="" style={{ height: compact ? 30 : 48, borderRadius: 3, flexShrink: 0 }} />}
         <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
-        {ambiguous && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cb8' }}>choose die ▸</span>}
       </button>
       {picking && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '2px 0 6px 10px' }}>

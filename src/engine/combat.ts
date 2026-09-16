@@ -7,9 +7,9 @@
 // (a card's initiative only matters when both sides' effects collide — see D5)
 // and a few intricate per-effect cards (e.g. Mûmakil's two timings).
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
-import { REGIONS, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef } from './data';
+import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeForMovement, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, type Force, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeForMovement, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods, type VariableCost } from './combatCards';
@@ -100,7 +100,7 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   const target = clamp(2, 6, baseTarget - rollBonus + (enemyMods.enemyRollPenalty ?? 0));
   const rerollTarget = clamp(2, 6, baseTarget - rerollBonus);
   // Forfeiting a Companion's Leadership (Mighty Attack) costs re-roll dice.
-  let leadVal = Math.min(5, forceLeadership(state, own, side));
+  let leadVal = forceLeadership(state, own, side);
   // Gandalf the White "The White Rider": when the FP chose (at battle start) to forfeit
   // his Leadership, all Nazgûl Leadership (incl. the Witch-king) is negated this battle.
   if (whiteRiderForfeit) {
@@ -108,7 +108,8 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     const nazgulLead = sr.nazgul + (sr.characters.includes('witch-king') ? 2 : 0);
     leadVal = Math.max(0, leadVal - (side === 'shadow' ? nazgulLead : 1));
   }
-  const lead = Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0) - (enemyMods.enemyLeadershipPenalty ?? 0));
+  // The five-dice cap (p.28) bites only here, after every forfeit and penalty.
+  const lead = Math.min(5, Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0) - (enemyMods.enemyLeadershipPenalty ?? 0)));
   // Foul Stench cancels the FP Leader re-roll only "if the Nazgûl Leadership equals or
   // exceeds the total Free Peoples Leadership" (p. card text). `side` here is the side
   // ROLLING, so this fires while the FP rolls and the Shadow holds the card.
@@ -246,22 +247,46 @@ export function casualtyOptions(f: Force, hits: number): CasualtyOption[] {
 }
 
 /** Reduce one Elite of `nation` in `f` to a Regular (p.30). The Elite FIGURE comes
- *  off the board — back to the reinforcements for the Shadow, gone for the Free
- *  Peoples — and the replacement Regular is TAKEN FROM the reinforcements. Every
- *  reduction path (casualty choice, batch plan, pressing a siege assault) goes
- *  through here so the figure count is conserved. It used to swap only the board
- *  figures: the pool never lost the Regular nor regained the Elite, so four
- *  siege-extensions left the Shadow with 40 Sauron Regulars in play out of 36
- *  and four Trolls that existed nowhere (player report: "where are all my
- *  trolls!"). If the pool holds no Regular the reduction still happens (the rule
- *  never fails for want of a figure — RAW p.30 lets the FP draw one from their
- *  eliminated units; for the Shadow it is a documented edge). */
+ *  off the board — back to the reinforcements for the Shadow, among the casualties for
+ *  the Free Peoples — and every reduction path (casualty choice, batch plan, pressing a
+ *  siege assault) goes through here so the figure count is conserved. (It once swapped
+ *  only the board figures, and four siege-extensions left the Shadow with 40 Sauron
+ *  Regulars out of 36 — player report: "where are all my trolls!")
+ *  Where the replacement Regular comes from, p.30: "the Regular unit can be taken from
+ *  the previous casualties (if any). Otherwise, the player takes the replacement from
+ *  the available reinforcements, if able. … If no Regular units are available in
+ *  either the casualties or the reinforcements, the Elite unit cannot be replaced and
+ *  is eliminated without further effect." Shadow casualties ARE the reinforcements, so
+ *  only the Free Peoples have a separate pile to draw on first (player report
+ *  2b0l0z6j322n2m2x: the FP replacement always came out of the reinforcements). */
 export function reduceElite(state: GameState, f: Force, nation: Nation, side: Side): void {
   const u = f.units[nation]!;
-  u.elite -= 1; u.regular += 1;
   const pool = state.reinforcements[nation];
+  const fromCasualties = side === 'fp' && fpRegularCasualties(state, nation) > 0;
+  u.elite -= 1;
   if (side === 'shadow') pool.elite += 1;
-  if (pool.regular > 0) pool.regular -= 1;
+  if (fromCasualties) u.regular += 1;
+  else if (pool.regular > 0) { pool.regular -= 1; u.regular += 1; }
+  // else: no Regular anywhere — the Elite is simply eliminated.
+}
+
+/** Free Peoples Regulars of `nation` among the casualties. The game never keeps that
+ *  pile as its own field; it doesn't need to, because FP figures never leave the game
+ *  any other way: every Regular that is neither on the board (open field, siege box,
+ *  a battle's stashed rearguard) nor in the reinforcements is a casualty. */
+export function fpRegularCasualties(state: GameState, nation: Nation): number {
+  let total = NATIONS_DEF[nation]!.reinforcements.regular;
+  for (const id of REGION_IDS) {
+    const def = REGIONS[id]!;
+    if ((def.setupNation ?? def.nation) === nation) total += def.setup?.regular ?? 0;
+  }
+  let present = state.reinforcements[nation].regular;
+  for (const id of REGION_IDS) {
+    const r = state.regions[id]!;
+    present += (r.units[nation]?.regular ?? 0) + (r.siegeBox?.units[nation]?.regular ?? 0);
+  }
+  present += state.pendingCombat?.rearguard?.units[nation]?.regular ?? 0;
+  return Math.max(0, total - present);
 }
 
 /** Apply ONE allocation. Returns the hits it consumed (0 if it was illegal).
@@ -946,6 +971,7 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
   moveOwnLeaders(attacker, src, dst); dst.characters.push(...movingChars);
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   captureIfEnemySettlement(state, to, attacker, true); // a post-battle capture is an attack (Wormtongue)
+  activateOnCompanionLand(state, attacker, movingChars, to); // an advancing Companion ends his movement here
   // If the advancing army was besieging `from`, vacating its field lifts that siege
   // (the boxed garrison returns to the field) — e.g. a besieger that wins a field
   // battle in an adjacent region and advances out (player report).

@@ -120,7 +120,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
         {mine ? (
           <>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-              {decisions.map((a, i) => <DecisionButton key={i} action={a} disabled={busy} onClick={() => click(a)} onHover={setHoverCard} />)}
+              {decisions.map((a, i) => <DecisionButton key={i} action={a} disabled={busy} onClick={() => click(a)} onHover={setHoverCard} guide={view.fellowship.guide} />)}
             </div>
             {/* With nothing hovered, show the card the prompt is ABOUT: the Event card
                 being resolved, or — in a battle — the Combat card already revealed this
@@ -223,7 +223,7 @@ function ArmySize({ label, force, side, view }: { label: string; force?: { units
   // named figures' printed values via levelOf (Leadership == Level for Minions
   // and Companions in the battle context shown here).
   const chars = (force?.characters ?? []).filter((c) => characterSide(c) === side);
-  const leadership = force ? Math.min(5, forceLeadership(view, force as never, side)) : 0;
+  const leadership = force ? forceLeadership(view, force as never, side) : 0;
   const extra = [lead ? `${lead} Leader${lead === 1 ? '' : 's'}` : '', naz ? `${naz} Nazgûl` : '',
     ...chars.map((c) => charName(c))].filter(Boolean).join(', ');
   return (
@@ -344,7 +344,7 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
   );
 }
 
-function DecisionButton({ action, disabled, onClick, onHover }: { action: WotrAction; disabled: boolean; onClick: () => void; onHover?: (id: string | null) => void }) {
+function DecisionButton({ action, disabled, onClick, onHover, guide }: { action: WotrAction; disabled: boolean; onClick: () => void; onHover?: (id: string | null) => void; guide?: string }) {
   // Card-referencing choices (play a Combat card, or pick a card to discard) get the
   // card thumbnail + hover preview so you can read what you're choosing.
   const cardId = action.kind === 'playCombatCard' ? action.cardId : action.kind === 'discardCard' ? action.card : null;
@@ -353,7 +353,8 @@ function DecisionButton({ action, disabled, onClick, onHover }: { action: WotrAc
   return (
     <button onClick={onClick} disabled={disabled} style={dbtn} {...hov}>
       {art && <img src={art} alt="" style={{ height: 56, borderRadius: 3, display: 'block', marginBottom: 4 }} />}
-      {describeAction(action)}
+      {/* Name the Guide being sacrificed (player report 6u2f1h4c6n5e6l5w). */}
+      {action.kind === 'huntDamage' && action.mode === 'guide' && guide ? `Sacrifice ${charName(guide)}` : describeAction(action)}
     </button>
   );
 }

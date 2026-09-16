@@ -251,22 +251,26 @@ function applyDrawnTile(state: GameState, tile: HuntTileDef, successes: number, 
 
 /** Resolve the BLIND prevent-the-draw choice (Wizard's Staff). */
 export function resolveHuntPreventDraw(state: GameState, prevent: boolean): void {
-  const d = state.pendingChoice!.data as { successes: number; onMordor: boolean };
+  const d = state.pendingChoice!.data as { successes: number; onMordor: boolean; extra?: HuntOpts };
   state.pendingChoice = null;
   if (prevent) { discardTableCard(state, WIZARD_STAFF); log(state, null, 'hunt', 'Wizard’s Staff prevents the Hunt tile draw'); return; }
+  if (d.extra) { doExtraDraw(state, d.extra); return; }
   doHuntDraw(state, d.successes, d.onMordor);
 }
 /** Resolve the redraw choice (Mithril Coat): redraw (return the first tile, draw
  *  a second, apply it) or keep the first. */
 export function resolveHuntRedraw(state: GameState, redraw: boolean): void {
-  const d = state.pendingChoice!.data as { tile: HuntTileDef; ref: TileRef; successes: number; onMordor: boolean };
+  const d = state.pendingChoice!.data as { tile: HuntTileDef; ref: TileRef; successes: number; onMordor: boolean; extra?: HuntOpts };
   state.pendingChoice = null;
   if (redraw) {
     discardTableCard(state, MITHRIL_COAT);
     returnTileToPool(state, d.ref);
-    const { tile } = drawTile(state);
+    const { tile, ref } = drawTile(state);
     log(state, null, 'hunt', 'Mithril Coat and Sting: redrew the Hunt tile');
-    applyDrawnTile(state, tile, d.successes, d.onMordor);
+    if (d.extra) applyExtraTile(state, tile, ref, d.extra);
+    else applyDrawnTile(state, tile, d.successes, d.onMordor);
+  } else if (d.extra) {
+    applyExtraTile(state, d.tile, d.ref, d.extra);
   } else {
     applyDrawnTile(state, d.tile, d.successes, d.onMordor);
   }
@@ -275,12 +279,31 @@ export const huntPreventAvailable = hasWizardStaff;
 
 /** An "extra" Hunt from an Event card (Orc Patrol / Isildur's Bane / Foul Thing):
  *  draw a tile; if it's an Eye or a Free-Peoples special tile, discard it without
- *  effect; otherwise apply it as a successful Hunt (which may prompt FP). */
+ *  effect; otherwise apply it as a successful Hunt (which may prompt FP).
+ *  It is a tile draw BY THE SHADOW, so Wizard's Staff may prevent it and Mithril Coat
+ *  and Sting may redraw it (Almanac: "whether due to a Hunt or Event card or any
+ *  other reason"; player report: Orc Patrol drew straight past both). */
 export function extraHunt(state: GameState, opts: HuntOpts = {}): void {
+  if (hasWizardStaff(state)) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntPreventDraw', data: { successes: 0, onMordor: false, extra: opts } };
+    return;
+  }
+  doExtraDraw(state, opts);
+}
+function doExtraDraw(state: GameState, opts: HuntOpts): void {
   const { tile, ref } = drawTile(state);
-  const isEye = tile.value === 'eye';
-  const isFpSpecial = 'spec' in ref && ref.spec.startsWith('fp-');
-  if (isEye || isFpSpecial) {
+  // Mithril Coat is offered only for a tile that would do something: redrawing a tile
+  // that is discarded without effect can never help (deviation noted in rules-spec §10).
+  if (!extraTileDiscarded(tile, ref) && hasMithrilCoat(state)) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntRedraw', data: { tile, ref, successes: 0, onMordor: false, extra: opts } };
+    return;
+  }
+  applyExtraTile(state, tile, ref, opts);
+}
+const extraTileDiscarded = (tile: HuntTileDef, ref: TileRef): boolean =>
+  tile.value === 'eye' || ('spec' in ref && ref.spec.startsWith('fp-'));
+function applyExtraTile(state: GameState, tile: HuntTileDef, ref: TileRef, opts: HuntOpts): void {
+  if (extraTileDiscarded(tile, ref)) {
     log(state, null, 'hunt', `${opts.source ?? 'Extra Hunt'}: tile discarded (Eye / Free Peoples special)`);
     // Record the draw anyway, so the Hunt popup shows what came up and why nothing
     // happened (player report 1g6i3l5t05293p4q).

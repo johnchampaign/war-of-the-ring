@@ -13,7 +13,7 @@
 import type { GameState, RegionId, Side, Nation } from './types';
 import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS } from './data';
-import { settlementController, armySide, unitCount, figureForce } from './armies';
+import { settlementController, armySide, unitCount, figureForce, activateOnCompanionLand } from './armies';
 import { activateNation } from './politics';
 import { log } from './log';
 
@@ -143,24 +143,8 @@ function canLand(state: GameState, to: RegionId, side: Side, char?: string, opts
   return true;
 }
 
-const FP_NATION_SET = new Set<string>(FP_NATIONS);
-/** RAW p.34: a Companion (or group) that ENDS its movement in a City/Stronghold of a
- *  Free Peoples Nation it can activate — and not enemy-controlled — activates that
- *  Nation (presence only; never advances the track). Mirrors the separation rule; the
- *  Character-die move path previously skipped it (report: Gandalf into The Shire).
- *  The same rule reads "ends his movement OR ENTERS PLAY", so bringUpgrade calls this
- *  too when Aragorn is crowned / Gandalf the White arrives. */
-export function activateOnCompanionLand(state: GameState, side: Side, chars: string[], to: RegionId): void {
-  if (side !== 'fp') return;
-  const dn = REGIONS[to]?.nation as Nation | undefined;
-  const st = REGIONS[to]?.settlement;
-  if (!dn || !FP_NATION_SET.has(dn) || (st !== 'City' && st !== 'Stronghold')) return;
-  if (settlementController(state, to) === 'shadow') return; // "unless controlled by the enemy"
-  for (const c of chars) {
-    const cn = COMPANIONS[c]?.nation; // 'any' companion (Gandalf/Aragorn-line) activates any FP Nation
-    if (!cn || cn === 'any' || cn === dn) { activateNation(state, dn, { viaCompanion: true }); return; }
-  }
-}
+// activateOnCompanionLand lives in armies.ts (Army moves need it too); re-exported here.
+export { activateOnCompanionLand } from './armies';
 
 const HOBBITS = new Set(['meriadoc', 'peregrin']);
 /** Range modifiers granted by an Event card ("as if their Level were 4", "two extra

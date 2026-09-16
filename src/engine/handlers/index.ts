@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, forceSide } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, forceSide, activateOnCompanionLand } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -136,6 +136,7 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   for (const c of movingChars) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to; // keep the roster index honest
   captureIfEnemySettlement(state, to, side);
+  activateOnCompanionLand(state, side, movingChars, to); // a Companion moving with the Army ends his movement here
   // A card-driven move may empty a BESIEGER's field (Shadows Gather / The Shadow
   // Lengthens can now start from a besieging Army). The siege ends the moment the
   // besieger leaves (p.51), exactly as it does after a plain Army move.
@@ -179,6 +180,7 @@ function moveSelectedUnits(state: GameState, from: string, to: string, side: Sid
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   for (const c of movingChars) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
   captureIfEnemySettlement(state, to, side);
+  activateOnCompanionLand(state, side, movingChars, to);
   return true;
 }
 /** Force-place units into a region (a card that recruits in a NAMED region,

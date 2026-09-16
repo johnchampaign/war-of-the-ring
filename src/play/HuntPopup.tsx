@@ -48,7 +48,10 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
               {fresh.map((d) => <HuntTileFace key={d.seq} draw={d} />)}
             </div>
             {/* Stated per tile kind, not as a base-game-only generalization (player report 0l5o3w4k2y5t6s33). */}
-            <div style={{ fontSize: 11, color: '#887', marginTop: 3 }}>{fresh[0]!.value === 'eye' ? 'Eye tiles drawn by Event cards are discarded without effect.' : `Free Peoples special tiles drawn by ${fresh[0]!.source} are discarded without effect.`}</div>
+            <div style={{ fontSize: 11, color: '#887', marginTop: 3 }}>{fresh[0]!.value === 'eye' ? (fresh[0]!.source?.startsWith('revealed through')
+              // A reveal through a Shadow Stronghold is not an Event card (player report 6z10320k4z2o0k24).
+              ? 'Eye tiles drawn because of a Shadow Stronghold presence are discarded without effect.'
+              : 'Eye tiles drawn by Event cards are discarded without effect.') : `Free Peoples special tiles drawn by ${fresh[0]!.source} are discarded without effect.`}</div>
           </div>
         ) : fresh.every((d) => d.miss) ? (
           <div style={{ margin: '12px 0 4px' }}>
