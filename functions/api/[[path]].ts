@@ -1,7 +1,7 @@
 // Cloudflare Pages Function: the /api/* lobby for online async play. Routes map
 // onto the framework GameServer (see _lib/server.ts). Token auth via ?as=TOKEN.
 // Mirrors the integration-guide route table.
-import { makeServer, makeStore, stampLogTime, fetchLogTimes, type Env, backendStats } from '../_lib/server';
+import { makeServer, makeStore, stampLogTime, fetchLogTimes, type Env, backendStats, fetchReportBodies } from '../_lib/server';
 import { ConflictError, type BugReportRow } from 'digital-boardgame-framework/server';
 import { createGame } from '../../src/engine/setup';
 import { startGame } from '../../src/adapter/wotrAdapter';
@@ -127,16 +127,29 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
       // entries (a finished game's public moves; safe to expose). Never for bug
       // reports, whose client log can carry the reporter's hidden game state.
       const full = url.searchParams.get('full') === '1';
-      const reports = await server.listReports({
+      // ALWAYS a light listing first (no blobs). `resolution` ({at, note}) is in
+      // it, so counting/ageing reports never needs ?full=1.
+      let rows = await server.listReports({
         unresolved: u === '1' || u === 'true' ? true : undefined,
         severity: url.searchParams.get('severity') ?? undefined,
         category: cat === null ? 'wotr' : cat === '*' ? undefined : cat,
-        // Only fetch the state blobs when we'll actually return them: without
-        // this the DB detoasts every report's snapshots just to be stripped
-        // by summarizeReport (framework >=0.45; see integration guide).
-        bodies: full,
+        since: url.searchParams.get('since') ?? undefined,
+        bodies: false,
       });
-      return json({ reports: reports.map((r) => summarizeReport(r, full)) });
+      const total = rows.length;
+      // ?order=asc → oldest first (work a backlog in order). ?limit=N pages it.
+      // With ?full=1 a limit is ENFORCED (default 40, max 100): bodies are
+      // ~70 KB each and an unbounded full listing was 41.7 MB / 14.8 s.
+      if (url.searchParams.get('order') === 'asc') rows = [...rows].reverse();
+      const asked = parseInt(url.searchParams.get('limit') ?? '', 10);
+      const limit = full ? Math.min(Number.isFinite(asked) && asked > 0 ? asked : 40, 100)
+                         : (Number.isFinite(asked) && asked > 0 ? asked : 0);
+      if (limit) rows = rows.slice(0, limit);
+      if (full) {
+        const bodies = await fetchReportBodies(env, rows.map((r) => r.reportId));
+        rows = rows.map((r) => { const b = bodies.get(r.reportId); return b ? { ...r, clientLog: b.clientLog as typeof r.clientLog, reporterView: b.reporterView } : r; });
+      }
+      return json({ reports: rows.map((r) => summarizeReport(r, full)), total, truncated: rows.length < total });
     }
     // POST /api/reports/:id/resolve  { note }
     if (seg.length === 3 && seg[0] === 'reports' && seg[2] === 'resolve' && method === 'POST') {

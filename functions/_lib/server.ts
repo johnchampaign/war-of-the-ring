@@ -182,6 +182,21 @@ export async function backendStats(env: Env): Promise<Record<string, number | nu
   return { snapshots, games, activeGames, resolvedGames, reports, unresolvedReports, messages };
 }
 
+/** The heavy body columns for a FEW specific reports. The listing route takes a
+ *  light listing first (no blobs), picks a bounded page, and only then fetches
+ *  bodies for that page — an unbounded bodies listing measured 41.7 MB / 14.8 s
+ *  on the shared backend, i.e. at the store's 15 s deadline. (Framework 0.49 adds
+ *  ReportFilter.reportIds/limit for this; swap over once it is installed.) */
+export async function fetchReportBodies(env: Env, ids: string[]): Promise<Map<string, { clientLog: unknown; reporterView: string }>> {
+  const out = new Map<string, { clientLog: unknown; reporterView: string }>();
+  if (!ids.length) return out;
+  const { data, error } = await supabase(env).from('dbf_reports')
+    .select('report_id, client_log, reporter_view').in('report_id', ids);
+  if (error) throw new Error(error.message);
+  for (const r of data ?? []) out.set(r.report_id as string, { clientLog: r.client_log ?? [], reporterView: (r.reporter_view as string) ?? '' });
+  return out;
+}
+
 /** Row count of dbf_snapshots (HEAD request; no rows transferred). */
 export async function countSnapshots(env: Env): Promise<number | null> {
   try {
