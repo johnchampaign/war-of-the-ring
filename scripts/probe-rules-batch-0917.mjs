@@ -15,12 +15,22 @@
 //   1. revealed THROUGH Moria with the card on the table → the Shadow is asked;
 //   2. the Shadow is asked BEFORE Moria's own Stronghold tile, and that tile still
 //      draws once the card is answered (the Balrog must not be swallowed by D12);
-//   3. revealed in place at Moria (no movement) → not asked;
+//   3. revealed in place at Moria (no movement) → STILL asked: the Almanac adds
+//      "or remains stationary in Moria while being revealed" to the card's own
+//      wording, and says so explicitly ("although 'remains stationary' is not
+//      mentioned, it also meets the condition … e.g. if the Fellowship is standing in
+//      Moria and a card like 'Orc Patrol' causes the Fellowship to reveal there") —
+//      player report 120x4a0f6n4k4m14;
 //   4. card not on the table → not asked;
 //   5. a declaration THROUGH Moria still asks (the original path, unbroken);
-//   6. a declaration in place at Moria does not (nothing moved).
+//   6. a declaration in place at Moria asks too ("if the Ring-bearers figure is
+//      standing in Moria, the Free Peoples player may choose to declare there …
+//      allowing the Shadow player to use the in play 'Balrog of Moria' card");
+//   7. and a reveal with NO Progress at all — the case that never reaches the
+//      placement step, so `beginReveal` has to fire the card itself.
 import { createGame } from '../src/engine/setup.ts';
 import { wotrAdapter, startGame } from '../src/adapter/wotrAdapter.ts';
+import { beginReveal } from '../src/engine/hunt.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -87,15 +97,48 @@ const [sideA, sideB] = [nextToMoria[0], nextToMoria[1]];
     `draws=${(used.hunt.draws ?? []).length}`);
 }
 
-// --- 3. revealed in place at Moria: nothing moved --------------------------------
+// --- 3. revealed in place at Moria: stationary still counts -----------------------
 {
-  console.log('\n=== revealed in place at Moria (no movement) ===');
+  console.log('\n=== revealed in place at Moria (stationary) ===');
   const state = revealSetup({ at: 'moria', progress: 1 });
   const res = reveal(state, 'moria'); // target === location: zero steps
   check('reveal accepted', res.ok, res.ok ? '' : res.error);
   const after = res.ok ? res.state : state;
-  check('the Balrog is NOT asked', after.pendingChoice?.kind !== 'balrog',
+  check('the Shadow is asked', after.pendingChoice?.kind === 'balrog',
     `kind=${after.pendingChoice?.kind}`);
+}
+
+// --- 7. revealed at Moria with NO Progress: `beginReveal`'s own path --------------
+{
+  console.log('\n=== revealed at Moria with no Progress at all ===');
+  const state = startGame(createGame({ seed: 7 }));
+  state.fellowship.location = 'moria';
+  state.fellowship.progress = 0;
+  state.fellowship.hidden = true;
+  state.fellowship.mordor = null;
+  state.cards.shadow.table.push('sh-char-17');
+  beginReveal(state);
+  check('the Fellowship is revealed in place', !state.fellowship.hidden && state.fellowship.location === 'moria');
+  check('the Shadow is asked', state.pendingChoice?.kind === 'balrog', `kind=${state.pendingChoice?.kind}`);
+
+  // …and not when the card is elsewhere, or the Fellowship is elsewhere.
+  const noCard = startGame(createGame({ seed: 7 }));
+  noCard.fellowship.location = 'moria'; noCard.fellowship.progress = 0; noCard.fellowship.hidden = true; noCard.fellowship.mordor = null;
+  beginReveal(noCard);
+  check('no card, no question', noCard.pendingChoice?.kind !== 'balrog', `kind=${noCard.pendingChoice?.kind}`);
+
+  const elsewhere = startGame(createGame({ seed: 7 }));
+  elsewhere.fellowship.location = sideA; elsewhere.fellowship.progress = 0; elsewhere.fellowship.hidden = true; elsewhere.fellowship.mordor = null;
+  elsewhere.cards.shadow.table.push('sh-char-17');
+  beginReveal(elsewhere);
+  check('revealed outside Moria, no question', elsewhere.pendingChoice?.kind !== 'balrog', `kind=${elsewhere.pendingChoice?.kind}`);
+
+  // An ALREADY-revealed Fellowship standing in Moria is not being revealed at all.
+  const already = startGame(createGame({ seed: 7 }));
+  already.fellowship.location = 'moria'; already.fellowship.progress = 0; already.fellowship.hidden = false; already.fellowship.mordor = null;
+  already.cards.shadow.table.push('sh-char-17');
+  beginReveal(already);
+  check('an already-revealed Fellowship is not a reveal', already.pendingChoice?.kind !== 'balrog', `kind=${already.pendingChoice?.kind}`);
 }
 
 // --- 4. the card is not on the table ---------------------------------------------
@@ -110,7 +153,7 @@ const [sideA, sideB] = [nextToMoria[0], nextToMoria[1]];
 
 // --- 5 & 6. the declaration path, unbroken ---------------------------------------
 {
-  console.log('\n=== declaring through Moria still asks; declaring in place does not ===');
+  console.log('\n=== declaring through Moria asks; so does declaring in place ===');
   const decl = (at, progress, target) => {
     const state = startGame(createGame({ seed: 7 }));
     state.phase = 'fellowship';
@@ -128,8 +171,14 @@ const [sideA, sideB] = [nextToMoria[0], nextToMoria[1]];
 
   const inPlace = decl('moria', 1, 'moria');
   check('declaring in place accepted', inPlace.ok, inPlace.ok ? '' : inPlace.error);
-  check('the Balrog is NOT asked', inPlace.ok && inPlace.state.pendingChoice?.kind !== 'balrog',
+  check('the Shadow is asked there too', inPlace.ok && inPlace.state.pendingChoice?.kind === 'balrog',
     `kind=${inPlace.ok ? inPlace.state.pendingChoice?.kind : 'n/a'}`);
+
+  // …and a declaration in place ANYWHERE ELSE still leaves the card on the table.
+  const restingElsewhere = decl(sideA, 0, sideA);
+  check('declaring in place outside Moria accepted', restingElsewhere.ok, restingElsewhere.ok ? '' : restingElsewhere.error);
+  check('the Balrog is NOT asked', restingElsewhere.ok && restingElsewhere.state.pendingChoice?.kind !== 'balrog',
+    `kind=${restingElsewhere.ok ? restingElsewhere.state.pendingChoice?.kind : 'n/a'}`);
 }
 
 console.log(`  (Moria's neighbours used: ${sideA}, ${sideB})`);

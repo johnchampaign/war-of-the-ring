@@ -40,6 +40,7 @@ import { panelShowsAction, isSpatial } from './panelFilter';
 import { movableCharsAt, characterDestinations } from '../engine/charMove';
 import { separationActivates } from '../engine/fellowship';
 import { REGIONS, levelOf, sideOfNation } from '../engine/data';
+import { threatsAndPromisesActive } from '../engine/persistent';
 import { charName } from './charInfo';
 
 const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ? 'Shadow' : s);
@@ -668,6 +669,24 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const panelActions = activeDie && g.you
     ? panelActionsAll.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie))
     : panelActionsAll;
+  // Threats and Promises (sh-str-05) bars the Free Peoples from advancing a PASSIVE
+  // Nation with an Action die. The engine simply stops offering those actions, and a
+  // list that silently loses "advance Rohan" reads as the game having forgotten that
+  // diplomacy exists — so the barred advances are still listed, greyed, with the card
+  // named on hover (player report 3k6l6x4l0t3t4q5q). Plain code, not a hook: this is
+  // below the `if (!g.view) return` guard.
+  const blockedPanel: { action: WotrAction; reason: string }[] = [];
+  if (g.yourTurn && g.you === 'fp' && g.view.phase === 'actionResolution' && threatsAndPromisesActive(g.view)) {
+    for (const n of Object.keys(g.view.nations) as Nation[]) {
+      const ns = g.view.nations[n];
+      // Only a Nation the die COULD otherwise advance: ours, still passive, and not
+      // already sitting on the step above "At War" that passive Nations may not pass.
+      if (sideOfNation(n) !== 'fp' || ns.active || ns.step <= 1) continue;
+      const action: WotrAction = { kind: 'diplomaticAction', nation: n };
+      if (activeDie && !dieAllowsAction(action, g.view, 'fp', activeDie)) continue;
+      blockedPanel.push({ action, reason: 'Threats and Promises is in play — the Free Peoples cannot advance a passive Nation' });
+    }
+  }
   // The optional SECOND army move (Army die) is offered as panel buttons; route it
   // through the split picker too, so a second move can also be partial. NB: plain
   // function (NOT useCallback) — this is below the `if (!g.view) return` guard, so a
@@ -844,7 +863,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             <div style={{ flex: '0 0 44%', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               {/* Action buttons (compact — half height). */}
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
-                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardHints={boardHints} selectedDie={activeDie} />
+                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardHints={boardHints} blocked={blockedPanel} selectedDie={activeDie} />
               </div>
               {chatClient && g.you && (
                 <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"

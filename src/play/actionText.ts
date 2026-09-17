@@ -8,7 +8,7 @@ import { charDieLeaders } from '../engine/armies';
 import { playFacesFor, nationName } from '../engine/data';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
-import { charName } from './charInfo';
+import { charName, charDef } from './charInfo';
 import { aFace } from './names';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
@@ -17,6 +17,12 @@ const cardName = (id: string): string => (eventCards as any).cards.find((c: any)
 // Event name 'The Spirit of Mordor' printed on the same card (report 4j520o4i46450w25).
 const combatTitle = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.combat?.title ?? cardName(id);
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** The named special ability behind a Companion's political action — "High Warden of
+ *  the White Tower" (Boromir), "Prince of Mirkwood" (Legolas), "Dwarf of Erebor"
+ *  (Gimli). Read off the character card rather than hard-coded, so the three stay in
+ *  step with the data; falls back to the Companion's name if no such ability is found. */
+const politicalAbility = (id: string): string =>
+  charDef(id)?.abilities?.find((ab) => /advance the/i.test(ab.text))?.name ?? charName(id);
 
 /** What a region-only "recruit here" card target actually places, by card. These
  *  targets carry no nation/figure — the handler knows the bundle — so the label has to
@@ -43,7 +49,10 @@ export function describeAction(a: WotrAction): string {
     case 'separateCompanion': return `Separate ${charName(a.companion)}`;
     case 'changeGuide': return `Make ${charName(a.companion)} the Guide`;
     // The die chip / picker already says which dice can pay (player report 5d682g3j3s4i221d).
-    case 'companionMuster': return `${charName(a.companion)}: advance ${nationName(a.nation)}`;
+    // Named after the Companion's ABILITY, the way the Voice of Saruman action already
+    // is — "High Warden of the White Tower: advance Gondor", not "Boromir: advance
+    // Gondor" (player report 572t095r1z6q3s31).
+    case 'companionMuster': return `${politicalAbility(a.companion)}: advance ${nationName(a.nation)}`;
     // Die FACES have proper names and proper articles: "change an Event die to an
     // Army/Muster die", never "change a Event die to ArmyMuster" (player report
     // 2a2z6u3v703c445v).
@@ -62,7 +71,7 @@ export function describeAction(a: WotrAction): string {
     // actually does — Isengard Regulars, in Isengard Settlements; and the upgrade is a
     // REPLACEMENT of two Regulars standing in Orthanc.
     case 'sarumanMuster': return a.mode === 'upgrade'
-      ? 'Voice of Saruman: replace 2 Isengard Regulars in Orthanc with Elites'
+      ? 'Voice of Saruman: replace up to 2 Isengard Regulars in Orthanc with Elites'
       : 'Voice of Saruman: recruit an Isengard Regular in every Isengard Settlement';
     // The button is already prefixed with the die that pays for it, so naming the die
     // again in the label is noise (player report 0c3p44321u1w1f1a).

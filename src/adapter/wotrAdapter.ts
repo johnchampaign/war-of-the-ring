@@ -47,13 +47,22 @@ function consumeArmyDie(state: GameState, actor: Side): boolean {
 
 /** Balrog of Moria (sh-char-17, on the table): the Shadow may discard it for an extra
  *  Hunt tile "if the Fellowship moves into, out of, or through Moria while being
- *  declared or revealed" (card text). Both the declare and the reveal path ask, and
- *  both require an actual MOVE: `traversed` always starts with where the Fellowship
- *  already stood, so a declaration (or reveal) in place at Moria moved through
- *  nothing and the Balrog stays on the table. Both callers ask before drawing any
- *  tile, so the pendingChoice guard is belt-and-braces: one choice at a time. */
-function balrogFires(state: GameState, traversed: RegionId[], steps: number): boolean {
-  return !state.pendingChoice && steps > 0
+ *  declared or revealed" (card text). Both the declare and the reveal path ask.
+ *  STANDING STILL in Moria counts too, though the card doesn't say so — the Almanac
+ *  spells out both halves: "moves through, from, into or remains stationary in Moria
+ *  while being revealed" ("although 'remains stationary' is not mentioned, it also
+ *  meets the condition … e.g. if the Fellowship is standing in Moria and a card like
+ *  'Orc Patrol' causes the Fellowship to reveal there"), and the same for a
+ *  declaration ("if the Ring-bearers figure is standing in Moria, the Free Peoples
+ *  player may choose to declare there … allowing the Shadow player to use the in play
+ *  'Balrog of Moria' card") — player report 120x4a0f6n4k4m14. `traversed` always
+ *  starts with where the Fellowship already stood, so a zero-step declaration or
+ *  reveal at Moria still contains 'moria' and fires. Both callers ask before drawing
+ *  any tile, so the pendingChoice guard is belt-and-braces: one choice at a time.
+ *  The zero-PROGRESS reveal never reaches here at all (there is nothing to place, so
+ *  no `revealMove` choice) — `beginReveal` fires the card for that case. */
+function balrogFires(state: GameState, traversed: RegionId[]): boolean {
+  return !state.pendingChoice
     && state.cards.shadow.table.includes('sh-char-17') && traversed.includes('moria');
 }
 
@@ -85,8 +94,14 @@ const voiceOfSarumanActive = (state: GameState): boolean =>
 const canSarumanRecruit = (state: GameState): boolean =>
   state.reinforcements.isengard.regular > 0
   && isengardSettlements().some((id) => settlementController(state, id) === 'shadow' && unitCount(state, id) < STACKING_LIMIT);
-const canSarumanUpgrade = (state: GameState): boolean =>
-  (state.regions['orthanc']!.units.isengard?.regular ?? 0) >= 2 && state.reinforcements.isengard.elite >= 2;
+// Partial upgrades count: a Muster action does as much as it can, exactly like a
+// Muster die recruiting into a Nation whose reinforcements have run short, and like
+// the recruit half of this same ability (the Almanac's own note: a captured Dunland
+// is simply skipped). One Regular in Orthanc and one Elite in the pool is enough to
+// use the ability (player report 476j5r1l0m093n25).
+const sarumanUpgradeCount = (state: GameState): number =>
+  Math.min(2, state.regions['orthanc']!.units.isengard?.regular ?? 0, state.reinforcements.isengard.elite);
+const canSarumanUpgrade = (state: GameState): boolean => sarumanUpgradeCount(state) > 0;
 function sarumanMusterOptions(state: GameState): WotrAction[] {
   if (!voiceOfSarumanActive(state)) return [];
   const out: WotrAction[] = [];
@@ -594,7 +609,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Mordor "after fully resolving the declaration of the Fellowship's position").
       // Balrog of Moria is a CARD-SPECIFIC exception: its own text draws an extra tile
       // when the Fellowship is "declared or revealed" through Moria.
-      if (balrogFires(state, traversed, stepsBefore)) {
+      if (balrogFires(state, traversed)) {
         state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: {} };
       }
       break;
@@ -965,9 +980,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (action.mode === 'upgrade' ? !canSarumanUpgrade(state) : !canSarumanRecruit(state)) throw new Error('Voice of Saruman option not available');
       if (!consumePreferred(state, 'shadow', ['muster', 'armyMuster', 'will'], action.die)) throw new Error('No Muster die');
       if (action.mode === 'upgrade') {
-        const u = state.regions['orthanc']!.units.isengard!; // ≥2 Regulars (checked above)
-        u.regular -= 2; u.elite += 2;
-        state.reinforcements.isengard.regular += 2; state.reinforcements.isengard.elite -= 2;
+        const n = sarumanUpgradeCount(state); // 2 when both are there, else as many as can be done
+        const u = state.regions['orthanc']!.units.isengard!; // ≥1 Regular (checked above)
+        u.regular -= n; u.elite += n;
+        state.reinforcements.isengard.regular += n; state.reinforcements.isengard.elite -= n;
+        log(state, null, 'muster', `The Voice of Saruman: ${n} Isengard Regular${n === 1 ? '' : 's'} in Orthanc replaced with Elite${n === 1 ? '' : 's'}`);
       } else {
         for (const id of isengardSettlements()) {
           if (settlementController(state, id) === 'shadow') recruit(state, 'isengard', id, 1, 0, { ignoreAtWar: true });
@@ -1289,7 +1306,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // that opens an FP damage choice drops the draws behind it (deviation D12), and
       // Moria is itself a Shadow Stronghold — so asking the tiles first would have
       // swallowed the card's one-shot in exactly the case it exists for.
-      if (balrogFires(state, traversed, steps)) state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: { strongholds } };
+      if (balrogFires(state, traversed)) state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: { strongholds } };
       else drawStrongholdHunts(state, strongholds);
       break; // checkRingVictory + advance run at dispatch end
     }

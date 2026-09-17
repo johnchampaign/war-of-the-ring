@@ -31,13 +31,18 @@ function actionHover(a: WotrAction): Hover {
   return null;
 }
 
-export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardHints = [], selectedDie, compact }: {
+export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardHints = [], blocked = [], selectedDie, compact }: {
   actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null;
   /** One line per thing the MAP offers that this list doesn't (army moves, siege
    *  assaults, musters and Minion entries, character moves). Rendered as pointers, and
    *  counted by the "nothing to do" check below — so stripping a board-driven action
    *  from the list can never make the panel claim there is nothing to do. */
   boardHints?: string[];
+  /** Actions the player would normally have, that a card or rule is barring right now.
+   *  They are LISTED, greyed, with the reason on hover — removing them outright made
+   *  it look as though the game had forgotten the action existed (player report
+   *  3k6l6x4l0t3t4q5q, on Threats and Promises). They never count as something to do. */
+  blocked?: { action: WotrAction; reason: string }[];
   selectedDie?: DieFace | null; compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
@@ -55,7 +60,11 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // (player report 1v1g2y5x095p2m1n). They collapse into ONE button with the same
   // face picker the other ambiguous actions use.
   const allSkips = actions.filter((a) => a.kind === 'skipDie') as Extract<WotrAction, { kind: 'skipDie' }>[];
-  const rest = inNationOrder(actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie'));
+  const live = actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie');
+  const reasonFor = new Map<WotrAction, string>(blocked.map((b) => [b.action, b.reason]));
+  // Barred actions sort in with the real ones (same kind, same Nation order), so a
+  // greyed "advance Rohan" sits where the player expects it, not in a footnote.
+  const rest = inNationOrder([...live, ...blocked.map((b) => b.action)]);
   const sel = selectedDie ?? null;
   // The second half of a die's Action (a second Army move, a second recruit, more
   // Character moves) can't be passed out of — but the Pass button stays in place,
@@ -63,6 +72,14 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // (player report 423m415l300y1l4z).
   const midAction = !pass && ['armyMove2', 'recruitSecond', 'charMove2'].includes(view.pendingChoice?.kind ?? '');
   const passOff = !pass || !!sel;
+  // Why Pass is off right now — it is ALWAYS on screen (below), so every off state
+  // needs its own sentence. The plain "you simply may not pass yet" case is the
+  // rulebook's condition: you may pass only while you hold FEWER unused Action dice
+  // than your opponent (p.21).
+  const passWhyOff = midAction ? 'Finish this Action first'
+    : sel ? 'Click your selected die again (or pick another) to pass'
+      : !pass ? 'You can pass only while you have fewer Action dice left than your opponent'
+        : undefined;
   // A die picked in the tray decides which die "Discard" spends, like every other
   // action (player report: the discard button still asked which die).
   const skips = sel ? allSkips.filter((a) => a.face === sel) : allSkips;
@@ -101,13 +118,16 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       {chainNote && (
         <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '6px 9px', margin: '2px 0 6px', fontSize: 12 }}>⚑ {chainNote}</div>
       )}
-      {(pass || midAction) && (
+      {(
         // Picking a die means you are acting with it, so Pass is off until you clear
         // the selection (player report 111g4j5g2n4q3x2g).
         // ...and it has to LOOK off, not just be off — a full-brightness button that
         // silently ignores the click reads as a broken game (player report
         // 2p206p523z253b02).
-        <button disabled={busy || passOff} title={midAction ? 'Finish this Action first' : sel ? 'Click your selected die again (or pick another) to pass' : undefined} onClick={() => pass && click(pass)}
+        // The button is never REMOVED either: dropping it from the layout whenever
+        // passing is illegal shoved the whole action list up and down between turns
+        // (player report 1j0k1n13646w0p3f). It is always here, greyed when off.
+        <button disabled={busy || passOff} title={passWhyOff} onClick={() => pass && click(pass)}
           style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 3px' : '0 0 8px', padding: compact ? '3px 10px' : '9px 10px', borderRadius: 6, fontSize: compact ? 11 : 14, fontWeight: 700,
             background: passOff ? '#241f16' : '#4a3a1a', color: passOff ? '#6d6455' : '#ffe08a', border: `1px solid ${passOff ? '#3a342a' : '#7a5f24'}`, cursor: passOff ? 'not-allowed' : 'pointer' }}>
           {/* Same label either way — the greyed look says it's off (player report 1r510z456m0z6p35). */}
@@ -123,9 +143,9 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
         </div>
       ))}
       {rest.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
-        options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} />)}
+        options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} blockedReason={reasonFor.get(a)} />)}
       {skips.length > 0 && <DiscardDieButton skips={skips} disabled={busy} onClick={click} compact={compact} />}
-      {rest.length === 0 && skips.length === 0 && boardHints.length === 0 && (
+      {live.length === 0 && skips.length === 0 && boardHints.length === 0 && (
         boardPending
           ? <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', fontSize: 13 }}>⚑ {boardPending}</div>
           : <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>
@@ -165,7 +185,7 @@ function DiscardDieButton({ skips, disabled, onClick, compact }: { skips: Extrac
 // A normal action button. For "Play event" it shows the card-art thumbnail (when
 // downloaded). When more than one die could pay for the action, the first click opens
 // a die-picker (the player chooses which to spend); one option submits directly.
-function ActionButton({ action, disabled, onClick, onHover, options, forceDie, compact }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null; compact?: boolean }) {
+function ActionButton({ action, disabled, onClick, onHover, options, forceDie, compact, blockedReason }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null; compact?: boolean; blockedReason?: string }) {
   const [picking, setPicking] = useState(false);
   const cardId = action.kind === 'playEvent' ? action.cardId : null;
   const art = useCardArt(cardId);
@@ -191,10 +211,12 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
     else if (ambiguous) setPicking((p) => !p);
     else onClick(action);
   };
-  const bstyle = compact ? { ...btn, margin: '1px 0', padding: '1px 8px', fontSize: 11, lineHeight: 1.2 } : btn;
+  const base = compact ? { ...btn, margin: '1px 0', padding: '1px 8px', fontSize: 11, lineHeight: 1.2 } : btn;
+  // A barred action LOOKS barred — greyed, not clickable — and says why on hover.
+  const bstyle = blockedReason ? { ...base, background: '#241f16', color: '#6d6455', border: '1px solid #3a342a', cursor: 'not-allowed' } : base;
   return (
     <div>
-      <button disabled={disabled} onClick={onMain} {...hov} style={{ ...bstyle, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <button disabled={disabled || !!blockedReason} title={blockedReason} onClick={onMain} {...hov} style={{ ...bstyle, display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* An ambiguous action shows no die tag: the tag used to advertise the die the
             old auto-pick would have spent, which no longer happens — the player
             chooses (player report 5z0v4l0v36546w4k). */}

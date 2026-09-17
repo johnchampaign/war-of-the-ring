@@ -1016,6 +1016,7 @@ function combatCardValue(m: CombatMods | null): number {
   if (!m) return 0;
   return (m.rollBonus ?? 0) * 2 + (m.extraAttackDice ?? 0) + (m.bonusHitsIfAny ?? 0) * 2
     + (m.bonusHitsIfOutnumber ?? 0) + (m.enemyRollPenalty ?? 0) * 2 + (m.maxDiceEnemy != null ? 2 : 0)
+    + (m.enemyDiceReduction ?? 0) * 2
     + (m.cancelEnemyCard ? 3 : 0) + (m.negateEnemyReroll ? 2 : 0) + (m.cancelHits ?? 0) * 2;
 }
 

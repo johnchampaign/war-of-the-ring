@@ -24,8 +24,18 @@ export function beginReveal(state: GameState): void {
   const fs = state.fellowship;
   if (fs.hidden && fs.progress > 0 && fs.mordor === null) {
     state.pendingChoice = { owner: 'fp', kind: 'revealMove' };
-  } else {
-    fs.hidden = false; fs.progress = 0;
+    return;
+  }
+  // Balrog of Moria (sh-char-17) also fires when the Fellowship "remains stationary in
+  // Moria while being revealed" (Almanac, p.27: "if the Fellowship is standing in Moria
+  // and a card like 'Orc Patrol' causes the Fellowship to reveal there") — the case with
+  // no Progress to spend, which never reaches the adapter's placement step because there
+  // is nothing to place (player report 120x4a0f6n4k4m14). No movement means no Shadow
+  // Stronghold tiles are owed, so the card's own tile is all that is drawn.
+  const stationaryInMoria = fs.hidden && fs.mordor === null && fs.location === 'moria';
+  fs.hidden = false; fs.progress = 0;
+  if (stationaryInMoria && !state.pendingChoice && state.cards.shadow.table.includes('sh-char-17')) {
+    state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: {} };
   }
 }
 

@@ -79,6 +79,9 @@ export function TurnSummary({ view, yourTurn, you, onOpenLog, hold }: { view: Ga
 }
 
 const viewCardBtn: React.CSSProperties = { flexShrink: 0, alignSelf: 'flex-start', marginTop: 1, fontSize: 10, padding: '1px 6px', background: '#2e2a1f', color: '#d8cfa8', border: '1px solid #5a4a2a', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' };
-const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.62)', display: 'grid', placeItems: 'center', zIndex: 56 };
+// No dimming: the recap is a catch-up read, not a decision, and the player wants the
+// board legible behind it (player report 491j275r6o4a294a). The layer still covers
+// the page so a click anywhere dismisses the recap.
+const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'transparent', display: 'grid', placeItems: 'center', zIndex: 56 };
 const card: React.CSSProperties = { background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: '16px 22px', borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 340, maxWidth: 520, boxShadow: '0 8px 40px #000' };
 const btn: React.CSSProperties = { marginTop: 12, padding: '7px 22px', background: '#3a3326', color: '#f0e9d8', border: '1px solid #6a5', borderRadius: 6, cursor: 'pointer', fontSize: 14, display: 'block', marginLeft: 'auto' };

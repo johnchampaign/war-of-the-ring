@@ -4,7 +4,7 @@
 // faithfully; a few intricate ones (specific Character elimination, forfeit-
 // Leadership bookkeeping, retreat-as-card) are approximated or omitted — a card
 // with no mapped title is simply not offered as a combat card. See D5 note.
-import { EVENT_BY_ID } from './data';
+import { EVENT_BY_ID, COMPANIONS, UPGRADES } from './data';
 
 export interface CombatMods {
   /** +N to the owner's COMBAT ROLL dice (lowers the hit target). The cards name the
@@ -121,7 +121,12 @@ const BY_TITLE: Record<string, CombatMods> = {
   'Relentless Assault': {}, // sized by the self-hits the owner chooses to inflict (VARIABLE_COST)
   // weaken the enemy
   'Daylight': { maxDiceEnemy: 3 },
-  'Brave Stand': { maxDiceEnemy: 3 },
+  // "The Shadow player rolls one die less in his Combat roll FOR EACH Companion in
+  // the battle (to a minimum of one)" — a reduction that counts the Companions
+  // present, not a flat cap of three dice, which is what it used to be (player report
+  // 640i6h2s51023q4w). The 1 here is the card's floor: it may only be played with a
+  // Companion in the battle. The real count is filled in by `combatModsFor`.
+  'Brave Stand': { enemyDiceReduction: 1 },
   'Huorn-dark': { maxDiceEnemy: 2 },
   'Advantageous Position': { enemyRollPenalty: 1 },
   // Forfeit 1 Nazgûl Leadership → the enemy rolls 1 fewer COMBAT die (not a worse
@@ -209,6 +214,10 @@ export interface CombatModContext {
   cost?: number;
 }
 
+/** Every Companion figure id (the starting five plus the Aragorn / Gandalf the White
+ *  upgrades) — what "for each Companion in the battle" counts. */
+const COMPANION_SET = new Set<string>([...Object.keys(COMPANIONS), ...Object.keys(UPGRADES)]);
+
 /** Cards whose effect is sized by a cost the OWNER chooses when playing them.
  *  RAW wording, and why each is here rather than a flat entry in BY_TITLE:
  *   - Relentless Assault: "you may inflict and apply UP TO TWO hits against your
@@ -261,6 +270,12 @@ export function combatModsFor(cardId: string, ctx?: CombatModContext): CombatMod
   // Variable-size cards: the mods ARE the cost the owner paid. Until it is chosen the
   // card does nothing, so an unanswered prompt can never leak a free effect.
   const cost = ctx?.cost ?? 0;
+  // Brave Stand is sized by the BATTLE, not by a cost: one fewer Shadow Combat die per
+  // Companion in the Free Peoples force (the roll applies the "minimum of one").
+  if (title === 'Brave Stand' && ctx?.ownCharacters) {
+    const companions = ctx.ownCharacters.filter((c) => COMPANION_SET.has(c)).length;
+    return { ...base, enemyDiceReduction: Math.max(1, companions) };
+  }
   if (title === 'Relentless Assault') return cost > 0 ? { ...base, rollBonus: cost } : base;
   if (title === 'Dread and Despair') return cost > 0 ? { ...base, enemyDiceReduction: cost, ownLeadershipPenalty: cost } : base;
   return base;
