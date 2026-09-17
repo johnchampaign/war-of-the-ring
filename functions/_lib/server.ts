@@ -182,6 +182,26 @@ export async function backendStats(env: Env): Promise<Record<string, number | nu
   return { snapshots, games, activeGames, resolvedGames, reports, unresolvedReports, messages };
 }
 
+/** Age out game-log uploads: auto-resolve every UNRESOLVED report whose category
+ *  ends in `-gamelog` and is older than `days`, across the shared table (this
+ *  game's `wotr-gamelog`, Axis & Allies' `axis-allies-gamelog`, …). These are
+ *  end-of-game move logs, not bugs — nobody triages them, so nothing ever
+ *  resolved them and they were ~90% of an ever-growing "unresolved" count
+ *  (770 of 854 on 2026-09-17). Only `resolution` is set; the row and its log
+ *  stay, so the AI-tuning data is untouched. One UPDATE; TOASTed columns are
+ *  not rewritten. Best-effort: returns the error rather than throwing. */
+export async function ageOutGamelogs(env: Env, days = 30): Promise<{ count: number | null; error?: string }> {
+  try {
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+    const { data, error } = await supabase(env).from('dbf_reports')
+      .update({ resolution: { at: new Date().toISOString(), note: `Auto-resolved: game-log upload older than ${days} days (kept for AI tuning; not a bug report).` } })
+      .is('resolution', null).like('category', '%-gamelog').lt('created_at', cutoff)
+      .select('report_id');
+    if (error) return { count: null, error: `${error.message}${error.code ? ` [${error.code}]` : ''}` };
+    return { count: (data ?? []).length };
+  } catch (e) { return { count: null, error: (e as Error).message }; }
+}
+
 /** The heavy body columns for a FEW specific reports. The listing route takes a
  *  light listing first (no blobs), picks a bounded page, and only then fetches
  *  bodies for that page — an unbounded bodies listing measured 41.7 MB / 14.8 s

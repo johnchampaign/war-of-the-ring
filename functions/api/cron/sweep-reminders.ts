@@ -18,9 +18,10 @@
 //
 //   POST /api/cron/sweep-reminders                 sweep (+ daily prune first at PRUNE_HOUR_UTC)
 //   POST /api/cron/sweep-reminders?prune=1         SQL prune only (dbf_prune_resolved_snapshots)
+//   POST /api/cron/sweep-reminders?prune=gamelogs  age out game-log uploads (>30 d) only
 //   POST /api/cron/sweep-reminders?prune=finished  framework pruneFinishedGames() only, budgeted;
 //                                                  re-call until truncated is false
-import { makeCronServer, pruneResolvedSnapshots, countSnapshots, type Env } from '../../_lib/server';
+import { makeCronServer, pruneResolvedSnapshots, countSnapshots, ageOutGamelogs, type Env } from '../../_lib/server';
 
 // Nudge a seat only once it's been on the clock a good while — async PvP, not a
 // chess clock. The framework marks a turn reminded so it won't re-nag each sweep.
@@ -29,6 +30,8 @@ const OLDER_THAN_MS = 6 * 60 * 60 * 1000; // 6 hours
 const SWEEP_BUDGET_MS = 20_000;
 // 04:00 UTC = 00:00 EDT — the daily resolved-snapshot prune runs on that tick.
 const PRUNE_HOUR_UTC = 4;
+// Game-log uploads (category *-gamelog) auto-resolve after this many days.
+const GAMELOG_MAX_AGE_DAYS = 30;
 
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -54,6 +57,13 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
         ...(prune.error ? { pruneError: prune.error } : {}) });
     }
 
+    // ?prune=gamelogs — age out game-log uploads only (manual run / verification).
+    if (mode === 'gamelogs') {
+      const t0 = Date.now();
+      const aged = await ageOutGamelogs(env, GAMELOG_MAX_AGE_DAYS);
+      return json({ ok: true, mode: 'gamelogs', ms: Date.now() - t0, agedOutGamelogs: aged.count, ...(aged.error ? { ageOutError: aged.error } : {}) });
+    }
+
     const server = makeCronServer(env);
 
     // ?prune=finished — one-off size cleanup through the framework (no SQL
@@ -72,14 +82,17 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
     // Normal tick. Daily prune FIRST so it has a subrequest budget.
     const pruneDue = new Date().getUTCHours() === PRUNE_HOUR_UTC;
     const prune = pruneDue ? await pruneResolvedSnapshots(env) : { count: null as number | null };
+    // Same daily tick: auto-resolve game-log uploads older than 30 days (one UPDATE).
+    const aged = pruneDue ? await ageOutGamelogs(env, GAMELOG_MAX_AGE_DAYS) : { count: null as number | null };
 
     const t0 = Date.now();
     const result = await server.sweepTurnReminders({ olderThanMs: OLDER_THAN_MS, budgetMs: SWEEP_BUDGET_MS });
     const sweepMs = Date.now() - t0;
     // Visible via `wrangler pages deployment tail` — which half of a run is slow.
-    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs, pruneDue, ...result, prunedSnapshots: prune.count, pruneError: prune.error }));
+    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs, pruneDue, ...result, prunedSnapshots: prune.count, pruneError: prune.error, agedOutGamelogs: aged.count, ageOutError: aged.error }));
     return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, sweepMs, prunedSnapshots: prune.count,
-      ...(prune.error ? { pruneError: prune.error } : {}), ...result });
+      ...(prune.error ? { pruneError: prune.error } : {}), agedOutGamelogs: aged.count,
+      ...(aged.error ? { ageOutError: aged.error } : {}), ...result });
   } catch (e) {
     const msg = (e as Error).message ?? 'error';
     return json({ error: msg }, /not configured/i.test(msg) ? 503 : 500);
