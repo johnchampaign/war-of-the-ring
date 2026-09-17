@@ -92,6 +92,15 @@ function huntRerolls(state: GameState): number {
   return (s.stronghold ? 1 : 0) + (s.army ? 1 : 0) + (s.nazgul ? 1 : 0);
 }
 
+/** Which SPECIAL tile this was, for the draw record — the physical Shadow specials are
+ *  red cardboard and the Free Peoples' blue, and their printed faces don't give them
+ *  away (Elven Cloaks is a "0", like the standard blanks), so the UI can't tell them
+ *  apart on its own (player report 5d552r3p4w3v2o6j). Empty for a standard tile. */
+function specialOf(tile: HuntTileDef): { special?: 'fp' | 'shadow'; specialCard?: string } {
+  if (!tile.introducedBy) return {};
+  return { special: tile.introducedBy.startsWith('fp-') ? 'fp' : 'shadow', ...(tile.card ? { specialCard: tile.card } : {}) };
+}
+
 /** Apply a drawn tile. Damage>0 with Companions present sets a PendingChoice;
  *  otherwise applies directly. Reveal is applied with the resolution. `opts.source`
  *  names the Event card that caused a no-roll draw (shown in the FP's damage prompt);
@@ -116,7 +125,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // capped; seq marks a new draw. Public — drawn tiles are open info.
   const prev = state.hunt.draws ?? [];
   const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
-  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, stop: !!tile.stop, onMordor: fs.mordor !== null, roll: state.hunt.lastRoll }].slice(-16);
+  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, stop: !!tile.stop, onMordor: fs.mordor !== null, roll: state.hunt.lastRoll, ...specialOf(tile) }].slice(-16);
 
   if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) beginReveal(state); return; }
   if (damage === 0) { if (reveal) beginReveal(state); return; }
@@ -309,7 +318,7 @@ function applyExtraTile(state: GameState, tile: HuntTileDef, ref: TileRef, opts:
     // happened (player report 1g6i3l5t05293p4q).
     const prev = state.hunt.draws ?? [];
     const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
-    state.hunt.draws = [...prev, { seq, value: tile.value, damage: 0, reveal: false, stop: false, onMordor: state.fellowship.mordor !== null, discarded: true, source: opts.source ?? 'Extra Hunt' }].slice(-16);
+    state.hunt.draws = [...prev, { seq, value: tile.value, damage: 0, reveal: false, stop: false, onMordor: state.fellowship.mordor !== null, discarded: true, source: opts.source ?? 'Extra Hunt', ...specialOf(tile) }].slice(-16);
     return;
   }
   applyHuntTile(state, tile, Math.min(5, state.hunt.box), opts);

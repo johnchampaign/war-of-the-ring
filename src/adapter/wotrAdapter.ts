@@ -45,6 +45,28 @@ function consumeArmyDie(state: GameState, actor: Side): boolean {
   return false;
 }
 
+/** Balrog of Moria (sh-char-17, on the table): the Shadow may discard it for an extra
+ *  Hunt tile "if the Fellowship moves into, out of, or through Moria while being
+ *  declared or revealed" (card text). Both the declare and the reveal path ask, and
+ *  both require an actual MOVE: `traversed` always starts with where the Fellowship
+ *  already stood, so a declaration (or reveal) in place at Moria moved through
+ *  nothing and the Balrog stays on the table. Both callers ask before drawing any
+ *  tile, so the pendingChoice guard is belt-and-braces: one choice at a time. */
+function balrogFires(state: GameState, traversed: RegionId[], steps: number): boolean {
+  return !state.pendingChoice && steps > 0
+    && state.cards.shadow.table.includes('sh-char-17') && traversed.includes('moria');
+}
+
+/** One extra Hunt tile per Shadow Stronghold the revealed Fellowship's traced path
+ *  crossed (p.39), in path order. Stops at the first tile that opens a choice — the
+ *  draws behind it are lost, deviation D12 in docs/rules-spec.md. */
+function drawStrongholdHunts(state: GameState, strongholds: RegionId[]): void {
+  for (const r of strongholds) {
+    if (state.pendingChoice) break;
+    extraHunt(state, { source: `revealed through ${REGIONS[r]!.name}` }); // name the Stronghold that caused it
+  }
+}
+
 // Companion political abilities (High Warden / Prince of Mirkwood / Dwarf of Erebor):
 // while the Companion stands in their own unconquered Settlement, any Action die may
 // advance their Nation one step. Returns the legal companionMuster actions.
@@ -572,7 +594,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Mordor "after fully resolving the declaration of the Fellowship's position").
       // Balrog of Moria is a CARD-SPECIFIC exception: its own text draws an extra tile
       // when the Fellowship is "declared or revealed" through Moria.
-      if (state.cards.shadow.table.includes('sh-char-17') && traversed.includes('moria')) {
+      if (balrogFires(state, traversed, stepsBefore)) {
         state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: {} };
       }
       break;
@@ -915,7 +937,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Spend the die (the die IS the action, p.22): a Will die for 'will', else any die.
       if (action.via === 'will') {
         if (!consumeDie(state, 'fp', 'will')) throw new Error('No Will of the West die');
-      } else if (!consumePreferred(state, 'fp', [...new Set(state.dice.fp)], action.die)) {
+      } else if (!consumePreferred(state, 'fp', [...new Set(state.dice.fp)].filter((f) => f !== 'will'), action.die)) {
+        // Not the Will die: that clause is the card's own, and spending a Will here
+        // would only buy the same discard dearer (see fpForceDiscardMethods).
         throw new Error('No Action die');
       }
       // 'ring': also spend one Elven Ring (flips FP→Shadow; one Ring per turn, p.21).
@@ -1157,6 +1181,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'crebain', actor); resolveCrebain(state, action.use); break; // makes the deferred Hunt roll
     case 'balrog': {
       requireChoice(state, 'balrog', actor);
+      // A reveal hands its Shadow Strongholds over to this choice so the card is asked
+      // first; they draw once the Balrog is answered (see the revealMove handler).
+      const owedStrongholds = (state.pendingChoice!.data as { strongholds?: RegionId[] }).strongholds ?? [];
       state.pendingChoice = null;
       const i = state.cards.shadow.table.indexOf('sh-char-17');
       if (action.use && i >= 0) {
@@ -1170,6 +1197,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         state.log[state.log.length - 1]!.card = 'sh-char-17';
         extraHunt(state, { source: 'Balrog of Moria' }); // may set a huntDamage choice for the FP
       }
+      drawStrongholdHunts(state, owedStrongholds); // no-op on a declaration (none are owed)
       break; // Hunt Allocation phase was already set
     }
     case 'retreatTo':
@@ -1252,12 +1280,17 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Revealing through a Shadow Stronghold draws a Hunt tile per such Stronghold on
       // the traced path (rulebook p.39). (If a tile opens an FP choice, further
       // Strongholds' tiles defer — same as declaration; deviation log.)
-      for (const r of traversed) {
-        if (state.pendingChoice) break;
-        if (REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow') {
-          extraHunt(state, { source: `revealed through ${REGIONS[r]!.name}` }); // name the Stronghold that caused it
-        }
-      }
+      const strongholds = traversed.filter((r) => REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow');
+      // Balrog of Moria fires on a REVEAL through Moria too, not only on a declaration:
+      // "if the Fellowship moves into, out of, or through Moria while being declared or
+      // revealed" (card text). Only the declare path offered it, so a Fellowship caught
+      // crossing Moria never faced the Balrog (player report 3m4a0q4l643g1s2s).
+      // It is asked BEFORE the Stronghold tiles and carries them with it: the first tile
+      // that opens an FP damage choice drops the draws behind it (deviation D12), and
+      // Moria is itself a Shadow Stronghold — so asking the tiles first would have
+      // swallowed the card's one-shot in exactly the case it exists for.
+      if (balrogFires(state, traversed, steps)) state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: { strongholds } };
+      else drawStrongholdHunts(state, strongholds);
       break; // checkRingVictory + advance run at dispatch end
     }
     case 'huntPreventDraw':

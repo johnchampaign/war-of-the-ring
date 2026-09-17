@@ -23,17 +23,25 @@ export function describeDraw(d: Draw): string {
 export function HuntTileFace({ draw, size = 58 }: { draw: Draw; size?: number }) {
   const v = draw.value;
   const num = typeof v === 'number';
-  const heal = num && (v as number) < 0; // blue Free-Peoples tile
+  const heal = num && (v as number) < 0;
   const blank = num && v === 0;
   const center = num ? `${Math.abs(v as number)}` : v === 'eye' ? '👁' : v === 'die' ? '🎲' : String(v);
-  // Tan/cream parchment for standard tiles; blue for an FP (heal) tile; muted for a blank.
-  const face = heal ? 'radial-gradient(circle at 35% 30%, #8fb6d6, #4a7aa0)'
+  // The physical tiles come in three colours and the face alone doesn't tell them
+  // apart (Elven Cloaks is a "0" like the standard blanks), so the engine records
+  // which special tile was drawn — Shadow specials are red cardboard, Free Peoples
+  // specials blue, everything else standard tan (player report 5d552r3p4w3v2o6j).
+  // A heal tile is always an FP special; older saves without `special` fall back on it.
+  const kind = draw.special ?? (heal ? 'fp' : undefined);
+  const face = kind === 'shadow' ? 'radial-gradient(circle at 35% 30%, #d08a7e, #a33a2c)'
+    : kind === 'fp' ? 'radial-gradient(circle at 35% 30%, #8fb6d6, #4a7aa0)'
     : blank ? 'radial-gradient(circle at 35% 30%, #b6ad94, #837a62)'
     : 'radial-gradient(circle at 35% 30%, #e6d6ad, #c2a86f)';
-  const rim = heal ? '#27506e' : blank ? '#564e3a' : '#7a5a28';
-  const ink = heal ? '#0f2a3e' : blank ? '#2a2418' : '#3a2a0e';
-  // Name the TILE, not its effect.
-  const caption = blank ? 'blank tile' : heal ? `“heal ${-(v as number)}” tile`
+  const rim = kind === 'shadow' ? '#6d1f16' : kind === 'fp' ? '#27506e' : blank ? '#564e3a' : '#7a5a28';
+  const ink = kind === 'shadow' ? '#2e0b06' : kind === 'fp' ? '#0f2a3e' : blank ? '#2a2418' : '#3a2a0e';
+  // Name the TILE, not its effect — and a special tile is named by the card it came
+  // in on, which is how players talk about it ("the Shelob's Lair tile").
+  const caption = draw.specialCard ? `“${draw.specialCard}” tile`
+    : blank ? 'blank tile' : heal ? `“heal ${-(v as number)}” tile`
     : v === 'eye' ? 'Eye of Sauron tile' : v === 'die' ? 'die tile' : `the “${v}” tile`;
   return (
     <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: '0 6px' }}>

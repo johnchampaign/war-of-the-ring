@@ -292,8 +292,15 @@ die already showing an Eye.
   West die, OR any Action die + one Elven Ring) and *Denethor's Folly* (sh-str-03: a Will
   of the West die, OR any Action die if Gandalf or Aragorn is in Minas Tirith). The die
   spent IS the action (p.22); the Elven Ring flips FP→Shadow and counts against the
-  one-Ring-per-turn limit (p.21). All other table cards discard only on a ceased play
-  condition (`pruneTableCards`), never by an opponent's action.
+  one-Ring-per-turn limit (p.21). **Deviation:** a Will of the West *is* "any Action
+  die result", so RAW it could pay the second clause too — but each card already has a
+  Will clause, so that buys the identical discard for a strictly higher price (an
+  Elven Ring on top, for the Palantír). The second clause is therefore offered only
+  when a **non-Will** die can pay it, and its die-picker leaves the Will die out; the
+  engine refuses a Will die there as well, so the list and the rule agree. A dominated
+  duplicate is not a genuine player choice (player report 2r1d613t4d3l6631);
+  `scripts/probe-rules-batch-0917.mjs`. All other table cards discard only on a ceased
+  play condition (`pruneTableCards`), never by an opponent's action.
 - **Handlers** (`handlers/index.ts`, all 96/96 implemented): each registered card
   applies its effect; unimplemented cards aren't offered. **Interactive cards**
   (those whose effect needs a player-chosen target) use an `EventHandler.targets`/
@@ -970,7 +977,17 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   Revealed** by the Shadow ("This drawing of a Hunt tile is done only if the
   Fellowship is revealed by the Shadow player", p.39), so it lives in the
   `revealMove` handler, not the declare path. The **only** tile drawn on a *declare*
-  is the *Balrog of Moria* card's own text ("declared or revealed" through Moria).
+  is the *Balrog of Moria* card's own text ("declared or revealed" through Moria) —
+  and since that text names **both**, the Balrog is asked on the **reveal** path too,
+  not just the declare path (player report 3m4a0q4l643g1s2s). Either way it needs an
+  actual move: the traced path always starts where the Fellowship already stood, so
+  declaring (or revealing) *in place* at Moria moved "into, out of, or through"
+  nothing and the card stays on the table. On a reveal the Balrog is asked **before**
+  the Stronghold tiles and carries them with it (they draw once it is answered),
+  because the first tile that opens an FP damage choice drops the draws behind it
+  (D12) — and Moria is itself a Shadow Stronghold, so asking the tiles first would
+  have swallowed the card's one-shot in exactly the case it exists for.
+  `scripts/probe-rules-batch-0917.mjs`.
   Declaring does **not** end the Fellowship phase: the FP may then change the Guide
   or, if the figure now sits at Morannon/Minas Morgul, **enter Mordor this same
   phase** (p.43: enter Mordor "after fully resolving the declaration"). It is,

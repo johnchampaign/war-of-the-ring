@@ -51,18 +51,25 @@ const inMinasTirith = (s: GameState, id: string): boolean =>
   (s.characters.inPlay as Record<string, RegionId>)[id] === 'minas-tirith';
 export function fpForceDiscardMethods(s: GameState, cardId: string): FpForceDiscardMethod[] {
   if (!onTable(s, 'shadow', cardId)) return [];
-  const hasDie = s.dice.fp.length > 0;
+  // A Will of the West IS "any one Action die result", but each of these cards already
+  // has its own Will of the West clause — so paying the OTHER clause with a Will die
+  // buys exactly the same discard for a strictly higher price (an Elven Ring on top,
+  // for the Palantír). That is not a choice anyone would make, so the plain-die clause
+  // is offered only when a non-Will die can pay it (player report 2r1d613t4d3l6631);
+  // `dieOptions` drops the Will die from that clause's picker to match. Deviation
+  // noted in docs/rules-spec.md.
+  const hasPlainDie = s.dice.fp.some((f) => f !== 'will');
   const hasWill = s.dice.fp.includes('will');
   const ringReady = s.elvenRings.includes('fp') && !s.flags.fpUsedElvenRingThisTurn;
   const m: FpForceDiscardMethod[] = [];
   if (cardId === 'sh-char-21') { // The Palantír of Orthanc
     if (hasWill) m.push('will');
-    if (hasDie && ringReady) m.push('ring');
+    if (hasPlainDie && ringReady) m.push('ring');
   } else if (cardId === 'sh-str-03') { // Denethor's Folly
     if (hasWill) m.push('will');
     const gandalfOrAragorn = inMinasTirith(s, 'gandalf-grey') || inMinasTirith(s, 'gandalf-white')
       || inMinasTirith(s, 'aragorn') || inMinasTirith(s, 'strider');
-    if (hasDie && gandalfOrAragorn) m.push('die');
+    if (hasPlainDie && gandalfOrAragorn) m.push('die');
   }
   return m;
 }

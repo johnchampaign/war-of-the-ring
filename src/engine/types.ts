@@ -119,6 +119,13 @@ export interface HuntState {
     discarded?: boolean;
     /** The card that caused an extra draw (Foul Thing from the Deep, Orc Patrol, ...). */
     source?: string;
+    /** Set when the tile drawn was a SPECIAL one, and whose: the physical game prints
+     *  the Shadow's specials red and the Free Peoples' blue, and the face alone can't
+     *  tell them from a standard tile (Elven Cloaks is a "0" like the standard blanks).
+     *  Absent = a standard tile. Public, like the rest of the draw. */
+    special?: 'fp' | 'shadow';
+    /** The Event card that brought that special tile into the pool ("Elven Cloaks"). */
+    specialCard?: string;
     /** The Hunt roll that produced this draw, for the informational popup (public). */
     roll?: HuntRoll }[];
 }

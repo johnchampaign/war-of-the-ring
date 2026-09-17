@@ -48,11 +48,14 @@ export function describeAction(a: WotrAction): string {
     // Army/Muster die", never "change a Event die to ArmyMuster" (player report
     // 2a2z6u3v703c445v).
     case 'useElvenRing': return `Elven Ring: change ${aFace(a.from)} die to ${a.to === 'eye' ? 'an Eye (→ Hunt Box)' : `${aFace(a.to)} die`}`;
+    // Every Action costs an Action die by definition, so naming the die in the
+    // parenthetical said nothing — the chip above the button already shows which die
+    // is being spent (player reports 240x236w5m3e3b4p, 1n17492q185h4n2q). The
+    // parenthetical is left for what the clause costs ON TOP of the die.
     case 'forceDiscardCard': return a.via === 'cards'
-      ? `Discard "${cardName(a.cardId)}" (any die + discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
-      // The Will of the West variant's chip already shows the die (player report 240x236w5m3e3b4p).
-      : a.via === 'will' ? `Discard "${cardName(a.cardId)}"`
-      : `Discard "${cardName(a.cardId)}" (${a.via === 'ring' ? 'Elven Ring + any die' : 'any die'})`;
+      ? `Discard "${cardName(a.cardId)}" (and discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
+      : a.via === 'ring' ? `Discard "${cardName(a.cardId)}" (and one Elven Ring)`
+      : `Discard "${cardName(a.cardId)}"`;
     // Both labels used to describe the ability in shorthand that reads as something
     // else: "recruit Isengard" is not a thing you recruit, and "Orthanc Regulars" names
     // a Nation that does not exist (player report 3v6m502j4k3z161y). Say what the card
@@ -227,7 +230,10 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
     case 'moveFellowship': case 'separateCompanion': case 'moveCharacter': return pick(['character', 'will']);
     case 'recruitUnit': case 'diplomaticAction': case 'bringMinion': case 'sarumanMuster': return pick(['muster', 'armyMuster', 'will']);
     case 'drawEvent': return pick(['event', 'will']);
-    case 'forceDiscardCard': return a.via === 'will' ? pick(['will']) : [...new Set(pool)]; // any Action die pays 'ring'/'die'
+    // 'ring'/'die' are paid by any Action die EXCEPT a Will of the West: these cards
+    // carry their own Will clause, so spending a Will here would buy the same discard
+    // dearer (player report 2r1d613t4d3l6631 — mirrors fpForceDiscardMethods).
+    case 'forceDiscardCard': return a.via === 'will' ? pick(['will']) : [...new Set(pool)].filter((f) => f !== 'will');
     // A card plays via the die ICON PRINTED ON IT — Character, Army or Muster — or an
     // Event/Will wildcard (p.21-22). The Strategy deck holds both Army-icon and
     // Muster-icon cards, and this used to offer either die for any of them: the picker
