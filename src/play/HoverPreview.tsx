@@ -95,7 +95,15 @@ function RegionPreview({ id, view, bottom }: { id: string; view: GameState; bott
     .filter(([, u]) => u!.regular + u!.elite > 0)
     .map(([n, u]) => ({ nation: n as Nation, reg: u!.regular, elite: u!.elite }))
     .sort((a, b) => (FP_SET.has(a.nation) ? 0 : 1) - (FP_SET.has(b.nation) ? 0 : 1));
-  const control = r?.control ? (r.control === 'fp' ? 'Free Peoples' : 'Shadow') : (def?.nation ? (FP_SET.has(def.nation) ? 'Free Peoples' : 'Shadow') : null);
+  // Name the region's NATION ("Town · Rohan"), not just its side — "Town · Shadow" said
+  // less than the board does (player report 3d081j1h0q1w1l4h). A Settlement held by the
+  // other side says so after it.
+  const homeSide = def?.nation ? (FP_SET.has(def.nation) ? 'fp' : 'shadow') : null;
+  const sideName = (s: string) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
+  const control = [
+    def?.nation ? nationLabel(def.nation) : null,
+    r?.control && r.control !== homeSide ? `held by ${sideName(r.control)}` : null,
+  ].filter(Boolean).join(' · ') || null;
 
   const crop = (
     <svg viewBox={vb} style={bottom

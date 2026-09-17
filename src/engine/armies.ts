@@ -568,7 +568,7 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   liftSiegeIfAbandoned(state, from); // a besieger that vacates the field lifts the siege
   if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
   activateOnCompanionLand(state, side, chars, to);
-  log(state, null, 'army', `Split army ${from} -> ${to} (${movingUnits} unit${movingUnits > 1 ? 's' : ''})`);
+  log(state, null, 'army', `Moved army ${from} -> ${to} (${movingUnits} unit${movingUnits > 1 ? 's' : ''})`);
   return true;
 }
 

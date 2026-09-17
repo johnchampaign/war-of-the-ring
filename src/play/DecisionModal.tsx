@@ -71,6 +71,17 @@ function cardCostTitle(data: { card?: string; kind?: string } | undefined): stri
   return `${title} — how big do you make it?`;
 }
 
+/** The actions this modal renders as its choices. Shared with the page's "Peek board"
+ *  toggle so every modal that covers the board also offers the peek — Event-card picks
+ *  (Stormcrow, Fear! Fear! Foes!) went through a second path the toggle didn't know
+ *  about (player reports 2r5l183z6n6f460d, 113f0x4k300a0u01). */
+export function modalDecisions(view: GameState | null | undefined, actions: WotrAction[]): WotrAction[] {
+  const evModal = eventChoiceInModal(actions);
+  const freeCard = view?.pendingChoice?.kind === 'freeCharEvent';
+  return inNationOrder(actions).filter((a) => (isDecisionAction(a) || (evModal && a.kind === 'eventTarget') || (freeCard && a.kind === 'playEvent'))
+    && a.kind !== 'retreatTo' && a.kind !== 'preCombatRetreat');
+}
+
 export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: {
   view: GameState; you: Side; actions: WotrAction[]; onAction: (a: WotrAction) => void; yourTurn: boolean;
   // When set, an Undo control is shown INSIDE the modal — the modal's backdrop
@@ -91,8 +102,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
   // list of buttons — the binary Retreat-or-stand choice above it stays here (player
   // report 0f3003342g666741). The modal keeps its frame so the battle context is
   // visible while you click.
-  const decisions = inNationOrder(actions).filter((a) => (isDecisionAction(a) || (evModal && a.kind === 'eventTarget') || (freeCard && a.kind === 'playEvent'))
-    && a.kind !== 'retreatTo' && a.kind !== 'preCombatRetreat');
+  const decisions = modalDecisions(view, actions);
 
   // Show only when there's a live decision (battle in progress, or a decision the
   // viewer owns). If a battle is up but it's the opponent's call, show a wait note.

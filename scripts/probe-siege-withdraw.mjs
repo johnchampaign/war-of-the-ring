@@ -182,5 +182,32 @@ const boxCount = (state, id) => (state.regions[id].siegeBox ? forceUnitCount(sta
     c.state.pendingChoice?.kind !== 'siegeWithdraw', `kind=${c.state.pendingChoice?.kind}`);
 }
 
+// --- 5. the OTHER side's Characters stay outside ---------------------------------
+{
+  // Player report 362s69475d0h3835: Companions standing in Moria's region (with a
+  // Shadow Army there) were swept into the Stronghold Box when that Army withdrew.
+  console.log('\n=== withdraw: enemy Companions in the region are not boxed ===');
+  const state = bareBoard();
+  state.nations.sauron.step = 0; state.nations.sauron.active = true;
+  state.nations.elves.step = 0; state.nations.elves.active = true;
+  state.regions.moria.units = { sauron: { regular: 3, elite: 0 } };
+  state.regions.moria.characters = ['boromir', 'gimli', 'legolas'];
+  state.regions['dimrill-dale'].units = { elves: { regular: 1, elite: 4 } };
+  state.regions['dimrill-dale'].leaders = 1;
+  startBattle(state, 'fp', 'dimrill-dale', 'moria');
+  combatStep(state);
+  check('Shadow is offered the withdraw', state.pendingChoice?.kind === 'siegeWithdraw', `kind=${state.pendingChoice?.kind}`);
+  const w = wotrAdapter.tryApplyAction(state, { kind: 'siegeWithdraw', withdraw: true }, 'shadow');
+  check('withdraw accepted', w.ok, w.ok ? '' : w.error);
+  const box = w.ok ? w.state.regions.moria.siegeBox : null;
+  check('no Companion in the Stronghold Box', !!box && box.characters.length === 0, JSON.stringify(box?.characters));
+  check('the Companions stay in the region', w.ok && w.state.regions.moria.characters.length === 3);
+  const a = w.ok ? wotrAdapter.tryApplyAction(w.state, { kind: 'besiegerAdvance', advance: true }, 'fp') : w;
+  check('advance accepted', a.ok, a.ok ? '' : a.error);
+  check('after the advance the Companions are outside with the besiegers',
+    a.ok && ['boromir', 'gimli', 'legolas'].every((c) => a.state.regions.moria.characters.includes(c))
+      && a.state.regions.moria.siegeBox.characters.length === 0);
+}
+
 console.log(failures ? `\nprobe-siege-withdraw: ${failures} FAILURE(S)` : '\nprobe-siege-withdraw OK');
 process.exit(failures ? 1 : 0);

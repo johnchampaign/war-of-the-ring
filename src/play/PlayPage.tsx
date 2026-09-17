@@ -19,7 +19,7 @@ import { regionName } from './names';
 import { StatusBar } from './StatusBar';
 import { HandStrip, TabledStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
-import { DecisionModal } from './DecisionModal';
+import { DecisionModal, modalDecisions } from './DecisionModal';
 import { MovePicker } from './MovePicker';
 import { sortieForce } from '../engine/combat';
 import { DiceTray } from './DiceTray';
@@ -168,7 +168,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   });
   const submit = useCallback(async (a: WotrAction) => {
     if (inFlight.current) return;
-    if (!activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die && g.view && g.you) {
+    // The card Gandalf the White grants after an Ents card is played WITHOUT a die, so
+    // it must not ask which die pays (player report 6v145h2o5w361j27).
+    const dieFree = a.kind === 'playEvent' && g.view?.pendingChoice?.kind === 'freeCharEvent';
+    if (!dieFree && !activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die && g.view && g.you) {
       const opts = dieOptions(a, g.view, g.you as Side);
       // The plain-vs-hybrid case is settled without asking (same rule as the action
       // list — player report 4w2p23491g062m5l); every other multi-die action asks.
@@ -178,7 +181,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     inFlight.current = true;
     // Name the die the player actually picked (see DIE_BEARING).
-    const withDie = (activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die)
+    const withDie = (!dieFree && activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die)
       ? { ...a, die: activeDie } as WotrAction
       : a;
     setBusy(true);
@@ -417,7 +420,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Peeking is a look at the board DURING one blocking prompt; once that prompt is gone
   // the peek has to end with it, or the toggle stays latched on and hides the NEXT
   // modal before the player has seen it.
-  const peekable = !!moveDraft || !!g.view?.pendingCombat || g.legalActions.some(isDecisionAction);
+  const peekable = !!moveDraft || !!g.view?.pendingCombat || modalDecisions(g.view, g.legalActions).length > 0;
   useEffect(() => { if (!peekable) setPeekBoard(false); }, [peekable]);
   // What the MAP offers that the action list deliberately leaves out. The panel has to
   // NAME these: army moves, musters, Minion entries, character moves and siege assaults

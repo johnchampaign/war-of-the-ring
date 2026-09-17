@@ -57,6 +57,12 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   const allSkips = actions.filter((a) => a.kind === 'skipDie') as Extract<WotrAction, { kind: 'skipDie' }>[];
   const rest = inNationOrder(actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie'));
   const sel = selectedDie ?? null;
+  // The second half of a die's Action (a second Army move, a second recruit, more
+  // Character moves) can't be passed out of — but the Pass button stays in place,
+  // greyed, like it does while a die is selected, so the list doesn't jump
+  // (player report 423m415l300y1l4z).
+  const midAction = !pass && ['armyMove2', 'recruitSecond', 'charMove2'].includes(view.pendingChoice?.kind ?? '');
+  const passOff = !pass || !!sel;
   // A die picked in the tray decides which die "Discard" spends, like every other
   // action (player report: the discard button still asked which die).
   const skips = sel ? allSkips.filter((a) => a.face === sel) : allSkips;
@@ -95,16 +101,17 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       {chainNote && (
         <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '6px 9px', margin: '2px 0 6px', fontSize: 12 }}>⚑ {chainNote}</div>
       )}
-      {pass && (
+      {(pass || midAction) && (
         // Picking a die means you are acting with it, so Pass is off until you clear
         // the selection (player report 111g4j5g2n4q3x2g).
         // ...and it has to LOOK off, not just be off — a full-brightness button that
         // silently ignores the click reads as a broken game (player report
         // 2p206p523z253b02).
-        <button disabled={busy || !!sel} title={sel ? 'Click your selected die again (or pick another) to pass' : undefined} onClick={() => click(pass)}
+        <button disabled={busy || passOff} title={midAction ? 'Finish this Action first' : sel ? 'Click your selected die again (or pick another) to pass' : undefined} onClick={() => pass && click(pass)}
           style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 3px' : '0 0 8px', padding: compact ? '3px 10px' : '9px 10px', borderRadius: 6, fontSize: compact ? 11 : 14, fontWeight: 700,
-            background: sel ? '#241f16' : '#4a3a1a', color: sel ? '#6d6455' : '#ffe08a', border: `1px solid ${sel ? '#3a342a' : '#7a5f24'}`, cursor: sel ? 'not-allowed' : 'pointer' }}>
-          Pass{sel ? ' (a die is selected)' : ''}
+            background: passOff ? '#241f16' : '#4a3a1a', color: passOff ? '#6d6455' : '#ffe08a', border: `1px solid ${passOff ? '#3a342a' : '#7a5f24'}`, cursor: passOff ? 'not-allowed' : 'pointer' }}>
+          {/* Same label either way — the greyed look says it's off (player report 1r510z456m0z6p35). */}
+          Pass
         </button>
       )}
       {/* Board-driven actions live on the MAP (not in this list) — point the player

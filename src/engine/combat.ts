@@ -1699,8 +1699,13 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
     // region. IF the attacking Army chooses to advance, the Stronghold is now
     // considered under siege and the battle is over." So the advance — and with it
     // whether a siege exists at all — is the attacker's call, not automatic.
-    r.siegeBox = { units: r.units, leaders: r.leaders, nazgul: r.nazgul, characters: r.characters };
-    r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = [];
+    // Only the DEFENDER's figures withdraw. The other side's Characters standing in
+    // the region (Companions passing through a Shadow Stronghold's region) are not part
+    // of that Army and stay outside, with the attackers (player report 362s69475d0h3835).
+    const defSide = pc.attacker === 'fp' ? 'shadow' : 'fp';
+    const inside = r.characters.filter((c) => characterSide(c) === defSide);
+    r.siegeBox = { units: r.units, leaders: r.leaders, nazgul: r.nazgul, characters: inside };
+    r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = r.characters.filter((c) => !inside.includes(c));
     // NB the 5-unit garrison cap is NOT applied yet: it bites when a Stronghold "comes
     // under siege", and no siege exists until the besieger actually advances.
     state.pendingChoice = { owner: pc.attacker, kind: 'besiegerAdvance' };
