@@ -45,6 +45,11 @@ function bareBoard(seed = 11) {
  *  besieging the Elven garrison (which sits in the siege box). */
 function moriaAndTheSiegeOfLorien() {
   const s = bareBoard();
+  // Sauron is At War, as it must be for an Army besieging Lórien to have got there: a
+  // Nation short of War may not cross another Nation's borders, and Lórien is Elven
+  // ground. The card enumerators now check the ROUTE (probe-card-move-reach.mjs), so
+  // this board has to be a position the game could actually reach.
+  s.nations.sauron.active = true; s.nations.sauron.step = 0;
   s.regions['moria'].units = { sauron: { regular: 3, elite: 1 } };
   s.regions['moria'].nazgul = 1;
   const lorien = s.regions['lorien'];

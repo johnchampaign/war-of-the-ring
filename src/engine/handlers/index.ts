@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, forceSide, figureForce, activateOnCompanionLand } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -90,7 +90,7 @@ type CardMoveSel = { units?: Partial<Record<Nation, { regular?: number; elite?: 
  *  moving" (deviation D15, now closed). The selection is sanitized against the
  *  region (clamped to available own-side figures); if no unit survives the clamp
  *  the WHOLE Army moves, so a malformed selection degrades to the old behavior. */
-function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel, path?: readonly RegionId[], maxSteps?: number): void {
+function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel, path?: readonly RegionId[], maxSteps?: number, direct = false): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
   // THE ROUTE MATTERS. A card move "through more than one region" enters each region
   // on the way, and entering an enemy Settlement free of enemy units captures it —
@@ -103,12 +103,34 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   // refused rather than quietly straightened). With none given, the QUIET route is
   // taken: the way round that captures nothing, so no Nation is ever woken by a
   // choice nobody made. Only a journey with no alternative captures on the way.
+  //
+  // `direct` marks the cards that do not travel at all. Paths of the Woses moves an
+  // Army "DIRECTLY to Minas Tirith"; Corsairs of Umbar moves one "from Umbar TO a
+  // Gondor coastal region"; Rage of the Dunlendings moves units "TO this region";
+  // Dead Men of Dunharrow moves Companions "to Erech, Lamedon or Pelargir". None of
+  // them names a range or a traversal clause, so there is no route: the Army leaves
+  // one region and arrives in the other, and nothing in between is entered, captured
+  // or roused. Inventing a route for them both woke Nations nobody marched through
+  // and made the UI demand a walkable path to a destination the card reaches by
+  // fiat (player report 1u1f45154m472g67). The restrictions that DO still bind such a
+  // move are the ones at its two ends, and each card's own enumerator states them.
   const movingNations = (Object.keys(sel?.units ?? src.units) as Nation[]).filter((n) => sideOfNation(n) === side);
-  const route = path?.length ? [...path] : quietCardPath(state, from as RegionId, to as RegionId, side, movingNations, regionDist(from, to) + 2);
-  if (path?.length) {
+  const route = direct ? [to as RegionId]
+    : path?.length ? [...path]
+    : quietCardPath(state, from as RegionId, to as RegionId, side, movingNations, regionDist(from, to) + 2);
+  if (!direct && path?.length) {
     const bad = cardPathBlockReason(state, from as RegionId, route, side, movingNations, maxSteps);
     if (bad) throw new Error(bad);
     if (route[route.length - 1] !== to) throw new Error('That route does not end where the move does.');
+  }
+  // A RANGED card move with no route at all is not a move the card can make. The
+  // quiet-route search comes back empty when every way round is walled off, and the
+  // move used to go through anyway — the Army simply appeared at the far end, which is
+  // how a Free Peoples Army crossed a Shadow Army to reach Moria (player report
+  // y1hvvsejg6wgibm0). The enumerators no longer offer such a pair; refuse it here too,
+  // so a hand-built action cannot walk through an Army either.
+  if (!direct && maxSteps !== undefined && !route.length) {
+    throw new Error(`There is no route from ${REGIONS[from]?.name ?? from} to ${REGIONS[to]?.name ?? to} that this card can take — every way round is held by an enemy Army.`);
   }
   // Everything entered BEFORE the destination is passed through: it is captured (and
   // its Nation roused) but the Army does not stop, so no stacking check applies.
@@ -652,9 +674,18 @@ register('sh-str-17', { // Many Kings: 2 S&E Regulars in each of three different
   },
   applyTarget: (s, _side, t) => placeForce(s, 'southrons', t.region!, { regular: 2 }),
 });
+// "Recruit two Isengard Regular units in a FREE REGION adjacent to North or South
+// Dunland." A free region (p.10) is stricter than the general Event-card recruit test:
+// no enemy Army in it and no Settlement the enemy controls. `recruitable` allowed a
+// besieged Stronghold, which p.33 makes free for the BESIEGING player — so with a Free
+// Peoples Army camped outside Moria the card recruited into the boxed Isengard garrison
+// and then walked the Dunland units into the open field, where they joined the besiegers
+// (player report 1q2j5e5y0c2l5q4q). Moria is adjacent to South Dunland, so this was
+// reachable in an ordinary game. A besieged Stronghold is never a free region for the
+// side inside it, and that single test closes both halves of the report.
 function rageTargets(s: GameState): EventTarget[] {
   const adj = new Set([...REGIONS['north-dunland']!.adjacency, ...REGIONS['south-dunland']!.adjacency]);
-  return [...adj].filter((r) => recruitable(s, 'shadow', r)).map((region) => ({ region }));
+  return [...adj].filter((r) => freeRegion(s, r as RegionId, 'shadow')).map((region) => ({ region }));
 }
 function seSettlements(s: GameState): string[] {
   return Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'southrons' && isSettlementRegion(id) && recruitable(s, 'shadow', id));
@@ -686,7 +717,7 @@ register('sh-str-10', {
       || (armySide(state, to) !== 'fp' && unitCount(state, 'umbar') + unitCount(state, to) <= STACKING_LIMIT))
     // Tag enemy-held destinations as attacks so the UI doesn't offer the p.28
     // split picker for what resolves as a battle (applyTarget re-checks armySide).
-    .map((to): EventTarget => ({ from: 'umbar', to, mode: armySide(state, to) === 'fp' ? 'attack' : 'move' })),
+    .map((to): EventTarget => ({ from: 'umbar', to, mode: armySide(state, to) === 'fp' ? 'attack' : 'move', direct: true })),
   applyTarget(state, _side, t) {
     // THE ARMY MOVES, THEN FIGHTS — the card says so, and it matters (player report
     // 5l014y5s1w3p1c1k, John's call 2026-09-13). Two consequences the old
@@ -706,7 +737,7 @@ register('sh-str-10', {
       startBattle(state, 'shadow', t.from!, t.to!, { noCease: true, mustAdvance: true });
       return;
     }
-    moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path);
+    moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, undefined, true); // "from Umbar TO a Gondor coastal region" — a landing, not a march
     log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}${t.move ? ' (split)' : ''}`);
     // "If there is a Free Peoples Army in the region, a battle starts" — a boxed
     // garrison IS a Free Peoples Army in the region (p.31), so landing alongside the
@@ -745,15 +776,23 @@ register('sh-str-10', {
 // 57650y0x71235d5f: "I cannot move to or move from the Shadow Armies in West Harondor
 // and South Ithilien"). The over-stack is caught once the card finishes by the
 // adapter's end-of-action sweep, which raises the normal "remove excess" prompt.
+//
+// REACH, NOT DISTANCE. The card ends with "the traversed regions must be free for the
+// purposes of Army movement", so what matters is whether a legal route exists — not how
+// far apart two Armies sit on the bare map. Measuring plain distance offered moves that
+// could not be made: Helm's Deep, whose only exits are the Fords of Isen and Westemnet,
+// was listed as an origin for a three-region hop to Orthanc while a Rohan Army held the
+// Fords (player report 4e6f6u1a5y3q381q, which reports Mount Gundabad the same way).
 const SHADOWS_GATHER_RANGE = 3;
 function shadowsGatherMoves(state: GameState): EventTarget[] {
   const out: EventTarget[] = [];
   const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
   for (const from of shadowRegions) {
+    const reach = cardMoveReach(state, from as RegionId, 'shadow', ownNationsIn(state, from as RegionId, 'shadow'), SHADOWS_GATHER_RANGE);
     for (const to of shadowRegions) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       if (from === to) continue;
-      if (regionDist(from, to) <= SHADOWS_GATHER_RANGE) out.push({ from, to, range: SHADOWS_GATHER_RANGE });
+      if (reach.has(to as RegionId)) out.push({ from, to, range: SHADOWS_GATHER_RANGE });
     }
   }
   return out;
@@ -773,13 +812,15 @@ function shadowLengthensMoves(state: GameState, applied: EventTarget[] = []): Ev
   const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
   for (const from of shadowRegions) {
     if (movedTo.has(from)) continue;
+    // Reach, not distance — same clause and same reason as shadowsGatherMoves.
+    const reach = cardMoveReach(state, from as RegionId, 'shadow', ownNationsIn(state, from as RegionId, 'shadow'), SHADOW_LENGTHENS_RANGE);
     for (const to of shadowRegions) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       // No `besieged` test on the destination — see shadowsGatherMoves for why an
       // open-field Shadow Army in a besieged region is the besieger, not the besieged.
       if (from === to) continue;
       // No stacking pre-filter either - see shadowsGatherMoves.
-      if (regionDist(from, to) <= SHADOW_LENGTHENS_RANGE) out.push({ from, to, range: SHADOW_LENGTHENS_RANGE });
+      if (reach.has(to as RegionId)) out.push({ from, to, range: SHADOW_LENGTHENS_RANGE });
     }
   }
   return out;
@@ -890,14 +931,20 @@ const wosesDestinations = (state: GameState): string[] => {
   const dests = shadowHoldsMT ? (REGIONS['minas-tirith']!.adjacency as string[]) : ['minas-tirith'];
   return dests.filter((to) => freeForMovement(state, to, 'fp'));
 };
-const wosesMoves = (state: GameState): Array<{ from: string; to: string }> => {
-  const out: Array<{ from: string; to: string }> = [];
+// RESIDUAL: the card allows an origin "including a Stronghold under siege", which this
+// enumerator cannot yet offer — a boxed garrison marching out needs the siege to end and
+// the Stronghold to change hands behind it, which belongs with the siege bookkeeping in
+// combat, not here. Open-field Armies only for now; recorded in docs/rules-spec.md.
+const wosesMoves = (state: GameState): EventTarget[] => {
+  const out: EventTarget[] = [];
   const dests = wosesDestinations(state);
   for (const from of ROHAN) {
     if (armySide(state, from) !== 'fp') continue;
     const fromCount = unitCount(state, from);
     for (const to of dests) {
-      if (to !== from && fromCount + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to });
+      // `direct: true` — the card says "DIRECTLY to Minas Tirith": no route, nothing
+      // entered on the way, and no path for the player to trace on the map.
+      if (to !== from && fromCount + unitCount(state, to) <= STACKING_LIMIT) out.push({ from, to, direct: true });
     }
   }
   return out;
@@ -910,7 +957,8 @@ register('fp-str-11', {
     // but the part that MOVES must include a Companion (Almanac; player report
     // 6b3v215v0m1s090m — a split with no Companion in it was allowed to go).
     if (t.move && !(t.move.characters ?? []).some((c) => COMPANION_SET.has(c))) throw new Error('Through a Day and a Night: the moving part must include a Companion');
-    moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path); log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
+    moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, undefined, true); // "DIRECTLY to Minas Tirith"
+    log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
 });
 // Through a Day and a Night: move an FP Army containing a Companion up to 2 regions.
 const DAY_NIGHT_RANGE = 2;
@@ -918,12 +966,16 @@ function dayNightMoves(state: GameState): EventTarget[] {
   const out: EventTarget[] = [];
   for (const from of Object.keys(state.regions)) {
     if (armySide(state, from) !== 'fp' || !state.regions[from]!.characters.some((c) => COMPANION_SET.has(c))) continue;
-    for (const to of Object.keys(state.regions)) {
+    // "The regions must be free for the purposes of Army movement" — every region on
+    // the way, not just the landing. Plain distance let this Army walk THROUGH a Shadow
+    // Army: Lórien → Moria with Shadow units standing in between (player report
+    // y1hvvsejg6wgibm0).
+    const reach = cardMoveReach(state, from as RegionId, 'fp', ownNationsIn(state, from as RegionId, 'fp'), DAY_NIGHT_RANGE);
+    for (const to of reach.keys()) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
-      const d = regionDist(from, to);
       // No stacking pre-filter - the Almanac gives this card the same "merge over the
       // limit, resolve after the movement" allowance as the Shadow move cards.
-      if (d >= 1 && d <= DAY_NIGHT_RANGE && freeForMovement(state, to, 'fp')) out.push({ from, to, range: DAY_NIGHT_RANGE });
+      if (freeForMovement(state, to, 'fp')) out.push({ from, to, range: DAY_NIGHT_RANGE });
     }
   }
   return out;

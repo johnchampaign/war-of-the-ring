@@ -308,7 +308,7 @@ die already showing an Eye.
   player picks from the enumerated targets, then the effect applies (e.g.
   *Cruel Weather* = move the Fellowship to an adjacent region; *Corsairs of Umbar*;
   *Shadows Gather*). Minor approximations are noted per card (Corsairs' "coastal"
-  set; Shadows Gather's path-traversal reduced to distance).
+  set).
   *Corsairs of Umbar* follows its card text: moving onto a Free Peoples Army **starts
   a battle** (`startBattle` from Umbar, advancing on a win via the normal End of
   Battle rules) rather than merging, and the attack **cannot be ceased**
@@ -1248,6 +1248,52 @@ turn the FP reached 4 and still lost). Regression-tested in
   along with the Army" (Almanac). The sibling card *Paths of the Woses* already enforced
   this; this one let the Army march off and leave every Companion at home *(player report
   0c2d6s4y07386h19)*. `scripts/probe-card-move-split.mjs`.
+- **Card moves that state a RANGE need a legal ROUTE, not a short distance.**
+  *Shadows Gather* ("move one Shadow Army up to three regions … the traversed regions
+  must be free for the purposes of Army movement"), *The Shadow Lengthens* (same clause,
+  two regions) and *Through a Day and a Night* ("the regions must be free for the
+  purposes of Army movement") were enumerated by plain region-step **distance** over the
+  bare map. Distance is not reach: an Army walled in behind an enemy Army was offered as
+  both an origin and a destination — Helm's Deep, whose only exits are the Fords of Isen
+  and Westemnet, was listed for a hop to Orthanc while a Rohan Army held the Fords
+  *(player report 4e6f6u1a5y3q381q, which reports Mount Gundabad the same way)* — and a
+  Free Peoples Army walked Lórien → Moria straight through the Shadow units in Dimrill
+  Dale *(player report y1hvvsejg6wgibm0)*. All three now enumerate with
+  `cardMoveReach` (`armies.ts`), a BFS over the same per-step test the route validator
+  and the quiet-route search use (`cardStepBlocked`: no enemy Army, no Shadow bar, and
+  no Nation crossing another's borders before it is At War). The enumerators ask the
+  **permissive** form of the diplomatic test — p.28 lets an Army split before a card
+  move, so a step barred to one travelling Nation is still open to another — and the
+  strict form is applied to whoever actually goes, when the move is applied.
+  `moveAllUnits` now **refuses** a ranged move with no route at all, instead of quietly
+  teleporting the Army when every way round was walled off.
+  `scripts/probe-card-move-reach.mjs`.
+- **Card moves that state NO range move DIRECTLY — deviation closed the other way.**
+  *Paths of the Woses* moves an Army "from any one Rohan region … **directly** to Minas
+  Tirith", *Corsairs of Umbar* "from Umbar to a Gondor coastal region", *Dead Men of
+  Dunharrow* Companions "to Erech, Lamedon or Pelargir", *Rage of the Dunlendings* units
+  "**to** this region". None names a range or a traversal clause, so there is no route:
+  the figures leave one region and arrive in the other, and nothing in between is
+  entered, captured or roused. The engine invented a quiet route for them anyway, which
+  both woke Nations nobody marched through and made the map demand a walkable path to a
+  destination the card reaches by fiat *(player report 1u1f45154m472g67)*. Such targets
+  now carry `direct: true`: `moveAllUnits` skips the route, and the board hands them back
+  to the plain click-the-destination flow instead of asking for a trace.
+  **Residual:** *Paths of the Woses* allows an origin "including a Stronghold under
+  siege", which the enumerator still cannot offer — a boxed garrison marching out needs
+  the siege to end and the Stronghold to change hands behind it, which belongs with the
+  siege bookkeeping in `combat.ts`. Open-field Armies only for now.
+- **"Rage of the Dunlendings" (sh-str-11) recruits in a *free region*.** The card says
+  "Recruit two Isengard Regular units in a **free region** adjacent to North or South
+  Dunland", and a free region (p.10) is stricter than the general Event-card recruit
+  test: no enemy Army in it and no Settlement the enemy controls. The generic
+  `recruitable` helper was used instead, which p.28/p.33 open to a **besieged**
+  Stronghold — free for the *besieging* player, never for the side boxed inside it. With
+  a Free Peoples Army camped in Moria's open field (Moria is adjacent to South Dunland)
+  the card therefore recruited into the boxed Isengard garrison and then walked the
+  Dunland units into the open field, where they joined the besiegers *(player report
+  1q2j5e5y0c2l5q4q)*. One `freeRegion` test closes both halves.
+  `scripts/probe-card-move-reach.mjs`.
 
 ---
 

@@ -377,6 +377,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // (player report 1y683v3l5s0z3o1u, "I can move from Eastemnet via Folde to Dead
     // Marshes, but not from Dead Marshes via Folde to Eastemnet"). The old guess stays
     // as the fallback for cards that don't state a range.
+    // A DIRECT card move has no route to trace: Paths of the Woses goes "directly to
+    // Minas Tirith", Corsairs of Umbar lands "from Umbar to a Gondor coastal region".
+    // Falling back to a region-hop guess made the map demand a walkable path to a
+    // destination the card reaches by fiat, and then refused the move when no such path
+    // existed (player report 1u1f45154m472g67). Hand these back to the plain
+    // click-the-destination flow.
+    if (legs.some((a) => a.direct)) return null;
     const budget = Math.max(...legs.map((a) => a.range ?? regionHops(selected as RegionId, a.to!)));
     // A ONE-REGION card move is an ordinary Army move — there is no route to trace, so
     // hand it back to the plain click-the-destination flow rather than making the

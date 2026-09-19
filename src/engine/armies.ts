@@ -360,13 +360,7 @@ export function cardPathBlockReason(state: GameState, from: RegionId, path: read
 export function quietCardPath(state: GameState, from: RegionId, to: RegionId, side: Side, movingNations: readonly Nation[], maxSteps: number): RegionId[] {
   const enemy: Side = side === 'fp' ? 'shadow' : 'fp';
   const wakes = (r: RegionId) => r !== to && !!REGIONS[r]?.settlement && REGIONS[r]!.settlement !== 'Fortification' && settlementController(state, r) === enemy;
-  const passable = (r: RegionId) => {
-    if (side === 'shadow' && shadowBarredFromRegion(state, r)) return false;
-    const occ = armySide(state, r);
-    if (occ !== null && occ !== side) return false;
-    const dn = REGIONS[r]?.nation;
-    return !movingNations.some((n) => !isAtWar(state, n) && dn && dn !== n);
-  };
+  const passable = (r: RegionId) => !cardStepBlocked(state, r, side, movingNations);
   // Layered DP over step count, fewest captures first then fewest steps — the same
   // shape as the Fellowship's route (see fellowship.ts), for the same reason.
   const layers: Array<Map<string, { cost: number; prev: string | null }>> = [new Map([[from, { cost: 0, prev: null }]])];
@@ -392,6 +386,65 @@ export function quietCardPath(state: GameState, from: RegionId, to: RegionId, si
   let cur: string = to;
   for (let k = bestK; k >= 1; k--) { out.unshift(cur as RegionId); cur = layers[k]!.get(cur)!.prev!; }
   return out;
+}
+
+/** May an Army of `nations` STEP INTO `r` on a card move? One step of the rule
+ *  `cardPathBlockReason` applies to a whole route: no enemy Army in the way, no
+ *  card effect barring the Shadow, and no Nation crossing another's borders before
+ *  it is At War.
+ *
+ *  `anyNation` asks the PERMISSIVE version of the last test, which is the question
+ *  the move ENUMERATORS have to ask: p.28 lets an Army split before a card move, so
+ *  a mixed stack may send only its At-War half, and a step barred to one travelling
+ *  Nation is still open to another. Leaving it false asks the strict question — every
+ *  named Nation must be able to enter — which is the one to ask once the player has
+ *  chosen who actually goes. */
+export function cardStepBlocked(state: GameState, r: RegionId, side: Side, nations: readonly Nation[], anyNation = false): boolean {
+  if (side === 'shadow' && shadowBarredFromRegion(state, r)) return true;
+  const occ = armySide(state, r);
+  if (occ !== null && occ !== side) return true;
+  const dn = REGIONS[r]?.nation;
+  const barred = (n: Nation) => !isAtWar(state, n) && !!dn && dn !== n;
+  if (!nations.length) return false;
+  return anyNation ? nations.every(barred) : nations.some(barred);
+}
+
+/** Every region an Army of `nations` can legally REACH from `from` in 1..`maxSteps`
+ *  card-move steps, mapped to the fewest steps that get there.
+ *
+ *  The move cards that state a range — Shadows Gather, The Shadow Lengthens, Through
+ *  a Day and a Night — all carry the same clause: "the traversed regions must be free
+ *  for the purposes of Army movement". Their enumerators used to measure a plain
+ *  region-step DISTANCE over the bare map instead, so they offered moves whose route
+ *  did not exist: an Army walled in behind an enemy Army was listed as a source and a
+ *  destination (player report 4e6f6u1a5y3q381q — Helm's Deep, whose only ways out are
+ *  the Fords of Isen and Westemnet, offered as an origin for a hop to Orthanc), and a
+ *  Free Peoples Army walked Lórien → Moria straight through the Shadow units standing
+ *  in between (player report y1hvvsejg6wgibm0). Distance is not reach; this is. */
+export function cardMoveReach(state: GameState, from: RegionId, side: Side, nations: readonly Nation[], maxSteps: number, anyNation = true): Map<RegionId, number> {
+  const out = new Map<RegionId, number>();
+  let layer: RegionId[] = [from];
+  const seen = new Set<string>([from]);
+  for (let d = 1; d <= maxSteps && layer.length; d++) {
+    const next: RegionId[] = [];
+    for (const r of layer) {
+      for (const a of (REGIONS[r]?.adjacency ?? []) as RegionId[]) {
+        if (seen.has(a)) continue;
+        if (cardStepBlocked(state, a, side, nations, anyNation)) continue;
+        seen.add(a); out.set(a, d); next.push(a);
+      }
+    }
+    layer = next;
+  }
+  out.delete(from); // a card move "cannot end movement in the region that it started from"
+  return out;
+}
+
+/** The Nations of `side` with units standing in `region` — who would be travelling
+ *  if this Army made a card move. */
+export function ownNationsIn(state: GameState, region: RegionId, side: Side): Nation[] {
+  const u = state.regions[region]?.units ?? {};
+  return (Object.keys(u) as Nation[]).filter((n) => sideOfNation(n) === side && (u[n]!.regular + u[n]!.elite) > 0);
 }
 
 export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side): string | null {
