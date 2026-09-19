@@ -881,8 +881,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'sorcererDraw': {
       requireChoice(state, 'sorcererDraw', actor); // Witch-king Sorcerer draw (or decline) — combat resumes via advance()
-      if (action.draw) drawOne(state, 'shadow', (state.pendingChoice!.data as { deck: 'character' | 'strategy' }).deck, 'the Witch-king, Sorcerer');
-      state.pendingChoice = null; break;
+      const d = state.pendingChoice!.data as { deck: 'character' | 'strategy'; then?: GameState['pendingChoice'] };
+      if (action.draw) drawOne(state, 'shadow', d.deck, 'the Witch-king, Sorcerer');
+      // A battle that ended in round one parks its advance choice behind this draw.
+      state.pendingChoice = d.then ?? null; break;
     }
     case 'diplomaticAction': {
       requirePhase(state, 'actionResolution');
@@ -1126,8 +1128,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'combatCard', actor);
       resolvePlayCombatCard(state, action.cardId);
       // Witch-king "Sorcerer": Shadow plays a Combat card in the first round with the
-      // Witch-king in the battle → flag an optional matching-deck Event draw, which the
-      // combat driver pauses for (sorcererDraw choice) before the round resolves.
+      // Witch-king in the battle → flag an optional matching-deck Event draw, asked once
+      // that round is completely over (see sorcererDue in combat.ts).
       const pc = state.pendingCombat;
       if (actor === 'shadow' && action.cardId && pc && pc.round === 0 && !pc.sorcererAsked) {
         const shR = pc.attacker === 'shadow' ? pc.from : pc.to;

@@ -104,19 +104,19 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   // Gandalf the White "The White Rider": when the FP chose (at battle start) to forfeit
   // his Leadership, all Nazgûl Leadership (incl. the Witch-king) is negated this battle.
   if (whiteRiderForfeit) {
-    const shR = side === 'shadow' ? ownRegion : enemyRegion, sr = state.regions[shR]!;
-    const nazgulLead = sr.nazgul + (sr.characters.includes('witch-king') ? 2 : 0);
-    leadVal = Math.max(0, leadVal - (side === 'shadow' ? nazgulLead : 1));
+    leadVal = Math.max(0, leadVal - (side === 'shadow' ? nazgulLeadership(own) : 1));
   }
   // The five-dice cap (p.28) bites only here, after every forfeit and penalty.
   const lead = Math.min(5, Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0) - (enemyMods.enemyLeadershipPenalty ?? 0)));
   // Foul Stench cancels the FP Leader re-roll only "if the Nazgûl Leadership equals or
   // exceeds the total Free Peoples Leadership" (p. card text). `side` here is the side
-  // ROLLING, so this fires while the FP rolls and the Shadow holds the card.
+  // ROLLING, so this fires while the FP rolls and the Shadow holds the card. NAZGÛL
+  // Leadership only — the Mouth of Sauron's and Saruman's used to count (player
+  // report 1q195n1v414a1u27) — and the FP total is after any White Rider forfeit.
   let conditionalNegate = false;
   if (enemyMods.negateEnemyRerollIfNazgulDominant && side === 'fp') {
     const shadow = enemyForce ?? state.regions[enemyRegion]!;
-    conditionalNegate = forceLeadership(state, shadow, 'shadow') >= forceLeadership(state, own, 'fp');
+    conditionalNegate = nazgulLeadership(shadow, whiteRiderForfeit) >= leadVal;
   }
   const allowReroll = !enemyMods.negateEnemyReroll && !conditionalNegate;
   if (roll) { roll.dice = []; roll.rerolls = []; roll.target = target; roll.rerollTarget = rerollTarget; }
@@ -667,7 +667,7 @@ function costRange(state: GameState, pc: PendingCombat, side: Side, vc: Variable
   const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
   const have = vc.kind === 'selfHits'
     ? Math.max(0, forceUnitCount(own) - 1)          // never self-annihilate
-    : forceLeadership(state, own, side);
+    : nazgulLeadership(own, pc.whiteRiderForfeit);  // not the Mouth's or Saruman's
   const max = Math.min(vc.cap, have);
   return { min: Math.min(vc.min, max), max };
 }
@@ -1121,6 +1121,24 @@ function finishCombat(state: GameState, advance: boolean): void {
     state.pendingChoice = { owner: advanceOffer.owner, kind: 'advanceChoice',
       data: { from: advanceOffer.from, to: advanceOffer.to, rearguard: pc.rearguard ?? null } };
   }
+  // A battle that ended in its first round still owes the Sorcerer draw. The Almanac
+  // puts it after cease/retreat but BEFORE the advance, so the Shadow may read the card
+  // before deciding whether to advance: ask it first and park the advance behind it.
+  if (sorcererDue(state, pc)) {
+    const then = state.pendingChoice;
+    state.pendingChoice = { owner: 'shadow', kind: 'sorcererDraw', data: { deck: pc.sorcererDeck, then } };
+  }
+}
+
+/** The Witch-king's "Sorcerer": the Shadow played a Combat card in the first round of
+ *  a battle he fought in, so may draw an Event card of that deck. RAW timing (Almanac,
+ *  the Witch-king): Combat cards are discarded "as soon as the Combat round is over"
+ *  (p.29), so the draw comes only after every step of that round — casualties, a
+ *  siege's Elite reduction to press on, the cease/retreat decision and any retreat —
+ *  and before the advance after combat. It used to be offered the moment the card was
+ *  played (report 295c2a6x452j1573). If he was eliminated in that round, no draw. */
+function sorcererDue(state: GameState, pc: PendingCombat): boolean {
+  return !!pc.sorcererDeck && !pc.sorcererAsked && !state.characters.eliminated.includes('witch-king');
 }
 
 /** Resolve the winner's End of Battle advance (p.31 "may move all or part"; the FFG
@@ -1289,8 +1307,9 @@ export function combatStep(state: GameState): void {
       state.pendingChoice = { owner: 'fp', kind: 'whiteRider' }; // FP is always a participant
       return;
     }
-    // Witch-king "Sorcerer": after the Shadow's round-1 Combat card, offer the draw.
-    if (pc.sorcererDeck && !pc.sorcererAsked) {
+    // Witch-king "Sorcerer": offered once the FIRST Combat round is completely over —
+    // i.e. when the second one begins (the battle-ending case is in finishCombat).
+    if (pc.round >= 1 && sorcererDue(state, pc)) {
       pc.sorcererAsked = true;
       state.pendingChoice = { owner: 'shadow', kind: 'sorcererDraw', data: { deck: pc.sorcererDeck } };
       return;
@@ -1852,7 +1871,18 @@ export const canRetreat = (state: GameState): boolean => retreatRegion(state, st
 export function whiteRiderApplicable(state: GameState, pc: PendingCombat): boolean {
   const { fp, sh } = battleForces(state, pc);
   if (!fp.characters.includes('gandalf-white')) return false;
-  return sh.nazgul + (sh.characters.includes('witch-king') ? 2 : 0) > 0;
+  return nazgulLeadership(sh) > 0;
+}
+
+/** "Nazgûl Leadership": one per Nazgûl figure plus the Witch-king's two — NOT the
+ *  Mouth of Sauron's or Saruman's. Cards gated on it (Foul Stench, Cruel as Death,
+ *  Dread and Despair, They Are Terrible) read this, and The White Rider negates all
+ *  of it for the battle: the Almanac (Gandalf the White) says the Shadow "cannot play
+ *  any card that requires Nazgûl Leadership when this ability is in use". Cards that
+ *  ask only for the PRESENCE of Nazgûl (Black Breath, Words of Power) do not. */
+export function nazgulLeadership(sh: Force, whiteRiderForfeit = false): number {
+  if (whiteRiderForfeit) return 0;
+  return sh.nazgul + (sh.characters.includes('witch-king') ? 2 : 0);
 }
 /** Resolve the White Rider battle-start choice (combat resumes via advance). */
 export function resolveWhiteRider(state: GameState, forfeit: boolean): void {
@@ -1889,7 +1919,7 @@ function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): 
   const companionInBattle = fpChars.some((c) => COMPANION_IDS.has(c));
   const fpElite = Object.entries(fp.units).some(([n, u]) => sideOfNation(n as Nation) === 'fp' && u!.elite > 0);
   const shElite = Object.entries(sh.units).some(([n, u]) => sideOfNation(n as Nation) === 'shadow' && u!.elite > 0);
-  const nazgulLeadership = sh.nazgul + (sh.characters.includes('witch-king') ? 2 : 0);
+  const nazgulLead = nazgulLeadership(sh, pc.whiteRiderForfeit);
   const defNation = REGIONS[pc.to]!.nation;
   const has = (s: string) => pre.includes(s);
 
@@ -1901,8 +1931,8 @@ function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): 
   if (has('Shadow Elite')) return shElite;
   if (has('Southrons & Easterlings Elite')) return (sh.units.southrons?.elite ?? 0) > 0;
   if (has('Isengard Army unit')) return !!sh.units.isengard && REGIONS[pc.to]!.settlement === 'Stronghold';
-  if (has('Leadership is 2')) return nazgulLeadership >= 2;
-  if (has('Leadership is 1')) return nazgulLeadership >= 1;
+  if (has('Leadership is 2')) return nazgulLead >= 2;
+  if (has('Leadership is 1')) return nazgulLead >= 1;
   if (has('Rohan region, Fangorn or Orthanc')) return defNation === 'rohan' || pc.to === 'fangorn' || pc.to === 'orthanc';
   if (has('inside the borders of a Free Peoples Nation')) return !!defNation && sideOfNation(defNation) === 'fp';
   if (has('within two regions of Moria')) return withinRegions(pc.to, 'moria', 2);

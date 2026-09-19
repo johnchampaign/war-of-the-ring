@@ -67,7 +67,7 @@ const FOUL_STENCH = 'sh-char-09';
   /** Run one round of a field battle with the Shadow holding Foul Stench, and report
    *  whether the FP's Leader re-roll happened. `shadowNazgul` vs `fpLeaders` is the
    *  comparison the card turns on. */
-  function fpRerolled({ shadowNazgul, fpLeaders }) {
+  function fpRerolled({ shadowNazgul, fpLeaders, shadowChars = [] }) {
     const state = startGame(createGame({ seed: 3 }));
     for (const r of Object.values(state.regions)) {
       r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = [];
@@ -79,6 +79,7 @@ const FOUL_STENCH = 'sh-char-09';
     state.regions[to].leaders = fpLeaders;
     state.regions[from].units = { sauron: { regular: 4, elite: 0 } };
     state.regions[from].nazgul = shadowNazgul;
+    state.regions[from].characters = shadowChars;
     startBattle(state, 'shadow', from, to);
     const pc = state.pendingCombat;
     pc.attackerCard = FOUL_STENCH;      // Shadow attacks holding Foul Stench
@@ -95,6 +96,55 @@ const FOUL_STENCH = 'sh-char-09';
     fpRerolled({ shadowNazgul: 1, fpLeaders: 3 }) === true);
   check('equal Leadership cancels (RAW says "equals or exceeds")',
     fpRerolled({ shadowNazgul: 2, fpLeaders: 2 }) === false);
+  // Report 1q195n1v414a1u27: only NAZGÛL Leadership counts. One Nazgûl + the Mouth
+  // of Sauron is Nazgûl Leadership 1 against the FP's 2 — the re-roll stands.
+  check("the Mouth of Sauron's Leadership is not Nazgûl Leadership",
+    fpRerolled({ shadowNazgul: 1, fpLeaders: 2, shadowChars: ['mouth-of-sauron'] }) === true);
+  check("the Witch-king's two points are",
+    fpRerolled({ shadowNazgul: 0, fpLeaders: 2, shadowChars: ['witch-king'] }) === false);
+}
+
+// --- Nazgûl Leadership gates, and The White Rider negates it -------------------------
+{
+  console.log('\n=== Nazgûl Leadership: what counts, and The White Rider ===');
+  const { createGame } = await import('../src/engine/setup.ts');
+  const { startGame } = await import('../src/adapter/wotrAdapter.ts');
+  const { startBattle, playableCombatCards, nazgulLeadership } = await import('../src/engine/combat.ts');
+  const CRUEL = 'sh-char-05', DND = 'sh-char-08', TERRIBLE = 'sh-char-13', WORDS = 'sh-char-15';
+
+  check('Nazgûl + Witch-king, never the Mouth or Saruman',
+    nazgulLeadership({ nazgul: 1, characters: ['witch-king', 'mouth-of-sauron', 'saruman'] }) === 3);
+  check('The White Rider negates all of it', nazgulLeadership({ nazgul: 3, characters: ['witch-king'] }, true) === 0);
+
+  /** Shadow attacks from Minas Morgul into Osgiliath; the FP has Gandalf the White. */
+  function battle({ nazgul = 0, chars = [], forfeit = false } = {}) {
+    const state = startGame(createGame({ seed: 5 }));
+    for (const r of Object.values(state.regions)) {
+      r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = [];
+      delete r.siegeBox; r.besieged = false;
+    }
+    state.nations.gondor.step = 0; state.nations.sauron.step = 0;
+    state.regions['osgiliath'].units = { gondor: { regular: 3, elite: 0 } };
+    state.regions['osgiliath'].characters = ['gandalf-white'];
+    state.regions['minas-morgul'].units = { sauron: { regular: 4, elite: 0 } };
+    state.regions['minas-morgul'].nazgul = nazgul;
+    state.regions['minas-morgul'].characters = chars;
+    state.cards.shadow.hand = [CRUEL, DND, TERRIBLE, WORDS];
+    startBattle(state, 'shadow', 'minas-morgul', 'osgiliath');
+    state.pendingCombat.whiteRiderAsked = true;
+    state.pendingCombat.whiteRiderForfeit = forfeit;
+    return playableCombatCards(state, 'shadow');
+  }
+  const mouth = battle({ chars: ['mouth-of-sauron'] });
+  check('the Mouth alone enables no Nazgûl-Leadership card',
+    !mouth.includes(CRUEL) && !mouth.includes(DND) && !mouth.includes(TERRIBLE), mouth.join(','));
+  const wk = battle({ chars: ['witch-king'] });
+  check('the Witch-king enables Cruel as Death (2+) and the 1+ cards',
+    wk.includes(CRUEL) && wk.includes(DND) && wk.includes(TERRIBLE), wk.join(','));
+  const rider = battle({ nazgul: 2, chars: ['witch-king'], forfeit: true });
+  check('The White Rider bars Cruel as Death, Dread and Despair, They Are Terrible',
+    !rider.includes(CRUEL) && !rider.includes(DND) && !rider.includes(TERRIBLE), rider.join(','));
+  check('…but not Words of Power, which needs only a Nazgûl present', rider.includes(WORDS), rider.join(','));
 }
 
 // --- the three "up to N, your choice" costs ---------------------------------------
