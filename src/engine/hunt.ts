@@ -19,7 +19,8 @@ import { log, notify } from './log';
  *  for the FP to choose where the figure moves (the `revealMove` choice — the move,
  *  Progress reset, Revealed flip, and the per-Shadow-Stronghold extra Hunt tiles are
  *  applied when it resolves, in the adapter). With no Progress there's nothing to
- *  move, so it just flips to Revealed. */
+ *  move, so it just flips to Revealed (drawing a tile if it stands in a Shadow-held
+ *  Shadow Stronghold). */
 export function beginReveal(state: GameState): void {
   const fs = state.fellowship;
   if (fs.hidden && fs.progress > 0 && fs.mordor === null) {
@@ -30,13 +31,24 @@ export function beginReveal(state: GameState): void {
   // Moria while being revealed" (Almanac, p.27: "if the Fellowship is standing in Moria
   // and a card like 'Orc Patrol' causes the Fellowship to reveal there") — the case with
   // no Progress to spend, which never reaches the adapter's placement step because there
-  // is nothing to place (player report 120x4a0f6n4k4m14). No movement means no Shadow
-  // Stronghold tiles are owed, so the card's own tile is all that is drawn.
-  const stationaryInMoria = fs.hidden && fs.mordor === null && fs.location === 'moria';
+  // is nothing to place (player report 120x4a0f6n4k4m14).
+  // Standing still owes the Shadow Stronghold tile too: "if the Fellowship moves
+  // through, moves from, moves into, or REMAINS STATIONARY in a Shadow Stronghold still
+  // controlled by the Shadow player, then a Hunt tile is immediately drawn as if a Hunt
+  // has been successful" (p.39; player report 4y720k5x4n5t4755). The revealMove path
+  // already counts its starting region; this is the no-Progress case.
+  const loc = fs.location;
+  const wasHidden = fs.hidden && fs.mordor === null;
+  const strongholds = wasHidden && REGIONS[loc]?.settlement === 'Stronghold' && settlementController(state, loc) === 'shadow' ? [loc] : [];
   fs.hidden = false; fs.progress = 0;
-  if (stationaryInMoria && !state.pendingChoice && state.cards.shadow.table.includes('sh-char-17')) {
-    state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: {} };
+  if (state.pendingChoice) return;
+  if (wasHidden && loc === 'moria' && state.cards.shadow.table.includes('sh-char-17')) {
+    // The Balrog is asked first and carries the Stronghold tile with it, as on a reveal
+    // that moves (see the adapter's revealMove handler).
+    state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: { strongholds } };
+    return;
   }
+  for (const r of strongholds) extraHunt(state, { source: `revealed in ${REGIONS[r]!.name}` });
 }
 
 /** PendingChoice kinds that are steps of a Hunt still being resolved — the tile is

@@ -998,8 +998,13 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   in play 'Balrog of Moria' card" (player report 120x4a0f6n4k4m14). The traced path
   always starts where the Fellowship stood, so a zero-step declare or reveal at Moria
   still fires; the zero-**Progress** reveal never reaches the placement step at all
-  (nothing to place), so `beginReveal` raises the card itself. No movement means no
-  Shadow Stronghold tiles are owed — only the card's own tile is drawn. On a reveal
+  (nothing to place), so `beginReveal` raises the card itself. **Standing still in a
+  Shadow-held Shadow Stronghold owes its tile on a reveal too** — p.39 lists "moves
+  through, moves from, moves into, **or remains stationary in**" — so the zero-Progress
+  reveal draws it in `beginReveal` (behind the Balrog when both apply), matching the
+  `revealMove` path, whose traced path already starts at the old position (player
+  report 4y720k5x4n5t4755; an earlier note here said standing still owed nothing —
+  wrong). On a reveal
   the Balrog is asked **before**
   the Stronghold tiles and carries them with it (they draw once it is answered),
   because the first tile that opens an FP damage choice drops the draws behind it

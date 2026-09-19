@@ -676,7 +676,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // named on hover (player report 3k6l6x4l0t3t4q5q). Plain code, not a hook: this is
   // below the `if (!g.view) return` guard.
   const blockedPanel: { action: WotrAction; reason: string }[] = [];
-  if (g.yourTurn && g.you === 'fp' && g.view.phase === 'actionResolution' && threatsAndPromisesActive(g.view)) {
+  // Only on the plain action menu: mid-Action (a pending choice such as adding more
+  // Companions to a separating group) the die advances aren't on offer anyway, so
+  // greyed ones there are noise (player report 0m2j2c251s154y2h).
+  if (g.yourTurn && g.you === 'fp' && g.view.phase === 'actionResolution' && !g.view.pendingChoice && threatsAndPromisesActive(g.view)) {
     for (const n of Object.keys(g.view.nations) as Nation[]) {
       const ns = g.view.nations[n];
       // Only a Nation the die COULD otherwise advance: ours, still passive, and not
@@ -1098,10 +1101,11 @@ function NazgulCountPicker({ pick, onConfirm, onCancel }: {
 // back — the network round trip online, or the AI taking its whole turn. It sits over
 // the top of the screen and swallows clicks, so a second click can't queue up behind
 // the first (which `inFlight` already drops silently, with nothing on screen to explain
-// why). Deliberately small and translucent: the board stays readable underneath.
+// why). No dimming at all: against the AI it shows after every action, and even a
+// faint tint read as a dark flash each time (player report 6p2l0q6p73354o5c).
 function BusyOverlay() {
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200, cursor: 'progress', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'rgba(8,6,3,0.12)' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, cursor: 'progress', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'transparent' }}>
       <style>{'@keyframes wotr-spin{to{transform:rotate(360deg)}}'}</style>
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, background: '#1c1710e6', color: '#e9e1cc', fontFamily: 'system-ui', fontSize: 13, padding: '8px 14px', borderRadius: 20, border: '1px solid #5a4a2a', boxShadow: '0 4px 18px #000a' }}>
         <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid #5a4a2a', borderTopColor: '#e6b85a', animation: 'wotr-spin 0.8s linear infinite', display: 'inline-block' }} />

@@ -234,13 +234,18 @@ export interface CasualtyOption { step: CasualtyStepKind; nation: Nation; cost: 
 /** Every legal way to absorb the next hit(s) from this Force. The nation is part of
  *  the choice: which Nation loses a figure is the owner's call (p.30), and it matters
  *  (a Nation's pool, and whether its Elites survive to press a siege). */
-export function casualtyOptions(f: Force, hits: number): CasualtyOption[] {
+export function casualtyOptions(f: Force, hits: number, owner?: { state: GameState; side: Side }): CasualtyOption[] {
   const out: CasualtyOption[] = [];
   if (hits <= 0) return out;
   for (const n of Object.keys(f.units) as Nation[]) {
     const u = f.units[n]; if (!u) continue;
     if (u.regular > 0) out.push({ step: 'removeRegular', nation: n, cost: 1 });
-    if (u.elite > 0) out.push({ step: 'reduceElite', nation: n, cost: 1 });
+    // With no Regular anywhere to replace it, "reducing" an Elite eliminates it
+    // (p.30). Once two hits are open that's the same loss as removing it for two
+    // hits, only worse, so it isn't offered as a separate — and mislabelled —
+    // option (player report 6q6h2i1o102a2m6k). With one hit it stays: it is then
+    // the only way to take the hit on that Elite.
+    if (u.elite > 0 && !(hits >= 2 && owner && !eliteHasReplacement(owner.state, n, owner.side))) out.push({ step: 'reduceElite', nation: n, cost: 1 });
     if (u.elite > 0 && hits >= 2) out.push({ step: 'removeElite', nation: n, cost: 2 });
   }
   return out;
@@ -259,6 +264,14 @@ export function casualtyOptions(f: Force, hits: number): CasualtyOption[] {
  *  is eliminated without further effect." Shadow casualties ARE the reinforcements, so
  *  only the Free Peoples have a separate pile to draw on first (player report
  *  2b0l0z6j322n2m2x: the FP replacement always came out of the reinforcements). */
+/** Whether an Elite of `nation` reduced now would get a replacement Regular (from the
+ *  Free Peoples casualties or the reinforcements — see reduceElite). When it
+ *  wouldn't, the "reduction" eliminates the Elite outright. */
+export function eliteHasReplacement(state: GameState, nation: Nation, side: Side): boolean {
+  if (state.reinforcements[nation].regular > 0) return true;
+  return side === 'fp' && fpRegularCasualties(state, nation) > 0;
+}
+
 export function reduceElite(state: GameState, f: Force, nation: Nation, side: Side): void {
   const u = f.units[nation]!;
   const pool = state.reinforcements[nation];
@@ -310,14 +323,15 @@ function absorbForced(state: GameState, f: Force, side: Side, hits: number): num
   let left = hits;
   const taken: string[] = [];
   for (;;) {
-    const opts = casualtyOptions(f, left);
+    const opts = casualtyOptions(f, left, { state, side });
     if (left <= 0 || opts.length !== 1) break;
     const o = opts[0]!;
+    const replaced = o.step === 'reduceElite' && eliteHasReplacement(state, o.nation, side); // before the Regular is taken
     const spent = applyCasualtyOption(state, f, side, o);
     if (spent <= 0) break; // defensive: never spin
     left -= spent;
     taken.push(o.step === 'removeRegular' ? `a ${cap1(o.nation)} Regular is eliminated`
-      : o.step === 'reduceElite' ? `a ${cap1(o.nation)} Elite is reduced to a Regular`
+      : replaced ? `a ${cap1(o.nation)} Elite is reduced to a Regular`
         : `a ${cap1(o.nation)} Elite is eliminated`);
   }
   // Forced allocations skip the prompt (there is no decision), but they must NOT
@@ -333,8 +347,8 @@ const cap1 = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
 const casualtyLogKind = (state: GameState): string => (state.pendingCombat ? 'combat' : 'event');
 
 /** True when the owner still has a real decision to make about these hits. */
-function meaningfulForceCasualty(f: Force, hits: number): boolean {
-  return casualtyOptions(f, hits).length > 1;
+function meaningfulForceCasualty(state: GameState, f: Force, side: Side, hits: number): boolean {
+  return casualtyOptions(f, hits, { state, side }).length > 1;
 }
 
 /** Apply `hits` steps to a region's army. regularsFirst removes Regulars before
@@ -419,8 +433,8 @@ function pendingCasualtyForce(state: GameState): Force | null {
 export function pendingCasualtyOptions(state: GameState): CasualtyOption[] {
   const f = pendingCasualtyForce(state);
   if (!f) return [];
-  const d = state.pendingChoice!.data as { hits: number };
-  return casualtyOptions(f, d.hits);
+  const d = state.pendingChoice!.data as { hits: number; side: Side };
+  return casualtyOptions(f, d.hits, { state, side: d.side });
 }
 
 /** Apply ONE chosen allocation, then either re-prompt for the next hit or finish
@@ -431,12 +445,12 @@ export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, na
   const isEvent = ch.kind === 'eventCasualties';
   const d = ch.data as { region: RegionId; side: Side; hits: number; next?: PendingCombat['step']; boxed?: boolean; then?: CasualtyThen | null };
   const f = pendingCasualtyForce(state)!;
-  const opts = casualtyOptions(f, d.hits);
+  const opts = casualtyOptions(f, d.hits, { state, side: d.side });
   const chosen = opts.find((o) => o.step === step && o.nation === nation) ?? opts[0];
   let left = d.hits;
   if (chosen) left -= applyCasualtyOption(state, f, d.side, chosen);
   left = absorbForced(state, f, d.side, left);
-  if (meaningfulForceCasualty(f, left)) {
+  if (meaningfulForceCasualty(state, f, d.side, left)) {
     state.pendingChoice = { ...ch, data: { ...d, hits: left } };
     return;
   }
@@ -517,7 +531,7 @@ export function queueOrApplyEventCasualties(state: GameState, side: Side, region
   const f = armyForceOf(state, region, side) ?? state.regions[region]!;
   const boxed = f !== state.regions[region];
   const left = absorbForced(state, f, side, hits); // forced losses need no prompt
-  if (meaningfulForceCasualty(f, left)) {
+  if (meaningfulForceCasualty(state, f, side, left)) {
     state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits: left, boxed, then: then ?? null } };
     return;
   }
@@ -698,7 +712,7 @@ function payCardCost(state: GameState, pc: PendingCombat, side: Side, vc: Variab
     // how to apply casualties for Relentless Assault and Onslaught"). Re-entering the
     // same step afterwards is safe: the cost is already marked paid.
     const left = absorbForced(state, own, side, amount);
-    if (meaningfulForceCasualty(own, left)) {
+    if (meaningfulForceCasualty(state, own, side, left)) {
       state.pendingChoice = { owner: side, kind: 'combatCasualties',
         data: { region: side === pc.attacker ? pc.from : pc.to, side, hits: left, next: pc.step, boxed: pc.boxed === side } };
       return;
@@ -1495,7 +1509,7 @@ export function combatStep(state: GameState): void {
           const f = atkForce(state, pc);
           // Forced hits land silently; the owner is asked only about the rest (p.30).
           const left = absorbForced(state, f, pc.attacker, pc.defHits);
-          if (meaningfulForceCasualty(f, left)) {
+          if (meaningfulForceCasualty(state, f, pc.attacker, left)) {
             state.pendingChoice = { owner: pc.attacker, kind: 'combatCasualties', data: { region: pc.from, side: pc.attacker, hits: left, next: 'defenderCasualties', boxed: boxedAtk } };
             return;
           }
@@ -1508,7 +1522,7 @@ export function combatStep(state: GameState): void {
           const boxedDef = pc.boxed === pc.defender;
           const f = defForce(state, pc);
           const left = absorbForced(state, f, pc.defender, pc.atkHits);
-          if (meaningfulForceCasualty(f, left)) {
+          if (meaningfulForceCasualty(state, f, pc.defender, left)) {
             state.pendingChoice = { owner: pc.defender, kind: 'combatCasualties', data: { region: pc.to, side: pc.defender, hits: left, next: 'onslaught', boxed: boxedDef } };
             return;
           }
@@ -1531,7 +1545,7 @@ export function combatStep(state: GameState): void {
           log(state, null, 'combat', `Onslaught counter-attack: [${dice.join(' ')}] on 4+ → ${oHits} hit${oHits === 1 ? '' : 's'}`);
           if (oHits > 0) {
             const left = absorbForced(state, target, enemy, oHits);
-            if (meaningfulForceCasualty(target, left)) {
+            if (meaningfulForceCasualty(state, target, enemy, left)) {
               state.pendingChoice = { owner: enemy, kind: 'combatCasualties',
                 data: { region: enemy === pc.attacker ? pc.from : pc.to, side: enemy, hits: left, next: 'onslaught', boxed: pc.boxed === enemy } };
               return;
@@ -1587,7 +1601,7 @@ export function combatStep(state: GameState): void {
             log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (after casualties): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`);
             if (hits > 0) {
               const left = absorbForced(state, foe, foeSide, hits);
-              if (meaningfulForceCasualty(foe, left)) {
+              if (meaningfulForceCasualty(state, foe, foeSide, left)) {
                 state.pendingChoice = { owner: foeSide, kind: 'combatCasualties',
                   data: { region: foeSide === pc.attacker ? pc.from : pc.to, side: foeSide, hits: left, next: 'onslaught', boxed: pc.boxed === foeSide } };
                 return;
@@ -1611,7 +1625,7 @@ export function combatStep(state: GameState): void {
             if (forceUnitCount(own) >= 2 * Math.max(1, forceUnitCount(foe))) {
               log(state, null, 'combat', `Great Host: outnumbering 2:1 after casualties — one automatic hit`);
               const left = absorbForced(state, foe, foeSide, mods.bonusHitsIfOutnumber!);
-              if (meaningfulForceCasualty(foe, left)) {
+              if (meaningfulForceCasualty(state, foe, foeSide, left)) {
                 const boxedFoe = pc.boxed === foeSide;
                 state.pendingChoice = { owner: foeSide, kind: 'combatCasualties',
                   data: { region: foeSide === pc.attacker ? pc.from : pc.to, side: foeSide, hits: left, next: 'onslaught', boxed: boxedFoe } };

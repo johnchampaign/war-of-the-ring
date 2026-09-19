@@ -70,7 +70,10 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // Character moves) can't be passed out of — but the Pass button stays in place,
   // greyed, like it does while a die is selected, so the list doesn't jump
   // (player report 423m415l300y1l4z).
-  const midAction = !pass && ['armyMove2', 'recruitSecond', 'charMove2'].includes(view.pendingChoice?.kind ?? '');
+  // ANY pending choice counts — separating Companions, placing a revealed Fellowship,
+  // a card's follow-up — not just the second half of a die; otherwise the tooltip
+  // blamed the dice count (player report 6s0u2h6k561e3n0u).
+  const midAction = !pass && !!view.pendingChoice;
   const passOff = !pass || !!sel;
   // Why Pass is off right now — it is ALWAYS on screen (below), so every off state
   // needs its own sentence. The plain "you simply may not pass yet" case is the

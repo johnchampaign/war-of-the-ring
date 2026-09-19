@@ -10,10 +10,11 @@ import { RollLine, CorruptionLine, describeDraw, HuntTileFace } from './huntView
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt } from './artCache';
 import { RollRow } from './combatDice';
-import type { GameState, Side } from '../engine/types';
+import type { GameState, Side, Nation } from '../engine/types';
+import { eliteHasReplacement } from '../engine/combat';
 import type { WotrAction } from '../adapter/wotrAction';
 import mapData from '../../assets/map.json';
-import { characterSide } from '../engine/data';
+import { characterSide, nationName } from '../engine/data';
 import { forceLeadership } from '../engine/armies';
 import { charName } from './charInfo';
 import { cardSideLine, inNationOrder } from './names';
@@ -130,7 +131,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
         {mine ? (
           <>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-              {decisions.map((a, i) => <DecisionButton key={i} action={a} disabled={busy} onClick={() => click(a)} onHover={setHoverCard} guide={view.fellowship.guide} />)}
+              {decisions.map((a, i) => <DecisionButton key={i} action={a} disabled={busy} onClick={() => click(a)} onHover={setHoverCard} guide={view.fellowship.guide} label={eliteLabel(a, view)} />)}
             </div>
             {/* With nothing hovered, show the card the prompt is ABOUT: the Event card
                 being resolved, or — in a battle — the Combat card already revealed this
@@ -354,7 +355,24 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
   );
 }
 
-function DecisionButton({ action, disabled, onClick, onHover, guide }: { action: WotrAction; disabled: boolean; onClick: () => void; onHover?: (id: string | null) => void; guide?: string }) {
+// "Reduce an Elite to a Regular" is a lie when no Regular is left to swap in — the
+// Elite is then simply eliminated (p.30) — so those buttons say what really happens
+// (player report 6q6h2i1o102a2m6k).
+function eliteLabel(a: WotrAction, view: GameState): string | undefined {
+  const owner = view.pendingChoice?.owner;
+  if (!owner) return undefined;
+  if (a.kind === 'casualtyStep' && a.step === 'reduceElite' && !eliteHasReplacement(view, a.nation, owner)) {
+    return `Lose a ${nationName(a.nation)} Elite (no Regular left to replace it)`;
+  }
+  if (a.kind === 'siegeExtend' && a.extend && view.pendingCombat) {
+    const units = view.regions[view.pendingCombat.from]?.units ?? {};
+    const n = (Object.keys(units) as Nation[]).find((k) => (units[k]?.elite ?? 0) > 0);
+    if (n && !eliteHasReplacement(view, n, owner)) return 'Press the assault (remove an Elite)';
+  }
+  return undefined;
+}
+
+function DecisionButton({ action, disabled, onClick, onHover, guide, label }: { action: WotrAction; disabled: boolean; onClick: () => void; onHover?: (id: string | null) => void; guide?: string; label?: string }) {
   // Card-referencing choices (play a Combat card, or pick a card to discard) get the
   // card thumbnail + hover preview so you can read what you're choosing.
   const cardId = action.kind === 'playCombatCard' ? action.cardId : action.kind === 'discardCard' ? action.card : null;
@@ -364,7 +382,7 @@ function DecisionButton({ action, disabled, onClick, onHover, guide }: { action:
     <button onClick={onClick} disabled={disabled} style={dbtn} {...hov}>
       {art && <img src={art} alt="" style={{ height: 56, borderRadius: 3, display: 'block', marginBottom: 4 }} />}
       {/* Name the Guide being sacrificed (player report 6u2f1h4c6n5e6l5w). */}
-      {action.kind === 'huntDamage' && action.mode === 'guide' && guide ? `Sacrifice ${charName(guide)}` : describeAction(action)}
+      {action.kind === 'huntDamage' && action.mode === 'guide' && guide ? `Sacrifice ${charName(guide)}` : label ?? describeAction(action)}
     </button>
   );
 }
