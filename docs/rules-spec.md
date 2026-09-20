@@ -1006,6 +1006,28 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   (can defend); cannot be recruited via Muster die. Retreat-from-battle may cross
   a border as an exception (p.35).
 - Characters/Minions/Nazgûl are effectively always At War (p.35).
+- **A MIXED stack is not frozen — the At-War half moves and the rest stays.** p.27 lets
+  a player move "all or some of the units" of an Army, so a Nation that cannot cross a
+  border only pins *its own* figures, never the Army around them. The destination
+  enumerator asked the **strict** question (`moveBlockReason`, which speaks for the whole
+  stack), so a mixed Army was offered **no destination at all** across a foreign border:
+  an Elven/North Army in Vale of the Carnen with the North still on the track could not
+  be moved into East Rhûn, and the only hint told the player to "split off only its
+  At-War units" — which the move interface cannot be asked for until a destination has
+  been picked *(player report 615m5q0t090g205d)*. The offer is the **permissive** question
+  now (`canMoveSomeArmy`/`partialMoveBlockReason`, `armies.ts`), matching what the ranged
+  card-move enumerators already do; a bare whole-army move takes exactly the figures
+  allowed across, logs which Nation stayed and why, and the picker hides the barred
+  Nations' units instead of letting a player tick figures that would be left behind. A
+  selection that names a barred Nation is still refused, and a stack with **no** At-War
+  Nation still has nowhere to go. `scripts/probe-partial-at-war-move.mjs`.
+- **Open: Free Peoples Leaders are not yet per-Nation.** A Leader figure belongs to a
+  Nation and is bound by the same diplomatic restrictions as its units, so an Army whose
+  Elves are At War and whose North is not should send the Elven Leader and hold the North
+  Leader back *(player report 154q2f5e406s6g32)*. The engine models a region's Leaders as
+  a bare count (`leaders: number`), so it cannot tell them apart: every Leader currently
+  travels with the movers. Closing this means giving Leaders a Nation everywhere they are
+  stored (region, siege box, rearguard) and is a schema change.
 
 ---
 
@@ -1349,6 +1371,20 @@ turn the FP reached 4 and still lost). Regression-tested in
   Dunland units into the open field, where they joined the besiegers *(player report
   1q2j5e5y0c2l5q4q)*. One `freeRegion` test closes both halves.
   `scripts/probe-card-move-reach.mjs`.
+- **"Rage of the Dunlendings" runs on the MAP, both halves.** Its recruit pick carried no
+  `mode`, so it stayed a panel button instead of the highlighted-Settlement muster menu
+  every other card recruit uses; and its consolidation picks carried `region` instead of
+  `to`, so they were not card Army moves either — the board never lit them, and the card
+  walked **one unit per pick** with no say over Regular vs Elite *(player reports
+  0g40604w245d6w3q, 4z4d6h18592c546r; John's standing call of 2026-09-10, "Event cards
+  use the map")*. The recruit pick is now `mode: 'recruit'` and each source is
+  `{ from, to, mode: 'move', direct: true }` — a real card Army move, so it takes the
+  click-army-then-destination flow and the p.28 split picker. Two new fields carry the
+  card's own limits into that picker: `nation` ("up to four **Isengard** units", so the
+  Sauron troops sharing a Dunland are not on offer) and `count` (how many figures the
+  four-unit budget still allows). The engine re-derives both when it applies the pick, so
+  an over-wide selection is trimmed rather than trusted, and it writes back what actually
+  moved. `scripts/probe-rage-of-the-dunlendings.mjs`.
 
 ---
 

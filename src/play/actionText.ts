@@ -33,6 +33,7 @@ const CARD_RECRUITS: Record<string, string> = {
   'sh-str-19': '2 Sauron Regulars and a Nazgûl',     // Shadows on the Misty Mountains
   'sh-str-21': '5 Southron & Easterling Regulars',   // Hordes From the East
   'sh-str-24': '2 Sauron Regulars',                  // Pits of Mordor
+  'sh-str-11': '2 Isengard Regulars',                // Rage of the Dunlendings
 };
 
 export function describeAction(a: WotrAction): string {

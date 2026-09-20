@@ -456,6 +456,40 @@ export function ownNationsIn(state: GameState, region: RegionId, side: Side): Na
   return (Object.keys(u) as Nation[]).filter((n) => sideOfNation(n) === side && (u[n]!.regular + u[n]!.elite) > 0);
 }
 
+/** The Nations of `side` with units in `from` whose figures MAY cross into `to`
+ *  (p.27: a Nation not At War never crosses another Nation's border). */
+export function nationsAllowedInto(state: GameState, from: RegionId, to: RegionId, side: Side): Nation[] {
+  const dn = REGIONS[to]?.nation;
+  return ownNationsIn(state, from, side).filter((n) => isAtWar(state, n) || !dn || dn === n);
+}
+
+/** Why NOT EVEN PART of `side`'s Army in `from` may move to `to`, or null when at
+ *  least its At-War half can go.
+ *
+ *  p.27 lets a player move "all or some of the units" of an Army, so a stack whose
+ *  Nations sit on different Political Track steps is not frozen in place: the units
+ *  that are At War march, the rest stay behind as their own Army. The destination
+ *  enumerator used to ask the STRICT question (`moveBlockReason`, which speaks for
+ *  the whole stack), so a mixed Army was offered no destination at all across a
+ *  foreign border — the board went dark and the only hint told the player to "split
+ *  off only its At-War units", which is not a thing the move interface can be asked
+ *  for until a destination has been picked (player report 615m5q0t090g205d: an Army
+ *  in Vale of the Carnen with the Elves At War and the North still passive could not
+ *  be moved into East Rhun at all). The offer is the permissive question now; the
+ *  strict one is applied to whoever actually goes, when the move lands. */
+export function partialMoveBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side): string | null {
+  const strict = moveBlockReason(state, from, to, side);
+  if (strict === null) return strict;
+  if (nationsAllowedInto(state, from, to, side).length > 0 && armySide(state, from) === side && freeForMovement(state, to, side) && REGIONS[from]!.adjacency.includes(to) && !(side === 'shadow' && shadowBarredFromRegion(state, to))) return null;
+  return strict;
+}
+
+/** Whether ANY part of `side`'s Army in `from` may move to `to` — what the board asks
+ *  before it lights a destination. See `partialMoveBlockReason`. */
+export function canMoveSomeArmy(state: GameState, from: RegionId, to: RegionId, side: Side): boolean {
+  return partialMoveBlockReason(state, from, to, side) === null;
+}
+
 export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side): string | null {
   if (!REGIONS[from]!.adjacency.includes(to)) return 'Those regions are not adjacent.';
   if (armySide(state, from) !== side) return 'You have no Army to move there.';
@@ -635,7 +669,31 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
 }
 
 export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: Side): boolean {
-  if (!canMoveArmy(state, from, to, side)) return false;
+  if (!canMoveArmy(state, from, to, side)) {
+    // The whole stack cannot cross, but its At-War half can (p.27, "all or some of
+    // the units"): move exactly the figures that may go and leave the rest standing
+    // as their own Army. Nothing is lost to the player here — the units that stay
+    // behind are the ones the Political Track forbids to travel, and the picker is
+    // still there for anyone who wants to send fewer. Player report 615m5q0t090g205d.
+    if (!canMoveSomeArmy(state, from, to, side)) return false;
+    const allowed = nationsAllowedInto(state, from, to, side);
+    const src0 = state.regions[from]!;
+    const units: NonNullable<MoveSelection['units']> = {};
+    for (const n of allowed) units[n] = { regular: src0.units[n]!.regular, elite: src0.units[n]!.elite };
+    const stayers = ownNationsIn(state, from, side).filter((n) => !allowed.includes(n));
+    const ok = moveArmySplit(state, from, to, side, {
+      units,
+      leaders: side === 'fp' ? src0.leaders : 0,
+      nazgul: side === 'shadow' ? src0.nazgul : 0,
+      characters: src0.characters.filter((c) => characterSide(c) === side),
+    });
+    if (ok && stayers.length) {
+      const names = stayers.map(nationName);
+      const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+      log(state, null, 'army', `${list} ${names.length === 1 ? 'is' : 'are'} not At War and stayed in ${REGIONS[from]?.name ?? from}`);
+    }
+    return ok;
+  }
   const src = state.regions[from]!, dst = state.regions[to]!;
   // Merge units, leaders, nazgûl, characters. Only THIS side's Nations move — if
   // enemy units ever illegally share the region (a card bug once merged two Armies),

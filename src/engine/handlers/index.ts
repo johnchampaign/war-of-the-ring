@@ -637,24 +637,54 @@ register('sh-str-14', atWarGate(placeChoiceCard('sauron', shadowArmyRegionIds), 
 // Dunland, then OPTIONALLY move up to 4 Isengard units there from N/S Dunland (RAW).
 const RAGE_SOURCES = ['north-dunland', 'south-dunland'];
 const rageHasIsengard = (s: GameState, d: string): boolean => ((s.regions[d]?.units.isengard?.regular ?? 0) + (s.regions[d]?.units.isengard?.elite ?? 0)) > 0;
+const RAGE_MAX_MOVED = 4; // "up to four Isengard units … from North Dunland and/or South Dunland"
+/** How many units this card has already walked into the recruit region. `count` on an
+ *  applied target is what `applyTarget` actually moved (it writes the number back). */
+const rageMoved = (applied: readonly EventTarget[]): number => applied.reduce((n, a) => n + (a.from ? a.count ?? 0 : 0), 0);
 register('sh-str-11', {
   canPlay: (s) => isAtWar(s, 'isengard') && s.reinforcements.isengard.regular > 0 && rageTargets(s).length > 0, // printed: Isengard At War
-  repeat: 5, // 1 recruit + up to 4 consolidation moves
+  repeat: 3, // the recruit, then one consolidation move out of each Dunland
   targets: (s, _side, applied = []) => {
     if (applied.length === 0) return rageTargets(s); // choose the recruit region
-    const region = applied[0]!.region!;
-    if (applied.length - 1 >= 4 || unitCount(s, region) >= STACKING_LIMIT) return []; // moved the max / no room
-    return RAGE_SOURCES.filter((d) => d !== region && rageHasIsengard(s, d)).map((from) => ({ from, region, mode: 'move' as const }));
+    const to = applied[0]!.region!;
+    const room = Math.min(RAGE_MAX_MOVED - rageMoved(applied), STACKING_LIMIT - unitCount(s, to));
+    if (room <= 0) return []; // moved the max / no room
+    const used = new Set(applied.slice(1).map((a) => a.from));
+    // `to` (not `region`) makes this a real card ARMY MOVE, so the board runs it the way
+    // it runs every other one — click the Dunland Army, then the lit destination — with
+    // `nation`/`count` telling the picker that only Isengard units travel and how many
+    // are still allowed (player reports 0g40604w245d6w3q, 4z4d6h18592c546r). `direct`:
+    // the card names both ends, so nothing is entered on the way.
+    return RAGE_SOURCES.filter((d) => d !== to && !used.has(d) && rageHasIsengard(s, d))
+      .map((from) => ({ from, to, mode: 'move' as const, direct: true, nation: 'isengard' as const, count: room }));
   },
-  applyTarget: (s, _side, t) => {
+  applyTarget: (s, _side, t, applied = []) => {
     if (!t.from) { placeForce(s, 'isengard', t.region!, { regular: 2 }); return; }
-    // Move one Isengard unit (Regular first) from the Dunland source into the recruit region.
-    const src = s.regions[t.from]!.units.isengard; const dst = s.regions[t.region!]!;
-    if (!src || unitCount(s, t.region!) >= STACKING_LIMIT) return;
+    // A consolidation move: only Isengard units, only out of a Dunland, only into the
+    // region this card just recruited in, and never more than the card's four.
+    const to = t.to ?? t.region;
+    t.count = 0; // what actually moved — read back by `targets`/`rageMoved`
+    const first = applied[0]?.region;
+    if (!to || !first || to !== first || !RAGE_SOURCES.includes(t.from)) return;
+    const src = s.regions[t.from]!.units.isengard;
+    if (!src) return;
+    let room = Math.min(RAGE_MAX_MOVED - rageMoved(applied), STACKING_LIMIT - unitCount(s, to));
+    if (room <= 0) return;
+    // The picker's selection says WHICH figures go (Regular vs Elite is a real choice);
+    // with none, the card takes as many as it may, Regulars first.
+    const sel = t.move?.units?.isengard;
+    const takeR = Math.min(Math.max(0, sel?.regular ?? src.regular), src.regular, room);
+    room -= takeR;
+    const takeE = Math.min(Math.max(0, sel?.elite ?? src.elite), src.elite, room);
+    if (takeR + takeE <= 0) return;
+    const dst = s.regions[to]!;
     const du = dst.units.isengard ?? { regular: 0, elite: 0 };
-    if (src.regular > 0) { src.regular -= 1; du.regular += 1; }
-    else if (src.elite > 0) { src.elite -= 1; du.elite += 1; }
+    src.regular -= takeR; du.regular += takeR;
+    src.elite -= takeE; du.elite += takeE;
     dst.units.isengard = du;
+    if (src.regular === 0 && src.elite === 0) delete s.regions[t.from]!.units.isengard;
+    t.count = takeR + takeE;
+    log(s, null, 'event', `Rage of the Dunlendings moves ${takeR + takeE} Isengard unit${takeR + takeE === 1 ? '' : 's'} from ${REGIONS[t.from]?.name ?? t.from} to ${REGIONS[to]?.name ?? to}`);
   },
 });
 register('sh-str-19', { // Shadows on the Misty Mountains: 2 Sauron + 1 Nazgûl in Mount Gram or Moria
@@ -690,7 +720,10 @@ register('sh-str-17', { // Many Kings: 2 S&E Regulars in each of three different
 // side inside it, and that single test closes both halves of the report.
 function rageTargets(s: GameState): EventTarget[] {
   const adj = new Set([...REGIONS['north-dunland']!.adjacency, ...REGIONS['south-dunland']!.adjacency]);
-  return [...adj].filter((r) => freeRegion(s, r as RegionId, 'shadow')).map((region) => ({ region }));
+  // `mode: 'recruit'` puts the pick on the MAP (the highlighted Settlement's muster
+  // menu), like every other card recruit — it used to be a bare panel button
+  // (player reports 0g40604w245d6w3q, 4z4d6h18592c546r).
+  return [...adj].filter((r) => freeRegion(s, r as RegionId, 'shadow')).map((region) => ({ region, mode: 'recruit' as const }));
 }
 function seSettlements(s: GameState): string[] {
   return Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'southrons' && isSettlementRegion(id) && recruitable(s, 'shadow', id));

@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type { GameState, Nation, Side } from '../engine/types';
 import type { MoveSel, WotrAction } from '../adapter/wotrAction';
 import { characterSide, sideOfNation } from '../engine/data';
+import { isAtWar } from '../engine/politics';
 import { attackError, sortieForce } from '../engine/combat';
 import { charName } from './charInfo';
 import mapData from '../../assets/map.json';
@@ -34,7 +35,18 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   const sortieBox = attackMode && from === to ? sortieForce(view, from, you) : null;
   const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : holdBackMode ? 'Keep forward' : kind === 'advance' ? 'Advance' : 'Move';
   const r = sortieBox ?? view.regions[from];
-  const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
+  // A card move may be narrower than "the Army": Rage of the Dunlendings moves "up to
+  // four ISENGARD units" and nothing else, so the offer carries the Nation it moves
+  // (`nation`) and how many figures are still allowed to travel (`count`). Without
+  // those the picker offered the whole stack and the engine silently trimmed the
+  // selection down to what the card allows (player reports 0g40604w245d6w3q,
+  // 4z4d6h18592c546r).
+  const evBase = kind === 'eventMove' ? (base as Extract<WotrAction, { kind: 'eventTarget' }> | undefined) : undefined;
+  const evNation = evBase?.nation;
+  const evLimit = evBase?.count;
+  const nations = (Object.keys(r.units) as Nation[])
+    .filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0)
+    .filter((n) => !evNation || n === evNation);
   // Only the MOVING army's OWN Characters can travel with it — never an enemy Companion
   // who happens to share the region (e.g. one who separated into a besieged Stronghold).
   const armySide: Side = nations.length ? sideOfNation(nations[0]!) : 'fp';
@@ -49,21 +61,45 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   // Leader figures). Same in mirror for FP Leaders under a Shadow Army.
   const maxLeaders = armySide === 'fp' ? r.leaders : 0;
   const maxNazgul = armySide === 'shadow' ? r.nazgul : 0;
+  // A Nation not At War can never cross another Nation's border (p.27), so on an
+  // ordinary Army move its units are not on offer at all — the move takes the At-War
+  // half and leaves them standing. Showing them as movable let the player tick figures
+  // the engine would then quietly leave behind (player report 615m5q0t090g205d).
+  const destNation = (mapData as any).regions[to]?.nation as string | undefined;
+  const moveMode = kind === 'moveArmy' || kind === 'armyMove2';
+  const barred = (n: Nation) => moveMode && !isAtWar(view, n) && !!destNation && destNation !== n;
+  const stayNations = nations.filter(barred);
+  const goNations = nations.filter((n) => !barred(n));
   // Default selection = the whole Army (so an unchanged picker is a normal move).
-  const [reg, setReg] = useState<Record<string, number>>(() => Object.fromEntries(nations.map((n) => [n, r.units[n]!.regular])));
-  const [eli, setEli] = useState<Record<string, number>>(() => Object.fromEntries(nations.map((n) => [n, r.units[n]!.elite])));
+  const capped = (): [Record<string, number>, Record<string, number>] => {
+    const rr: Record<string, number> = {}, ee: Record<string, number> = {};
+    let left = evLimit ?? Infinity;
+    for (const n of nations) {
+      if (barred(n)) { rr[n] = 0; ee[n] = 0; continue; }
+      rr[n] = Math.min(r.units[n]!.regular, left); left -= rr[n]!;
+      ee[n] = Math.min(r.units[n]!.elite, left); left -= ee[n]!;
+    }
+    return [rr, ee];
+  };
+  const [reg, setReg] = useState<Record<string, number>>(() => capped()[0]);
+  const [eli, setEli] = useState<Record<string, number>>(() => capped()[1]);
   const [leaders, setLeaders] = useState(maxLeaders);
   const [nazgul, setNazgul] = useState(maxNazgul);
   const [chars, setChars] = useState<Set<string>>(() => new Set(myChars));
 
   const totalUnits = nations.reduce((s, n) => s + (reg[n] ?? 0) + (eli[n] ?? 0), 0);
-  const armyUnits = nations.reduce((s, n) => s + r.units[n]!.regular + r.units[n]!.elite, 0);
+  // What CAN travel — the barred Nations' units are not part of "the whole Army" for
+  // this move, so an untouched picker still submits the plain whole-army action.
+  const armyUnits = goNations.reduce((s, n) => s + r.units[n]!.regular + r.units[n]!.elite, 0);
   // Merging onto a friendly army may push the destination over the 10-unit limit;
   // the excess is removed afterward (rulebook p.26). Warn so it isn't a surprise.
   const destUnits = !attackMode ? Object.values(view.regions[to]?.units ?? {}).reduce((s, u) => s + u!.regular + u!.elite, 0) : 0;
   const overAll = Math.max(0, destUnits + armyUnits - 10);
   const overSel = Math.max(0, destUnits + totalUnits - 10);
-  const isWhole = totalUnits === armyUnits && leaders === maxLeaders && nazgul === maxNazgul && chars.size === myChars.length;
+  // A capped card move always states its selection: "the whole Army" is not what the
+  // card offers, so the bare action would mean something else.
+  const isWhole = evLimit === undefined && totalUnits === armyUnits && leaders === maxLeaders && nazgul === maxNazgul && chars.size === myChars.length;
+  const budgetLeft = evLimit === undefined ? Infinity : Math.max(0, evLimit - totalUnits);
 
   const buildSel = (): MoveSel => {
     const units: MoveSel['units'] = {};
@@ -122,7 +158,8 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
         <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
           {attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.'
             : holdBackMode ? `Choose who stays in ${rName(from)}; everyone unticked marches back to ${rName(to)}.${holdBackMustHold ? ' At least one unit must hold the Settlement you just took.' : ' You may bring the whole Army back.'}`
-              : 'Choose what moves.'}
+              : evLimit !== undefined ? `Choose what moves — this card moves up to ${evLimit} ${evNation ? cap(evNation) + ' ' : ''}unit${evLimit === 1 ? '' : 's'}.`
+              : stayNations.length ? `Choose what moves. ${stayNations.map(cap).join(' and ')} ${stayNations.length === 1 ? 'is' : 'are'} not At War and cannot cross into ${rName(to)}, so those units stay behind.` : 'Choose what moves.'}
         </div>
         {!attackMode && destUnits > 0 && (
           <div style={{ fontSize: 12, color: overAll || overSel ? '#f0d090' : '#9c9', marginBottom: 8 }}>
@@ -131,11 +168,19 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
             {overSel > 0 && ` You'll remove ${overSel} excess after moving.`}
           </div>
         )}
-        {nations.map((n) => (
+        {goNations.map((n) => (
           <div key={n} style={{ marginBottom: 4 }}>
             <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{cap(n)}</div>
-            {r.units[n]!.regular > 0 && <Step label="Regulars" val={reg[n] ?? 0} max={r.units[n]!.regular} set={(v) => setReg({ ...reg, [n]: v })} />}
-            {r.units[n]!.elite > 0 && <Step label="Elites" val={eli[n] ?? 0} max={r.units[n]!.elite} set={(v) => setEli({ ...eli, [n]: v })} />}
+            {r.units[n]!.regular > 0 && <Step label="Regulars" val={reg[n] ?? 0} max={Math.min(r.units[n]!.regular, (reg[n] ?? 0) + budgetLeft)} set={(v) => setReg({ ...reg, [n]: v })} />}
+            {r.units[n]!.elite > 0 && <Step label="Elites" val={eli[n] ?? 0} max={Math.min(r.units[n]!.elite, (eli[n] ?? 0) + budgetLeft)} set={(v) => setEli({ ...eli, [n]: v })} />}
+          </div>
+        ))}
+        {stayNations.map((n) => (
+          <div key={n} style={{ marginBottom: 4, opacity: 0.6 }}>
+            <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{cap(n)}</div>
+            <div style={{ fontSize: 12, color: '#bbb' }}>
+              {r.units[n]!.regular + r.units[n]!.elite} unit{r.units[n]!.regular + r.units[n]!.elite === 1 ? '' : 's'} stay — {cap(n)} is not At War.
+            </div>
           </div>
         ))}
         {maxLeaders > 0 && <Step label="Leaders" val={leaders} max={maxLeaders} set={setLeaders} />}

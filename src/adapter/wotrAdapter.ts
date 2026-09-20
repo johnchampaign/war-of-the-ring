@@ -11,7 +11,7 @@ import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separat
 import { extraHunt } from '../engine/hunt';
 import { log, logCardDraw } from '../engine/log';
 import {
-  recruit, moveArmy, moveArmySplit, canMoveArmy, moveBlockReason, splitBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
+  recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders,
 } from '../engine/armies';
 import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
@@ -1604,7 +1604,12 @@ function moveTargets(state: GameState, side: Side): Array<[string, string]> {
   for (const from of Object.keys(state.regions)) {
     if (armySide(state, from) !== side) continue;
     for (const to of REGIONS[from]!.adjacency) {
-      if (canMoveArmy(state, from, to, side)) out.push([from, to]); // every legal move (incl. merging onto a friendly army); no cap — the UI needs them all
+      // The PERMISSIVE question (p.27, "all or some of the units"): a destination that
+      // only the stack's At-War half can reach is still a legal Army move — the move
+      // takes exactly the figures allowed across and leaves the rest behind. Asking the
+      // strict question here left a mixed Army with no lit destination at all (player
+      // report 615m5q0t090g205d). No cap — the UI needs them all.
+      if (canMoveSomeArmy(state, from, to, side)) out.push([from, to]); // every legal move, incl. merging onto a friendly army
     }
   }
   return out;
