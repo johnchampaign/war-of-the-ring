@@ -393,6 +393,11 @@ register('fp-char-09', { // Athelas
 // move triggers a Hunt, run via `finalize` so its follow-up choice survives), or
 // decline. A real player choice (RAW).
 register('fp-char-10', {
+  // Strengthened play condition: both halves must be dead before the card is refused.
+  // The heal is live whenever there is Corruption to remove; the Gollum half is live
+  // whenever he guides (revealed → hide, hidden → move). With neither, the card does
+  // literally nothing, so it is not offered (report 476n3s6q0c1i2c2w).
+  canPlay: (state) => state.fellowship.corruption > 0 || isGollumGuide(state),
   apply: (state) => { heal(state, 1); },
   targets: (state) => {
     if (!isGollumGuide(state)) return [];
@@ -788,7 +793,15 @@ function shadowsGatherMoves(state: GameState): EventTarget[] {
   const out: EventTarget[] = [];
   const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
   for (const from of shadowRegions) {
-    const reach = cardMoveReach(state, from as RegionId, 'shadow', ownNationsIn(state, from as RegionId, 'shadow'), SHADOWS_GATHER_RANGE);
+    // STRICT (`anyNation: false`): every Nation in the stack must be able to walk the
+    // route, because this target is submitted as a WHOLE-Army move — `move` (the split)
+    // is an optional decoration the player adds afterwards, and the picker's "move
+    // everything" is the bare action. Asking the permissive question here offered a
+    // destination only the stack's At-War half could reach, and the engine then refused
+    // the very move it had just offered ("there is no route … that this card can take"),
+    // for the AI and for a player who clicked it alike (soak 2026-09-20: Trollshaws →
+    // North Dunland). See the note on `cardStepBlocked`'s `anyNation`.
+    const reach = cardMoveReach(state, from as RegionId, 'shadow', ownNationsIn(state, from as RegionId, 'shadow'), SHADOWS_GATHER_RANGE, false);
     for (const to of shadowRegions) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       if (from === to) continue;
@@ -812,8 +825,9 @@ function shadowLengthensMoves(state: GameState, applied: EventTarget[] = []): Ev
   const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
   for (const from of shadowRegions) {
     if (movedTo.has(from)) continue;
-    // Reach, not distance — same clause and same reason as shadowsGatherMoves.
-    const reach = cardMoveReach(state, from as RegionId, 'shadow', ownNationsIn(state, from as RegionId, 'shadow'), SHADOW_LENGTHENS_RANGE);
+    // Reach, not distance — same clause and same reason as shadowsGatherMoves, and
+    // strict for the same reason (the target is a whole-Army move).
+    const reach = cardMoveReach(state, from as RegionId, 'shadow', ownNationsIn(state, from as RegionId, 'shadow'), SHADOW_LENGTHENS_RANGE, false);
     for (const to of shadowRegions) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       // No `besieged` test on the destination — see shadowsGatherMoves for why an
@@ -970,7 +984,8 @@ function dayNightMoves(state: GameState): EventTarget[] {
     // the way, not just the landing. Plain distance let this Army walk THROUGH a Shadow
     // Army: Lórien → Moria with Shadow units standing in between (player report
     // y1hvvsejg6wgibm0).
-    const reach = cardMoveReach(state, from as RegionId, 'fp', ownNationsIn(state, from as RegionId, 'fp'), DAY_NIGHT_RANGE);
+    // Strict, as for the Shadow move cards: this target is a whole-Army move.
+    const reach = cardMoveReach(state, from as RegionId, 'fp', ownNationsIn(state, from as RegionId, 'fp'), DAY_NIGHT_RANGE, false);
     for (const to of reach.keys()) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       // No stacking pre-filter - the Almanac gives this card the same "merge over the
@@ -1064,7 +1079,13 @@ const greyCompanyNations = (state: GameState, r: string): Nation[] =>
     .filter(([n, u]) => isFpNation(n) && u.regular > 0 && state.reinforcements[n as Nation].elite > 0)
     .map(([n]) => n as Nation);
 register('fp-char-24', {
-  canPlay: (state) => { const r = greyCompanyRegion(state); return !!r && greyCompanyNations(state, r).length > 0; },
+  // The card's PRINTED condition is "Play if Strider/Aragorn is with a Free Peoples
+  // Army" — and its second clause, "Then, draw two Strategy Event cards", stands alone.
+  // Requiring an upgradeable Regular as well refused the card in a position where the
+  // draw was still a perfectly good reason to play it (p.23: effects apply "to the
+  // maximum extent possible"; the Almanac says the same of King Brand's Men's draw).
+  // Report 476n3s6q0c1i2c2w.
+  canPlay: (state) => { const r = greyCompanyRegion(state); const f = r ? armyForceOf(state, r as RegionId, 'fp') : null; return !!f && forceUnitCount(f) > 0; },
   targets: (state) => { const r = greyCompanyRegion(state); return r ? greyCompanyNations(state, r).map((nation) => ({ nation, region: r, figure: 'elite' as const })) : []; },
   applyTarget(state, _side, t) {
     const u = state.regions[t.region!]!.units[t.nation!]!;
@@ -1771,7 +1792,11 @@ function moveNazgulCard(after: (state: GameState) => void): EventHandler {
 /** A card that separates ONE Companion: step 1 pick the Companion, step 2 pick where
  *  it goes (the player's CHOICE, within Progress + Level + the card's bonus). `after`
  *  runs the card's post-placement effect (heal, extra rouse). */
-function separateViaCard(opts: { extraMove?: number; levelOverride?: number; siegeOk?: boolean; mapMove?: boolean; after?: (state: GameState, companions: string[], dest: RegionId) => void } = {}): EventHandler {
+function separateViaCard(opts: { extraMove?: number; levelOverride?: number; siegeOk?: boolean; mapMove?: boolean; after?: (state: GameState, companions: string[], dest: RegionId) => void;
+  /** A "Then, …" clause that does not depend on the separation. It runs EXACTLY ONCE,
+   *  on every exit from finalize (including the fizzle paths), and `extraPlay` makes it
+   *  its own reason to play the card when nobody can be separated at all. */
+  always?: (state: GameState) => void; extraPlay?: (state: GameState) => boolean } = {}): EventHandler {
   // RAW: these cards separate "one Companion OR one group of Companions". The player
   // picks one or more Companions (each a companion-only target → a panel button), then
   // a destination (a companion+region target → a board click) that places the whole
@@ -1797,8 +1822,30 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
   };
   const canMapMove = (state: GameState): boolean =>
     !!opts.mapMove && onMap(state).some(([c, from]) => mapDests(state, [c], from).length > 0);
+  /** The separation itself (the card's first clause). May legitimately do nothing. */
+  const resolve = (state: GameState, applied: EventTarget[]): void => {
+    const dest = applied.find((a) => a.region);
+    const companions = chosenOf(applied);
+    if (state.fellowship.mordor !== null && !dest?.region) {
+      // Mordor Track: the Companions are removed from play; the card's own effect
+      // (e.g. "I Will Go Alone" healing one Corruption) still takes effect.
+      if (companions.length === 0) return; // nobody separated → the card does nothing
+      for (const c of companions) removeCompanionOnMordorTrack(state, c as CharacterId);
+      opts.after?.(state, companions, state.fellowship.location);
+      return;
+    }
+    if (!dest?.region || companions.length === 0) return; // fizzle (no destination reachable)
+    if (dest.from) { // "or move" branch: Companions already on the map travel together
+      moveCompanionGroup(state, 'fp', dest.from, dest.region, companions, opts);
+      opts.after?.(state, companions, dest.region);
+      return;
+    }
+    for (const c of companions) beginSeparation(state, c);
+    placeSeparatedGroup(state, companions, dest.region);
+    opts.after?.(state, companions, dest.region);
+  };
   return {
-    canPlay: (state) => canSeparate(state) || canSeparateOnMordorTrack(state) || canMapMove(state),
+    canPlay: (state) => canSeparate(state) || canSeparateOnMordorTrack(state) || canMapMove(state) || !!opts.extraPlay?.(state),
     repeat: 24,   // pick any number of Companions, then a destination
     // Off the Mordor Track you can't stop without placing — the destination ends it.
     // ON the track there is no destination step (the Companions are removed from play),
@@ -1846,25 +1893,10 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
     },
     applyTarget() { /* no mutation per step; the group is placed in finalize from `applied` */ },
     finalize(state, _side, applied) {
-      const dest = applied.find((a) => a.region);
-      const companions = chosenOf(applied);
-      if (state.fellowship.mordor !== null && !dest?.region) {
-        // Mordor Track: the Companions are removed from play; the card's own effect
-        // (e.g. "I Will Go Alone" healing one Corruption) still takes effect.
-        if (companions.length === 0) return; // nobody separated → the card does nothing
-        for (const c of companions) removeCompanionOnMordorTrack(state, c as CharacterId);
-        opts.after?.(state, companions, state.fellowship.location);
-        return;
-      }
-      if (!dest?.region || companions.length === 0) return; // fizzle (no destination reachable)
-      if (dest.from) { // "or move" branch: Companions already on the map travel together
-        moveCompanionGroup(state, 'fp', dest.from, dest.region, companions, opts);
-        opts.after?.(state, companions, dest.region);
-        return;
-      }
-      for (const c of companions) beginSeparation(state, c);
-      placeSeparatedGroup(state, companions, dest.region);
-      opts.after?.(state, companions, dest.region);
+      resolve(state, applied);
+      // The independent "Then, …" clause fires once, whichever way the separation went
+      // (or didn't) — it is not conditional on anyone actually moving.
+      opts.always?.(state);
     },
   };
 }
@@ -1877,20 +1909,29 @@ register('fp-char-15', separateViaCard({ levelOverride: 4, mapMove: true, siegeO
 register('fp-char-16', separateViaCard({ extraMove: 2, mapMove: true, siegeOk: true }));
 // There and Back Again — separate a Companion (+1, you choose where); if Gimli/Legolas
 // is then in Dale/Erebor/Woodland Realm, rouse the Dwarves, Elves & North.
+// …and only while that region is uncaptured (Almanac: "this card does not permit
+// activating Nations or advancing them … if the region they are standing at is
+// captured"; player report 3a3e73174f1m1s4b).
+const THERE_AND_BACK_REGIONS: RegionId[] = ['dale', 'erebor', 'woodland-realm'];
+const thereAndBackRousing = (state: GameState): boolean =>
+  ['gimli', 'legolas'].some((c) => { const r = charRegion(state, c); return !!r && THERE_AND_BACK_REGIONS.includes(r as RegionId) && settlementController(state, r as RegionId) !== 'shadow'; });
 register('fp-char-17', separateViaCard({
   extraMove: 1,
-  after: (state) => {
-    const trig = ['dale', 'erebor', 'woodland-realm'];
-    // …and only while that region is uncaptured (Almanac: "this card does not permit
-    // activating Nations or advancing them … if the region they are standing at is
-    // captured"; player report 3a3e73174f1m1s4b).
-    if (['gimli', 'legolas'].some((c) => { const r = charRegion(state, c); return !!r && trig.includes(r) && settlementController(state, r) !== 'shadow'; })) {
-      activateNation(state, 'dwarves', { viaCompanion: true }); activateNation(state, 'north', { viaCompanion: true });
-      advancePolitical(state, 'dwarves', 1); advancePolitical(state, 'elves', 1); advancePolitical(state, 'north', 1);
-      log(state, null, 'event', 'There and Back Again rouses the Dwarves/Elves/North');
-      notify(state, 'There and Back Again rouses the Dwarves, Elves and North to war!', 'A Nation is Roused');
-    }
+  // The "Then, …" clause stands on its own: it reads where Gimli and Legolas ARE, not
+  // where this card put them, so it fires once at the end of the card whether or not
+  // anyone separated — and with Gimli or Legolas already standing in Dale, Erebor or
+  // the Woodland Realm it is reason enough to play the card with an empty Fellowship
+  // (report 476n3s6q0c1i2c2w).
+  always: (state) => {
+    if (!thereAndBackRousing(state)) return;
+    activateNation(state, 'dwarves', { viaCompanion: true }); activateNation(state, 'north', { viaCompanion: true });
+    advancePolitical(state, 'dwarves', 1); advancePolitical(state, 'elves', 1); advancePolitical(state, 'north', 1);
+    log(state, null, 'event', 'There and Back Again rouses the Dwarves/Elves/North');
+    notify(state, 'There and Back Again rouses the Dwarves, Elves and North to war!', 'A Nation is Roused');
   },
+  // …but only while one of those three Nations can still be moved by it.
+  extraPlay: (state) => thereAndBackRousing(state)
+    && (['dwarves', 'elves', 'north'] as Nation[]).some((n) => state.nations[n].step > 0 || !state.nations[n].active),
 }));
 
 // --- Nazgûl converge on the Fellowship. "Move any or all of the Nazgûl" is

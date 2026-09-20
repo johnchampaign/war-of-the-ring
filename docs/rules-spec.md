@@ -368,6 +368,36 @@ die already showing an Eye.
   text; the Leader (no choice to make, and not subject to stacking) rides along in
   `finalize`, or in `apply` when the unit half has no legal target at all.
   Regression: `scripts/probe-faramir-rangers.mjs`.
+  **The whole "Then, …" family reviewed as one** *(player report 476n3s6q0c1i2c2w,
+  2026-09-20: "some cards have a construction where there is a separate clause
+  independent of the first")*. The rule is the OR of the clauses, never the AND. Six of
+  the nine the reporter listed were already right — *Faramir's Rangers* (fp-str-06),
+  *Book of Mazarbul* (fp-str-04) and *Fear! Fire! Foes!* (fp-str-07, both via
+  `moveCompanionsCard`'s `… || rousing`), *The Red Arrow* (fp-str-09, `Rohan can advance
+  || Edoras recruitable`), *I Will Go Alone* (fp-char-11, whose printed "Play if at
+  least one Companion is in the Fellowship" **is** the first clause) and *Stormcrow*
+  (sh-str-06, whose forced FP loss survives a Nation already at the top of the track).
+  Three were not:
+  - ***There Is Another Way*** (fp-char-10) had no `canPlay` at all, so it could be spent
+    on nothing whatever: no Corruption to heal and no Gollum guiding. Now
+    `corruption > 0 || isGollumGuide`.
+  - ***The Grey Company*** (fp-char-24) demanded an upgradeable Regular on top of its
+    printed "Play if Strider/Aragorn is with a Free Peoples Army", although "Then, draw
+    two Strategy Event cards" is reason enough on its own (the Almanac says exactly that
+    of *King Brand's Men*'s draw). Now the printed condition alone.
+  - ***There and Back Again*** (fp-char-17) could only be played to separate somebody,
+    yet its rouse reads where Gimli and Legolas **are**, not where the card put them —
+    so with one of them already standing in an uncaptured Dale / Erebor / Woodland Realm
+    it is playable with an empty Fellowship. `separateViaCard` grew an `always` hook
+    (the independent clause, run exactly once on **every** exit from `finalize`,
+    including the fizzle paths — which is also what stops the rouse double-advancing the
+    track when the card's own move is what lands Gimli in Erebor) and an `extraPlay`
+    hook (that clause as its own reason to play).
+  `scripts/probe-then-clause-play.mjs`.
+  **Not an exception:** a "null effect" card is *not* made playable by Gandalf the Grey
+  guiding. Drawing through his ability costs the same Event die as the "Draw an Event
+  card" action and additionally spends the card, so it is strictly worse — there is no
+  play to protect.
   **A recruitment card with nothing to recruit is still playable for the rest of its
   text.** Almanac, "Points common to all Free Peoples recruitment cards": "These cards
   may still be played if recruitment is impossible (e.g., if the required Settlement has

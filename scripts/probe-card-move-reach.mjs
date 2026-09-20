@@ -138,5 +138,40 @@ console.log('\n=== Rage of the Dunlendings recruits in a FREE region only ===');
   check('an unbesieged Moria IS offered', !!free && wotrAdapter.legalActions(free, 'shadow').some((a) => a.kind === 'eventTarget' && a.region === 'moria'));
 }
 
+console.log('\n=== a ranged card move is offered only where the WHOLE Army may go ===');
+{
+  // The soak's 2026-09-20 board: an FP stack at Trollshaws holding units of a Nation
+  // that is At War AND of one that is not, with North Dunland (Isengard's) two regions
+  // away. The not-At-War half cannot cross into another Nation's borders, and the card
+  // is submitted as a whole-Army move — so the destination must not be offered at all,
+  // or the engine refuses a move it had just offered.
+  const build = (northAtWar, elvesAtWar) => {
+    const s = bareBoard(131, 'fp', 'fp-str-12');
+    for (const n of Object.keys(s.nations)) { s.nations[n].active = true; s.nations[n].step = 3; }
+    s.nations.north.step = northAtWar ? 0 : 3;
+    s.nations.elves.step = elvesAtWar ? 0 : 3;
+    s.regions['trollshaws'].units = { north: { regular: 2, elite: 0 }, elves: { regular: 1, elite: 0 } };
+    s.regions['trollshaws'].characters = ['strider'];
+    s.characters.inPlay['strider'] = 'trollshaws';
+    s.fellowship.companions = s.fellowship.companions.filter((c) => c !== 'strider');
+    return playCard(s, 'fp', 'fp-str-12');
+  };
+  const mixed = build(true, false);   // the North may cross into Isengard, the Elves may not
+  check('the card is playable', !!mixed && mixed.pendingChoice?.kind === 'eventTarget', mixed?.pendingChoice?.kind ?? 'not playable');
+  check('North Dunland is NOT offered while part of the stack is barred',
+    !moveOffered(mixed, 'fp', 'trollshaws', 'north-dunland'));
+  // ...and every ranged move it DOES offer really is applicable as submitted.
+  for (const a of wotrAdapter.legalActions(mixed, 'fp')) {
+    if (a.kind !== 'eventTarget' || !a.from || !a.to) continue;
+    const res = wotrAdapter.tryApplyAction(mixed, a, 'fp');
+    if (!res.ok) { check(`offered ${a.from}→${a.to} is applicable`, false, res.reason); break; }
+  }
+  check('every offered whole-Army move is applicable', true);
+
+  const both = build(true, true);     // both Nations At War: the trip is on again
+  check('with the whole stack At War, North Dunland IS offered',
+    moveOffered(both, 'fp', 'trollshaws', 'north-dunland'));
+}
+
 console.log(failures === 0 ? '\nALL OK' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

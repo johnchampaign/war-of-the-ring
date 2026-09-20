@@ -221,11 +221,17 @@ export function casualtyOptions(f: Force, hits: number, owner?: { state: GameSta
   for (const n of Object.keys(f.units) as Nation[]) {
     const u = f.units[n]; if (!u) continue;
     if (u.regular > 0) out.push({ step: 'removeRegular', nation: n, cost: 1 });
+    // NB this hides "Reduce" ONLY in the no-replacement case — whenever a Regular is
+    // available the Elite really does become a Regular, so the option stands at any
+    // number of hits, and the unit count it leaves behind is exactly why (report
+    // 5b2o1o374u5i436p asked us to re-check that, and it holds).
     // With no Regular anywhere to replace it, "reducing" an Elite eliminates it
-    // (p.30). Once two hits are open that's the same loss as removing it for two
-    // hits, only worse, so it isn't offered as a separate — and mislabelled —
-    // option (player report 6q6h2i1o102a2m6k). With one hit it stays: it is then
-    // the only way to take the hit on that Elite.
+    // outright (p.30), so the two offers end in the same place — the Elite gone — and
+    // differ only in price: 1 hit for the reduction, 2 for the removal. With 2+ hits
+    // still to assign, paying the cheaper price just leaves a hit to fall on ANOTHER
+    // unit, so the reduction is strictly the worse buy and is not offered as a
+    // separate — and mislabelled — option (player report 6q6h2i1o102a2m6k). With one
+    // hit it stays: it is then the only way to take the hit on that Elite.
     if (u.elite > 0 && !(hits >= 2 && owner && !eliteHasReplacement(owner.state, n, owner.side))) out.push({ step: 'reduceElite', nation: n, cost: 1 });
     if (u.elite > 0 && hits >= 2) out.push({ step: 'removeElite', nation: n, cost: 2 });
   }

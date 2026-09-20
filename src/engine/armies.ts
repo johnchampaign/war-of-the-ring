@@ -393,12 +393,21 @@ export function quietCardPath(state: GameState, from: RegionId, to: RegionId, si
  *  card effect barring the Shadow, and no Nation crossing another's borders before
  *  it is At War.
  *
- *  `anyNation` asks the PERMISSIVE version of the last test, which is the question
- *  the move ENUMERATORS have to ask: p.28 lets an Army split before a card move, so
- *  a mixed stack may send only its At-War half, and a step barred to one travelling
- *  Nation is still open to another. Leaving it false asks the strict question — every
- *  named Nation must be able to enter — which is the one to ask once the player has
- *  chosen who actually goes. */
+ *  `anyNation` asks the PERMISSIVE version of the last test — p.28 lets an Army split
+ *  before a card move, so a mixed stack could in principle send only its At-War half,
+ *  and a step barred to one travelling Nation is still open to another. Leaving it
+ *  false asks the strict question — every named Nation must be able to enter.
+ *
+ *  **The ranged card-move enumerators ask the STRICT question**, because the target
+ *  they emit is submitted as a whole-Army move: the split (`move`) is an optional
+ *  decoration the player adds afterwards, and "move everything" in the picker is the
+ *  bare action. Offering a destination only part of the stack could reach meant the
+ *  engine refused a move it had itself just offered — for the AI and for a player who
+ *  clicked it alike (soak 2026-09-20: Trollshaws → North Dunland, an FP stack whose
+ *  not-At-War half could not cross into Isengard). The cost is that a mixed stack can
+ *  no longer be offered a destination that ONLY its At-War half can reach; making that
+ *  play available again needs the split to be expressible in the offer itself, which
+ *  is a design question of its own rather than a flag. */
 export function cardStepBlocked(state: GameState, r: RegionId, side: Side, nations: readonly Nation[], anyNation = false): boolean {
   if (side === 'shadow' && shadowBarredFromRegion(state, r)) return true;
   const occ = armySide(state, r);
