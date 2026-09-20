@@ -120,6 +120,17 @@ export function wormtongueAllowsActivation(
   return (!!opts.viaAttack || !!opts.viaDeclare) && atRohansSeat;
 }
 
+/** Wormtongue's attack exception names the REGION, not the defender: "an attack on
+ *  Edoras or Helm's Deep". So a Shadow attack there rouses Rohan (and, by the card's
+ *  printed clause, discards the card) even when the Army holding the place carries no
+ *  Rohan units — an allied Gondor garrison in Edoras is still an attack on Edoras.
+ *  The normal attack trigger only wakes the Nations whose units are in the battle, so
+ *  this is the card's own exception firing, and it is scoped to the card being on the
+ *  table (player report 6d1g1o4l2d4r0a3q). Activation only — Rohan's Army was not the
+ *  one attacked, so the Political Track does not advance. */
+export const wormtongueRousedByAttackAt = (s: GameState, region: RegionId): boolean =>
+  onTable(s, 'shadow', 'sh-char-22') && (region === 'edoras' || region === 'helms-deep');
+
 // --- Cease-to-be-met discards (rulebook p.22) ---------------------------------
 // "If the condition required to play such a card ceases to be met, the card is
 // immediately discarded" (the rulebook's own example: Denethor's Folly when Minas

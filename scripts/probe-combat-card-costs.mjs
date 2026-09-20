@@ -170,7 +170,11 @@ const FOUL_STENCH = 'sh-char-09';
   check('Dread and Despair unpaid removes no enemy dice', !combatModsFor(DND)?.enemyDiceReduction);
   check('Dread and Despair paid 3 removes 3 dice and costs 3 Leadership',
     combatModsFor(DND, { cost: 3 })?.enemyDiceReduction === 3 && combatModsFor(DND, { cost: 3 })?.ownLeadershipPenalty === 3);
-  check('Onslaught is no longer a free 4-dice extra attack', !combatModsFor(ONS)?.extraAttackDice);
+  // Onslaught carries NO roll modifier at all — it is resolved as its own
+  // post-casualty step, paid for by self-inflicted hits (it used to be a free
+  // flat-4-dice extra attack bolted onto the roll).
+  check('Onslaught is no longer a free 4-dice extra attack',
+    Object.keys(combatModsFor(ONS) ?? {}).length === 0, JSON.stringify(combatModsFor(ONS)));
 }
 
 // --- the prompt actually fires, and charges ---------------------------------------

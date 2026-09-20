@@ -56,11 +56,15 @@ export function onArmyAttacked(state: GameState, n: Nation, region?: RegionId): 
 }
 
 /** Automatic reaction when one of a nation's Settlements (in `region`) is captured.
- *  `viaAttack` distinguishes a battle capture (an attack — can rouse Rohan under
- *  Wormtongue) from a walk-in occupation of an undefended Settlement (which cannot). */
-export function onSettlementCaptured(state: GameState, n: Nation, region?: RegionId, viaAttack = false): void {
-  activateNation(state, n, { region, viaAttack });
-  advancePolitical(state, n, 1, { viaAttack });
+ *  A capture is NOT an attack: an attack is what starts a battle, and it has already
+ *  fired its own `onArmyAttacked` (with `viaAttack`) by the time the winner advances
+ *  in — so a battle capture needs no attack flag of its own, and a walk-in occupation
+ *  of an undefended Settlement never was one (player report 6d1g1o4l2d4r0a3q). That
+ *  keeps Rohan passive under Wormtongue on a walk-in, and keeps Threats and Promises
+ *  on the table unless the advance it reacts to really came from an attack. */
+export function onSettlementCaptured(state: GameState, n: Nation, region?: RegionId): void {
+  activateNation(state, n, { region });
+  advancePolitical(state, n, 1);
 }
 
 /** Nations of a side that can still be advanced on the track (diplomatic action). */

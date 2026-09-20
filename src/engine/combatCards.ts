@@ -28,13 +28,6 @@ export interface CombatMods {
   maxDiceEnemy?: number;
   /** The enemy rolls N fewer Combat dice, to a minimum of one (Dread and Despair). */
   enemyDiceReduction?: number;
-  /** Roll an extra attack of N dice (hits on 5+), added to the owner's hits. */
-  extraAttackDice?: number;
-  /** The extra attack's dice are COUNTED FROM the owner's army, not fixed: 'leadership'
-   *  = Sudden Strike ("dice equal to your Leadership"), 'elites' = Charge / We Come to
-   *  Kill ("using only the … Elite units"). All three were hardcoded to 3, which a
-   *  player caught when a single Leader rolled three dice (report 2w424i0). Max 5. */
-  extraAttackFrom?: 'leadership' | 'elites';
   /** "BEFORE the Combat roll, roll an additional attack ... and apply the result
    *  immediately" (Sudden Strike: Leadership dice; Charge: Elite dice; both max 5).
    *  Resolves in the pre-combat pipeline, so its casualties thin the enemy before
@@ -186,11 +179,8 @@ export function describeCombatMods(mods: CombatMods): string {
   if (mods.negateEnemyReroll) p.push('cancels the enemy Leader re-roll');
   if (mods.cancelEnemyCard) p.push("cancels the enemy's Combat card");
   if (mods.preCombatAttackDice) p.push(`pre-combat attack: ${mods.preCombatAttackDice} dice, hits on 4+`);
-  if (mods.extraAttackFrom === 'leadership') p.push('extra attack: one die per point of Leadership (max 5), hits on 5+');
-  else if (mods.extraAttackFrom === 'elites') p.push('extra attack: one die per Elite unit (max 5), hits on 5+');
   if (mods.preCombatAttackFrom) p.push(`Before the Combat roll: an additional attack, one die per ${mods.preCombatAttackFrom === 'leadership' ? 'point of Leadership' : 'Elite unit'} (max 5), applied immediately`);
   if (mods.postCasualtyAttackFrom) p.push('After casualties: an additional attack, one die per surviving Elite unit (max 5)');
-  else if (mods.extraAttackDice) p.push(`extra attack: ${mods.extraAttackDice} dice, hits on 5+`);
   if (mods.guaranteedHits) p.push(`turns ${mods.guaranteedHits} miss into a hit`);
   if (mods.bonusHitsIfAny) p.push(`+${mods.bonusHitsIfAny} hit${mods.bonusHitsIfAny === 1 ? '' : 's'} if it scored any`);
   if (mods.bonusHitsIfOutnumber) p.push(`+${mods.bonusHitsIfOutnumber} hit if it outnumbers 2:1`);

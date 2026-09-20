@@ -1014,7 +1014,11 @@ function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction
 
 function combatCardValue(m: CombatMods | null): number {
   if (!m) return 0;
-  return (m.rollBonus ?? 0) * 2 + (m.extraAttackDice ?? 0) + (m.bonusHitsIfAny ?? 0) * 2
+  // NB the additional-attack cards (Sudden Strike / Charge / We Come to Kill) carry no
+  // term here: this used to read the long-dead `extraAttackDice`, which no card ever
+  // set, so they already scored 0. Giving them a real weight changes play, so it needs
+  // the two-gate A/B in docs/ai-humanlike-yardstick.md, not a guess (report 162o1y5e).
+  return (m.rollBonus ?? 0) * 2 + (m.bonusHitsIfAny ?? 0) * 2
     + (m.bonusHitsIfOutnumber ?? 0) + (m.enemyRollPenalty ?? 0) * 2 + (m.maxDiceEnemy != null ? 2 : 0)
     + (m.enemyDiceReduction ?? 0) * 2
     + (m.cancelEnemyCard ? 3 : 0) + (m.negateEnemyReroll ? 2 : 0) + (m.cancelHits ?? 0) * 2;

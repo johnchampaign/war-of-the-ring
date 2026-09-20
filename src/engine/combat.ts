@@ -10,8 +10,8 @@ import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef } from './data';
 import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeForMovement, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection } from './armies';
-import { onArmyAttacked } from './politics';
-import { shadowBarredFromRegion, fpCombatCardsBarredAt } from './persistent';
+import { onArmyAttacked, activateNation } from './politics';
+import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods, type VariableCost } from './combatCards';
 import { log } from './log';
 
@@ -68,10 +68,6 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
 /** A combat roll's faces, for the battle popup: the main dice, any leadership
  *  re-rolls, and the to-hit target so the UI can colour the hits. */
 export interface CombatRoll { dice: number[]; rerolls: number[]; target: number; rerollTarget?: number;
-  /** The extra attack's dice (Sudden Strike / Charge / We Come to Kill) and the hits
-   *  they scored — kept separate from the Combat roll so the log can show where the
-   *  hits actually came from. */
-  extra?: number[]; extraHits?: number;
   /** Automatic hits granted by a card with no die behind them (Great Host's 2:1
    *  free hit, Shield Wall-style "+1 if you scored any"). */
   auto?: number;
@@ -140,21 +136,6 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     // 5 got only 2 re-rolls, because the first re-roll hit).
     const rerollDice = allowReroll ? Math.min(lead, failed) : 0;
     for (let i = 0; i < rerollDice; i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; failed--; } }
-    // The extra attack (Sudden Strike / Charge / We Come to Kill). Its size is read
-    // from the army — Leadership, or Elite units — capped at 5; it used to be a flat
-    // 3 for all three cards. Its dice are RECORDED, because rolling them invisibly
-    // made the hits look like they came from nowhere (player report: "the extra
-    // attack was never performed… the defender's hits weren't properly counted" —
-    // they were, from dice the log never showed).
-    let ownElites = 0;
-    for (const n of Object.keys(own.units) as Nation[]) ownElites += own.units[n]!.elite;
-    const extraDice = ownMods.extraAttackFrom === 'leadership' ? Math.min(5, lead)
-      : ownMods.extraAttackFrom === 'elites' ? Math.min(5, ownElites)
-      : (ownMods.extraAttackDice ?? 0);
-    const extraFaces: number[] = [];
-    let extraHits = 0;
-    for (let i = 0; i < extraDice; i++) { const d = rng.rollDie(6); extraFaces.push(d); if (d >= 5) { h++; extraHits++; } }
-    if (roll && extraFaces.length) { roll.extra = extraFaces; roll.extraHits = extraHits; }
     // Mighty Attack: turn up to N still-missed dice into hits.
     h += Math.min(ownMods.guaranteedHits ?? 0, failed);
     return h;
@@ -760,6 +741,9 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   // besieger standing in the open field in a sortie.
   for (const n of nationsWithUnits(state, to)) if (!assault) onArmyAttacked(state, n, to);
   if (assault) for (const n of Object.keys(box!.units) as Nation[]) if ((box!.units[n]!.regular + box!.units[n]!.elite) > 0) onArmyAttacked(state, n, to);
+  // …and Wormtongue's own exception is region-keyed, so an attack on Edoras or Helm's
+  // Deep rouses Rohan even if no Rohan unit stood in the battle (see persistent.ts).
+  if (attacker === 'shadow' && wormtongueRousedByAttackAt(state, to)) activateNation(state, 'rohan', { region: to, viaAttack: true });
   const pc: PendingCombat = {
     attacker, defender, from, to, round: 0,
     // `fortified` means ONLY "this Settlement grants the first-round 6-to-hit", which
@@ -984,7 +968,7 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
   const movingChars = src.characters.filter((c) => characterSide(c) === attacker && c !== 'saruman');
   moveOwnLeaders(attacker, src, dst); dst.characters.push(...movingChars);
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
-  captureIfEnemySettlement(state, to, attacker, true); // a post-battle capture is an attack (Wormtongue)
+  captureIfEnemySettlement(state, to, attacker);
   activateOnCompanionLand(state, attacker, movingChars, to); // an advancing Companion ends his movement here
   // If the advancing army was besieging `from`, vacating its field lifts that siege
   // (the boxed garrison returns to the field) — e.g. a besieger that wins a field
@@ -1048,7 +1032,7 @@ function finishCombat(state: GameState, advance: boolean): void {
       // Every unit defending the Stronghold is gone and the besieger still holds the
       // region — p.32's second capture trigger, from the DEFENDER's side of this battle.
       delete r.siegeBox; r.besieged = false;
-      captured = true; captureIfEnemySettlement(state, pc.to, pc.defender, true);
+      captured = true; captureIfEnemySettlement(state, pc.to, pc.defender);
       outcome = `The sortie from ${name} is destroyed — ${side(pc.defender)} take the Stronghold`;
     } else if (garrison === 0 && defSurv === 0) {
       delete r.siegeBox; r.besieged = false;
@@ -1064,7 +1048,7 @@ function finishCombat(state: GameState, advance: boolean): void {
     }
   } else if (assault) {
     if (advance && defSurv === 0 && atkSurv > 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
-      captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker, true);
+      captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker);
       outcome = `${side(pc.attacker)} storm ${name}`;
     } else if (atkSurv === 0) {
       liftSiege(state, pc.to); // an empty box on a mutual wipe: the region simply ends up empty, control unchanged
@@ -1187,7 +1171,7 @@ export function resolveAdvanceChoice(state: GameState, sel: { advance: boolean; 
       if (owner === 'fp') clamped.leaders = Math.max(0, Math.min(sel.move.leaders ?? 0, src.leaders));
       else clamped.nazgul = Math.max(0, Math.min(sel.move.nazgul ?? 0, src.nazgul));
       moveSelectedBack(state, d.from, d.to, owner, clamped);       // subset mover (shared with hold-back)
-      captureIfEnemySettlement(state, d.to, owner, true);          // units ENTERED: capture fires (viaAttack)
+      captureIfEnemySettlement(state, d.to, owner);                // units ENTERED, so the capture fires
       // p.26: FP Leaders can never stand without FP units — a full vacate drags them.
       const ownLeft = (Object.keys(src.units) as Nation[]).some((n) => sideOfNation(n) === owner && (src.units[n]!.regular + src.units[n]!.elite) > 0);
       if (owner === 'fp' && !ownLeft && src.leaders > 0) { state.regions[d.to]!.leaders += src.leaders; src.leaders = 0; }
@@ -1195,7 +1179,7 @@ export function resolveAdvanceChoice(state: GameState, sel: { advance: boolean; 
       log(state, null, 'combat', `${who} advance ${moved} unit${moved === 1 ? '' : 's'} into ${REGIONS[d.to]!.name ?? d.to}`);
     }
   } else {
-    advanceInto(state, owner, d.from, d.to);                       // whole force; advanceInto captures viaAttack
+    advanceInto(state, owner, d.from, d.to);                       // whole force; advanceInto captures
     advancedTo = d.to;
     log(state, null, 'combat', `${who} advance into ${REGIONS[d.to]!.name ?? d.to}`);
   }
@@ -1483,9 +1467,6 @@ export function combatStep(state: GameState): void {
           `[${roll.dice.join(' ')}] on ${roll.target}+`
           // The re-roll can have its OWN to-hit (cards bonus the two rolls separately).
           + (roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]${roll.rerollTarget != null && roll.rerollTarget !== roll.target ? ` on ${roll.rerollTarget}+` : ''}` : '')
-          // Name the extra attack's own dice, or its hits look like they came from
-          // nowhere (player report: a defender showing [1] re-roll [2] "scored" 2 hits).
-          + (roll.extra?.length ? ` + extra attack [${roll.extra.join(' ')}] on 5+ → ${roll.extraHits ?? 0} hit${(roll.extraHits ?? 0) === 1 ? '' : 's'}` : '')
           + (roll.auto ? ` + ${roll.auto} automatic hit${roll.auto === 1 ? '' : 's'} from the card` : '')
           // Confusion's backfire is a hit AGAINST this roller, so it is named on their
           // own segment rather than silently inflating the opponent's total.
