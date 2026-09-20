@@ -10,7 +10,7 @@ export const isAtWar = (state: GameState, n: Nation): boolean => state.nations[n
 
 /** Activate a Nation. `trigger` carries the activation source so persistent cards
  *  (Wormtongue) can veto it; default (no trigger) is a generic activation. */
-export function activateNation(state: GameState, n: Nation, trigger: { region?: RegionId; viaCompanion?: boolean; viaAttack?: boolean } = {}): void {
+export function activateNation(state: GameState, n: Nation, trigger: { region?: RegionId; viaCompanion?: boolean; viaAttack?: boolean; viaDeclare?: boolean } = {}): void {
   if (!wormtongueAllowsActivation(state, n, trigger)) return; // Wormtongue: Rohan stays passive
   if (!state.nations[n].active) {
     state.nations[n].active = true;

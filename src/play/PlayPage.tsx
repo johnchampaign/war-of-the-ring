@@ -88,6 +88,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // than the plain die (The Day Without Dawn discards Will dice only) — player
   // report 690g3p1z041n6q1g.
   const [diePick, setDiePick] = useState<WotrAction | null>(null);
+  // Drop the pending prompt outright once the turn leaves you, so it cannot come back
+  // pointing at an action from a turn that has already ended.
+  useEffect(() => { if (!g.yourTurn) setDiePick(null); }, [g.yourTurn]);
   const charDieOk = !activeDie || activeDie === 'character' || activeDie === 'will';
   const [selected, setSelected] = useState<RegionId | null>(null);
   // A card that moves an Army "through more than one region" is traced step by step:
@@ -169,6 +172,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   });
   const submit = useCallback(async (a: WotrAction) => {
     if (inFlight.current) return;
+    // Any action reaching this funnel SUPERSEDES an open "which die pays?" prompt.
+    // The prompt used to sit there while the player did something else entirely, and
+    // its buttons still submitted the abandoned action — clicking one later replayed
+    // a move that was no longer possible and answered with a red "You have no Army to
+    // move there." hint (player report 1z2b2n2n340v6e0c). The disambiguation branch
+    // below re-arms it for the action actually being asked about.
+    setDiePick(null);
     // The card Gandalf the White grants after an Ents card is played WITHOUT a die, so
     // it must not ask which die pays (player report 6v145h2o5w361j27).
     const dieFree = a.kind === 'playEvent' && g.view?.pendingChoice?.kind === 'freeCharEvent';
@@ -848,7 +858,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ display: 'flex', flexWrap: 'wrap', flexShrink: 0, maxHeight: '42%', overflowY: 'auto', borderBottom: '1px solid #2a2418' }}>
             <div style={{ flex: '1 1 200px', minWidth: 0, overflow: 'auto' }}>
               <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn ? setDie : undefined} />
-              {diePick && g.view && g.you && (
+              {/* `g.yourTurn` as well: online, the turn can pass to the opponent while
+                  the prompt is open (a pendingChoice resolving, a timeout), and a
+                  prompt for an action you can no longer take is worse than none. */}
+              {diePick && g.yourTurn && g.view && g.you && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, margin: '4px 0', padding: '6px 9px', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, fontSize: 12, color: '#f0d090' }}>
                   <span>Which die pays for “{describeAction(diePick)}”?</span>
                   {dieOptions(diePick, g.view, g.you as Side).map((f) => (

@@ -104,18 +104,20 @@ export const SH_FORCE_DISCARD_UNLOCKS: Record<string, RegionId[]> = {
  *  taken as a casualty, the Shadow also discards an FP Character Event card. */
 export const wornWithSorrowActive = (s: GameState): boolean => onTable(s, 'shadow', 'sh-char-15');
 
-/** sh-char-22 "Wormtongue": Rohan cannot be activated except by an appropriate
- *  Companion, the Fellowship being declared in Edoras/Helm's Deep, or an attack on
- *  Edoras/Helm's Deep. Given an activation trigger, may it activate Rohan? */
+/** sh-char-22 "Wormtongue", card text verbatim: "Rohan cannot be activated except by
+ *  an appropriate Companion, or by the Fellowship being declared in Edoras or Helm's
+ *  Deep, or by an attack on Edoras or Helm's Deep." Given an activation trigger, may
+ *  it activate Rohan? */
 export function wormtongueAllowsActivation(
-  s: GameState, n: string, opts: { region?: RegionId; viaCompanion?: boolean; viaAttack?: boolean },
+  s: GameState, n: string, opts: { region?: RegionId; viaCompanion?: boolean; viaAttack?: boolean; viaDeclare?: boolean },
 ): boolean {
   if (n !== 'rohan' || !onTable(s, 'shadow', 'sh-char-22')) return true;
-  // Only an appropriate Companion, or an ATTACK on Edoras/Helm's Deep, rouses Rohan.
-  // A plain army move into those regions (or a walk-in capture of an undefended one)
-  // is not an attack, so it must not activate Rohan (player report).
+  // Only an appropriate Companion, or a DECLARE or ATTACK on Edoras/Helm's Deep,
+  // rouses Rohan. A plain army move into those regions (or a walk-in capture of an
+  // undefended one) is not an attack, so it must not activate Rohan (player report).
   if (opts.viaCompanion) return true;
-  return !!opts.viaAttack && (opts.region === 'edoras' || opts.region === 'helms-deep');
+  const atRohansSeat = opts.region === 'edoras' || opts.region === 'helms-deep';
+  return (!!opts.viaAttack || !!opts.viaDeclare) && atRohansSeat;
 }
 
 // --- Cease-to-be-met discards (rulebook p.22) ---------------------------------

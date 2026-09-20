@@ -283,9 +283,12 @@ die already showing an Eye.
   politics.ts. A plain army move into those regions, or a walk-in occupation of an
   undefended Edoras/Helm's Deep, is *not* an attack and no longer rouses Rohan — the
   Wormtongue `viaAttack` flag is set only on the combat capture paths, `combat.ts`).
-  **Deviation:** declaring the Fellowship in a region does not activate that Nation in this
-  engine, so Wormtongue's "declared in Edoras/Helm's Deep" exception is moot. Worn with
-  Sorrow's "you may" is auto-applied (always to the Shadow's benefit).
+  Wormtongue's third exception — "the Fellowship being declared in Edoras or Helm's Deep" —
+  is live: `declareFellowship` activates with `viaDeclare`, which the card lets through at
+  exactly those two regions, and rousing Rohan then discards the card by its own printed
+  clause. (Until 2026-09-20 this engine did not activate a Nation on a declare at all, so
+  the exception was moot; report 1y222s09436d5q0z.) Worn with Sorrow's "you may" is
+  auto-applied (always to the Shadow's benefit).
 - **FP force-discard of a Shadow table card** (`persistent.ts` `fpForceDiscardMethods`,
   adapter `forceDiscardCard`): two Shadow "play on the table" cards let the FP player
   spend an action to discard them — *The Palantír of Orthanc* (sh-char-21: a Will of the
@@ -1020,6 +1023,16 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   without it the FP could re-declare in place and heal 1 Corruption *each time*
   (player report 4r4z: five declarations at Dale in one Fellowship phase took
   Corruption from 5 to 0). `scripts/probe-declare-once.mjs`.
+- **A declare ACTIVATES the Nation.** "If the Fellowship is declared in a City or
+  Stronghold of a Free Peoples Nation, that Nation is activated ... and the Ring-bearers
+  may be healed" (p.19), listed again among the activation triggers on p.34. The Almanac's
+  declare walkthrough (Ring-bearers entry) ties the two to the *same* condition: an
+  **unconquered** FP City/Stronghold grants heal **and** activation, a conquered one grants
+  neither — so `declareFellowship` activates inside the existing heal branch
+  (`fellowship.ts`). Activation only; a declare never *advances* the Political Track.
+  The activation is tagged `viaDeclare` so Wormtongue can honour its own exception (see
+  the persistent-card section). Until 2026-09-20 the engine skipped the activation
+  entirely — player report 1y222s09436d5q0z. `scripts/probe-declare-activates.mjs`.
 - **Revealed** (by successful Hunt or events): flip Progress to Revealed; FP must
   move the Ring-bearers figure (≤ Progress, never ending in an FP City/Stronghold)
   and reset to 0 (p.38). **A Revealed Fellowship cannot be moved** (via Character

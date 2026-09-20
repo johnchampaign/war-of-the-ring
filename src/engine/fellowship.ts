@@ -272,6 +272,15 @@ export function declareFellowship(state: GameState, target: RegionId): void {
     && def.nation && ['dwarves', 'elves', 'gondor', 'north', 'rohan'].includes(def.nation)
     && state.regions[fs.location]!.control !== 'shadow') {
     fs.corruption = Math.max(0, fs.corruption - 1);
+    // "If the Fellowship is declared in a City or Stronghold of a Free Peoples
+    // Nation, that Nation is activated" (rulebook p.19, and the activation list on
+    // p.34). The Almanac's declare walkthrough (Ring-bearers entry) ties the heal and
+    // the activation to the SAME condition — an *unconquered* FP City/Stronghold
+    // grants both, a conquered one grants neither — so this rides in the heal branch.
+    // Player report 1y222s09436d5q0z: the port was skipping the activation entirely.
+    // `viaDeclare` is what lets it through Wormtongue at Edoras/Helm's Deep, and
+    // rousing Rohan then discards Wormtongue via its own table condition.
+    activateNation(state, def.nation as Nation, { region: fs.location, viaDeclare: true });
     // Worn with Sorrow and Toil (sh-char-15) carries its own printed discard
     // clause: "discard this card from the table if the Fellowship is declared in a
     // City or Stronghold controlled by the Free Peoples" — exactly this branch's
