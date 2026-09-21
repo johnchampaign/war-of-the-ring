@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -746,6 +746,28 @@ register('sh-char-10', {
 // hand-written guess that offered landlocked Lossarnach and Osgiliath and left out
 // Lamedon (player report 6r6b3v).
 const GONDOR_COASTAL = COASTAL.filter((r) => REGIONS[r]?.nation === 'gondor');
+/** What stays in Umbar when only part of the Army lands: the Shadow figures in Umbar
+ *  that the landing selection leaves out. A selection that lands no Army unit at all
+ *  degrades to the whole Army (undefined) — the card needs units to land for its
+ *  battle, so an empty pick must not quietly waste it. */
+function corsairsStayBehind(state: GameState, from: RegionId, move: MoveSelection): MoveSelection | undefined {
+  const src = state.regions[from]!;
+  const units: NonNullable<MoveSelection['units']> = {};
+  let landing = 0, staying = 0;
+  for (const [n, u] of Object.entries(src.units) as [Nation, { regular: number; elite: number }][]) {
+    if (sideOfNation(n) !== 'shadow') continue;
+    const mr = Math.max(0, Math.min(move.units?.[n]?.regular ?? 0, u.regular));
+    const me = Math.max(0, Math.min(move.units?.[n]?.elite ?? 0, u.elite));
+    landing += mr + me;
+    const sr = u.regular - mr, se = u.elite - me;
+    if (sr + se > 0) { units[n] = { regular: sr, elite: se }; staying += sr + se; }
+  }
+  if (landing === 0) return undefined;
+  const nazgul = src.nazgul - Math.max(0, Math.min(move.nazgul ?? 0, src.nazgul));
+  const characters = src.characters.filter((c) => !(move.characters ?? []).includes(c));
+  if (staying === 0 && nazgul === 0 && characters.length === 0) return undefined;
+  return { units, leaders: 0, nazgul, characters };
+}
 register('sh-str-10', {
   canPlay: (state) => isAtWar(state, 'southrons') && armySide(state, 'umbar') === 'shadow',
   targets: (state) => GONDOR_COASTAL
@@ -771,8 +793,14 @@ register('sh-str-10', {
     // and the battle are one indivisible act, so committing everything and forcing
     // the advance reaches the same board without the illegal moment in between.
     if (armySide(state, t.to!) === 'fp') {
-      log(state, null, 'event', `Corsairs of Umbar: the Umbar Army lands at ${t.to} and gives battle`);
-      startBattle(state, 'shadow', t.from!, t.to!, { noCease: true, mustAdvance: true });
+      // "Move all or some of the Army in Umbar (… plus any Nazgûl/Minions in Umbar as
+      // desired)" — Almanac. The player picks who lands (player report 133q1o3448182t2l:
+      // the landing used to take everyone). Whoever stays behind is held out of the
+      // battle as a rearguard, returns to Umbar, and never advances — the combat driver
+      // restores a rearguard only after the forced advance.
+      const rearguard = t.move ? corsairsStayBehind(state, t.from!, t.move) : undefined;
+      log(state, null, 'event', `Corsairs of Umbar: the Umbar Army lands at ${t.to} and gives battle${rearguard ? ' (part of it stays in Umbar)' : ''}`);
+      startBattle(state, 'shadow', t.from!, t.to!, { noCease: true, mustAdvance: true, rearguard });
       return;
     }
     moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, undefined, true); // "from Umbar TO a Gondor coastal region" — a landing, not a march

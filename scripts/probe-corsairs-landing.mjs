@@ -88,5 +88,52 @@ console.log('\n=== an empty coast is still just a move ===');
   const t = play(s, 'anfalas');
   check('the Army lands with no battle', !!t && !t.pendingCombat && (t.regions['anfalas'].units.southrons?.regular ?? 0) > 0);
 }
+
+// "Move all or some of the Army in Umbar (… plus any Nazgûl/Minions in Umbar as
+// desired)" — Almanac. The landing takes a selection like any Army move; whoever stays
+// is held out of the battle and remains in Umbar (player report 133q1o3448182t2l).
+const playSplit = (s, to, move) => {
+  const p = wotrAdapter.legalActions(s, 'shadow').find((a) => a.kind === 'playEvent' && a.cardId === 'sh-str-10');
+  if (!p) return null;
+  const t = wotrAdapter.applyAction(s, { ...p, die: 'event' }, 'shadow');
+  const target = wotrAdapter.legalActions(t, 'shadow').find((a) => a.kind === 'eventTarget' && a.to === to);
+  return target ? wotrAdapter.applyAction(t, { ...target, move }, 'shadow') : null;
+};
+const se = (r) => (r.units.southrons?.regular ?? 0) + (r.units.southrons?.elite ?? 0);
+
+console.log('\n=== choosing who lands on a defended coast (the report) ===');
+{
+  const s = base();                                   // Umbar: 6 Regulars, 2 Elites
+  s.regions['pelargir'].units = { gondor: { regular: 1, elite: 0 } };
+  let t = playSplit(s, 'pelargir', { units: { southrons: { regular: 3, elite: 1 } } });
+  check('a partial landing is accepted and gives battle', !!t && !!t.pendingCombat, t ? (t.pendingCombat ? 'battle' : 'no battle') : 'refused');
+  if (t) {
+    check('only the four who landed are in the battle', (t.pendingCombat?.atkUnits0 ?? -1) === 4, String(t.pendingCombat?.atkUnits0));
+    t = settle(t);
+    const u = t.regions['umbar'].units.southrons;
+    check('the four who stayed are still in Umbar after the battle', !!u && u.regular === 3 && u.elite === 1, JSON.stringify(u));
+    check('Pelargir never holds more than the four who landed', se(t.regions['pelargir']) <= 4, String(se(t.regions['pelargir'])));
+    check('still no advance-or-hold question', t.pendingChoice?.kind !== 'advanceChoice', t.pendingChoice?.kind ?? 'none');
+  }
+}
+
+console.log('\n=== a Nazgûl left out of the landing stays in Umbar ===');
+{
+  const s = base();
+  s.regions['umbar'].nazgul = 1;
+  s.regions['pelargir'].units = { gondor: { regular: 1, elite: 0 } };
+  let t = playSplit(s, 'pelargir', { units: { southrons: { regular: 6, elite: 2 } } });
+  check('the whole Army lands without its Nazgûl', !!t && !!t.pendingCombat);
+  if (t) { t = settle(t); check('the Nazgûl is still in Umbar', t.regions['umbar'].nazgul === 1, String(t.regions['umbar'].nazgul)); }
+}
+
+console.log('\n=== a landing that picks no units sends the whole Army (the card is never wasted) ===');
+{
+  const s = base();
+  s.regions['pelargir'].units = { gondor: { regular: 1, elite: 0 } };
+  const t = playSplit(s, 'pelargir', { units: {} });
+  check('the battle still happens with every unit', !!t && t.pendingCombat?.atkUnits0 === 8, String(t?.pendingCombat?.atkUnits0));
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

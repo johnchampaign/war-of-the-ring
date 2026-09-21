@@ -292,6 +292,13 @@ export const isCardRecruitTarget = (a: WotrAction): boolean =>
   // Hordes From the East, Many Kings and Pits of Mordor (player reports
   // 4n1w2h4c0u635o1g, 1f595h0r5u0o273v).
   && ((a.mode === 'recruit') || ((!!a.nation || !!a.figure) && a.mode === undefined));
+/** Card ATTACKS where the player picks who goes, like any Army move, and the rest stays
+ *  behind out of the battle. Corsairs of Umbar moves "all or some of the Army in Umbar"
+ *  (Almanac) before its battle (player report 133q1o3448182t2l). Other card attacks'
+ *  handlers take the whole Army and ignore a selection, so they are not listed. */
+const SPLIT_CARD_ATTACKS = new Set(['sh-str-10']);
+export const isSplitCardAttack = (a: WotrAction): boolean =>
+  a.kind === 'eventTarget' && a.mode === 'attack' && !!a.card && SPLIT_CARD_ATTACKS.has(a.card) && !!a.from && !!a.to && a.from !== a.to;
 /** A card ARMY MOVE / ATTACK target with a real destination (Shadows Gather, The
  *  Shadow Lengthens, Corsairs, Grond's march, ...): takes the board's move flow —
  *  click the army, then the highlighted destination (same report). A from === to

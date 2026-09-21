@@ -33,7 +33,7 @@ import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, trivialDie } from './actionText';
+import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, trivialDie } from './actionText';
 import { moveBlockReason, musterBlockReason, cardPathBlockReason, regionHops } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial } from './panelFilter';
@@ -558,8 +558,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (cardAct) {
         setSelected(null);
         // A card ATTACK stays whole (the rearguard flow is the attack action's); a
-        // card MOVE may split (p.28), so it takes the move picker.
-        if (cardAct.mode === 'attack') void submit(cardAct);
+        // card MOVE may split (p.28), so it takes the move picker — and so does a card
+        // attack that LANDS first, where the player picks who goes (Corsairs of Umbar).
+        if (cardAct.mode === 'attack' && !isSplitCardAttack(cardAct)) void submit(cardAct);
         else setMoveDraft({ from: cardAct.from!, to: cardAct.to!, kind: 'eventMove', base: cardAct });
         return;
       }
@@ -740,7 +741,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // routes through the split picker — p.28 allows splitting the Army before a
     // card move (player report: "it did not ask if I wanted to move the ENTIRE
     // army"). Card ATTACKS stay whole (the rearguard flow is the attack action's).
-    if (a.kind === 'eventTarget' && a.from && a.to && !a.done && a.mode !== 'attack') {
+    if (a.kind === 'eventTarget' && a.from && a.to && !a.done && (a.mode !== 'attack' || isSplitCardAttack(a))) {
       setMoveDraft({ from: a.from, to: a.to, kind: 'eventMove', base: a }); return;
     }
     void submit(a);
@@ -797,7 +798,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   </span>
                   {trace.finish && (
                     <button onClick={() => { const act = trace.finish!; const path = [...route]; clearMove();
-                      if (act.mode === 'attack') void submit({ ...act, path });
+                      if (act.mode === 'attack' && !isSplitCardAttack(act)) void submit({ ...act, path });
                       else setMoveDraft({ from: act.from!, to: act.to!, kind: 'eventMove', base: { ...act, path } }); }}
                       style={{ padding: '3px 10px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: '#2c6a3a', color: '#f0f7ee', border: '1px solid #6ea84f' }}>
                       ✓ Stop here ({regionName(trace.head)})

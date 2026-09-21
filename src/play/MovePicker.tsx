@@ -21,6 +21,10 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   onConfirm: (a: WotrAction) => void; onCancel: () => void;
 }) {
   const attackMode = kind === 'attack';
+  // A card ATTACK that lands first (Corsairs of Umbar): the picker chooses who lands and
+  // attacks; whoever stays behind sits out the battle. The destination's units are the
+  // ENEMY Army being attacked, so they are no stacking concern here.
+  const landingAttack = kind === 'eventMove' && base?.kind === 'eventTarget' && base.mode === 'attack';
   // Hold-back (p.31): the Army has ALREADY advanced into `from` (the captured region);
   // the tick-boxes choose who STAYS forward, and everyone unticked marches back to
   // `to` (the region attacked from) — the same inversion the attack rearguard uses.
@@ -33,7 +37,7 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   // the region holds the besieger we're attacking. Everything the picker offers (units,
   // Leaders, the rearguard left behind in the Stronghold) must come from the box.
   const sortieBox = attackMode && from === to ? sortieForce(view, from, you) : null;
-  const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : holdBackMode ? 'Keep forward' : kind === 'advance' ? 'Advance' : 'Move';
+  const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : landingAttack ? 'Land and attack' : holdBackMode ? 'Keep forward' : kind === 'advance' ? 'Advance' : 'Move';
   const r = sortieBox ?? view.regions[from];
   // A card move may be narrower than "the Army": Rage of the Dunlendings moves "up to
   // four ISENGARD units" and nothing else, so the offer carries the Nation it moves
@@ -93,7 +97,7 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   const armyUnits = goNations.reduce((s, n) => s + r.units[n]!.regular + r.units[n]!.elite, 0);
   // Merging onto a friendly army may push the destination over the 10-unit limit;
   // the excess is removed afterward (rulebook p.26). Warn so it isn't a surprise.
-  const destUnits = !attackMode ? Object.values(view.regions[to]?.units ?? {}).reduce((s, u) => s + u!.regular + u!.elite, 0) : 0;
+  const destUnits = !attackMode && !landingAttack ? Object.values(view.regions[to]?.units ?? {}).reduce((s, u) => s + u!.regular + u!.elite, 0) : 0;
   const overAll = Math.max(0, destUnits + armyUnits - 10);
   const overSel = Math.max(0, destUnits + totalUnits - 10);
   // A capped card move always states its selection: "the whole Army" is not what the
@@ -156,7 +160,8 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
       <div style={card} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 6px' }}>{verb} {rName(from)} → {rName(to)}</h3>
         <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
-          {attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.'
+          {landingAttack ? `Choose what lands in ${rName(to)} and attacks; the rest stays in ${rName(from)} and sits out the battle.`
+            : attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.'
             : holdBackMode ? `Choose who stays in ${rName(from)}; everyone unticked marches back to ${rName(to)}.${holdBackMustHold ? ' At least one unit must hold the Settlement you just took.' : ' You may bring the whole Army back.'}`
               : evLimit !== undefined ? `Choose what moves — this card moves up to ${evLimit} ${evNation ? cap(evNation) + ' ' : ''}unit${evLimit === 1 ? '' : 's'}.`
               : stayNations.length ? `Choose what moves. ${stayNations.map(cap).join(' and ')} ${stayNations.length === 1 ? 'is' : 'are'} not At War and cannot cross into ${rName(to)}, so those units stay behind.` : 'Choose what moves.'}
