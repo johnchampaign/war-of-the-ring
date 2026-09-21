@@ -134,6 +134,10 @@ for (let game = 0; game < GAMES; game++) {
       // The FP view must not see the Shadow AI's campaign roll (the opening plan).
       const fv = redactStateForViewer(state, 'fp');
       if (!state.winner && fv.shadowPlanRoll != null) leaks++;
+      // Your own draw piles come sorted — never in draw order (it would show your next cards).
+      const inOrder = (pile) => pile.every((c, i) => i === 0 || String(pile[i - 1]) <= String(c));
+      if (!state.winner && (!inOrder(fv.cards.fp.draw.character) || !inOrder(fv.cards.fp.draw.strategy)
+        || !inOrder(sv.cards.shadow.draw.character) || !inOrder(sv.cards.shadow.draw.strategy))) leaks++;
     }
   }
 

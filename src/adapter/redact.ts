@@ -16,6 +16,16 @@ export function redactStateForViewer(state: GameState, viewer: Side | null): Gam
 
   if (state.winner) return v; // game over — reveal all (rng stays hidden, irrelevant)
 
+  // Your OWN draw piles. Which cards are left in them is knowable (the deck minus the
+  // cards you have seen), but their ORDER is the shuffle: face down on the tabletop,
+  // and it would tell you exactly what you draw next. The loop below skips the viewer
+  // (their own HAND is theirs to see), which used to hand over both piles in draw
+  // order. Sorted, they keep what is left and lose what comes next.
+  if (viewer) {
+    v.cards[viewer].draw.character = [...state.cards[viewer].draw.character].sort();
+    v.cards[viewer].draw.strategy = [...state.cards[viewer].draw.strategy].sort();
+  }
+
   for (const side of ['fp', 'shadow'] as Side[]) {
     if (side === viewer) continue;
     // The DECK (Character vs Strategy) of each held card is public on the tabletop —
