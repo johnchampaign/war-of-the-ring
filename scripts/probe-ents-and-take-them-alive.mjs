@@ -20,6 +20,9 @@
 //      place him in play again as if he was just separated from the Fellowship. This
 //      special ability cannot be used if the Fellowship is on the Mordor Track."
 //      fellowship.ts honoured it; the Hunt's own copy of the casualty code did not.
+//
+//   3. THE ENTS AWAKE on a Shadow Army is an ATTACK for the Political Track (Almanac;
+//      report 6n0a3p246d0r5k4h, following Dead Men of Dunharrow).
 import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
 import { getHandler } from '../src/engine/handlers/registry.ts';
@@ -92,9 +95,23 @@ function orthancUnderFpSiege({ seed = 7, garrison = 1 } = {}) {
   s.regions['fangorn'].characters = ['gandalf-white'];
   s.characters.inPlay['gandalf-white'] = 'fangorn';
   const before = forceUnitCount(s.regions['orthanc']);
+  s.nations.isengard.step = 2;
   getHandler('fp-char-21').apply(s);
   check('Orthanc holds a Shadow Army', before > 0, `${before} units`);
   check('the card rolls against it', s.log.some((e) => /The Ents Awake: \d+ hit\(s\)/.test(e.msg)));
+  // Almanac: with a Shadow Army in Orthanc the card is an "attack" (Political Track).
+  check('it counts as an attack: Isengard advances one step', s.nations.isengard.step === 1,
+    `step ${s.nations.isengard.step}`);
+}
+
+// --- 1d. Saruman alone is NOT an attack --------------------------------------------
+{
+  console.log('\n=== eliminating a lone Saruman is not an attack ===');
+  const s = orthancUnderFpSiege({ garrison: 0 });
+  s.regions['orthanc'].siegeBox.units = {};
+  s.nations.isengard.step = 2;
+  getHandler('fp-char-20').apply(s);
+  check('Isengard does not advance', s.nations.isengard.step === 2, `step ${s.nations.isengard.step}`);
 }
 
 // --- 2. Take Them Alive on a Hunt casualty --------------------------------------------

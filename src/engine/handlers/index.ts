@@ -11,7 +11,7 @@ import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
-import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID } from '../data';
+import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
 import { log, logCardDraw, notify } from '../log';
@@ -1291,6 +1291,10 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       const boxed = force !== orthanc;
       const naz0 = force.nazgul;
       const minionsHere = force.characters.filter((c) => MINIONS.includes(c));
+      // With a Shadow Army in Orthanc each of these cards is an "attack" and so
+      // affects the Political Track (Almanac, "The Ents Awake"; p.35) — same as Dead
+      // Men of Dunharrow. With no Army (Saruman alone) it is not.
+      for (const n of SHADOW_NATIONS) { const u = force.units[n]; if (u && u.regular + u.elite > 0) onArmyAttacked(state, n, 'orthanc'); }
       const hits = rollDice(state, 3, 4);
       log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on ${boxed ? 'the Orthanc garrison' : 'Orthanc'}`);
       freeChar();
@@ -2165,7 +2169,7 @@ register('sh-char-13', {
     const pool = state.fellowship.companions.filter((c) => COMPANION_SET.has(c));
     const companion = withRng(state, (rng) => rng.pick(pool));
     state.pendingChoice = { owner: 'fp', kind: 'lureChoice', data: { companion, level: levelOf(companion) } };
-    log(state, null, 'event', `Lure of the Ring tempts ${companion}`);
+    log(state, null, 'event', `Lure of the Ring tempts ${characterDef(companion)?.name ?? companion} (Level ${levelOf(companion)})`);
   },
 });
 

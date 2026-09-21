@@ -72,6 +72,11 @@ function cardCostTitle(data: { card?: string; kind?: string } | undefined): stri
   return `${title} — how big do you make it?`;
 }
 
+function lureTitle(data: { companion?: string; level?: number } | undefined): string {
+  if (!data?.companion) return CHOICE_TITLE.lureChoice!;
+  return `Lure of the Ring — the Ring tempts ${charName(data.companion)}: take ${data.level ?? 0} Corruption, or eliminate him?`;
+}
+
 /** The actions this modal renders as its choices. Shared with the page's "Peek board"
  *  toggle so every modal that covers the board also offers the peek — Event-card picks
  *  (Stormcrow, Fear! Fear! Foes!) went through a second path the toggle didn't know
@@ -121,6 +126,9 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
             ? `${cardName((choice.data as { card?: string } | undefined)?.card ?? '')} — choose how it resolves`
             : choice.kind === 'combatCardCost'
             ? cardCostTitle(choice.data as { card?: string; kind?: string } | undefined)
+            : choice.kind === 'lureChoice'
+            // Name the Companion the Ring tempts (player report 6a6y2s416s620a5e).
+            ? lureTitle(choice.data as { companion?: string; level?: number } | undefined)
             : CHOICE_TITLE[choice.kind] ?? choice.kind}
         </div>}
         {choice?.kind === 'huntDamage' && <HuntDetail view={view} data={(choice as any).data} onExplain={() => setHuntInfo(true)} />}

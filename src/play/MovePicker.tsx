@@ -8,6 +8,7 @@ import type { MoveSel, WotrAction } from '../adapter/wotrAction';
 import { characterSide, sideOfNation } from '../engine/data';
 import { isAtWar } from '../engine/politics';
 import { attackError, sortieForce } from '../engine/combat';
+import { splitBlockReason } from '../engine/armies';
 import { charName } from './charInfo';
 import mapData from '../../assets/map.json';
 
@@ -136,8 +137,19 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
     'A rearguard must contain at least one unit': 'Leaders or Characters left behind need at least one unit to stay with them — keep a unit back, or send them into the attack',
     'The attacking army must keep at least one unit': 'The attacking Army needs at least one unit',
   };
+  // The same goes for an ordinary Army move: the split rules (at least one unit moves;
+  // Free Peoples Leaders never stay behind without a unit, p.27) are checked here, as
+  // the attack's are, instead of being reported after the click (player report
+  // 6l3g4j5c6s30290e).
+  const MOVE_HINTS: Record<string, string> = {
+    'At least one Army unit must move.': 'At least one unit must move',
+    'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.':
+      'Free Peoples Leaders can never be left without a unit — keep a unit back with them, or take them along',
+  };
+  const rawMoveError = moveMode && !isWhole ? splitBlockReason(view, from, to, you, buildSel()) : null;
   const rawSplitError = attackMode && !isWhole ? attackError(view, from, you, buildRearguard()) : null;
-  const splitError = rawSplitError && (SPLIT_HINTS[rawSplitError] ?? rawSplitError);
+  const splitError = rawSplitError ? (SPLIT_HINTS[rawSplitError] ?? rawSplitError)
+    : rawMoveError ? (MOVE_HINTS[rawMoveError] ?? rawMoveError.replace(/\.$/, '')) : null;
   const make = (split: boolean): WotrAction =>
     kind === 'advance' ? { kind: 'advanceChoice', advance: true, move: split ? buildSel() : undefined }
       : kind === 'holdBack' ? { kind: 'advanceHoldBack', back: split ? buildRearguard() : undefined }
