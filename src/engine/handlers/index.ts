@@ -1486,10 +1486,20 @@ const isNazgulFigure = (c: string | undefined): boolean => c === 'nazgul' || c =
  *  or all" cards took the whole stack; the Character-die path and the other Nazgûl
  *  cards have always asked (player report: wanted to move only one of the Nazgûl out
  *  of Minas Tirith). */
-function nazgulFlyTargets(state: GameState, companion: string, from: RegionId): EventTarget[] {
-  const dests = characterDestinations(state, 'shadow', companion, from);
+/** Nazgûl at `region` that have NOT yet flown on this card: the stack minus those that
+ *  landed there from an earlier pick. "Move any or all of the Nazgûl" moves each figure
+ *  at most once, but a stack may split (two to one region, one to another) and a
+ *  region's own Nazgûl stay free to fly after the Witch-king (or another group) left
+ *  or arrived. Blocking whole regions instead meant flying the Witch-king out of Mount
+ *  Gundabad pinned the Nazgûl he left behind (player report 2m6j6f1z5w07390y). */
+function unmovedNazgul(state: GameState, applied: EventTarget[], region: RegionId): number {
+  const arrived = applied.filter((a) => a.companion === 'nazgul' && a.region === region).reduce((n, a) => n + (a.count ?? 1), 0);
+  return state.regions[region]!.nazgul - arrived;
+}
+function nazgulFlyTargets(state: GameState, companion: string, from: RegionId, applied: EventTarget[] = []): EventTarget[] {
+  const dests = characterDestinations(state, 'shadow', companion, from).filter((r) => r !== from);
   if (companion !== 'nazgul') return dests.map((region) => ({ companion, from, region }));
-  const avail = Math.max(1, state.regions[from]!.nazgul);
+  const avail = Math.max(1, unmovedNazgul(state, applied, from));
   return dests.flatMap((region) => Array.from({ length: avail }, (_, i) => ({ companion, from, region, count: i + 1 })));
 }
 /** Legal move/attack EventTargets for Nazgûl-led Armies. `allowAttack` gates the
@@ -1535,14 +1545,13 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
     const last = applied[applied.length - 1];
     // Destination step of a Nazgûl figure-move (fly anywhere it can land). The
     // Witch-king flies on this card too — he is a Nazgûl (rulebook p.25).
-    if (last && isNazgulFigure(last.companion) && last.from && !last.region) return nazgulFlyTargets(state, last.companion!, last.from);
+    if (last && isNazgulFigure(last.companion) && last.from && !last.region) return nazgulFlyTargets(state, last.companion!, last.from, applied);
     const armyActs = applied.filter((a) => a.mode === 'move' || a.mode === 'attack');
     if (armyActs.some((a) => a.mode === 'attack') || armyActs.length >= 2) return []; // army clause spent (1 attack, or 2 moves)
     const out: EventTarget[] = [];
     if (armyActs.length === 0) {
-      // Phase 1 still open: pick a Nazgûl group to fly (exclude groups already moved this card).
-      const blocked = new Set([...applied.filter((a) => a.companion === 'nazgul').flatMap((a) => [a.from, a.region])].filter(Boolean) as string[]);
-      for (const from of Object.keys(state.regions)) if (state.regions[from]!.nazgul > 0 && !blocked.has(from)) out.push({ companion: 'nazgul', from });
+      // Phase 1 still open: pick Nazgûl that have not flown yet on this card.
+      for (const from of Object.keys(state.regions)) if (unmovedNazgul(state, applied, from) > 0) out.push({ companion: 'nazgul', from });
       const wk = charRegion(state, 'witch-king');
       if (wk && !applied.some((a) => a.companion === 'witch-king')) out.push({ companion: 'witch-king', from: wk });
     }
@@ -1583,7 +1592,7 @@ register('sh-char-24', { // The Black Captain Commands
     const wk = charRegion(state, 'witch-king');
     const last = applied[applied.length - 1];
     // Destination step of a Nazgûl figure-fly (the Witch-king flies too — p.25).
-    if (last && isNazgulFigure(last.companion) && last.from && !last.region) return nazgulFlyTargets(state, last.companion!, last.from);
+    if (last && isNazgulFigure(last.companion) && last.from && !last.region) return nazgulFlyTargets(state, last.companion!, last.from, applied);
     const recruited = applied.some((a) => a.mode === 'recruit');
     const flies = applied.filter((a) => isNazgulFigure(a.companion));
     const armyActs = applied.filter((a) => a.mode === 'move' || a.mode === 'attack');
@@ -1591,8 +1600,7 @@ register('sh-char-24', { // The Black Captain Commands
     // Phase 1 — recruit XOR fly — only before any army action and before recruiting.
     if (armyActs.length === 0 && !recruited) {
       if (flies.length === 0 && wk && (state.reinforcements.sauron.nazgul ?? 0) > 0) out.push({ mode: 'recruit', region: wk });
-      const blocked = new Set(flies.flatMap((a) => [a.from, a.region]).filter(Boolean) as string[]);
-      for (const id of Object.keys(state.regions)) if (state.regions[id]!.nazgul > 0 && !blocked.has(id)) out.push({ companion: 'nazgul', from: id });
+      for (const id of Object.keys(state.regions)) if (unmovedNazgul(state, applied, id) > 0) out.push({ companion: 'nazgul', from: id });
       if (wk && !flies.some((a) => a.companion === 'witch-king')) out.push({ companion: 'witch-king', from: wk });
     }
     // Phase 2 — ONE move/attack with the Army containing the Witch-king.
@@ -1786,11 +1794,9 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
 
 /** A card that may MOVE any or all Nazgûl groups (each region's Nazgûl fly together),
  *  then runs `after` (reveal / Hunt if a Nazgûl ends with the Fellowship). Interactive:
- *  pick a Nazgûl group (button), board-click its destination, repeat, or stop. A group
- *  moves at most once (its source and destination are blocked from re-selection). */
+ *  pick a Nazgûl group (button), board-click its destination, repeat, or stop. Each
+ *  Nazgûl flies at most once (`unmovedNazgul`). */
 function moveNazgulCard(after: (state: GameState) => void): EventHandler {
-  const sourceRegions = (state: GameState, blocked: Set<string>): RegionId[] =>
-    Object.keys(state.regions).filter((r) => state.regions[r]!.nazgul > 0 && !blocked.has(r));
   return {
     canPlay: (state) => Object.values(state.regions).some((r) => r.nazgul > 0),
     repeat: 12,
@@ -1803,13 +1809,10 @@ function moveNazgulCard(after: (state: GameState) => void): EventHandler {
         // The action-die path has always asked how many (moveCharacter takes a count);
         // the CARD path took the whole stack, so the same figures obeyed two different
         // rules depending on how you moved them (reported independently by two players).
-        const avail = state.regions[last.from]!.nazgul;
-        return characterDestinations(state, 'shadow', 'nazgul', last.from).flatMap((region) =>
-          Array.from({ length: Math.max(1, avail) }, (_, i) => ({ companion: 'nazgul', from: last.from, region, count: i + 1 })));
+        return nazgulFlyTargets(state, 'nazgul', last.from, applied);
       }
-      // pick step: Nazgûl groups whose source/destination hasn't been used this card
-      const blocked = new Set<string>([...applied.map((t) => t.from), ...applied.filter((t) => t.region).map((t) => t.region)].filter(Boolean) as string[]);
-      return sourceRegions(state, blocked).map((from) => ({ companion: 'nazgul', from }));
+      // pick step: regions holding Nazgûl that have not flown yet on this card
+      return Object.keys(state.regions).filter((r) => unmovedNazgul(state, applied, r) > 0).map((from) => ({ companion: 'nazgul', from }));
     },
     applyTarget(state, _side, t) {
       if (t.region && t.from) moveCharacter(state, 'shadow', 'nazgul', t.from, t.region, t.count);

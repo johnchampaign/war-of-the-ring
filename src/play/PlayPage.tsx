@@ -589,7 +589,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }
       | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] }> = [
       ...cardHere.map((a) => ({ kind: 'cardchar' as const, act: a, label: charName(a.companion!) })),
-      ...(cardHere.length >= 2 ? [{ kind: 'cardgroup' as const, acts: cardHere as WotrAction[] }] : []),
+      // Only Companions travel as a group on a card; Nazgûl each fly on their own, so a
+      // Nazgûl "group" pick left the second figure un-pickable (player report 2m6j6f1z5w07390y).
+      ...(cardHere.length >= 2 && !cardHere.some((a) => a.companion === 'nazgul' || a.companion === 'witch-king') ? [{ kind: 'cardgroup' as const, acts: cardHere as WotrAction[] }] : []),
       ...(armyHere ? [{ kind: 'army' as const }] : []),
       ...(assaultHere ? [{ kind: 'assault' as const }] : []),
       ...(compsHere.length >= 2 ? [{ kind: 'chargroup' as const, chars: compsHere }] : []),

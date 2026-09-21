@@ -369,9 +369,14 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // an UNCONQUERED Free Peoples one (Almanac). A Shadow Stronghold the Free Peoples
         // have captured, like Moria, is still a Shadow Stronghold, so the Fellowship may
         // reveal into it (player report 51605i2q17082f2s).
+        // Staying put is one of the options: the reveal moves the figure "as described
+        // in the previous section" — the declaration's "equal to or less than" the
+        // Progress, where the FP "may choose to leave the Ring-bearers figure in its
+        // current position" (p.38). Only the forbidden FP City/Stronghold rule applies
+        // to the spot it is already on (player report 5n1h4h4b3p2b3b32).
         const fs = state.fellowship;
         const acts: WotrAction[] = [];
-        for (const r of regionsWithin(fs.location, fs.progress)) {
+        for (const r of [fs.location, ...regionsWithin(fs.location, fs.progress)]) {
           const def = REGIONS[r]!;
           if ((def.settlement === 'City' || def.settlement === 'Stronghold') && !!def.nation
             && sideOfNation(def.nation as Nation) === 'fp' && settlementController(state, r) === 'fp') continue;

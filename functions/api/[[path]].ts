@@ -154,7 +154,8 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
     // POST /api/reports/:id/resolve  { note }
     if (seg.length === 3 && seg[0] === 'reports' && seg[2] === 'resolve' && method === 'POST') {
       const body = await safeJson(request);
-      await server.resolveReport(seg[1]!, String(body?.note ?? body?.resolution ?? '').slice(0, 2000));
+      // Replies to players can run long; the cap only guards against abuse (report 3f5e3a1o4p1l173y).
+      await server.resolveReport(seg[1]!, String(body?.note ?? body?.resolution ?? '').slice(0, 10000));
       return json({ ok: true });
     }
     // GET /api/my-responses?reporterId=<id> — PUBLIC: a reporter polls for the
@@ -171,7 +172,7 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         .filter((r) => r.resolution && typeof r.message === 'string' && r.message.includes(marker))
         .map((r) => ({
           reportId: r.reportId,
-          message: r.message.replace(/\n*<!-- reporter:[a-zA-Z0-9-]{4,64} -->/g, '').trim().slice(0, 500),
+          message: r.message.replace(/\n*<!-- reporter:[a-zA-Z0-9-]{4,64} -->/g, '').trim().slice(0, 2000), // the full report as filed (submit caps it at 2000)
           response: (r.resolution!.note ?? '').trim(),
           at: r.resolution!.at,
         }))
