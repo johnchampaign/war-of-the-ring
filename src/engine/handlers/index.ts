@@ -10,7 +10,7 @@ import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKI
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
-import { activateNation, advancePolitical, isAtWar } from '../politics';
+import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
@@ -902,11 +902,23 @@ register('sh-str-09', {
   applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, 1); log(state, null, 'event', `The Shadow is Moving: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 
-// Dead Men of Dunharrow: move Strider/Aragorn (+ Companions in the same region)
-// from a Rohan region to Erech, Lamedon or Pelargir.
+// Dead Men of Dunharrow: move Strider/Aragorn (+ any number of Companions in the same
+// region) from a Rohan region to Erech, Lamedon or Pelargir.
 const ROHAN = ['eastemnet', 'edoras', 'folde', 'fords-of-isen', 'helms-deep', 'westemnet'];
-function aragornRohanRegion(state: GameState): string | null {
-  for (const id of ROHAN) if (state.regions[id]!.characters.some((c) => c === 'aragorn' || c === 'strider')) return id;
+const DEAD_MEN_DESTS: RegionId[] = ['erech', 'lamedon', 'pelargir'];
+/** Where Strider/Aragorn stands in Rohan, and the figures standing WITH him. The card
+ *  is playable "including a Stronghold under siege" (Card Text Reference; Almanac: "this
+ *  group may even move from inside Helm's Deep under siege"), and a besieged garrison's
+ *  figures live in the siege box — which this used to skip, so the card sat dead in hand
+ *  with Aragorn inside Helm's Deep (player report 0k5q531m3c4d3x5z). */
+function aragornRohanOrigin(state: GameState): { from: RegionId; ranger: string; force: { characters: string[] } } | null {
+  for (const id of ROHAN) {
+    const r = state.regions[id]!;
+    for (const force of [r, r.siegeBox]) {
+      const ranger = force?.characters.find((c) => c === 'aragorn' || c === 'strider');
+      if (force && ranger) return { from: id as RegionId, ranger, force };
+    }
+  }
   return null;
 }
 /** Move the Shadow army (units + Nazgûl + Minions) out of `from` into `to`,
@@ -937,21 +949,66 @@ function destroyShadowStack(state: GameState, region: RegionId): void {
   for (const c of r.characters.filter((c) => !COMPANION_SET.has(c))) { state.characters.eliminated.push(c); delete state.characters.inPlay[c]; }
   r.characters = r.characters.filter((c) => COMPANION_SET.has(c));
 }
+// The card is three steps, each the player's own call (player reports 4r2y2p2l2e3g3p1h,
+// 6d31266k0u535r11, 2s1q5z4f2d0j2y16):
+//  1. WHO goes: Strider/Aragorn must; each other Companion standing with him MAY
+//     ("and any number of Companions") — picked on the map from his region's menu.
+//  2. WHERE: Erech, Lamedon or Pelargir, clicked on the map. The move is direct (no
+//     route). A Shadow Army there is ATTACKED — the Political Track reacts (Almanac) —
+//     takes a die's worth of hits and must retreat, or is destroyed with its Nazgûl
+//     and Minions.
+//  3. HOW MANY: "You MAY then recruit UP TO three Gondor Regulars" — 0 to 3, after the
+//     die is seen. Recruiting none takes no control of a Shadow-held Settlement there
+//     (Almanac: control comes with the recruit).
+const deadMenDest = (applied: EventTarget[]) => applied.find((a) => a.region)?.region;
 register('fp-char-22', {
-  canPlay: (state) => aragornRohanRegion(state) !== null,
-  targets: () => ['erech', 'lamedon', 'pelargir'].map((region) => ({ region })),
-  applyTarget(state, _side, t) {
-    const from = aragornRohanRegion(state); if (!from || !t.region) return;
-    const region = t.region, src = state.regions[from]!, dst = state.regions[region]!;
-    // 1. Move Strider/Aragorn + any Companions in the same region.
-    const moving = src.characters.filter((c) => COMPANION_SET.has(c));
-    src.characters = src.characters.filter((c) => !COMPANION_SET.has(c));
+  canPlay: (state) => aragornRohanOrigin(state) !== null,
+  repeat: 12,
+  noDone: true,
+  targets(state, _side, applied = []) {
+    if (applied.some((a) => a.count !== undefined)) return [];
+    const dest = deadMenDest(applied);
+    if (dest) {
+      const room = Math.max(0, STACKING_LIMIT - unitCount(state, dest));
+      const max = Math.min(3, state.reinforcements.gondor.regular, room);
+      return Array.from({ length: max + 1 }, (_, count) => ({ count }));
+    }
+    const o = aragornRohanOrigin(state); if (!o) return [];
+    const going = new Set(applied.map((a) => a.companion));
+    const out: EventTarget[] = o.force.characters
+      .filter((c) => COMPANION_SET.has(c) && c !== o.ranger && !going.has(c))
+      .map((companion) => ({ companion, from: o.from }));
+    for (const region of DEAD_MEN_DESTS) out.push({ companion: o.ranger, from: o.from, region, direct: true });
+    return out;
+  },
+  applyTarget(state, _side, t, applied = []) {
+    if (t.count !== undefined) {
+      // 3. Recruit — and only a real recruit takes control of the Settlement.
+      const region = deadMenDest(applied); if (!region || t.count <= 0) return;
+      const room = Math.max(0, STACKING_LIMIT - unitCount(state, region));
+      const n = Math.min(t.count, 3, state.reinforcements.gondor.regular, room);
+      if (n <= 0) return;
+      captureIfEnemySettlement(state, region, 'fp');
+      const dst = state.regions[region]!;
+      const u = dst.units.gondor ?? { regular: 0, elite: 0 }; u.regular += n; dst.units.gondor = u;
+      state.reinforcements.gondor.regular -= n;
+      log(state, null, 'event', `Dead Men: recruit ${n} Gondor Regular${n === 1 ? '' : 's'} in ${region}`);
+      return;
+    }
+    if (!t.region) return; // a "goes with him" pick: recorded, nothing moves yet
+    const o = aragornRohanOrigin(state); if (!o) return;
+    const region = t.region, dst = state.regions[region]!;
+    // 1. Move Strider/Aragorn + the Companions chosen to go with him.
+    const chosen = new Set([o.ranger, ...applied.filter((a) => a.companion && !a.region).map((a) => a.companion!)]);
+    const moving = o.force.characters.filter((c) => chosen.has(c));
+    o.force.characters = o.force.characters.filter((c) => !chosen.has(c));
     dst.characters.push(...moving);
     for (const c of moving) if (state.characters.inPlay[c]) state.characters.inPlay[c] = region;
-    log(state, null, 'event', `Dead Men of Dunharrow: ${from} → ${region}`);
-    // 2. A Shadow Army there takes a die's worth of hits, then must retreat —
+    log(state, null, 'event', `Dead Men of Dunharrow: ${moving.join(' + ')} ${o.from} → ${region}`);
+    // 2. A Shadow Army there is attacked: a die's worth of hits, then it must retreat —
     //    destroyed (with its Nazgûl/Minions) if it cannot.
     if (armySide(state, region) === 'shadow') {
+      for (const n of SHADOW_NATIONS) { const u = dst.units[n]; if (u && u.regular + u.elite > 0) onArmyAttacked(state, n, region); }
       const hits = withRng(state, (rng) => rng.rollDie(6));
       applyCasualties(state, region, 'shadow', hits, 'regularsFirst');
       log(state, null, 'event', `Dead Men: the Shadow Army at ${region} takes ${hits} hit${hits === 1 ? '' : 's'}`);
@@ -959,14 +1016,8 @@ register('fp-char-22', {
       if (unitCount(state, region) > 0 && dest) { retreatShadowStack(state, region, dest); log(state, null, 'event', `Dead Men: the Shadow Army retreats ${region} → ${dest}`); }
       else { destroyShadowStack(state, region); log(state, null, 'event', `Dead Men: the Shadow Army at ${region} is destroyed`); }
     }
-    // 3. Recruit up to three Gondor Regular units there, taking control if necessary.
-    captureIfEnemySettlement(state, region, 'fp');
-    const n = Math.min(3, state.reinforcements.gondor.regular, Math.max(0, STACKING_LIMIT - unitCount(state, region)));
-    if (n > 0) {
-      const u = dst.units.gondor ?? { regular: 0, elite: 0 }; u.regular += n; dst.units.gondor = u;
-      state.reinforcements.gondor.regular -= n;
-      log(state, null, 'event', `Dead Men: recruit ${n} Gondor Regular${n === 1 ? '' : 's'} in ${region}`);
-    }
+    // A Companion ending his move in a friendly City wakes its Nation, as on any move.
+    activateOnCompanionLand(state, 'fp', moving, region);
   },
 });
 // Paths of the Woses: a Rohan FP Army marches secretly to Minas Tirith — BUT "If the

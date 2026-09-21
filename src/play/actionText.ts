@@ -106,6 +106,10 @@ export function describeAction(a: WotrAction): string {
       // (player report h9wdkpkz6cx3xw9e).
       if (a.mode === 'recruit') return `${cardName(a.card)}: recruit ${CARD_RECRUITS[a.card] ?? 'reinforcements'} in ${rName(a.region!)}`;
       if (a.mode === 'attack' && a.from && a.from === a.to) return `${cardName(a.card)}: ⚔ assault the siege at ${rName(a.to)}`;
+      // Dead Men of Dunharrow: who rides with Strider/Aragorn, and the "may recruit up
+      // to three" step after the Dead Men have struck.
+      if (a.card === 'fp-char-22' && a.count !== undefined) return a.count === 0 ? `${cardName(a.card)}: recruit no Gondor Regulars` : `${cardName(a.card)}: recruit ${a.count} Gondor Regular${a.count === 1 ? '' : 's'} there`;
+      if (a.card === 'fp-char-22' && a.companion && a.from && !a.region) return `${cardName(a.card)}: ${charName(a.companion)} goes too`;
       if (a.companion === 'nazgul') return a.region ? `${cardName(a.card)}: move ${a.count ?? ''} Nazgûl ${rName(a.from!)} → ${rName(a.region)}`.replace('move  ', 'move ') : `${cardName(a.card)}: move the Nazgûl in ${rName(a.from!)}`;
       if (a.companion && a.mode === 'none') return `${cardName(a.card)}: deselect (move someone else)`;
       if (a.companion && a.region) return `${cardName(a.card)}: send ${charName(a.companion)} to ${rName(a.region)}`;

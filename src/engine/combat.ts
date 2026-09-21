@@ -75,6 +75,23 @@ export interface CombatRoll { dice: number[]; rerolls: number[]; target: number;
    *  OWN Army (and barred from the Leader re-roll). Scored by the enemy's card, so
    *  it is not part of `hits` — the round machine adds it to the other side's total. */
   backfire?: number }
+/** Mûmakil's initiative-5 bonus hit for each side: +N if, right after the Leader
+ *  re-roll, that side has scored more hits than the enemy so far (Almanac, Mûmakil).
+ *  `atkHits`/`defHits` are the rolled totals including each side's own automatic card
+ *  hits (`roll.auto`, No Quarter / Nameless Wood, also initiative 5). Tied initiatives
+ *  resolve the defender's card first, so a DEFENDING Mûmakil does not yet see the
+ *  attacker's automatic hits, while an attacking one does see the defender's. Each
+ *  side's Confusion '1's (`roll.backfire`) are hits for the enemy, whose card scored them. */
+export function outscoreBonusHits(aMods: CombatMods, dMods: CombatMods, atkHits: number, defHits: number,
+  aRoll: CombatRoll, dRoll: CombatRoll): { atk: number; def: number } {
+  const atkScored = atkHits + (dRoll.backfire ?? 0);
+  const defScored = defHits + (aRoll.backfire ?? 0);
+  return {
+    atk: aMods.bonusHitIfOutscore && atkScored > defScored ? aMods.bonusHitIfOutscore : 0,
+    def: dMods.bonusHitIfOutscore && defScored > atkScored - (aRoll.auto ?? 0) ? dMods.bonusHitIfOutscore : 0,
+  };
+}
+
 function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, side: Side,
   baseTarget: number, ownMods: CombatMods, enemyMods: CombatMods, whiteRiderForfeit = false, roll?: CombatRoll, force?: Force,
   enemyForce?: Force): number {
@@ -1440,17 +1457,21 @@ export function combatStep(state: GameState): void {
         // cancel is gated on the ENEMY's rolled hits clearing cancelHitsMinEnemyHits.
         const cancelFor = (m: CombatMods, enemyHits: number) =>
           (enemyHits >= (m.cancelHitsMinEnemyHits ?? 1) ? (m.cancelHits ?? 0) : 0) + (m.sacrificeLeaderToCancelHit ?? 0);
-        const dCancel = cancelFor(dMods, atkHits);
-        const aCancel = cancelFor(aMods, defHits);
-        if ((aMods.sacrificeLeaderToCancelHit ?? 0) > 0 && defHits > 0) { const af = atkForce(state, pc); af.leaders = Math.max(0, af.leaders - 1); }
-        if ((dMods.sacrificeLeaderToCancelHit ?? 0) > 0 && atkHits > 0) { const df = defForce(state, pc); df.leaders = Math.max(0, df.leaders - 1); }
-        let atk = Math.max(0, atkHits - dCancel);
-        let def = Math.max(0, defHits - aCancel);
-        // Mûmakil's later effect: +hits if you outscored the enemy (snapshot the
-        // pre-bonus totals so simultaneous bonuses compare fairly).
-        const a0 = atk, d0 = def;
-        if (aMods.bonusHitIfOutscore && a0 > d0) atk += aMods.bonusHitIfOutscore;
-        if (dMods.bonusHitIfOutscore && d0 > a0) def += dMods.bonusHitIfOutscore;
+        // Mûmakil's later effect resolves at initiative 5, right after the Leader
+        // re-roll, so it compares the hits scored AT THAT POINT in the sequence
+        // (Almanac, Mûmakil; player report 4i562s26251v1y26):
+        //  - the enemy's Confusion '1's count for the enemy (its card scored them);
+        //  - the enemy's own initiative-5 bonus (No Quarter / Nameless Wood) counts only
+        //    when the enemy DEFENDS — tied initiatives resolve the defender's card first;
+        //  - Shield-wall / Heroic Death cancel at initiative 6, so they never matter here.
+        // The bonus hit is then part of what the enemy's initiative-6 cards see.
+        const { atk: aMum, def: dMum } = outscoreBonusHits(aMods, dMods, atkHits, defHits, aRoll, dRoll);
+        const dCancel = cancelFor(dMods, atkHits + aMum);
+        const aCancel = cancelFor(aMods, defHits + dMum);
+        if ((aMods.sacrificeLeaderToCancelHit ?? 0) > 0 && defHits + dMum > 0) { const af = atkForce(state, pc); af.leaders = Math.max(0, af.leaders - 1); }
+        if ((dMods.sacrificeLeaderToCancelHit ?? 0) > 0 && atkHits + aMum > 0) { const df = defForce(state, pc); df.leaders = Math.max(0, df.leaders - 1); }
+        let atk = Math.max(0, atkHits + aMum - dCancel);
+        let def = Math.max(0, defHits + dMum - aCancel);
         // Enemy-figure eliminations (Blade of Westernesse / Fateful Strike): the
         // attacker's card targets the defender's army (pc.to), and vice versa.
         // (Force-keyed, not region-keyed: when either side is boxed the region's figures
