@@ -14,7 +14,7 @@ import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf } from '../engine/data';
-import { unitCount, forceUnitCount, STACKING_LIMIT, charDieLeaders } from '../engine/armies';
+import { unitCount, forceUnitCount, STACKING_LIMIT, splitBlockReason } from '../engine/armies';
 import { sortieForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
@@ -288,6 +288,13 @@ function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): 
   // leaderless Southrons). Try each garrison candidate (Regulars first, as
   // before) and take the first whose movers stay legal; if none do, march the
   // whole stack rather than propose an action the engine must refuse.
+  // Each candidate is checked with the engine's own split validator, not a partial
+  // copy of it: an explicit split must also respect the At-War border rule, which the
+  // whole-army move handles by holding the non-belligerent units back itself. The
+  // garrison split listed EVERY nation among the movers, so a mixed Dwarf/North stack
+  // in Erebor sent its not-yet-At-War Dwarves into Dale — refused, and on the server
+  // a refused AI move leaves the human waiting on the AI forever (player report
+  // yzb5la09aq34yd70, "Waiting for other player").
   const armyDieLeft = state.dice[actor].some((f) => f === 'army' || f === 'armyMuster' || f === 'will');
   const candidates: Array<{ n: Nation; useReg: boolean }> = [
     ...nations.filter((n) => r.units[n]!.regular > 0).map((n) => ({ n, useReg: true })),
@@ -296,7 +303,7 @@ function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): 
   for (const c of candidates) {
     const move = buildSplit(c.n, c.useReg);
     const sel = { units: move.units ?? {}, leaders: move.leaders ?? 0, nazgul: move.nazgul ?? 0, characters: move.characters ?? [] };
-    if (armyDieLeft || charDieLeaders(state, sel, actor, false) >= 1) {
+    if (splitBlockReason(state, from, to, actor, sel, !armyDieLeft) === null) {
       return { ...action, from, to, move };
     }
   }

@@ -30,7 +30,7 @@ const politicalAbility = (id: string): string =>
 const CARD_RECRUITS: Record<string, string> = {
   'sh-char-24': '2 Nazgûl',                          // The Black Captain Commands
   'sh-str-17': '2 Southron & Easterling Regulars',   // Many Kings to the Service of Mordor
-  'sh-str-19': '2 Sauron Regulars and a Nazgûl',     // Shadows on the Misty Mountains
+  'sh-str-19': 'a Nazgûl',                          // Shadows on the Misty Mountains (units are picked Regular/Elite first)
   'sh-str-21': '5 Southron & Easterling Regulars',   // Hordes From the East
   'sh-str-24': '2 Sauron Regulars',                  // Pits of Mordor
   'sh-str-11': '2 Isengard Regulars',                // Rage of the Dunlendings

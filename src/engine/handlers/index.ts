@@ -687,13 +687,42 @@ register('sh-str-11', {
     log(s, null, 'event', `Rage of the Dunlendings moves ${takeR + takeE} Isengard unit${takeR + takeE === 1 ? '' : 's'} from ${REGIONS[t.from]?.name ?? t.from} to ${REGIONS[to]?.name ?? to}`);
   },
 });
-register('sh-str-19', { // Shadows on the Misty Mountains: 2 Sauron + 1 Nazgûl in Mount Gram or Moria
-  canPlay: (s) => ['mount-gram', 'moria'].some((r) => recruitable(s, 'shadow', r)) && (s.reinforcements.sauron.regular > 0 || (s.reinforcements.sauron.nazgul ?? 0) > 0),
-  targets: (s) => ['mount-gram', 'moria'].filter((r) => recruitable(s, 'shadow', r)).map((region) => ({ region, mode: 'recruit' as const })),
-  applyTarget: (s, _side, t) => {
-    placeForce(s, 'sauron', t.region!, { regular: 2 });
-    const k = Math.min(1, s.reinforcements.sauron.nazgul ?? 0);
-    if (k > 0) { s.regions[t.region!]!.nazgul += k; s.reinforcements.sauron.nazgul = (s.reinforcements.sauron.nazgul ?? 0) - k; }
+// Shadows on the Misty Mountains: "Recruit two Sauron units (Regular or Elite) and one
+// Nazgûl either in Mount Gram or in Moria." Each unit is the player's Regular/Elite
+// pick (the card used to place two Regulars — player report a5qi63pq43cqj3sm); the
+// first pick fixes the region, and the Nazgûl joins them there. With no unit left to
+// recruit (empty pool / full stacks) the region is chosen for the Nazgûl alone.
+const MISTY = ['mount-gram', 'moria'];
+const mistyRegions = (s: GameState): string[] => MISTY.filter((r) => recruitable(s, 'shadow', r));
+const mistyUnits = placeChoiceCard('sauron', mistyRegions, { count: 2 });
+const mistyNazgulLeft = (s: GameState): boolean => (s.reinforcements.sauron.nazgul ?? 0) > 0;
+const placeMistyNazgul = (s: GameState, region: string): void => {
+  if (!mistyNazgulLeft(s) || !recruitable(s, 'shadow', region)) return;
+  s.regions[region]!.nazgul += 1;
+  s.reinforcements.sauron.nazgul = (s.reinforcements.sauron.nazgul ?? 0) - 1;
+  log(s, null, 'muster', `Recruited a Nazgûl in ${region}`);
+};
+register('sh-str-19', {
+  canPlay: (s, side) => mistyUnits.canPlay!(s, side) || (mistyNazgulLeft(s) && mistyRegions(s).length > 0),
+  repeat: 2,
+  noDone: true,
+  targets: (s, side, applied = []) => {
+    const unitPicks = applied.filter((a) => a.figure);
+    if (unitPicks.length < 2) {
+      const units = mistyUnits.targets!(s, side, applied);
+      if (units.length) return units;
+    }
+    // No unit could be recruited at all: choose the region for the Nazgûl itself.
+    if (applied.length === 0 && mistyNazgulLeft(s)) return mistyRegions(s).map((region) => ({ region, mode: 'recruit' as const }));
+    return [];
+  },
+  applyTarget: (s, side, t, applied = []) => {
+    if (t.figure) { mistyUnits.applyTarget!(s, side, t, applied); return; }
+    if (t.region) placeMistyNazgul(s, t.region);
+  },
+  finalize: (s, _side, applied) => {
+    const unitRegion = applied.find((a) => a.figure)?.region;
+    if (unitRegion) placeMistyNazgul(s, unitRegion);
   },
 });
 register('sh-str-17', { // Many Kings: 2 S&E Regulars in each of three different S&E Settlements

@@ -27,14 +27,28 @@ const standard: PlayerController<GameState, WotrAction, Side> = {
     // exactly that. Guard against a heuristic edge case returning an off-list
     // action by falling back to the first legal action.
     const rng = ctx.rng instanceof Rng ? ctx.rng : new Rng(1);
+    let a: WotrAction;
     try {
-      const a = chooseAction(ctx.state, ctx.actor, legal, rng);
-      return a ?? legal[0]!;
+      a = chooseAction(ctx.state, ctx.actor, legal, rng) ?? legal[0]!;
     } catch {
-      return legal[0]!;
+      a = legal[0]!;
     }
+    // Safety net: the heuristic may refine a legal action (e.g. pick which figures
+    // move), and a refinement the engine refuses makes the server stop driving the
+    // AI — the same refused move recurs on every refresh, so the human waits forever
+    // (player report yzb5la09aq34yd70). Check the pick against the view and fall back
+    // to the first listed action the engine accepts. Only if none can be confirmed
+    // (hidden information) is the original pick sent as-is.
+    if (accepts(ctx, a)) return a;
+    return legal.find((l) => accepts(ctx, l)) ?? a;
   },
 };
+
+type Ctx = Parameters<PlayerController<GameState, WotrAction, Side>['selectAction']>[0];
+function accepts(ctx: Ctx, a: WotrAction): boolean {
+  if (!ctx.adapter.tryApplyAction) return true;
+  try { return ctx.adapter.tryApplyAction(ctx.state, a, ctx.actor).ok; } catch { return false; }
+}
 
 export const wotrControllers: Record<string, PlayerController<GameState, WotrAction, Side>> = {
   standard,
