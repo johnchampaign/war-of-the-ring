@@ -11,10 +11,10 @@ import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separat
 import { extraHunt } from '../engine/hunt';
 import { log, logCardDraw } from '../engine/log';
 import {
-  recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, armySide, settlementController, unitCount, STACKING_LIMIT,
+  recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
+import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
@@ -226,6 +226,14 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         for (let n = d.min; n <= d.max; n++) acts.push({ kind: 'combatCardCost', amount: n });
         return acts;
       }
+      case 'heroicDeath': {
+        const d = state.pendingChoice.data as { leaders: number; companions: string[] };
+        return [
+          ...(d.leaders > 0 ? [{ kind: 'heroicDeath' as const, sacrifice: 'leader' }] : []),
+          ...d.companions.map((c) => ({ kind: 'heroicDeath' as const, sacrifice: c })),
+          { kind: 'heroicDeath' as const },
+        ];
+      }
       case 'whiteRider':
         return [{ kind: 'whiteRider', forfeit: true }, { kind: 'whiteRider', forfeit: false }];
       case 'balrog':
@@ -348,7 +356,15 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
             // selection (the picker may still narrow it — dispatch allows a subset).
             const sel = data.stayed ? snapshotToSel(state, data.dest as RegionId, actor, data.stayed) : null;
             if (!sel) continue;
-            acts.push({ kind: 'armyMove2', from, to, move: sel });
+            // …and of those, only the Nations that may cross into `to` (p.27): the
+            // offer carried the WHOLE remainder, so a not-At-War Dwarven contingent was
+            // offered a march into the Woodland Realm that dispatch then refused (soak).
+            const allowed = new Set(nationsAllowedInto(state, from, to, actor));
+            const units = Object.fromEntries(Object.entries(sel.units ?? {}).filter(([n]) => allowed.has(n as Nation)));
+            if (!Object.keys(units).length) continue;
+            const narrowed: MoveSel = { ...sel, units };
+            if (splitBlockReason(state, from, to, actor, narrowed, false)) continue;
+            acts.push({ kind: 'armyMove2', from, to, move: narrowed });
             continue;
           }
           acts.push({ kind: 'armyMove2', from, to });
@@ -1199,6 +1215,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (to) afterMove(state, actor, to, { kind: 'none' });
       break;
     }
+    case 'heroicDeath':
+      requireChoice(state, 'heroicDeath', actor); resolveHeroicDeath(state, action.sacrifice); break;
     case 'whiteRider':
       requireChoice(state, 'whiteRider', actor); resolveWhiteRider(state, action.forfeit); break;
     case 'crebain':

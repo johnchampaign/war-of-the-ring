@@ -202,7 +202,11 @@ export type CombatStep =
   // Cards whose SIZE the owner chooses ("inflict up to two hits on your own units",
   // "forfeit one or more points of Nazgul Leadership") pause here to be paid for.
   | 'cardCost'
-  | 'beginRound' | 'attackerCasualties' | 'defenderCasualties'
+  | 'beginRound'
+  // Heroic Death (initiative 6, before casualties): the Free Peoples choose whether to
+  // sacrifice a Leader or Companion to cancel hits.
+  | 'heroicDeath'
+  | 'attackerCasualties' | 'defenderCasualties'
   // Onslaught alone is paid AFTER casualties, then rolls its counter-attack.
   | 'onslaught'
   | 'continueDecision' | 'retreatDecision'
@@ -279,6 +283,10 @@ export interface PendingCombat {
    *  the roll must not happen while that prompt is open (player report
    *  384n4g074t2k4d01 — the hits were auto-applied Regulars-first either way). */
   onslaughtAttack?: { side: Side; hits: number };
+  /** Heroic Death, awaiting its owner's "sacrifice whom?" answer this round: the side
+   *  that played it and the most hits it may cancel (those the enemy's Combat roll and
+   *  Leader re-roll scored against it — not Confusion's self-inflicted '1's). */
+  heroicDeath?: { side: Side; max: number };
   /** The White Rider battle-start choice: asked once; true if the FP forfeited
    *  Gandalf the White's Leadership to negate all Nazgûl Leadership this battle. */
   whiteRiderAsked?: boolean;

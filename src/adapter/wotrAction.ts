@@ -84,6 +84,8 @@ export type WotrAction =
   | { kind: 'relieveAdvance'; advance: boolean } // reliever: march into the region whose siege it just broke (p.31, p.32)
   | { kind: 'besiegerAdvance'; advance: boolean } // attacker: advance into the region a defender just vacated, establishing the siege (p.31)
   | { kind: 'combatCardCost'; amount: number } // size a variable-cost combat card (self-hits / Nazgûl Leadership forfeited)
+  // Heroic Death: sacrifice a Free Peoples Leader ('leader') or the named Companion to cancel hits; omit to sacrifice no one.
+  | { kind: 'heroicDeath'; sacrifice?: string }
   | { kind: 'whiteRider'; forfeit: boolean } // FP: forfeit Gandalf the White's Leadership to negate Nazgûl Leadership
   | { kind: 'balrog'; use: boolean } // Shadow: discard Balrog of Moria to draw an extra Hunt tile
   | { kind: 'crebain'; use: boolean } // Shadow: discard Flocks of Crebain for +1 to all Hunt dice this roll

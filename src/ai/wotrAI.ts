@@ -15,7 +15,7 @@ import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf } from '../engine/data';
 import { unitCount, forceUnitCount, STACKING_LIMIT, splitBlockReason } from '../engine/armies';
-import { sortieForce } from '../engine/combat';
+import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
@@ -1335,6 +1335,23 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const me: Side = state.pendingChoice!.owner;
       const friendly = legal.find((a) => a.kind === 'preCombatRetreat' && settlementCtrl(state, a.region) === me);
       return friendly ?? legal[0]!;
+    }
+    case 'heroicDeath': {
+      // If the hits would destroy the Army, sacrifice whoever saves it (a Leader
+      // first, else the lowest-Level Companion that suffices) — everyone in it dies
+      // with it otherwise. Short of that, trade a Leader for a unit (what the card
+      // was played for), but never a Companion.
+      const d = state.pendingChoice!.data as { hits: number; leaders: number; companions: string[] };
+      const f = heroicDeathForce(state);
+      const hp = f ? Object.values(f.units).reduce((n, u) => n + (u?.regular ?? 0) + 2 * (u?.elite ?? 0), 0) : Infinity;
+      const pick = (sac: string) => legal.find((a) => a.kind === 'heroicDeath' && a.sacrifice === sac);
+      const decline = legal.find((a) => a.kind === 'heroicDeath' && !a.sacrifice) ?? legal[0]!;
+      if (d.hits >= hp) {
+        if (d.leaders > 0 && d.hits - 1 < hp) return pick('leader') ?? decline;
+        const saver = d.companions.filter((c) => d.hits - levelOf(c) < hp).sort((a, b) => levelOf(a) - levelOf(b))[0];
+        return (saver && pick(saver)) || decline;
+      }
+      return (d.leaders > 0 && pick('leader')) || decline;
     }
     case 'whiteRider': // only offered when there's Nazgûl Leadership to negate → forfeit
       return legal.find((a) => a.kind === 'whiteRider' && a.forfeit) ?? legal[0]!;

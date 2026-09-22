@@ -5,7 +5,7 @@
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState, Side, DieFace } from '../engine/types';
 import { charDieLeaders } from '../engine/armies';
-import { playFacesFor, nationName } from '../engine/data';
+import { playFacesFor, nationName, levelOf } from '../engine/data';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { charName, charDef } from './charInfo';
@@ -159,6 +159,12 @@ export function describeAction(a: WotrAction): string {
     case 'relieveAdvance': return a.advance ? 'Advance into the freed region' : 'Hold position';
     case 'besiegerAdvance': return a.advance ? 'Advance and lay siege' : 'Stay put (no siege)';
     case 'combatCardCost': return a.amount === 0 ? 'None' : `${a.amount}`;
+    case 'heroicDeath': {
+      if (!a.sacrifice) return 'Sacrifice no one';
+      if (a.sacrifice === 'leader') return 'Sacrifice a Leader — cancel 1 hit';
+      const lvl = levelOf(a.sacrifice);
+      return `Sacrifice ${charName(a.sacrifice)} — cancel up to ${lvl} hit${lvl === 1 ? '' : 's'}`;
+    }
     case 'whiteRider': return a.forfeit ? 'Forfeit Gandalf’s Leadership (negate Nazgûl)' : 'Keep Gandalf’s Leadership';
     case 'balrog': return a.use ? 'Discard Balrog of Moria — draw an extra Hunt tile' : 'Don’t use the Balrog';
     case 'crebain': return a.use ? 'Discard Flocks of Crebain — +1 to all Hunt dice' : 'Save Flocks of Crebain';
@@ -274,7 +280,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['freeCharEvent', 'playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
+const DECISION_KINDS = new Set(['freeCharEvent', 'playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'heroicDeath', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);
 
 /** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)

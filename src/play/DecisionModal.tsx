@@ -72,6 +72,13 @@ function cardCostTitle(data: { card?: string; kind?: string } | undefined): stri
   return `${title} — how big do you make it?`;
 }
 
+// Heroic Death is optional and the owner picks the victim (Card Text Reference), so
+// the prompt says how many hits are on the table to cancel.
+function heroicDeathTitle(data: { hits?: number } | undefined): string {
+  const n = data?.hits ?? 0;
+  return `Heroic Death — the enemy scored ${n} hit${n === 1 ? '' : 's'} against you: sacrifice a Leader or a Companion to cancel?`;
+}
+
 function lureTitle(data: { companion?: string; level?: number } | undefined): string {
   if (!data?.companion) return CHOICE_TITLE.lureChoice!;
   return `Lure of the Ring — the Ring tempts ${charName(data.companion)}: take ${data.level ?? 0} Corruption, or eliminate him?`;
@@ -126,6 +133,8 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
             ? `${cardName((choice.data as { card?: string } | undefined)?.card ?? '')} — choose how it resolves`
             : choice.kind === 'combatCardCost'
             ? cardCostTitle(choice.data as { card?: string; kind?: string } | undefined)
+            : choice.kind === 'heroicDeath'
+            ? heroicDeathTitle(choice.data as { hits?: number } | undefined)
             : choice.kind === 'lureChoice'
             // Name the Companion the Ring tempts (player report 6a6y2s416s620a5e).
             ? lureTitle(choice.data as { companion?: string; level?: number } | undefined)

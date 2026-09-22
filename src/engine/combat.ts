@@ -1452,11 +1452,12 @@ export function combatStep(state: GameState): void {
         const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit, dRoll,
           pc.boxed === pc.defender ? state.regions[pc.to]!.siegeBox : undefined, atkForce(state, pc));
         pc.atkRoll = aRoll; pc.defRoll = dRoll;
-        // Hit cancellation: Shield-wall, plus Heroic Death's sacrifice-a-Leader.
-        // Shield-wall only fires "if your opponent scored two or more hits", so a
-        // cancel is gated on the ENEMY's rolled hits clearing cancelHitsMinEnemyHits.
+        // Hit cancellation: Shield-wall. Shield-wall only fires "if your opponent
+        // scored two or more hits", so a cancel is gated on the ENEMY's rolled hits
+        // clearing cancelHitsMinEnemyHits. (Heroic Death is the owner's CHOICE — whom
+        // to sacrifice, or no one — so it pauses at the 'heroicDeath' step below.)
         const cancelFor = (m: CombatMods, enemyHits: number) =>
-          (enemyHits >= (m.cancelHitsMinEnemyHits ?? 1) ? (m.cancelHits ?? 0) : 0) + (m.sacrificeLeaderToCancelHit ?? 0);
+          (enemyHits >= (m.cancelHitsMinEnemyHits ?? 1) ? (m.cancelHits ?? 0) : 0);
         // Mûmakil's later effect resolves at initiative 5, right after the Leader
         // re-roll, so it compares the hits scored AT THAT POINT in the sequence
         // (Almanac, Mûmakil; player report 4i562s26251v1y26):
@@ -1468,8 +1469,6 @@ export function combatStep(state: GameState): void {
         const { atk: aMum, def: dMum } = outscoreBonusHits(aMods, dMods, atkHits, defHits, aRoll, dRoll);
         const dCancel = cancelFor(dMods, atkHits + aMum);
         const aCancel = cancelFor(aMods, defHits + dMum);
-        if ((aMods.sacrificeLeaderToCancelHit ?? 0) > 0 && defHits + dMum > 0) { const af = atkForce(state, pc); af.leaders = Math.max(0, af.leaders - 1); }
-        if ((dMods.sacrificeLeaderToCancelHit ?? 0) > 0 && atkHits + aMum > 0) { const df = defForce(state, pc); df.leaders = Math.max(0, df.leaders - 1); }
         let atk = Math.max(0, atkHits + aMum - dCancel);
         let def = Math.max(0, defHits + dMum - aCancel);
         // Enemy-figure eliminations (Blade of Westernesse / Fateful Strike): the
@@ -1478,6 +1477,16 @@ export function combatStep(state: GameState): void {
         // belong to its opponent, so the region form used to strike the caster's OWN army.)
         atk = applyCombatEliminations(state, defForce(state, pc), pc.to, aMods, atk);
         def = applyCombatEliminations(state, atkForce(state, pc), pc.from, dMods, def);
+        // Heroic Death: "you MAY eliminate one of your Leaders to cancel one hit, or
+        // eliminate one Companion to cancel [up to its Level]" — asked below, once the
+        // dice are on the table. It used to be applied silently: a Leader was always
+        // spent (player report rfibkew6mp9hi2fi: "it should be optional"), a Companion
+        // could never be, and with only a Companion present the hit was cancelled for
+        // free (report 0m181w0r2w4b2z25). Capped here, before Confusion's '1's join the
+        // total — those are the roller's own dice, not the opponent's Combat roll.
+        pc.heroicDeath = undefined;
+        if ((aMods.sacrificeLeaderToCancelHit ?? 0) > 0 && def > 0 && heroicDeathCandidates(atkForce(state, pc)).length) pc.heroicDeath = { side: pc.attacker, max: def };
+        else if ((dMods.sacrificeLeaderToCancelHit ?? 0) > 0 && atk > 0 && heroicDeathCandidates(defForce(state, pc)).length) pc.heroicDeath = { side: pc.defender, max: atk };
         // Confusion: a roller's unmodified '1's hit that roller's OWN Army. They are
         // scored by the opponent's card, not by the opponent's dice, so they are added
         // AFTER cancellation (Shield Wall cancels hits the enemy SCORED) and land in
@@ -1509,6 +1518,20 @@ export function combatStep(state: GameState): void {
         // effects silently never fired in a real battle (player report: 'I played
         // Onslaught... It never asked' — twice). They are cleared when the NEXT
         // round begins ('attackerCard') or the battle ends.
+        pc.step = 'heroicDeath'; continue;
+      }
+      case 'heroicDeath': {
+        if (pc.heroicDeath) {
+          const hd = pc.heroicDeath;
+          const f = hd.side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
+          const hits = Math.min(hd.max, hd.side === pc.attacker ? pc.defHits : pc.atkHits);
+          const options = heroicDeathCandidates(f);
+          if (hits > 0 && options.length) {
+            state.pendingChoice = { owner: hd.side, kind: 'heroicDeath', data: { hits, leaders: f.leaders, companions: options.filter((o) => o !== 'leader') } };
+            return;
+          }
+          pc.heroicDeath = undefined;
+        }
         pc.step = 'attackerCasualties'; continue;
       }
       case 'attackerCasualties': {
@@ -1906,6 +1929,49 @@ export function nazgulLeadership(sh: Force, whiteRiderForfeit = false): number {
   if (whiteRiderForfeit) return 0;
   return sh.nazgul + (sh.characters.includes('witch-king') ? 2 : 0);
 }
+/** Who Heroic Death can sacrifice from this Force: 'leader' (any Free Peoples
+ *  Leader — FAQ: "must be a Free Peoples Leader") and each Companion in it. */
+export function heroicDeathCandidates(f: Force): Array<'leader' | string> {
+  const out: Array<'leader' | string> = f.leaders > 0 ? ['leader'] : [];
+  for (const c of f.characters) if (COMPANION_IDS.has(c)) out.push(c);
+  return out;
+}
+/** The Force whose owner is answering the pending Heroic Death prompt (for the AI). */
+export function heroicDeathForce(state: GameState): Force | null {
+  const pc = state.pendingCombat;
+  if (!pc?.heroicDeath) return null;
+  return pc.heroicDeath.side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
+}
+/** Resolve Heroic Death: eliminate the chosen Leader/Companion and cancel hits — one
+ *  for a Leader, up to the Companion's Level for a Companion (always the most it can,
+ *  since cancelling fewer can never help its owner) — or decline (`sacrifice` omitted). */
+export function resolveHeroicDeath(state: GameState, sacrifice: 'leader' | string | undefined): void {
+  const pc = state.pendingCombat!;
+  const hd = pc.heroicDeath!;
+  const f = hd.side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
+  const hitsOn = hd.side === pc.attacker ? pc.defHits : pc.atkHits;
+  const max = Math.min(hd.max, hitsOn);
+  if (sacrifice !== undefined && !heroicDeathCandidates(f).includes(sacrifice)) throw new Error('Heroic Death: that figure is not in the battle');
+  let cancel = 0;
+  if (sacrifice === 'leader') {
+    f.leaders -= 1;
+    cancel = Math.min(1, max);
+    log(state, null, 'combat', `Heroic Death: a Free Peoples Leader falls to cancel ${cancel} hit${cancel === 1 ? '' : 's'}`);
+  } else if (sacrifice) {
+    f.characters.splice(f.characters.indexOf(sacrifice), 1);
+    if (!state.characters.eliminated.includes(sacrifice)) state.characters.eliminated.push(sacrifice);
+    delete state.characters.inPlay[sacrifice];
+    cancel = Math.min(levelOf(sacrifice), max);
+    log(state, null, 'combat', `Heroic Death: ${characterDef(sacrifice)?.name ?? sacrifice} falls to cancel ${cancel} hit${cancel === 1 ? '' : 's'}`);
+  } else {
+    log(state, null, 'combat', `Heroic Death: the Free Peoples sacrifice no one`);
+  }
+  if (hd.side === pc.attacker) pc.defHits -= cancel; else pc.atkHits -= cancel;
+  pc.heroicDeath = undefined;
+  pc.step = 'attackerCasualties';
+  state.pendingChoice = null;
+}
+
 /** Resolve the White Rider battle-start choice (combat resumes via advance). */
 export function resolveWhiteRider(state: GameState, forfeit: boolean): void {
   state.pendingCombat!.whiteRiderForfeit = forfeit;
