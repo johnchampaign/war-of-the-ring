@@ -9,6 +9,7 @@ import { characterSide, sideOfNation } from '../engine/data';
 import { isAtWar } from '../engine/politics';
 import { attackError, sortieForce } from '../engine/combat';
 import { splitBlockReason } from '../engine/armies';
+import { cardSplitBlockReason, cardMoveEscortReason } from '../engine/handlers';
 import { charName } from './charInfo';
 import mapData from '../../assets/map.json';
 
@@ -146,7 +147,16 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
     'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.':
       'Free Peoples Leaders can never be left without a unit — keep a unit back with them, or take them along',
   };
-  const rawMoveError = moveMode && !isWhole ? splitBlockReason(view, from, to, you, buildSel()) : null;
+  // A card move splits under the same composition rules (p.28), so the picker asks the
+  // same question for it — the engine used to answer an impossible card split by
+  // quietly moving the whole Army, with no message anywhere (player report
+  // 2w0k3j4k1q026q3r). Only the composition half applies: a card move need not be
+  // adjacent, and each card's own enumerator owns where it may land.
+  const rawMoveError = !isWhole
+    ? (moveMode ? splitBlockReason(view, from, to, you, buildSel())
+      : kind === 'eventMove' && !landingAttack ? (cardMoveEscortReason(evBase?.card, buildSel()) ?? cardSplitBlockReason(view, from, armySide, buildSel()))
+        : null)
+    : null;
   const rawSplitError = attackMode && !isWhole ? attackError(view, from, you, buildRearguard()) : null;
   const splitError = rawSplitError ? (SPLIT_HINTS[rawSplitError] ?? rawSplitError)
     : rawMoveError ? (MOVE_HINTS[rawMoveError] ?? rawMoveError.replace(/\.$/, '')) : null;

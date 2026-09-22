@@ -83,13 +83,70 @@ function regionDist(from: string, to: string): number {
     layer = next; }
   return Infinity;
 }
-type CardMoveSel = { units?: Partial<Record<Nation, { regular?: number; elite?: number }>>; leaders?: number; nazgul?: number; characters?: string[] };
+export type CardMoveSel = { units?: Partial<Record<Nation, { regular?: number; elite?: number }>>; leaders?: number; nazgul?: number; characters?: string[] };
+/** The clamped figure counts a card-move selection actually takes out of `from`.
+ *  Shared by the validator and the mover so the picker's answer and the engine's are
+ *  the same arithmetic. */
+function clampCardSel(state: GameState, from: string, side: Side, sel: CardMoveSel): { take: Array<[Nation, number, number]>; moved: number; chars: string[] } {
+  const src = state.regions[from]!;
+  const take: Array<[Nation, number, number]> = [];
+  let moved = 0;
+  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
+    if (sideOfNation(n) !== side) continue;
+    const have = src.units[n]; if (!have) continue;
+    const mr = Math.max(0, Math.min(u.regular ?? 0, have.regular));
+    const me = Math.max(0, Math.min(u.elite ?? 0, have.elite));
+    if (mr + me > 0) { take.push([n, mr, me]); moved += mr + me; }
+  }
+  const chars = (sel.characters ?? []).filter((c) => src.characters.includes(c) && characterSide(c) === side && c !== 'saruman');
+  return { take, moved, chars };
+}
+/** Why this card cannot move THIS half of the Army, or null. A few cards move "the Army
+ *  containing the X", which is a requirement on the part that GOES, not on the Army as a
+ *  whole — a split that leaves the qualifying figure at home is not the move the card
+ *  describes (player report 0c2d6s4y07386h19). Exported so the picker can say it before
+ *  the click rather than swallowing a refusal afterwards (report 1b1c5q54732v1a22, which
+ *  also caught this rule being thrown at *Paths of the Woses*, a card that names no
+ *  figure at all). */
+export function cardMoveEscortReason(card: string | undefined, sel: CardMoveSel): string | null {
+  if (card !== 'fp-str-12') return null; // Through a Day and a Night — the only FP card that names one
+  return (sel.characters ?? []).some((c) => COMPANION_SET.has(c)) ? null
+    : 'Through a Day and a Night moves the Army containing the Companion(s) — at least one Companion must go with it.';
+}
+/** Why this card-move split cannot be made, or null. A card move splits under the same
+ *  composition rules as any other Army move (p.27-28): at least one unit goes, and Free
+ *  Peoples Leaders are never left standing in a region with no combat units. The engine
+ *  used to answer an impossible selection by quietly moving the WHOLE Army instead, and
+ *  to drag the Leaders along regardless of the tick-boxes — so the player's selection
+ *  was silently overruled with no message at all (player report 2w0k3j4k1q026q3r).
+ *  Exported so the picker can say it BEFORE the click, exactly as it does for a
+ *  die-driven move (splitBlockReason). */
+export function cardSplitBlockReason(state: GameState, from: string, side: Side, sel: CardMoveSel): string | null {
+  const src = state.regions[from]!;
+  const { take, moved } = clampCardSel(state, from, side, sel);
+  if (moved < 1) return 'At least one Army unit must move.';
+  if (side === 'fp') {
+    const left = new Map<Nation, number>();
+    for (const n of Object.keys(src.units) as Nation[]) {
+      if (sideOfNation(n) !== side) continue;
+      left.set(n, src.units[n]!.regular + src.units[n]!.elite);
+    }
+    for (const [n, mr, me] of take) left.set(n, (left.get(n) ?? 0) - mr - me);
+    const ownUnitsLeft = [...left.values()].some((v) => v > 0);
+    const leadersLeft = src.leaders - Math.max(0, Math.min(sel.leaders ?? 0, src.leaders));
+    if (!ownUnitsLeft && leadersLeft > 0) {
+      return 'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.';
+    }
+  }
+  return null;
+}
 /** Move an Army (units + Leaders + Nazgûl + characters) from→to, capturing for
  *  `side` (default Shadow). With `sel`, only the selected figures move — p.28,
  *  "Using an Event Card to Move Armies": "it is possible to split the Army before
  *  moving" (deviation D15, now closed). The selection is sanitized against the
- *  region (clamped to available own-side figures); if no unit survives the clamp
- *  the WHOLE Army moves, so a malformed selection degrades to the old behavior. */
+ *  region (clamped to available own-side figures) and then checked against the split
+ *  rules — an impossible selection is refused, not quietly widened to the whole Army
+ *  (cardSplitBlockReason). */
 function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel, path?: readonly RegionId[], maxSteps?: number, direct = false): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
   // THE ROUTE MATTERS. A card move "through more than one region" enters each region
@@ -140,7 +197,7 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
       if (settlementController(state, r) === side) log(state, null, 'army', `${REGIONS[r]?.name ?? r} is taken in passing`);
     }
   }
-  if (sel && moveSelectedUnits(state, from, to, side, sel)) { liftSiegeIfAbandoned(state, from); return; }
+  if (sel) { moveSelectedUnits(state, from, to, side, sel); liftSiegeIfAbandoned(state, from); return; }
   // Only `side`'s Nations travel — if enemy units ever share the region (an illegal
   // state a card bug once produced), a card-driven move must not kidnap them (report:
   // "Gondor has stolen my Southron Army").
@@ -164,46 +221,39 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   // besieger leaves (p.51), exactly as it does after a plain Army move.
   liftSiegeIfAbandoned(state, from);
 }
-/** The split half of moveAllUnits: apply a sanitized subset selection. Returns
- *  false when the clamped selection moves no unit (caller falls back to the whole
- *  Army). Mirrors moveArmySplit's apply rules minus adjacency (card moves may
- *  cross several regions): own-side Nations only, own Leader pool only, own
- *  Characters only (never Saruman), and FP Leaders are never stranded unitless. */
-function moveSelectedUnits(state: GameState, from: string, to: string, side: Side, sel: CardMoveSel): boolean {
+/** The split half of moveAllUnits: apply a sanitized subset selection. Mirrors
+ *  moveArmySplit's apply rules minus adjacency (card moves may cross several
+ *  regions): own-side Nations only, own Leader pool only, own Characters only
+ *  (never Saruman), and FP Leaders are never stranded unitless. */
+function moveSelectedUnits(state: GameState, from: string, to: string, side: Side, sel: CardMoveSel): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
-  const take: Array<[Nation, number, number]> = [];
-  let moved = 0;
-  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
-    if (sideOfNation(n) !== side) continue;
-    const have = src.units[n]; if (!have) continue;
-    const mr = Math.max(0, Math.min(u.regular ?? 0, have.regular));
-    const me = Math.max(0, Math.min(u.elite ?? 0, have.elite));
-    if (mr + me > 0) { take.push([n, mr, me]); moved += mr + me; }
-  }
-  if (moved === 0) return false;
+  // The split rules are a refusal, not a silent correction: an empty selection used to
+  // move the whole Army and a stranded-Leader selection used to drag the Leaders along
+  // anyway, both without a word to the player (report 2w0k3j4k1q026q3r). The picker
+  // asks the same question before the click, so a refusal here means a hand-built
+  // action, not a click the player could have made.
+  const bad = cardSplitBlockReason(state, from, side, sel);
+  if (bad) throw new Error(bad);
+  const { take, chars: movingChars } = clampCardSel(state, from, side, sel);
   for (const [n, mr, me] of take) {
     const have = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };
     have.regular -= mr; have.elite -= me; d.regular += mr; d.elite += me; dst.units[n] = d;
     if (have.regular === 0 && have.elite === 0) delete src.units[n];
   }
-  const ownUnitsLeft = (Object.keys(src.units) as Nation[])
-    .some((n) => sideOfNation(n) === side && (src.units[n]!.regular + src.units[n]!.elite) > 0);
   if (side === 'fp') {
-    // FP Leaders can never be in a region with no combat units (p.26): a full
-    // vacate takes them all, regardless of the selection.
-    const ml = ownUnitsLeft ? Math.max(0, Math.min(sel.leaders ?? 0, src.leaders)) : src.leaders;
+    // A selection that would strand Leaders was refused above, so the tick-boxes are
+    // taken at their word here.
+    const ml = Math.max(0, Math.min(sel.leaders ?? 0, src.leaders));
     src.leaders -= ml; dst.leaders += ml;
   } else {
     const mn = Math.max(0, Math.min(sel.nazgul ?? 0, src.nazgul));
     src.nazgul -= mn; dst.nazgul += mn;
   }
-  const movingChars = (sel.characters ?? []).filter((c) => src.characters.includes(c) && characterSide(c) === side && c !== 'saruman');
   dst.characters.push(...movingChars);
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
   for (const c of movingChars) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
   captureIfEnemySettlement(state, to, side);
   activateOnCompanionLand(state, side, movingChars, to);
-  return true;
 }
 /** Force-place units into a region (a card that recruits in a NAMED region,
  *  bypassing the settlement/control checks recruit() applies). Capped by
@@ -377,6 +427,10 @@ const canEventRecruit = (state: GameState, nation: Nation, n = 1): boolean =>
 
 // --- Free Peoples: heal / Corruption -------------------------------------
 register('fp-char-09', { // Athelas
+  // Strengthened play condition: the card is nothing but a heal, so at zero Corruption
+  // it rolls three dice to remove nothing and burns a die and the card. Same reasoning
+  // as There Is Another Way (player report 0k6e6n2c6m6g153q).
+  canPlay: (state) => state.fellowship.corruption > 0,
   apply(state) {
     const guideIsStrider = state.fellowship.guide === 'strider';
     const need = guideIsStrider ? 3 : 5;
@@ -409,7 +463,9 @@ register('fp-char-10', {
   },
   finalize: (state, _side, applied) => { if (applied.some((t) => t.mode === 'move')) moveFellowship(state); },
 });
-register('fp-char-12', { apply(state) { heal(state, isGollumGuide(state) ? 2 : 1); } }); // Bilbo's Song
+// Bilbo's Song: a pure heal, so it is not offered with no Corruption to remove
+// (player report 0k6e6n2c6m6g153q).
+register('fp-char-12', { canPlay: (state) => state.fellowship.corruption > 0, apply(state) { heal(state, isGollumGuide(state) ? 2 : 1); } });
 
 // --- Free Peoples: political ---------------------------------------------
 register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP Nation OF YOUR CHOICE
@@ -1108,10 +1164,11 @@ register('fp-str-11', {
   canPlay: (state) => isAtWar(state, 'rohan') && wosesMoves(state).length > 0,
   targets: (state) => wosesMoves(state),
   applyTarget(state, _side, t) {
-    // "Move the Army containing the Companion(s)": a split may leave units behind,
-    // but the part that MOVES must include a Companion (Almanac; player report
-    // 6b3v215v0m1s090m — a split with no Companion in it was allowed to go).
-    if (t.move && !(t.move.characters ?? []).some((c) => COMPANION_SET.has(c))) throw new Error('Through a Day and a Night: the moving part must include a Companion');
+    // No Companion clause: this card moves "a Free Peoples Army from any one Rohan
+    // region", full stop — the Companion requirement belongs to Through a Day and a
+    // Night ("the Army containing the Companion(s)"), and was wrongly copied onto this
+    // card, refusing perfectly legal splits with the OTHER card's name on the message
+    // (player report 1b1c5q54732v1a22).
     moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, undefined, true); // "DIRECTLY to Minas Tirith"
     log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
 });
@@ -1141,9 +1198,11 @@ register('fp-str-12', {
   targets: dayNightMoves,
   applyTarget(state, _side, t) {
     // "Move the Army containing the Companion(s)": a split may leave units behind, but
-    // "at least one Companion must move along with the Army" (Almanac). Paths of the
-    // Woses already checked this; this card did not (player report 0c2d6s4y07386h19).
-    if (t.move && !(t.move.characters ?? []).some((c) => COMPANION_SET.has(c))) throw new Error('Through a Day and a Night: the moving part must include a Companion');
+    // "at least one Companion must move along with the Army" (Almanac) — this card let
+    // the Army march off and leave them all at home (player report 0c2d6s4y07386h19).
+    // The clause is this card's alone; see cardMoveEscortReason.
+    const escort = t.move ? cardMoveEscortReason('fp-str-12', t.move) : null;
+    if (escort) throw new Error(escort);
     moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, DAY_NIGHT_RANGE); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
 });
 
@@ -1270,8 +1329,25 @@ register('sh-str-04', {
 // Orthanc without a Shadow Army, eliminate him."
 for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
   register(id, {
-    canPlay: (state) => state.characters.entered.includes('gandalf-white')
-      && state.regions['fangorn']!.characters.some((c) => COMPANION_SET.has(c)),
+    canPlay: (state) => {
+      if (!state.characters.entered.includes('gandalf-white')) return false;
+      if (!state.regions['fangorn']!.characters.some((c) => COMPANION_SET.has(c))) return false;
+      // Strengthened play condition: the printed precondition can be met with nothing
+      // for the Ents to do — no Shadow Army in Orthanc, no Saruman there, and Gandalf
+      // the White too far away to grant the free card. Played then, it rolls three dice
+      // at an empty Stronghold and burns an Action die and the card (player report
+      // 0o183f33230m5g4v). Any ONE of the three live clauses is enough; in particular
+      // Saruman alone in Orthanc still makes it playable (report 4u10).
+      const force = armyForceOf(state, 'orthanc', 'shadow');
+      if (force && forceUnitCount(force) > 0) return true;
+      const orthanc = state.regions['orthanc']!;
+      if (orthanc.characters.includes('saruman') || !!orthanc.siegeBox?.characters.includes('saruman')) return true;
+      const gw = charRegion(state, 'gandalf-white');
+      if (!gw || !(gw === 'fangorn' || REGIONS[gw]!.nation === 'rohan')) return false;
+      // The free-card clause is only worth a die if there IS another Character card to
+      // play with it.
+      return state.cards.fp.hand.some((c) => c !== id && EVENT_BY_ID[c]?.deck === 'Character');
+    },
     apply(state) {
       const orthanc = state.regions['orthanc']!;
       const freeChar = () => {
@@ -1639,8 +1715,16 @@ function applyNazgulArmyAction(state: GameState, t: EventTarget): void {
   if (t.mode === 'attack') { startBattle(state, 'shadow', t.from!, t.to!); log(state, null, 'event', `Nazgûl-led attack ${t.from} → ${t.to}`); }
   else {
     // A split of a Nazgûl-led Army must keep the card's qualifying figure with the
-    // movers — force ≥1 Nazgûl into the selection (clamped to what's there).
-    const sel = t.move ? { ...t.move, nazgul: Math.max(1, t.move.nazgul ?? 0) } : undefined;
+    // movers: a Nazgûl if the region holds one, otherwise the Witch-king, who is
+    // himself a Nazgûl (p.25) and can be an Army's only qualifying figure. Forcing a
+    // Nazgûl unconditionally asked for a figure that was not there, so a Witch-king-led
+    // Army could split and march off leaving him behind.
+    const src = state.regions[t.from!]!;
+    const sel = !t.move ? undefined
+      : src.nazgul > 0 ? { ...t.move, nazgul: Math.max(1, t.move.nazgul ?? 0) }
+      : src.characters.includes('witch-king') && !(t.move.characters ?? []).includes('witch-king')
+        ? { ...t.move, characters: [...(t.move.characters ?? []), 'witch-king'] }
+        : { ...t.move };
     moveAllUnits(state, t.from!, t.to!, 'shadow', sel, t.path);
     log(state, null, 'event', `Nazgûl-led Army moves ${t.from} → ${t.to}${sel ? ' (split)' : ''}`);
   }

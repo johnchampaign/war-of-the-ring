@@ -37,9 +37,9 @@ function board() {
   check('the unselected Nazgûl stays behind', src.nazgul === 1);
 }
 
-// --- the selection is sanitized (clamped), and an empty one degrades gracefully ---
+// --- the selection is sanitized (clamped); an empty one is REFUSED ------------------
 {
-  console.log('\n=== sanitization: over-ask clamps; a no-unit selection moves the whole Army ===');
+  console.log('\n=== sanitization: over-ask clamps; a no-unit selection is refused ===');
   const s1 = board();
   const t1 = getHandler('sh-str-07').targets(s1, 'shadow').find((x) => x.from === 'dol-guldur');
   getHandler('sh-str-07').applyTarget(s1, 'shadow', { ...t1, move: { units: { sauron: { regular: 99 } }, nazgul: 5 } });
@@ -47,11 +47,15 @@ function board() {
     !s1.regions['dol-guldur'].units.sauron?.regular && s1.regions['dol-guldur'].units.sauron?.elite === 2 && s1.regions['dol-guldur'].nazgul === 0,
     JSON.stringify({ units: s1.regions['dol-guldur'].units, nazgul: s1.regions['dol-guldur'].nazgul }));
 
+  // It used to move the WHOLE Army instead, so an empty tick-list was read as "move
+  // everything" — the player's selection overruled with no message (2w0k3j4k1q026q3r).
   const s2 = board();
   const t2 = getHandler('sh-str-07').targets(s2, 'shadow').find((x) => x.from === 'dol-guldur');
-  getHandler('sh-str-07').applyTarget(s2, 'shadow', { ...t2, move: { units: {} } });
-  check('a selection with no units falls back to the whole Army',
-    !s2.regions['dol-guldur'].units.sauron && s2.regions['dol-guldur'].nazgul === 0,
+  let emptyRefused = false;
+  try { getHandler('sh-str-07').applyTarget(s2, 'shadow', { ...t2, move: { units: {} } }); } catch { emptyRefused = true; }
+  check('a selection with no units is refused', emptyRefused);
+  check('and the Army has not budged',
+    s2.regions['dol-guldur'].units.sauron?.regular === 4 && s2.regions['dol-guldur'].nazgul === 1,
     JSON.stringify(s2.regions['dol-guldur'].units));
 }
 
@@ -72,10 +76,17 @@ function board() {
   try { getHandler('fp-str-12').applyTarget(state, 'fp', { ...t, move: { units: { rohan: { regular: 2 } }, leaders: 0 } }); }
   catch { refused = true; }
   check('a split with no Companion among the movers is refused', refused);
-  // The selection vacates every unit but claims to leave the Leaders — p.26 says
-  // FP Leaders can never stand without units, so they must be dragged along.
-  getHandler('fp-str-12').applyTarget(state, 'fp', { ...t, move: { units: { rohan: { regular: 2 } }, leaders: 0, characters: ['boromir'] } });
-  check('vacating every unit drags the Leaders along (never stranded)',
+  // The selection vacates every unit but claims to leave the Leaders behind — p.27 says
+  // FP Leaders can never stand without units, so the selection is impossible and is now
+  // REFUSED (it used to drag the Leaders along without a word, 2w0k3j4k1q026q3r).
+  let strandRefused = false;
+  try { getHandler('fp-str-12').applyTarget(state, 'fp', { ...t, move: { units: { rohan: { regular: 2 } }, leaders: 0, characters: ['boromir'] } }); }
+  catch { strandRefused = true; }
+  check('a split that would strand the Leaders is refused', strandRefused);
+  check('and nothing moved', state.regions['edoras'].leaders === 2 && state.regions['edoras'].units.rohan?.regular === 2);
+  // Taking them along is the legal answer.
+  getHandler('fp-str-12').applyTarget(state, 'fp', { ...t, move: { units: { rohan: { regular: 2 } }, leaders: 2, characters: ['boromir'] } });
+  check('taking the Leaders along is allowed',
     state.regions['edoras'].leaders === 0 && state.regions[t.to].leaders === 2,
     `left behind: ${state.regions['edoras'].leaders}, arrived: ${state.regions[t.to].leaders}`);
   check('the selected Companion travels with the Army',
