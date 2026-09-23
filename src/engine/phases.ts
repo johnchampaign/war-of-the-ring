@@ -92,10 +92,10 @@ function sweepTableCards(state: GameState): void {
     state,
     characterWithArmy,
     (r) => { const n = REGIONS[r]?.nation; return n ? sideOfNation(n) : null; },
-    (s, side, id) => {
+    (s, side, id, reason) => {
       const deck = EVENT_BY_ID[id]?.deck === 'Character' ? 'character' : 'strategy';
       s.cards[side].discard[deck].push(id);
-      log(s, null, 'event', `${EVENT_BY_ID[id]?.name ?? id} is discarded — its play condition no longer holds (p.22)`);
+      log(s, null, 'event', `${EVENT_BY_ID[id]?.name ?? id} is discarded — ${reason}`);
     },
   );
 }

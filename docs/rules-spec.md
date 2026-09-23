@@ -1326,6 +1326,61 @@ turn the FP reached 4 and still lost). Regression-tested in
 
 ---
 
+### Card clauses corrected from player reports (2026-09-23)
+
+- **"The Last Battle" (fp-str-01)** — the printed card carries a discard clause the
+  TTS-mod transcription *does* record but the engine never enforced: "You must discard
+  this card from the table as soon as the Fellowship is declared or revealed." The two
+  halves need different seams. **Revealed** is a *state*, so it joins the card's row in
+  `TABLE_CONDITIONS` (persistent.ts) and `pruneTableCards` sweeps it at the next
+  transition. **Declared** is a *momentary trigger* — a declaration leaves the
+  Fellowship Hidden (p.19) — so it fires inside `declareFellowship` (fellowship.ts),
+  next to Worn with Sorrow and Toil. Using the once-per-turn declare *flag* as a prune
+  condition instead would have made the card unplayable for the rest of any turn the
+  Fellowship had already declared in, which the clause does not say
+  *(player report 29253u1e62620w31)*.
+- **A printed discard clause that already holds is also a play condition.** Playing
+  The Last Battle onto a **revealed** Fellowship, or Wormtongue (sh-char-22) onto an
+  **already-active** Rohan, puts the card on the table only for the very next sweep to
+  take it off again — a die and a card burned for nothing. Both are now gated in
+  `canPlay`, the same strengthening *The Last Battle*, *Denethor's Folly* and *The
+  Palantír of Orthanc* already carry for their "Play on the table if" lines (same
+  report). A card whose clause has **not** yet fired is unaffected: a Fellowship that
+  declared earlier this turn is Hidden again by definition, so The Last Battle may be
+  played again in that same turn.
+- **Table-card discards now say WHY in the card's own words.** `pruneTableCards`
+  returns a reason string instead of a bare boolean, so the log reads "The Last Battle
+  is discarded — the Fellowship is revealed" or "Wormtongue is discarded — Rohan is
+  activated" rather than the generic "its play condition no longer holds (p.22)", which
+  was wrong for a printed clause that is not a play condition at all.
+- **"Captain of the West" is cumulative.** "Adds 1 to the Combat Strength of a Free
+  Peoples Army with this Companion (**cumulative if more Captains of the West are in
+  the battle**) up to a maximum of 5 Combat dice" (Almanac, the Companion entries;
+  rulebook p.34 for Gandalf's copy of the ability). `rollHits` gave a flat +1 for
+  "any Captain present", so Aragorn and Gimli standing together bought exactly what
+  Gimli bought alone *(player report 3m4h5z6n0o395041)*. It now counts them. The
+  five-dice cap (p.28) is unchanged and still applied after the bonus, and Meriadoc
+  and Peregrin are **not** Captains (Almanac). *Words of Power* cancels **one chosen
+  Companion's** abilities for the round, so its `enemyCaptainCancel` now removes one
+  Captain from the count rather than erasing the whole bonus — closer to the card, and
+  the natural seat for the target pick when that is modelled (report 5644674x3b5n2m6i,
+  still open). `scripts/probe-rules-batch-0923.mjs`.
+- **A card-recruited Nazgûl obeys the recruiting restrictions.** "All newly recruited
+  figures … can only be placed in a **free** City, Town, or Stronghold" and "you cannot
+  muster or recruit troops in a Settlement controlled by the enemy" (p.26) — nothing in
+  those lines exempts Leaders. The card handlers placed Nazgûl by writing straight into
+  `region.nazgul`, so *The King is Revealed* (sh-str-18) conjured one into a Minas
+  Morgul the Free Peoples had captured, even as the same card's five Regulars were
+  (correctly) refused *(player report 33010827046r0g39)*. All three card recruits —
+  The King is Revealed, *Shadows on the Misty Mountains* (sh-str-19) and *The Black
+  Captain Commands* (sh-char-24) — now go through `cardRecruitNazgul`, which gates on
+  `recruitable` and lands the figure in the stack `eventRecruitTarget` names, so under
+  a siege the garrison gets it **in the Stronghold Box** and the besieger gets it in the
+  open field (Almanac, "Points common to all … recruitment cards"). The King is
+  Revealed's unit count now reads its room from that same stack, too: it was measuring
+  the region's open field, which under a siege holds the **besieger**, so the whole
+  five-Regular recruit failed silently there.
+
 ### Card clauses corrected from player reports (2026-09-12)
 
 - **"The Grey Company" (fp-char-24)** — "Eliminate one Regular unit to recruit one Elite

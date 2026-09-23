@@ -317,6 +317,28 @@ const recruitStackSize = (state: GameState, region: string, side: Side): number 
   return dest ? forceUnitCount(dest.force) : 0;
 };
 
+/** Place up to `n` Nazgûl at `region` for a card recruit, and say how many landed.
+ *
+ *  A Nazgûl is a recruited figure like any other, so the ordinary recruiting
+ *  restrictions apply to it: "All newly recruited figures … can only be placed in a
+ *  FREE City, Town, or Stronghold" and "you cannot muster or recruit troops in a
+ *  Settlement controlled by the enemy" (rulebook p.26). The card handlers used to drop
+ *  the figure straight into `region.nazgul`, so The King is Revealed conjured a Nazgûl
+ *  inside a Minas Morgul the Free Peoples had captured (player report 33010827).
+ *  Under a siege it also joins the RIGHT stack — the garrison in the box, or the
+ *  besieger in the open field (eventRecruitTarget, Almanac "Points common to all
+ *  recruitment cards"). Nazgûl are Leaders, so no stacking room is needed. */
+const cardRecruitNazgul = (state: GameState, region: string, n: number): number => {
+  const pool = state.reinforcements.sauron as { nazgul?: number };
+  const want = Math.min(n, pool.nazgul ?? 0);
+  if (want <= 0 || !recruitable(state, 'shadow', region)) return 0;
+  const dest = eventRecruitTarget(state, region, 'shadow');
+  if (!dest) return 0;
+  pool.nazgul = (pool.nazgul ?? 0) - want;
+  dest.force.nazgul += want;
+  return want;
+};
+
 type RecruitSlot = { nation: Nation; region: string };
 /** Build a handler for a card that recruits one or more units "(Regular or Elite)"
  *  in NAMED regions, PROMPTING the player to choose Regular vs Elite for each unit
@@ -753,10 +775,7 @@ const mistyRegions = (s: GameState): string[] => MISTY.filter((r) => recruitable
 const mistyUnits = placeChoiceCard('sauron', mistyRegions, { count: 2 });
 const mistyNazgulLeft = (s: GameState): boolean => (s.reinforcements.sauron.nazgul ?? 0) > 0;
 const placeMistyNazgul = (s: GameState, region: string): void => {
-  if (!mistyNazgulLeft(s) || !recruitable(s, 'shadow', region)) return;
-  s.regions[region]!.nazgul += 1;
-  s.reinforcements.sauron.nazgul = (s.reinforcements.sauron.nazgul ?? 0) - 1;
-  log(s, null, 'muster', `Recruited a Nazgûl in ${region}`);
+  if (cardRecruitNazgul(s, region, 1) > 0) log(s, null, 'muster', `Recruited a Nazgûl in ${region}`);
 };
 register('sh-str-19', {
   canPlay: (s, side) => mistyUnits.canPlay!(s, side) || (mistyNazgulLeft(s) && mistyRegions(s).length > 0),
@@ -1627,6 +1646,12 @@ register('fp-str-01', { // The Last Battle — see hunt.ts (fpDiceInBox)
   // (player report: the FP AI "played it, condition unmet, discarded"). Mirrors the
   // TABLE_CONDITIONS check in persistent.ts.
   canPlay: (state) => {
+    // The printed discard clause ("as soon as the Fellowship is declared or revealed")
+    // makes a play onto a REVEALED Fellowship self-defeating: the card would hit the
+    // table and be swept straight off it again by pruneTableCards, for nothing. So the
+    // reveal state is a play condition too (player report 29253u), exactly as the
+    // Aragorn clause below already is.
+    if (!state.fellowship.hidden) return false;
     // characterWithArmy, not armySide: Aragorn besieged inside a Stronghold is still
     // "with a Free Peoples Army" even though the open field belongs to the besieger
     // (player report: refused with Aragorn holding Minas Morgul under siege).
@@ -1651,7 +1676,11 @@ register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see
 // (player report: "played it before mustering Saruman; it was discarded").
 register('sh-char-21', { onTable: true, canPlay: (state) => inPlay(state, 'saruman'), apply() { /* The Palantír of Orthanc — bonus draw, see wotrAdapter playEvent */ } });
 register('sh-char-15', { onTable: true, apply() { /* Worn with Sorrow and Toil — see hunt.ts (companion casualty) */ } });
-register('sh-char-22', { onTable: true, canPlay: (state) => inPlay(state, 'saruman'), apply() { /* Wormtongue — play if Saruman is in play; see politics.ts (activateNation) */ } });
+// Wormtongue: printed precondition "Play on the table if Saruman is in play", plus its
+// printed discard clause "as soon as Rohan is activated" — so playing it onto an
+// already-active Rohan buys nothing but an immediate discard, and is not offered
+// (player report 29253u, same reasoning as The Last Battle above).
+register('sh-char-22', { onTable: true, canPlay: (state) => inPlay(state, 'saruman') && !state.nations.rohan.active, apply() { /* Wormtongue — see politics.ts (activateNation) */ } });
 register('sh-char-16', { onTable: true, apply() { /* Flocks of Crebain — +1 Hunt dice, see hunt.ts resolveHunt */ } });
 register('sh-char-17', { onTable: true, apply() { /* Balrog of Moria — extra Hunt tile on a Moria declaration, see wotrAdapter declareFellowship */ } });
 
@@ -1805,8 +1834,8 @@ register('sh-char-24', { // The Black Captain Commands
   },
   applyTarget(state, _side, t) {
     if (t.mode === 'recruit' && t.region) {
-      const k = Math.min(2, state.reinforcements.sauron.nazgul ?? 0);
-      if (k > 0) { state.regions[t.region]!.nazgul += k; state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) - k; log(state, null, 'event', `The Black Captain Commands: ${k} Nazgûl muster at ${t.region}`); }
+      const k = cardRecruitNazgul(state, t.region, 2);
+      if (k > 0) log(state, null, 'event', `The Black Captain Commands: ${k} Nazgûl muster at ${t.region}`);
       return;
     }
     if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region, t.count); return; }
@@ -2426,12 +2455,15 @@ register('sh-str-15', {
 register('sh-str-18', {
   canPlay: (state) => state.characters.entered.includes('aragorn'),
   apply(state) {
-    const room = STACKING_LIMIT - unitCount(state, 'minas-morgul');
+    // Room is read from the stack the recruit would actually JOIN — under a siege that
+    // is the garrison's box (five units), not the region's open field, which holds the
+    // besieger. Reading the region made the whole recruit fail silently there.
+    const dest = eventRecruitTarget(state, 'minas-morgul', 'shadow');
+    const room = dest ? dest.limit - forceUnitCount(dest.force) : 0;
     const n = Math.max(0, Math.min(5, state.reinforcements.sauron.regular, room));
     if (n > 0) recruit(state, 'sauron', 'minas-morgul', n, 0, { ignoreAtWar: true });
-    // Nazgûl don't count toward the Army stacking limit.
-    if ((state.reinforcements.sauron.nazgul ?? 0) > 0) {
-      state.reinforcements.sauron.nazgul!--; state.regions['minas-morgul']!.nazgul++;
-    }
+    // Nazgûl don't count toward the Army stacking limit, but they DO obey the
+    // recruiting restrictions — nothing musters into an enemy-held Minas Morgul.
+    cardRecruitNazgul(state, 'minas-morgul', 1);
   },
 });

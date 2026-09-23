@@ -98,9 +98,16 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   // `force` (a siege box) overrides where this side's figures are read from — used
   // for the boxed DEFENDER in a siege assault (they're in to.siegeBox, not the region).
   const own: Force = force ?? state.regions[ownRegion]!;
-  // Captain of the West: +1 Combat Strength (die) if such a Companion is in this FP Army.
-  const captain = side === 'fp' && !enemyMods.enemyCaptainCancel && own.characters.some((c) => CAPTAINS.has(c)) ? 1 : 0;
-  let count = Math.min(5, forceUnitCount(own) + captain);
+  // Captain of the West: "Adds 1 to the Combat Strength of a Free Peoples Army with
+  // this Companion (CUMULATIVE if more Captains of the West are in the battle) up to a
+  // maximum of 5 Combat dice" (Almanac, the Companion entries). It used to be a flat
+  // +1 for "any Captain present", so Aragorn and Gimli together bought what Gimli
+  // alone did (player report 3m4h5z). Words of Power cancels ONE chosen Companion's
+  // abilities for the round, so it now takes one Captain off the count rather than
+  // erasing the whole bonus (the target pick itself is still unmodelled).
+  let captains = side === 'fp' ? own.characters.filter((c) => CAPTAINS.has(c)).length : 0;
+  if (enemyMods.enemyCaptainCancel) captains = Math.max(0, captains - 1);
+  let count = Math.min(5, forceUnitCount(own) + captains);
   if (enemyMods.maxDiceEnemy != null) count = Math.min(count, enemyMods.maxDiceEnemy);
   // Dread and Despair: "rolls one Combat die less (to a minimum of one)".
   if (enemyMods.enemyDiceReduction) count = Math.max(1, count - enemyMods.enemyDiceReduction);

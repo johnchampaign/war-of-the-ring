@@ -141,26 +141,41 @@ export const wormtongueRousedByAttackAt = (s: GameState, region: RegionId): bool
 // Wizard's Staff — is pruned separately at the Fellowship seams in fellowship.ts.)
 const sarumanInPlay = (s: GameState): boolean =>
   !!s.characters.inPlay['saruman'] && !s.characters.eliminated.includes('saruman');
-const TABLE_CONDITIONS: Array<{ side: 'fp' | 'shadow'; id: string; holds: (s: GameState, charWithArmy: (s: GameState, char: string, side: 'fp' | 'shadow') => RegionId | null, nationSideOf: (r: RegionId) => 'fp' | 'shadow' | null) => boolean }> = [
+/** Why a table card leaves the table, in the words a player would use. `discardIf`
+ *  returns null while the card stays, or the reason it must go — so a printed discard
+ *  clause ("as soon as the Fellowship is revealed") reads as itself in the log instead
+ *  of as the generic "its play condition no longer holds" (player report 29253u). */
+const CEASED = 'its play condition no longer holds (p.22)';
+const TABLE_CONDITIONS: Array<{ side: 'fp' | 'shadow'; id: string; discardIf: (s: GameState, charWithArmy: (s: GameState, char: string, side: 'fp' | 'shadow') => RegionId | null, nationSideOf: (r: RegionId) => 'fp' | 'shadow' | null) => string | null }> = [
   // fp-str-01 The Last Battle: "if Aragorn is with a Free Peoples Army in a region
   // outside of a Free Peoples Nation". A besieged Aragorn is still with his Army
-  // (see characterWithArmy).
+  // (see characterWithArmy). On top of that the printed card carries its own discard
+  // clause: "You must discard this card from the table as soon as the Fellowship is
+  // declared or revealed." REVEALED is a state, so it belongs here; DECLARED is a
+  // momentary trigger (a declaration leaves the Fellowship Hidden), so it fires at the
+  // declare seam in fellowship.ts instead — otherwise the card could never be played
+  // again in a turn the Fellowship had already declared in.
   {
-    side: 'fp', id: 'fp-str-01', holds: (s, charWithArmy, nationSideOf) => {
+    side: 'fp', id: 'fp-str-01', discardIf: (s, charWithArmy, nationSideOf) => {
+      if (!s.fellowship.hidden) return 'the Fellowship is revealed';
       const r = charWithArmy(s, 'aragorn', 'fp');
-      return !!r && nationSideOf(r) !== 'fp';
+      return !!r && nationSideOf(r) !== 'fp' ? null : CEASED;
     },
   },
   // sh-str-03 Denethor's Folly: "if Minas Tirith is under siege by a Shadow Army".
-  { side: 'shadow', id: 'sh-str-03', holds: (s) => !!s.regions['minas-tirith']?.besieged },
+  { side: 'shadow', id: 'sh-str-03', discardIf: (s) => (s.regions['minas-tirith']?.besieged ? null : CEASED) },
   // sh-char-21 Palantír of Orthanc: "if Saruman is in play".
-  { side: 'shadow', id: 'sh-char-21', holds: sarumanInPlay },
+  { side: 'shadow', id: 'sh-char-21', discardIf: (s) => (sarumanInPlay(s) ? null : 'Saruman is no longer in play') },
   // sh-char-22 Wormtongue — the printed card carries its own discard clause on top
   // of the play condition: "You must discard this card from the table as soon as
   // Rohan is activated, or if Saruman is eliminated." (The TTS-mod transcription in
   // assets/event-cards.json omits the clause; player report + card scans confirm
   // it.) Holds only while Saruman is in play AND Rohan is still passive.
-  { side: 'shadow', id: 'sh-char-22', holds: (s) => sarumanInPlay(s) && !s.nations.rohan.active },
+  {
+    side: 'shadow', id: 'sh-char-22',
+    discardIf: (s) => (!sarumanInPlay(s) ? 'Saruman is no longer in play'
+      : s.nations.rohan.active ? 'Rohan is activated' : null),
+  },
 ];
 /** Discard any on-table card whose play condition ceased (rulebook p.22). The army/
  *  nation lookups are passed in to keep this module import-cycle-free. */
@@ -168,14 +183,16 @@ export function pruneTableCards(
   s: GameState,
   charWithArmy: (s: GameState, char: string, side: 'fp' | 'shadow') => RegionId | null,
   nationSideOf: (r: RegionId) => 'fp' | 'shadow' | null,
-  logDiscard: (s: GameState, side: 'fp' | 'shadow', id: string) => void,
+  logDiscard: (s: GameState, side: 'fp' | 'shadow', id: string, reason: string) => void,
 ): void {
   for (const c of TABLE_CONDITIONS) {
     const t = s.cards[c.side].table;
     const i = t.indexOf(c.id);
-    if (i >= 0 && !c.holds(s, charWithArmy, nationSideOf)) {
+    if (i < 0) continue;
+    const why = c.discardIf(s, charWithArmy, nationSideOf);
+    if (why) {
       t.splice(i, 1);
-      logDiscard(s, c.side, c.id);
+      logDiscard(s, c.side, c.id, why);
     }
   }
 }

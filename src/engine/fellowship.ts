@@ -296,6 +296,18 @@ export function declareFellowship(state: GameState, target: RegionId): void {
     }
   }
   state.flags.fellowshipDeclaredThisTurn = true;
+  // The Last Battle (fp-str-01), printed discard clause: "You must discard this card
+  // from the table as soon as the Fellowship is declared or revealed." The REVEAL half
+  // is a state, so it rides in pruneTableCards (persistent.ts); the DECLARE half is a
+  // momentary trigger — a declaration leaves the Fellowship Hidden — so it fires here,
+  // like Worn with Sorrow and Toil above (player report 29253u).
+  const ft = state.cards.fp.table;
+  const fi = ft.indexOf('fp-str-01');
+  if (fi >= 0) {
+    ft.splice(fi, 1);
+    state.cards.fp.discard.strategy.push('fp-str-01');
+    log(state, null, 'event', 'The Last Battle is discarded — the Fellowship declared its position');
+  }
   log(state, null, 'fellowship', `Fellowship declared at ${fs.location} (corruption ${fs.corruption})`);
 }
 
