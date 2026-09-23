@@ -234,6 +234,12 @@ export interface PendingCombat {
   /** The dice faces rolled THIS round (for the battle popup; target = to-hit). */
   atkRoll?: { dice: number[]; rerolls: number[]; target: number };
   defRoll?: { dice: number[]; rerolls: number[]; target: number };
+  /** Which round `atkRoll`/`defRoll` belong to (0-based, like `round`). They are NOT
+   *  cleared when a new round starts — the battle modal keeps showing the last dice
+   *  thrown, which is the only way a side with no prompts of its own ever gets to see
+   *  them — so the label has to name the round they came from, not the round the
+   *  battle has since moved on to (player report 1u171v5e2e3m0n1k). */
+  rollRound?: number;
   /** Unit counts at battle start, to report each side's losses when it ends. */
   atkUnits0?: number;
   defUnits0?: number;

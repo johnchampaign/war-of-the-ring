@@ -7,6 +7,7 @@
 // and that the finished battle still carries its own copy for the outcome popup.
 import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
+import { combatStep } from '../src/engine/combat.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -57,5 +58,28 @@ if (atk) {
     check('and whether the region changed hands', 'captured' in b);
   }
 }
+console.log('\n=== the dice carry the round they were thrown in (report 1u171v5e) ===');
+{
+  // A siege defender gets no retreat, cease-attack or casualty prompt, so the FIRST
+  // time it sees a round's dice is the NEXT round's Combat-card prompt — and the modal
+  // labelled them with the round the battle had moved on to. The roll now stamps its
+  // own round, so the label can say which one it belongs to.
+  const t = startGame(createGame({ seed: 77 }));
+  for (const r of Object.values(t.regions)) { r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = []; delete r.siegeBox; r.besieged = false; }
+  t.regions['dale'].units = { sauron: { regular: 5, elite: 0 } };
+  t.regions['erebor'].units = { dwarves: { regular: 5, elite: 0 } };
+  t.pendingCombat = { attacker: 'shadow', defender: 'fp', from: 'dale', to: 'erebor', round: 0,
+    fortified: false, step: 'beginRound', attackerCard: null, defenderCard: null, atkHits: 0, defHits: 0 };
+  combatStep(t);
+  check('the first roll is stamped round 0', t.pendingCombat?.rollRound === 0, `rollRound=${t.pendingCombat?.rollRound}`);
+  const firstDice = JSON.stringify(t.pendingCombat?.atkRoll?.dice);
+  // Walk into round 2 without re-rolling: the stored dice must still be round 1's,
+  // and must still say so even though pc.round has advanced.
+  t.pendingCombat.round = 1; t.pendingCombat.step = 'attackerCard';
+  check('the stored dice are still the previous round\'s', JSON.stringify(t.pendingCombat.atkRoll?.dice) === firstDice);
+  check('…and they are NOT labelled with the new round', t.pendingCombat.rollRound !== t.pendingCombat.round,
+    `rollRound=${t.pendingCombat.rollRound}, round=${t.pendingCombat.round}`);
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

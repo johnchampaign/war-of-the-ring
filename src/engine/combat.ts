@@ -1458,7 +1458,7 @@ export function combatStep(state: GameState): void {
         const dRoll: CombatRoll = { dice: [], rerolls: [], target: 5 };
         const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit, dRoll,
           pc.boxed === pc.defender ? state.regions[pc.to]!.siegeBox : undefined, atkForce(state, pc));
-        pc.atkRoll = aRoll; pc.defRoll = dRoll;
+        pc.atkRoll = aRoll; pc.defRoll = dRoll; pc.rollRound = pc.round;
         // Hit cancellation: Shield-wall. Shield-wall only fires "if your opponent
         // scored two or more hits", so a cancel is gated on the ENEMY's rolled hits
         // clearing cancelHitsMinEnemyHits. (Heroic Death is the owner's CHOICE — whom

@@ -207,8 +207,13 @@ function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']
           2p2w0k6c5m2p6z4n asked for them to trade places, and they were right. */}
       {(pc.atkRoll || pc.defRoll) ? (
         <div style={{ background: '#15110b', border: '1px solid #2a2418', borderRadius: 8, padding: '6px 9px', marginTop: 6 }}>
+          {/* Name the round the DICE came from. A side that is never prompted mid-round
+              (a siege defender, who gets no retreat, cease-attack or casualty choice)
+              first sees the dice when the NEXT round's card prompt opens — and they
+              were labelled with that next round, so round 1's roll read "Round 2"
+              (player report 1u171v5e2e3m0n1k). */}
           <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
-            Round {pc.round + 1} roll
+            Round {(pc.rollRound ?? pc.round) + 1} roll{(pc.rollRound ?? pc.round) < pc.round ? ' (previous round)' : ''}
           </div>
           <RollRow label="Attacker" roll={pc.atkRoll} color="#e6857f" />
           <RollRow label="Defender" roll={pc.defRoll} color="#7fb6e6" />
