@@ -2049,26 +2049,42 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
  *  then runs `after` (reveal / Hunt if a Nazgûl ends with the Fellowship). Interactive:
  *  pick a Nazgûl group (button), board-click its destination, repeat, or stop. Each
  *  Nazgûl flies at most once (`unmovedNazgul`). */
+/** Is there a Nazgûl FIGURE on the map at all — counting the Witch-king, who is one
+ *  (p.25)? The "move any or all of the Nazgûl" cards used to look for plain Nazgûl
+ *  only, so a board where the Witch-king was the last Ringwraith standing refused the
+ *  card outright. */
+const nazgulFigureOnMap = (state: GameState): boolean =>
+  Object.values(state.regions).some((r) => r.nazgul > 0) || !!charRegion(state, 'witch-king');
 function moveNazgulCard(after: (state: GameState) => void): EventHandler {
   return {
-    canPlay: (state) => Object.values(state.regions).some((r) => r.nazgul > 0),
+    canPlay: (state) => nazgulFigureOnMap(state),
     repeat: 12,
     optionalFromStart: true,                   // "any or ALL" — moving zero is allowed
     targets(state, _side, applied = []) {
       const last = applied[applied.length - 1];
-      if (last && last.from && !last.region) {
+      if (last && isNazgulFigure(last.companion) && last.from && !last.region) {
         // destination step for the Nazgûl group at last.from
         // One option PER COUNT: a stack of three offers "move 1", "move 2", "move 3".
         // The action-die path has always asked how many (moveCharacter takes a count);
         // the CARD path took the whole stack, so the same figures obeyed two different
         // rules depending on how you moved them (reported independently by two players).
-        return nazgulFlyTargets(state, 'nazgul', last.from, applied);
+        return nazgulFlyTargets(state, last.companion!, last.from, applied);
       }
       // pick step: regions holding Nazgûl that have not flown yet on this card
-      return Object.keys(state.regions).filter((r) => unmovedNazgul(state, applied, r) > 0).map((from) => ({ companion: 'nazgul', from }));
+      const out: EventTarget[] = Object.keys(state.regions)
+        .filter((r) => unmovedNazgul(state, applied, r) > 0)
+        .map((from) => ({ companion: 'nazgul', from }));
+      // "Move any or all of the NAZGÛL" — and the Witch-king is one (p.25), which this
+      // card's own reveal clause already assumes when it checks his region for the
+      // Fellowship. He was the one figure the card could not move, while the other
+      // Nazgûl cards (The Black Captain Commands, The Ringwraiths Are Abroad) have
+      // always flown him (player report 5vw7t8btxx0r2dq7).
+      const wk = charRegion(state, 'witch-king');
+      if (wk && !applied.some((a) => a.companion === 'witch-king')) out.push({ companion: 'witch-king', from: wk as RegionId });
+      return out;
     },
     applyTarget(state, _side, t) {
-      if (t.region && t.from) moveCharacter(state, 'shadow', 'nazgul', t.from, t.region, t.count);
+      if (t.region && t.from && isNazgulFigure(t.companion)) moveCharacter(state, 'shadow', t.companion!, t.from, t.region, t.count);
       // pick step (no region): records the source group; no mutation
     },
     // The effect runs ONCE, after all moves (a Nazgûl already on the Fellowship still
@@ -2226,10 +2242,6 @@ register('fp-char-17', separateViaCard({
 // --- Nazgûl converge on the Fellowship. "Move any or all of the Nazgûl" is
 //     auto-resolved to the decisive move — one Nazgûl flown to the Fellowship's
 //     region — since that is the play that arms the card's secondary effect. ------
-const anyNazgul = (state: GameState): string | null => {
-  for (const id of Object.keys(state.regions)) if (state.regions[id]!.nazgul > 0) return id;
-  return null;
-};
 // Both Nazgûl cards print ONE condition — "Play if the Fellowship is on step 1 or
 // higher on the Fellowship Track" — and nothing else. The reveal/Hunt half is an
 // EFFECT, not a requirement: "it can happen that the effects of an Event card cannot
@@ -2238,7 +2250,7 @@ const anyNazgul = (state: GameState): string | null => {
 // there is a Nazgûl to move at all. (Report 3i1v1v: the card was additionally gated on
 // the Nazgûl being able to REACH the Fellowship, which blocked the very common play of
 // using it purely to reposition the Nazgûl.)
-const nazgulOnMap = (state: GameState): boolean => anyNazgul(state) !== null;
+const nazgulOnMap = (state: GameState): boolean => nazgulFigureOnMap(state); // the Witch-king counts (p.25)
 // Nazgûl Search — move any/all Nazgûl; if one is then with the Fellowship, reveal it.
 register('sh-char-09', {
   ...moveNazgulCard((state) => {

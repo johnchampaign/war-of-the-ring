@@ -59,5 +59,29 @@ for (const card of ['sh-char-24', 'sh-char-23']) {
   check('the Witch-king still may', p.some((t) => t.companion === 'witch-king'));
 }
 
+console.log('\n=== Nazgûl Search / The Nazgûl Strike! fly the Witch-king too (report 5vw7t8btxx0r2dq7) ===');
+for (const id of ['sh-char-09', 'sh-char-08b']) {
+  const s = board();
+  s.fellowship.progress = 2;
+  const h = getHandler(id);
+  const applied = [];
+  const p = picks(h.targets(s, 'shadow', applied));
+  check(`${id} offers the Witch-king`, p.some((t) => t.companion === 'witch-king' && t.from === 'moria'), JSON.stringify(p));
+  step(s, h, applied, { companion: 'witch-king', from: 'moria' });
+  const dests = h.targets(s, 'shadow', applied).filter((t) => t.region);
+  check(`${id} then offers him somewhere to fly`, dests.length > 0);
+  step(s, h, applied, dests[0]);
+  check(`${id} actually moves him`, s.regions[dests[0].region].characters.includes('witch-king')
+    && !s.regions['moria'].characters.includes('witch-king'), `now in ${dests[0].region}`);
+  check(`${id} will not fly him twice`, !picks(h.targets(s, 'shadow', applied)).some((t) => t.companion === 'witch-king'));
+}
+{
+  // ...and the card is playable when the Witch-king is the LAST Ringwraith on the map.
+  const s = board();
+  s.fellowship.progress = 2;
+  for (const r of Object.values(s.regions)) r.nazgul = 0;
+  check('Nazgûl Search is playable with only the Witch-king out', getHandler('sh-char-09').canPlay(s, 'shadow'));
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);
