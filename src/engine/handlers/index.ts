@@ -1943,8 +1943,13 @@ register('sh-str-03', { // Denethor's Folly — eliminate an FP Leader in Minas 
   // Shadow Army" — same missing gate as The Last Battle / Palantír of Orthanc.
   canPlay: (state) => !!state.regions['minas-tirith']?.besieged,
   apply(state) {
+    // The card only plays while Minas Tirith is besieged, and under siege the Free
+    // Peoples' figures are in the siege box — the open region holds the besieger.
+    // Reading `mt.leaders` alone never found a Leader (player reports xycytl2o,
+    // 9vhwbo79: "Denethor's Folly did not kill a Leader in Minas Tirith").
     const mt = state.regions['minas-tirith']!;
-    if (mt.leaders > 0) { mt.leaders -= 1; log(state, null, 'event', "Denethor's Folly: a Free Peoples Leader in Minas Tirith is eliminated"); }
+    const holder = mt.siegeBox ?? mt;
+    if (holder.leaders > 0) { holder.leaders -= 1; log(state, null, 'event', "Denethor's Folly: a Free Peoples Leader in Minas Tirith is eliminated"); }
   },
 });
 

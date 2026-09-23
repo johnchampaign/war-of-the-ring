@@ -116,5 +116,19 @@ const units = (f) => (f ? forceUnitCount(f) : 0);
   check('two Regulars reached Minas Tirith', (s.regions['minas-tirith'].units.rohan?.regular ?? 0) === 2);
 }
 
+{
+  console.log("\n=== Denethor's Folly: the Leader it eliminates is in the siege box (reports xycytl2o, 9vhwbo79) ===");
+  const s = fresh();
+  besiege(s, 'minas-tirith',
+    { units: { sauron: { regular: 5, elite: 1 } }, nazgul: 1 },
+    { units: { gondor: { regular: 2, elite: 1 } }, leaders: 2 });
+  check('the card is playable', canPlayCard(s, 'sh-str-03', 'shadow'));
+  getHandler('sh-str-03').apply(s, 'shadow');
+  check('one boxed Leader is eliminated', s.regions['minas-tirith'].siegeBox.leaders === 1,
+    `box leaders=${s.regions['minas-tirith'].siegeBox.leaders}`);
+  check('the garrison units are untouched', units(s.regions['minas-tirith'].siegeBox) === 3);
+  check('logged', s.log.some((e) => e.msg.includes("Denethor's Folly: a Free Peoples Leader")));
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);
