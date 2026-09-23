@@ -103,5 +103,21 @@ console.log('\n=== 4. the hints themselves are untouched inside the window ===')
   check('a non-adjacent move still explains itself', nonAdj === 'Those regions are not adjacent.', String(nonAdj));
 }
 
+console.log('\n=== 5. a MOVE-ONLY window does not blame the Political Track (report 4g082f04) ===');
+{
+  // Sauron is not At War and an FP Army holds the destination. Asked as a plain click
+  // the At-War sentence is the right answer; asked during an Army die's SECOND move —
+  // which can never become an attack — it answers a question nobody asked.
+  const s = startGame(createGame({ seed: 4 }));
+  s.regions['gorgoroth'].units = { sauron: { regular: 3, elite: 0 } };
+  s.regions['morannon'].units = { gondor: { regular: 1, elite: 0 } };
+  s.regions['morannon'].characters = [];
+  const attackWindow = moveBlockReason(s, 'gorgoroth', 'morannon', 'shadow');
+  check('a plain click still explains the Political Track', !!attackWindow && /not At War/.test(attackWindow), String(attackWindow));
+  const moveOnly = moveBlockReason(s, 'gorgoroth', 'morannon', 'shadow', { moveOnly: true });
+  check('a move-only window says the move is a move', !!moveOnly && !/At War/.test(moveOnly), String(moveOnly));
+  check('…and still says why the click failed', !!moveOnly && /Enemy units there/.test(moveOnly), String(moveOnly));
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

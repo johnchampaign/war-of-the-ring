@@ -1101,7 +1101,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         if (!ok2) {
           const reason = action.move
             ? splitBlockReason(state, action.from!, action.to!, actor, action.move, false)
-            : moveBlockReason(state, action.from!, action.to!, actor);
+            : moveBlockReason(state, action.from!, action.to!, actor, { moveOnly: true });
           throw new Error(reason ?? 'That second move is not legal (check the stacking limit and the moving nation\'s political status).');
         }
         afterMove(state, actor, action.to!, { kind: 'pass' }); // the 2nd move may also over-stack

@@ -614,7 +614,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (basicMoveWindow) {
       // Adjacent-but-illegal (e.g. a refused merge): explain why instead of a silent no-op.
       if (selected && id !== selected && g.view && REGIONS[selected]?.adjacency.includes(id)) {
-        const reason = moveBlockReason(g.view, selected, id, g.you as Side);
+        // An Army die's SECOND move and a card-granted move are moves only — they can
+        // never turn into an attack, so the hint must not blame the Political Track
+        // (player report 4g082f046g241z5i).
+        const moveOnly = isArmyMove2 || (isCardMove && !cardMoveActs.some((a) => a.mode === 'attack'));
+        const reason = moveBlockReason(g.view, selected, id, g.you as Side, { moveOnly });
         if (reason) setBlockMsg(reason);
       } else if (g.view && g.you && !musterTargets.has(id)) {
         // Clicked one of your own Settlements and it offered nothing at all: say why it
@@ -635,7 +639,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || isCardRecruit || isCardMove || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;

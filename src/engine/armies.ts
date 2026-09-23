@@ -490,7 +490,13 @@ export function canMoveSomeArmy(state: GameState, from: RegionId, to: RegionId, 
   return partialMoveBlockReason(state, from, to, side) === null;
 }
 
-export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side): string | null {
+/** `moveOnly` marks a window where ATTACKING is not on offer at all — an Army die's
+ *  second move, or an Event card that grants a plain move. There the At-War explanation
+ *  below answers a question the player never asked: it implies the Political Track is
+ *  what stands between them and the click, when the immediate reason is that this
+ *  particular action cannot become an attack whatever the Track says (player report
+ *  4g082f046g241z5i). */
+export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side, opts?: { moveOnly?: boolean }): string | null {
   if (!REGIONS[from]!.adjacency.includes(to)) return 'Those regions are not adjacent.';
   if (armySide(state, from) !== side) return 'You have no Army to move there.';
   if (side === 'shadow' && shadowBarredFromRegion(state, to)) return 'A card effect bars the Shadow from that region.';
@@ -505,6 +511,7 @@ export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, 
   // for a border it could not cross.
   const occ = armySide(state, to);
   if (occ !== null && occ !== side) {
+    if (opts?.moveOnly) return 'Enemy units there — and this is a move, not an attack: an Army can never move into an occupied region.';
     const own = (Object.keys(state.regions[from]!.units) as Nation[])
       .filter((n) => sideOfNation(n) === side && (state.regions[from]!.units[n]!.regular + state.regions[from]!.units[n]!.elite) > 0);
     const sleeping = own.filter((n) => !isAtWar(state, n));

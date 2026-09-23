@@ -1428,10 +1428,21 @@ turn the FP reached 4 and still lost). Regression-tested in
   destination the card reaches by fiat *(player report 1u1f45154m472g67)*. Such targets
   now carry `direct: true`: `moveAllUnits` skips the route, and the board hands them back
   to the plain click-the-destination flow instead of asking for a trace.
-  **Residual:** *Paths of the Woses* allows an origin "including a Stronghold under
-  siege", which the enumerator still cannot offer — a boxed garrison marching out needs
-  the siege to end and the Stronghold to change hands behind it, which belongs with the
-  siege bookkeeping in `combat.ts`. Open-field Armies only for now.
+  **Residual closed (2026-09-23).** *Paths of the Woses* allows an origin "including a
+  Stronghold under siege", and the enumerator now offers it: `wosesMoves` reads the
+  garrison through `armyForceOf` (the siege box when the FP is the besieged side), and
+  every card mover takes its source from `figureForce` rather than the region, so the
+  figures that march out are the boxed ones. `liftSiegeIfAbandoned` ends the siege
+  behind them and the handler then calls `captureIfEnemySettlement` for the besieger —
+  a Stronghold whose whole garrison walks away falls to the Army already standing in
+  the region. A **partial** march leaves units in the box, so the siege (and the
+  Settlement's ownership) stands. The same `figureForce` seam fixes `charRegion`, which
+  searched only the open field and therefore declared every besieged Companion "not in
+  play" for card preconditions — *House of the Stewards* went dead the moment Boromir
+  was shut inside Minas Tirith *(player reports 36323l0a702k6m17, 6x6f3v1h1y5r3k4u)*.
+  Event-card recruits into a besieged Stronghold go to the garrison under its 5-unit cap
+  (p.28, p.31), measured through `eventRecruitTarget`.
+  `scripts/probe-besieged-card-clauses.mjs`.
 - **Dead Men of Dunharrow (fp-char-22) is three choices, as printed.** "Play if
   Strider/Aragorn is in a Rohan region (including a Stronghold under siege). Move
   Strider/Aragorn (and any number of Companions in the same region) to Erech, Lamedon or

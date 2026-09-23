@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection, type Force } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -59,9 +59,16 @@ const SAURON_STRONGHOLDS = Object.keys(REGIONS).filter((id) => REGIONS[id]!.nati
 const MINIONS = ['witch-king', 'saruman', 'mouth-of-sauron'];
 const allAtWar = (state: GameState, nations: Nation[]): boolean => nations.every((n) => state.nations[n].step === 0);
 const isFpNation = (n: string): boolean => (FP_NATIONS as string[]).includes(n);
-/** The region holding character `id` (separated/in play), or null. */
+/** The region holding character `id` (separated/in play), or null. A figure inside a
+ *  besieged Stronghold IS in that region — the siege box is a place within it, not a
+ *  region of its own — so the box is searched too. Missing it made every card that
+ *  names a Character unplayable the moment he was besieged: Boromir shut inside Minas
+ *  Tirith switched House of the Stewards off (player report 6x6f3v1h1y5r3k4u). */
 function charRegion(state: GameState, id: string): string | null {
-  for (const r of Object.keys(state.regions)) if (state.regions[r]!.characters.includes(id)) return r;
+  for (const r of Object.keys(state.regions)) {
+    const reg = state.regions[r]!;
+    if (reg.characters.includes(id) || reg.siegeBox?.characters.includes(id)) return r;
+  }
   return null;
 }
 /** Draw one card from a deck into `side`'s hand (hand max 6). */
@@ -88,7 +95,7 @@ export type CardMoveSel = { units?: Partial<Record<Nation, { regular?: number; e
  *  Shared by the validator and the mover so the picker's answer and the engine's are
  *  the same arithmetic. */
 function clampCardSel(state: GameState, from: string, side: Side, sel: CardMoveSel): { take: Array<[Nation, number, number]>; moved: number; chars: string[] } {
-  const src = state.regions[from]!;
+  const src = figureForce(state, from as RegionId, side); // the boxed garrison when `side` is the one under siege here
   const take: Array<[Nation, number, number]> = [];
   let moved = 0;
   for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
@@ -122,7 +129,7 @@ export function cardMoveEscortReason(card: string | undefined, sel: CardMoveSel)
  *  Exported so the picker can say it BEFORE the click, exactly as it does for a
  *  die-driven move (splitBlockReason). */
 export function cardSplitBlockReason(state: GameState, from: string, side: Side, sel: CardMoveSel): string | null {
-  const src = state.regions[from]!;
+  const src = figureForce(state, from as RegionId, side);
   const { take, moved } = clampCardSel(state, from, side, sel);
   if (moved < 1) return 'At least one Army unit must move.';
   if (side === 'fp') {
@@ -148,7 +155,11 @@ export function cardSplitBlockReason(state: GameState, from: string, side: Side,
  *  rules — an impossible selection is refused, not quietly widened to the whole Army
  *  (cardSplitBlockReason). */
 function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel, path?: readonly RegionId[], maxSteps?: number, direct = false): void {
-  const src = state.regions[from]!, dst = state.regions[to]!;
+  // The figures that leave are the ones THIS side has in `from` — the boxed garrison
+  // when it is the one under siege there, the open field otherwise. Paths of the Woses
+  // marches out of "a Stronghold under siege" by name, and reading the region instead
+  // of the box found no Army at all (player report 36323l0a702k6m17).
+  const src = figureForce(state, from as RegionId, side), dst = state.regions[to]!;
   // THE ROUTE MATTERS. A card move "through more than one region" enters each region
   // on the way, and entering an enemy Settlement free of enemy units captures it —
   // which wakes its Nation (p.27, p.32). A route through Dale takes Dale and rouses
@@ -226,7 +237,7 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
  *  regions): own-side Nations only, own Leader pool only, own Characters only
  *  (never Saruman), and FP Leaders are never stranded unitless. */
 function moveSelectedUnits(state: GameState, from: string, to: string, side: Side, sel: CardMoveSel): void {
-  const src = state.regions[from]!, dst = state.regions[to]!;
+  const src = figureForce(state, from as RegionId, side), dst = state.regions[to]!;
   // The split rules are a refusal, not a silent correction: an empty selection used to
   // move the whole Army and a stranded-Leader selection used to drag the Leaders along
   // anyway, both without a word to the player (report 2w0k3j4k1q026q3r). The picker
@@ -1161,16 +1172,22 @@ const wosesDestinations = (state: GameState): string[] => {
   const dests = shadowHoldsMT ? (REGIONS['minas-tirith']!.adjacency as string[]) : ['minas-tirith'];
   return dests.filter((to) => freeForMovement(state, to, 'fp'));
 };
-// RESIDUAL: the card allows an origin "including a Stronghold under siege", which this
-// enumerator cannot yet offer — a boxed garrison marching out needs the siege to end and
-// the Stronghold to change hands behind it, which belongs with the siege bookkeeping in
-// combat, not here. Open-field Armies only for now; recorded in docs/rules-spec.md.
+// The origin may be "a Stronghold under siege" (printed on the card): the boxed Rohan
+// garrison marches out, the siege ends behind it and the besieger takes the empty
+// Stronghold. We used to offer open-field Armies only, so a garrison shut inside Helm's
+// Deep — the exact position the clause is written for — had no move at all (player
+// report 36323l0a702k6m17).
+const wosesForce = (state: GameState, from: RegionId): Force | null => {
+  const f = armyForceOf(state, from, 'fp');
+  return f && forceUnitCount(f) > 0 ? f : null;
+};
 const wosesMoves = (state: GameState): EventTarget[] => {
   const out: EventTarget[] = [];
   const dests = wosesDestinations(state);
   for (const from of ROHAN) {
-    if (armySide(state, from) !== 'fp') continue;
-    const fromCount = unitCount(state, from);
+    const force = wosesForce(state, from as RegionId);
+    if (!force) continue;
+    const fromCount = forceUnitCount(force);
     for (const to of dests) {
       // `direct: true` — the card says "DIRECTLY to Minas Tirith": no route, nothing
       // entered on the way, and no path for the player to trace on the map.
@@ -1188,8 +1205,14 @@ register('fp-str-11', {
     // Night ("the Army containing the Companion(s)"), and was wrongly copied onto this
     // card, refusing perfectly legal splits with the OTHER card's name on the message
     // (player report 1b1c5q54732v1a22).
+    const wasBesieged = !!state.regions[t.from!]!.besieged;
     moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, undefined, true); // "DIRECTLY to Minas Tirith"
-    log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); },
+    log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`);
+    // A garrison that marches out leaves the Stronghold undefended with the besieging
+    // Army already standing in the region, so it falls to the besieger. A split that
+    // leaves units behind keeps the siege on: captureIfEnemySettlement checks for a
+    // live garrison and does nothing then.
+    if (wasBesieged) captureIfEnemySettlement(state, t.from! as RegionId, 'shadow'); },
 });
 // Through a Day and a Night: move an FP Army containing a Companion up to 2 regions.
 const DAY_NIGHT_RANGE = 2;
@@ -1276,7 +1299,12 @@ register('fp-char-23', {
   canPlay: (state) => { const r = charRegion(state, 'boromir'); return !!r && REGIONS[r]!.nation === 'gondor' && state.reinforcements.gondor.regular + state.reinforcements.gondor.elite > 0; },
   targets(state) {
     const r = charRegion(state, 'boromir'); if (!r) return [];
-    const pool = state.reinforcements.gondor; const room = STACKING_LIMIT - unitCount(state, r);
+    // Room is measured where the unit would actually land: the boxed garrison (5) when
+    // Boromir is shut inside a besieged Stronghold, the open field (10) otherwise —
+    // the same seam placeUnits recruits through (p.28 opens Event-card recruiting to
+    // a besieged Stronghold).
+    const dest = eventRecruitTarget(state, r as RegionId, 'fp'); if (!dest) return [];
+    const pool = state.reinforcements.gondor; const room = dest.limit - forceUnitCount(dest.force);
     const o: EventTarget[] = [];
     if (room > 0 && pool.regular > 0) o.push({ nation: 'gondor', region: r, figure: 'regular', slot: 0 });
     if (room > 0 && pool.elite > 0) o.push({ nation: 'gondor', region: r, figure: 'elite', slot: 0 });
