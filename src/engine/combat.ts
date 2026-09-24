@@ -366,7 +366,15 @@ function meaningfulForceCasualty(state: GameState, f: Force, side: Side, hits: n
  *  downgrading Elites; elitesFirst downgrades Elites first (preserving unit
  *  count). Shadow casualties recycle to reinforcements; FP casualties are gone. */
 export function applyCasualties(state: GameState, id: RegionId, side: Side, hits: number, plan: 'regularsFirst' | 'elitesFirst'): void {
-  applyForceCasualties(state, state.regions[id]!, side, hits, plan);
+  // The target may be a garrison boxed inside a besieged Stronghold — it is still an
+  // Army in that region (p.31) — so hit `side`'s own Force, never the open field the
+  // enemy besieger holds. Every caller is an Event card naming an Army by region
+  // (The Spirit of Mordor could not see a besieged Army at all — report 526j5e3b).
+  const f = armyForceOf(state, id, side) ?? state.regions[id]!;
+  applyForceCasualties(state, f, side, hits, plan);
+  // A garrison wiped out this way leaves its Stronghold to the besieger (p.32), the
+  // same ending as a card that destroys a boxed garrison through the prompt path.
+  if (f !== state.regions[id] && forceUnitCount(f) === 0) runCasualtyThen(state, { kind: 'siegeFall', region: id, besieger: side === 'fp' ? 'shadow' : 'fp', spare: [] });
 }
 /** Apply casualties to a Force (a region or a siege box). */
 function applyForceCasualties(state: GameState, f: Force, side: Side, hits: number, plan: 'regularsFirst' | 'elitesFirst'): void {
@@ -529,6 +537,18 @@ function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
       }
     }
   }
+}
+
+/** A besieged garrison has just lost its last unit to something that is not a battle
+ *  (a card's "eliminate one unit"): the Stronghold falls to the besieger (p.32) and
+ *  the Characters inside, untouched, find themselves in the open region — the same
+ *  ending `siegeFall` gives the card-casualty paths. No-op while a unit remains. */
+export function garrisonFalls(state: GameState, region: RegionId, besieger: Side): void {
+  const box = state.regions[region]?.siegeBox;
+  if (!box || forceUnitCount(box) > 0) return;
+  const spare = [...box.characters];
+  box.characters = [];
+  runCasualtyThen(state, { kind: 'siegeFall', region, besieger, spare });
 }
 
 /** Apply event-inflicted `hits` to a region's Army, prompting the owner for the

@@ -12,9 +12,9 @@ import { extraHunt } from '../engine/hunt';
 import { log, logCardDraw } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, unitCount, STACKING_LIMIT,
-  recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders,
+  recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders, figureForce, forceUnitCount,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties } from '../engine/combat';
+import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
@@ -278,7 +278,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const data = state.pendingChoice!.data as { nation: Nation };
         const acts: WotrAction[] = [];
         for (const id of Object.keys(state.regions)) {
-          const r = state.regions[id]!;
+          // The Nation's units may be garrisoned in a besieged Stronghold's box.
+          const r = figureForce(state, id, 'fp');
           const u = r.units[data.nation];
           if (u && u.regular > 0) acts.push({ kind: 'stormcrowLoss', region: id, nation: data.nation, figure: 'regular' });
           if (u && u.elite > 0) acts.push({ kind: 'stormcrowLoss', region: id, nation: data.nation, figure: 'elite' });
@@ -836,11 +837,15 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'lureChoice', actor); resolveLureChoice(state, action.mode); break; // turn already passed
     case 'stormcrowLoss': {
       requireChoice(state, 'stormcrowLoss', actor); // FP eliminates one Leader or unit of the targeted Nation
+      const f = figureForce(state, action.region, 'fp'); // open field, or a besieged garrison's box
       if (action.figure === 'leader') {
-        if (state.regions[action.region]!.leaders > 0) state.regions[action.region]!.leaders -= 1; // FP Leaders are permanently removed (not to reinforcements)
+        if (f.leaders > 0) f.leaders -= 1; // FP Leaders are permanently removed (not to reinforcements)
       } else {
-        const u = state.regions[action.region]!.units[action.nation];
+        const u = f.units[action.nation];
         if (u && u[action.figure] > 0) { u[action.figure] -= 1; state.reinforcements[action.nation][action.figure] += 1; }
+        // A garrison's last unit gone: its Leaders cannot stand alone (p.26), and the
+        // Stronghold falls to the besieger (p.32) — the same ending as any card loss.
+        if (f !== state.regions[action.region] && forceUnitCount(f) === 0) { f.leaders = 0; garrisonFalls(state, action.region, 'shadow'); }
       }
       log(state, null, 'event', `Stormcrow: Free Peoples lose a ${action.nation} ${action.figure === 'leader' ? 'Leader' : action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
       // The turn already passed when the Event resolved; a Palantír draw held back

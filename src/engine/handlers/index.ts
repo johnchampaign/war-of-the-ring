@@ -1281,11 +1281,17 @@ register('sh-str-23', {
 register('sh-str-12', {
   canPlay: (state) => state.characters.entered.includes('witch-king'),
   apply(state) {
-    for (const id of Object.keys(state.regions)) {
-      const i = state.regions[id]!.characters.indexOf('witch-king');
-      if (i >= 0) { state.regions[id]!.characters.splice(i, 1); break; }
+    // Take him from wherever he stands — a besieged Shadow Stronghold keeps him in its
+    // siege box, and searching the open field alone left him there while a second
+    // Witch-king appeared in Angmar (player report 3y2y1w091o1c3o57).
+    const from = charRegion(state, 'witch-king');
+    if (from) {
+      const f = figureForce(state, from, 'shadow');
+      const i = f.characters.indexOf('witch-king');
+      if (i >= 0) f.characters.splice(i, 1);
     }
-    state.regions['angmar']!.characters.push('witch-king');
+    figureForce(state, 'angmar', 'shadow').characters.push('witch-king');
+    if (state.characters.inPlay['witch-king']) state.characters.inPlay['witch-king'] = 'angmar';
     placeUnits(state, 'sauron', 'angmar', 2, 1);
     log(state, null, 'event', 'Return of the Witch-king: to Angmar + muster');
   },
@@ -1528,7 +1534,10 @@ register('fp-char-18', {
     // Surviving Nazgûl must move to any one unconquered Sauron Stronghold (card text).
     const survivors = shf.nazgul;
     const dest = SAURON_STRONGHOLDS.find((r) => r !== sh && settlementController(state, r) === 'shadow');
-    if (survivors > 0 && dest) { state.regions[dest]!.nazgul += survivors; shf.nazgul = 0; }
+    // A Sauron Stronghold the Free Peoples besiege is still unconquered, and the
+    // Nazgûl join its garrison in the siege box, not the besiegers in the field
+    // (player report 485p4m2z27363p1o) — `figureForce` is the one seam for that.
+    if (survivors > 0 && dest) { figureForce(state, dest, 'shadow').nazgul += survivors; shf.nazgul = 0; }
     log(state, null, 'event', `The Eagles are Coming!: eliminated ${kills} Nazgûl at ${sh}${survivors > 0 && dest ? `; ${survivors} fled to ${dest}` : ''}`);
   },
 });
@@ -1606,7 +1615,7 @@ register('sh-str-06', {
   },
   finalize(state, _side, applied) {
     const n = applied[0]?.nation; if (!n) return;
-    const hasUnit = Object.values(state.regions).some((r) => { const u = r.units[n]; return !!u && (u.regular > 0 || u.elite > 0); });
+    const hasUnit = Object.keys(state.regions).some((id) => { const u = figureForce(state, id, 'fp').units[n]; return !!u && (u.regular > 0 || u.elite > 0); });
     // A Palantír of Orthanc draw already pending waits until the loss is chosen, rather
     // than one choice overwriting the other.
     const thenBonusDraw = state.pendingChoice?.kind === 'bonusDraw';
@@ -1622,8 +1631,11 @@ function stormcrowNations(state: GameState): Nation[] {
   const out = new Set<Nation>();
   const fellow = inRegion(state.fellowship.location);
   if (fellow) out.add(fellow);
+  // A Companion shut inside a besieged Stronghold is still inside that Nation's
+  // borders (player report 1u162l3949361146), so the siege box counts too.
   for (const id of Object.keys(state.regions)) {
-    if (state.regions[id]!.characters.some((c) => COMPANION_SET.has(c))) { const n = inRegion(id); if (n) out.add(n); }
+    const r = state.regions[id]!;
+    if ([...r.characters, ...(r.siegeBox?.characters ?? [])].some((c) => COMPANION_SET.has(c))) { const n = inRegion(id); if (n) out.add(n); }
   }
   return [...out];
 }
@@ -1718,6 +1730,12 @@ register('sh-char-17', { onTable: true, apply() { /* Balrog of Moria — extra H
 // The Witch-king IS a Nazgûl for every Event-card reference to "Nazgûl" (rulebook
 // p.25) unless the card names him or the "Minion" title — so an Army containing
 // only the Witch-king still counts as Nazgûl-led (player report).
+/** The Shadow's Nazgûl in `region`, wherever they stand in it: the open field, or the
+ *  siege box of a besieged Shadow Stronghold — the same Force `moveCharacter` takes
+ *  them from. Reading `region.nazgul` alone hid every boxed Nazgûl from the "move any
+ *  or all of the Nazgûl" cards, though p.25 lets a Nazgûl fly out of a besieged
+ *  Stronghold (player reports 1e14645k, 286a6b6x, 372s1b69, 6w0e4122). */
+const shadowNazgulAt = (state: GameState, region: RegionId): number => figureForce(state, region, 'shadow').nazgul;
 const nazgulArmies = (state: GameState): string[] =>
   Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow'
     && (state.regions[id]!.nazgul > 0 || state.regions[id]!.characters.includes('witch-king'))
@@ -1739,7 +1757,7 @@ const isNazgulFigure = (c: string | undefined): boolean => c === 'nazgul' || c =
  *  Gundabad pinned the Nazgûl he left behind (player report 2m6j6f1z5w07390y). */
 function unmovedNazgul(state: GameState, applied: EventTarget[], region: RegionId): number {
   const arrived = applied.filter((a) => a.companion === 'nazgul' && a.region === region).reduce((n, a) => n + (a.count ?? 1), 0);
-  return state.regions[region]!.nazgul - arrived;
+  return shadowNazgulAt(state, region) - arrived;
 }
 function nazgulFlyTargets(state: GameState, companion: string, from: RegionId, applied: EventTarget[] = []): EventTarget[] {
   const dests = characterDestinations(state, 'shadow', companion, from).filter((r) => r !== from);
@@ -1793,7 +1811,7 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
   // (player report: couldn't fly a Nazgûl to the Fords of Isen).
   repeat: 24,
   optionalFromStart: true, // "any or ALL" + the army clause is optional
-  canPlay: (state) => Object.values(state.regions).some((r) => r.nazgul > 0) || !!charRegion(state, 'witch-king') || nazgulArmyActions(state, true).length > 0,
+  canPlay: (state) => nazgulFigureOnMap(state) || nazgulArmyActions(state, true).length > 0,
   targets(state, _side, applied = []) {
     const last = applied[applied.length - 1];
     // Destination step of a Nazgûl figure-move (fly anywhere it can land). The
@@ -2058,8 +2076,9 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
  *  (p.25)? The "move any or all of the Nazgûl" cards used to look for plain Nazgûl
  *  only, so a board where the Witch-king was the last Ringwraith standing refused the
  *  card outright. */
-const nazgulFigureOnMap = (state: GameState): boolean =>
-  Object.values(state.regions).some((r) => r.nazgul > 0) || !!charRegion(state, 'witch-king');
+function nazgulFigureOnMap(state: GameState): boolean {
+  return Object.keys(state.regions).some((id) => shadowNazgulAt(state, id) > 0) || !!charRegion(state, 'witch-king');
+}
 function moveNazgulCard(after: (state: GameState) => void): EventHandler {
   return {
     canPlay: (state) => nazgulFigureOnMap(state),
@@ -2256,11 +2275,17 @@ register('fp-char-17', separateViaCard({
 // the Nazgûl being able to REACH the Fellowship, which blocked the very common play of
 // using it purely to reposition the Nazgûl.)
 const nazgulOnMap = (state: GameState): boolean => nazgulFigureOnMap(state); // the Witch-king counts (p.25)
+/** Is a Nazgûl figure (the Witch-king included) in the Fellowship's region — boxed
+ *  inside a besieged Shadow Stronghold there counts too, since that is where a Nazgûl
+ *  flying into that region lands. */
+const nazgulWithFellowship = (state: GameState): boolean => {
+  const f = figureForce(state, state.fellowship.location, 'shadow');
+  return f.nazgul > 0 || f.characters.includes('witch-king');
+};
 // Nazgûl Search — move any/all Nazgûl; if one is then with the Fellowship, reveal it.
 register('sh-char-09', {
   ...moveNazgulCard((state) => {
-    const loc = state.fellowship.location;
-    if (state.fellowship.hidden && (state.regions[loc]!.nazgul > 0 || state.regions[loc]!.characters.includes('witch-king'))) {
+    if (state.fellowship.hidden && nazgulWithFellowship(state)) {
       log(state, null, 'event', 'Nazgûl Search reveals the Fellowship');
       // A reveal is never just a flag flip: the Free Peoples must move the figure up
       // to its Progress and reset Progress to 0 (p.39). beginReveal raises that
@@ -2280,8 +2305,7 @@ register('sh-char-09', {
 // Shadow is never shown a one-answer question.
 register('sh-char-08b', {
   ...moveNazgulCard((state) => {
-    const loc = state.fellowship.location;
-    if (state.regions[loc]!.nazgul > 0 || state.regions[loc]!.characters.includes('witch-king')) {
+    if (nazgulWithFellowship(state)) {
       const tableFpChar = state.cards.fp.table.filter((id) => EVENT_BY_ID[id]?.deck === 'Character');
       if (tableFpChar.length > 0) {
         state.pendingChoice = { owner: 'shadow', kind: 'nazgulStrike', data: { cards: tableFpChar } };
@@ -2365,7 +2389,11 @@ register('sh-char-13', {
 function striderAragornArmy(state: GameState): { id: string; char: string } | null {
   for (const char of ['aragorn', 'strider']) {
     const id = charRegion(state, char);
-    if (id && (REGIONS[id]!.nation === 'gondor' || REGIONS[id]!.nation === 'rohan') && armySide(state, id) === 'fp') return { id, char };
+    // "With a Free Peoples Army" — a garrison besieged in a Gondor or Rohan Stronghold
+    // is one (p.31), with him inside it; the open field there is the besieger's, so
+    // asking who holds the field refused the card (player report 043e6x3t254g264z).
+    const army = id ? armyForceOf(state, id, 'fp') : null;
+    if (id && (REGIONS[id]!.nation === 'gondor' || REGIONS[id]!.nation === 'rohan') && army?.characters.includes(char)) return { id, char };
   }
   return null;
 }
@@ -2375,7 +2403,7 @@ register('fp-char-14', {
     const who = striderAragornArmy(state);
     if (challengeOfTheKing(state)) {
       if (who) {
-        const r = state.regions[who.id]!;
+        const r = figureForce(state, who.id, 'fp');
         r.characters = r.characters.filter((c) => c !== who.char);
         delete state.characters.inPlay[who.char];
         if (!state.characters.eliminated.includes(who.char)) state.characters.eliminated.push(who.char);
@@ -2437,8 +2465,12 @@ register('fp-str-10', {
 function multiNationShadowArmies(state: GameState): EventTarget[] {
   const out: EventTarget[] = [];
   for (const id of Object.keys(state.regions)) {
-    if (armySide(state, id) !== 'shadow') continue;
-    const nations = (Object.keys(state.regions[id]!.units) as Nation[]).filter((n) => { const u = state.regions[id]!.units[n]!; return u.regular > 0 || u.elite > 0; });
+    // "A Shadow Army anywhere on the board" — a garrison besieged inside a Shadow
+    // Stronghold is one too (p.31); reading the open field alone skipped it (player
+    // report 526j5e3b1q335v6l).
+    const f = armyForceOf(state, id, 'shadow');
+    if (!f) continue;
+    const nations = (Object.keys(f.units) as Nation[]).filter((n) => { const u = f.units[n]!; return u.regular > 0 || u.elite > 0; });
     if (nations.length >= 2) out.push({ region: id });
   }
   return out;

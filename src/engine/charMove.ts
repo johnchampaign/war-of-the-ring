@@ -91,12 +91,16 @@ function reachableWithin(from: RegionId, range: number, stops: ((r: RegionId) =>
   return dist;
 }
 
-/** The p.24 hard stop for walking Companions: a Shadow-controlled, unbesieged
- *  Stronghold region. Nazgûl/Minions never use it (they may not enter FP Strongholds
- *  at all — the canLand rule — and Nazgûl fly besides). */
+/** The p.24 hard stop for walking Companions: a Shadow-controlled Stronghold region —
+ *  besieged or not. A Free Peoples siege leaves the Stronghold in Shadow hands, and
+ *  neither p.24 ("must stop upon entering a region containing a Stronghold controlled
+ *  by the Shadow player") nor the Almanac makes an exception for it; the old
+ *  "unbesieged" clause let Companions walk straight through a besieged Minas Morgul
+ *  (player report 3i1b184d0s0k093u). Nazgûl/Minions never use it (they may not enter
+ *  FP Strongholds at all — the canLand rule — and Nazgûl fly besides). */
 function companionStop(state: GameState) {
   return (r: RegionId): boolean =>
-    REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow' && !state.regions[r]!.besieged;
+    REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow';
 }
 
 /** p.24/p.25: a region holding a figure's OWN Stronghold while an enemy Army besieges
