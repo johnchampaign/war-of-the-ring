@@ -7,7 +7,7 @@ import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
 import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection, type Force } from '../armies';
-import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, type CasualtyThen } from '../combat';
+import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, sortieForce, canSortie, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
@@ -1330,8 +1330,12 @@ register('fp-str-20', recruitChoiceCard('fp', [{ nation: 'north', region: 'the-s
 // The Grey Company: in Strider/Aragorn's Army, upgrade one Regular to an Elite of the
 // SAME Nation — the player CHOOSES which Nation (his Army can hold several).
 const greyCompanyRegion = (state: GameState): string | null => charRegion(state, 'strider') ?? charRegion(state, 'aragorn');
+// His Army is wherever he stands in the region: the siege box when he is shut inside a
+// besieged Stronghold, the open field otherwise (player report 4a643h5l3p664m23 — the
+// card found no Regulars to upgrade while Strider was besieged).
+const greyCompanyForce = (state: GameState, r: string): Force | null => armyForceOf(state, r as RegionId, 'fp');
 const greyCompanyNations = (state: GameState, r: string): Nation[] =>
-  (Object.entries(state.regions[r]!.units) as [string, { regular: number; elite: number }][])
+  (Object.entries(greyCompanyForce(state, r)?.units ?? {}) as [string, { regular: number; elite: number }][])
     .filter(([n, u]) => isFpNation(n) && u.regular > 0 && state.reinforcements[n as Nation].elite > 0)
     .map(([n]) => n as Nation);
 register('fp-char-24', {
@@ -1344,7 +1348,8 @@ register('fp-char-24', {
   canPlay: (state) => { const r = greyCompanyRegion(state); const f = r ? armyForceOf(state, r as RegionId, 'fp') : null; return !!f && forceUnitCount(f) > 0; },
   targets: (state) => { const r = greyCompanyRegion(state); return r ? greyCompanyNations(state, r).map((nation) => ({ nation, region: r, figure: 'elite' as const })) : []; },
   applyTarget(state, _side, t) {
-    const u = state.regions[t.region!]!.units[t.nation!]!;
+    const u = greyCompanyForce(state, t.region!)?.units[t.nation!];
+    if (!u || u.regular <= 0) return;
     u.regular--; u.elite++;
     // The card says ELIMINATE the Regular, and a Free Peoples unit that is eliminated
     // is a casualty — it leaves the game rather than returning to reinforcements.
@@ -1787,6 +1792,14 @@ function nazgulArmyActions(state: GameState, allowAttack: boolean, exclude: Set<
     const box = state.regions[from]!.siegeBox;
     if (canAttack && box && forceUnitCount(box) > 0 && !shadowBarredFromRegion(state, from)) out.push({ from, to: from, mode: 'attack' });
   }
+  // SORTIE (p.32): a besieged Shadow garrison holding a Nazgûl attacks the besiegers in
+  // its own region — an attack like any other, so the card's "attack with one" covers it
+  // (player report 531h4p6p29375a1m).
+  if (allowAttack) for (const from of Object.keys(state.regions)) {
+    if (exclude.has(from)) continue;
+    const sb = sortieForce(state, from, 'shadow');
+    if (sb && (sb.nazgul > 0 || sb.characters.includes('witch-king')) && canSortie(state, from, 'shadow')) out.push({ from, to: from, mode: 'attack' });
+  }
   return out;
 }
 function applyNazgulArmyAction(state: GameState, t: EventTarget): void {
@@ -1843,6 +1856,10 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
 /** Move / attack / ASSAULT EventTargets for the single Army containing the Witch-king. */
 function wkArmyActions(state: GameState, wk: RegionId): EventTarget[] {
   const out: EventTarget[] = [];
+  // SORTIE (p.32): the Witch-king shut inside a besieged Shadow Stronghold may lead its
+  // garrison out against the besiegers (player report 531h4p6p29375a1m).
+  const sb = sortieForce(state, wk, 'shadow');
+  if (sb && sb.characters.includes('witch-king')) return canSortie(state, wk, 'shadow') ? [{ from: wk, to: wk, mode: 'attack' }] : out;
   if (armySide(state, wk) !== 'shadow') return out; // WK must be with a Shadow Army
   const canAttack = hasAtWarUnit(state, wk, 'shadow'); // same At-War gate as a die-driven attack
   for (const to of REGIONS[wk]!.adjacency) {

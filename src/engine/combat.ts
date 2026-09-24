@@ -2118,8 +2118,7 @@ export function attackTargets(state: GameState, side: Side): Array<[RegionId, Re
   for (const from of Object.keys(state.regions)) {
     // SORTIE (p.32): a besieged garrison may attack the besiegers in its own region,
     // fighting a field battle out of the Stronghold.
-    const sb = sortieForce(state, from, side);
-    if (sb && hasAtWarUnitInForce(state, sb, side) && !(side === 'shadow' && shadowBarredFromRegion(state, from))) out.push([from, from]);
+    if (canSortie(state, from, side)) out.push([from, from]);
     if (armySide(state, from) !== side || !hasAtWarUnit(state, from, side)) continue;
     // Every adjacent enemy army is a target (an army may face several); no cap.
     for (const to of REGIONS[from]!.adjacency) if (armySide(state, to) === enemy && !(side === 'shadow' && shadowBarredFromRegion(state, to))) out.push([from, to]);
@@ -2129,6 +2128,13 @@ export function attackTargets(state: GameState, side: Side): Array<[RegionId, Re
     if (box && forceUnitCount(box) > 0 && !(side === 'shadow' && shadowBarredFromRegion(state, from))) out.push([from, from]);
   }
   return out;
+}
+/** May `side`'s besieged garrison in `id` SORTIE (p.32) — there is a besieger to hit,
+ *  the garrison holds a unit of a Nation At War, and no card bars the Shadow from the
+ *  region. Shared by die-driven attacks and the Event cards that grant an attack. */
+export function canSortie(state: GameState, id: RegionId, side: Side): boolean {
+  const sb = sortieForce(state, id, side);
+  return !!sb && hasAtWarUnitInForce(state, sb, side) && !(side === 'shadow' && shadowBarredFromRegion(state, id));
 }
 /** Does `side`'s Army in `id` hold at least one unit of a Nation At War — i.e. a
  *  unit that may attack? Every attack offer, die-driven OR card-driven, must pass
