@@ -922,11 +922,14 @@ register('sh-str-10', {
     log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}${t.move ? ' (split)' : ''}`);
     // "If there is a Free Peoples Army in the region, a battle starts" — a boxed
     // garrison IS a Free Peoples Army in the region (p.31), so landing alongside the
-    // besiegers presses the assault, with no option to cease.
+    // besiegers presses the assault. But the card's "cannot cease the attack, unless
+    // the Free Peoples Army was already under siege" frees exactly this case: the
+    // combined Army must attack, yet may cease after any round (Almanac A 10 (iii);
+    // player report 5u60495o5d6q5w5o).
     const box = state.regions[t.to!]!.siegeBox;
     if (box && forceUnitCount(box) > 0 && forceSide(box) === 'fp') {
       log(state, null, 'event', `Corsairs of Umbar: the landing joins the siege of ${t.to} and assaults`);
-      startBattle(state, 'shadow', t.to!, t.to!, { noCease: true });
+      startBattle(state, 'shadow', t.to!, t.to!);
     }
   },
 });

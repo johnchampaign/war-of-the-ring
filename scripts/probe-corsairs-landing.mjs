@@ -78,6 +78,9 @@ console.log('\n=== landing beside a besieging Army: the Corsairs join it and ass
     check('the Corsairs merged with the besiegers', !!field && (field.regular + field.elite) > 2, JSON.stringify(field));
     check('an assault on the garrison began', !!t.pendingCombat, t.pendingCombat ? `${t.pendingCombat.from} → ${t.pendingCombat.to}` : 'none');
     check('...fought inside the one region', t.pendingCombat?.from === t.pendingCombat?.to);
+    // "cannot cease the attack, unless the Free Peoples Army was already under siege"
+    // (report 5u60495o5d6q5w5o): the assault on a besieged garrison may be ceased.
+    check('...and the Shadow may cease it after a round', !t.pendingCombat?.noCease, String(t.pendingCombat?.noCease));
   }
 }
 

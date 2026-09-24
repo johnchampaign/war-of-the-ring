@@ -310,14 +310,17 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
             return <ArmyBadge key={`${a.side}-${a.nation ?? 'leaders'}`} x={pt.x} y={pt.y} scale={e.layout?.scale ?? 1} army={a} />;
           })}
           {/* Boxed garrison of a besieged Stronghold — small badges by the settlement
-              marker (inside the red siege ring), distinct from the besieger above. */}
+              marker (inside the red siege ring), distinct from the besieger above.
+              Hoverable like any Army badge, and drawn over the besieger, so the tooltip
+              names the garrison — it was pointer-transparent, so hovering it showed the
+              BESIEGER's counts where the two overlapped (player report 0q4k160r221b1h4n). */}
           {e.boxed.map((a, i) => {
             const base = e.layout?.anchor ?? e.poly[0]!;
             const c = clampToCrop({ x: base.x - 16 + (i - (e.boxed.length - 1) / 2) * 16, y: base.y + 2 });
             return (
-              <g key={`box-${a.side}-${i}`} style={{ pointerEvents: 'none' }}>
-                <rect x={c.x - 11} y={c.y - 8} width={22} height={16} rx={3} fill="none" stroke="#caa84b" strokeWidth={1} strokeDasharray="2 1.5" />
-                <ArmyBadge x={c.x} y={c.y} scale={(e.layout?.scale ?? 1) * 0.62} army={a} />
+              <g key={`box-${a.side}-${i}`}>
+                <rect x={c.x - 11} y={c.y - 8} width={22} height={16} rx={3} fill="none" stroke="#caa84b" strokeWidth={1} strokeDasharray="2 1.5" style={{ pointerEvents: 'none' }} />
+                <ArmyBadge x={c.x} y={c.y} scale={(e.layout?.scale ?? 1) * 0.62} army={a} titleSuffix=" — inside the besieged Stronghold" />
               </g>
             );
           })}
@@ -402,7 +405,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
 // An army marker: a two-tone pill — side colour for Regulars, gold for Elites —
 // plus a corner pip counting Leaders (FP) / Nazgûl (Shadow). Sized to stay legible
 // at fit-to-width zoom without overwhelming the small regions.
-function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number; army: ArmyInfo }) {
+function ArmyBadge({ x, y, scale, army, titleSuffix = '' }: { x: number; y: number; scale: number; army: ArmyInfo; titleSuffix?: string }) {
   const { side, nation, reg, elite, leaders, nazgul, eliteLead = 0 } = army;
   // Tint the badge by the Nation so factions are distinguishable; fall back to a
   // generic side colour for a leaders-only badge (no units → no nation).
@@ -426,7 +429,7 @@ function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number;
       : `${leaders} Free Peoples Leader${leaders === 1 ? '' : 's'} (no Army)`;
     return (
       <g transform={`translate(${x},${y}) scale(${s})`}>
-        <title>{soloLabel}</title>
+        <title>{soloLabel + titleSuffix}</title>
         <circle cx={0} cy={0} r={8.5} fill={naz ? '#141414' : '#f4e7c0'} stroke="#fff" strokeWidth={1.2} />
         <text x={0} y={3.5} fontSize={11} fontWeight="bold" fill={naz ? '#fff' : '#222'} textAnchor="middle">{special}</text>
       </g>
@@ -434,7 +437,7 @@ function ArmyBadge({ x, y, scale, army }: { x: number; y: number; scale: number;
   }
   return (
     <g transform={`translate(${x},${y}) scale(${s})`}>
-      <title>{label}</title>
+      <title>{label + titleSuffix}</title>
       {/* Whole badge is the NATION colour (report: gold Elites all looked like Isengard).
           Regulars = white number; Elites = dark number on a small cream "medal" so an
           Elite stack still reads as ITS nation, just marked as the stronger unit. */}

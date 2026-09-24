@@ -448,9 +448,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // two buttons that were covering for this, so the pointer has to be honest now.
   const boardHints = useMemo(() => {
     const out: string[] = [];
-    if (boardArmyActs.length) out.push('Move or attack — click a highlighted region on the map.');
+    // Character and Nazgûl moves are covered by "Move or attack" (player report
+    // 38082l3z263r3e4h: the separate character hint read as excluding the Nazgûl).
+    if (boardArmyActs.length || charSources.size) out.push('Move or attack — click a highlighted region on the map.');
     if (musterTargets.size) out.push('Muster — click a highlighted region on the map.');
-    if (charSources.size) out.push('Move a character — click its highlighted region on the map.');
     return out;
   }, [boardArmyActs, assaultSources, musterTargets, charSources]);
   // The Companion currently being separated (Character-die or card), if any.
@@ -569,7 +570,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         setSelected(null);
         if (act.kind === 'moveArmy') setMoveDraft({ from: act.from, to: act.to, kind: 'moveArmy' });
         else if (act.kind === 'attack') setMoveDraft({ from: act.from, to: act.to, kind: 'attack' });
-        else if (act.kind === 'armyMove2') setMoveDraft({ from: act.from!, to: act.to!, kind: 'armyMove2' });
+        else if (act.kind === 'armyMove2') setMoveDraft({ from: act.from!, to: act.to!, kind: 'armyMove2', base: act });
         else void submit(act);
       }
       return;
@@ -740,7 +741,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const onPanelAction = (a: WotrAction) => {
     if (a.kind === 'advanceHoldBack' && g.view?.pendingChoice?.kind === 'advanceHoldBack') { onDecisionAction(a); return; }
     if (a.kind === 'advanceChoice' && g.view?.pendingChoice?.kind === 'advanceChoice') { onDecisionAction(a); return; }
-    if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2' }); return; }
+    if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2', base: a }); return; }
     // A card-granted Army MOVE (Shadows Gather, The Shadow Lengthens, Corsairs…)
     // routes through the split picker — p.28 allows splitting the Army before a
     // card move (player report: "it did not ask if I wanted to move the ENTIRE

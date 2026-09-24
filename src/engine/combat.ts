@@ -948,8 +948,11 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       const foe = ef.side === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
       if (forceUnitCount(foe) === 0) continue;
       const dice = ef.mods.preCombatAttackDice;
-      const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) if (rng.rollDie(6) >= 4) h++; return h; });
-      if (hits > 0) { applyForceCasualties(state, foe, foeSide, hits, 'regularsFirst'); log(state, null, 'combat', `pre-combat attack scores ${hits} at ${enemy}`); }
+      // Logged in the same shape as Sudden Strike / Charge (player report 2t4s0c6p4q2f3f2q).
+      const faces: number[] = [];
+      const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= 4) h++; } return h; });
+      log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on 4+ → ${hits} hit${hits === 1 ? '' : 's'}`);
+      if (hits > 0) applyForceCasualties(state, foe, foeSide, hits, 'regularsFirst');
     } else if (ef.mods.preCombatAttackFrom) {
       // Sudden Strike / Charge: "BEFORE the Combat roll, roll an additional attack
       // using [Leadership | Elite] dice (max 5) and apply the result immediately."

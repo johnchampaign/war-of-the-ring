@@ -328,8 +328,10 @@ die already showing an Eye.
   a battle** (`startBattle` from Umbar, advancing on a win via the normal End of
   Battle rules) rather than merging, and the attack **cannot be ceased**
   (`PendingCombat.noCease` skips the continue/cease decision; the card's "unless the
-  Free Peoples Army was already under siege" arm is inherent — a besieged region's
-  open field holds the besieger, so the move is a plain merge with fellow besiegers).
+  Free Peoples Army was already under siege" arm: landing beside fellow besiegers is a
+  plain merge, and the combined Army must then assault the garrison but **may cease**
+  after any round (Almanac A 10 (iii); the engine used to forbid ceasing there too —
+  player report 5u60495o5d6q5w5o).
   The stacking check applies only when merging with a friendly Army.
   Cards whose text reads "…containing a Settlement" (Éomer Son of Éomund, Many Kings)
   and the Hunt-condition cards reading "a Free Peoples Settlement" (Orc Patrol /
