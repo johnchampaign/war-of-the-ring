@@ -83,11 +83,18 @@ export function describeAction(a: WotrAction): string {
     case 'diplomaticAction': return `Diplomacy: advance ${nationName(a.nation)}`;
     case 'recruitUnit': {
       const fig = a.nazgul ? 'Nazgûl' : a.leader ? 'Leader' : a.elite ? 'Elite' : 'Regular';
-      const more = a.then ? ' (+ an optional 2nd figure elsewhere)' : '';
-      return `Recruit ${nationName(a.nation)} ${fig} in ${rName(a.region)}${more}`; // nation first, as the log says it (report 261i321q390m3a1m)
+      // No "(+ an optional 2nd figure elsewhere)" tail: it made the buttons unwieldy and
+      // Event-card musters never carried it (player report 54410w442a1v3w6x).
+      return `Recruit ${nationName(a.nation)} ${fig} in ${rName(a.region)}`; // nation first, as the log says it (report 261i321q390m3a1m)
     }
     case 'recruitSecond':
-      return a.done ? 'Muster: no second figure' : `Muster 2nd: ${a.figure === 'leader' ? 'Leader/Nazgûl' : 'Regular'}${a.nation ? ` ${nationName(a.nation)}` : ''} in ${rName(a.region!)}`;
+      // Worded like the first figure: it is picked from the same muster menu now
+      // (player report 6r5a254l3f035e3l).
+      if (a.done) return 'Muster: no second figure';
+      {
+        const fig = a.figure === 'leader' ? (a.nation === 'sauron' ? 'Nazgûl' : a.nation ? 'Leader' : 'Leader/Nazgûl') : 'Regular';
+        return `Recruit ${a.nation ? `${nationName(a.nation)} ` : ''}${fig} in ${rName(a.region!)}`;
+      }
     case 'bringMinion': return `Bring ${charName(a.minion)} into play in ${rName(a.region)}`;
     case 'eventTarget': {
       if (a.done) return `${cardName(a.card)}: done`;
@@ -298,6 +305,11 @@ export const isCardRecruitTarget = (a: WotrAction): boolean =>
   // Hordes From the East, Many Kings and Pits of Mordor (player reports
   // 4n1w2h4c0u635o1g, 1f595h0r5u0o273v).
   && ((a.mode === 'recruit') || ((!!a.nation || !!a.figure) && a.mode === undefined));
+/** The second figure of a Muster die ("Recruit … in <Settlement>"): a board pick
+ *  like the first — click the highlighted Settlement, pick from its muster menu (player
+ *  report 6r5a254l3f035e3l). Only "no second figure" stays a button. */
+export const isSecondMusterTarget = (a: WotrAction): a is Extract<WotrAction, { kind: 'recruitSecond' }> =>
+  a.kind === 'recruitSecond' && !a.done && !!a.region;
 /** Card ATTACKS where the player picks who goes, like any Army move, and the rest stays
  *  behind out of the battle. Corsairs of Umbar moves "all or some of the Army in Umbar"
  *  (Almanac) before its battle (player report 133q1o3448182t2l). Other card attacks'

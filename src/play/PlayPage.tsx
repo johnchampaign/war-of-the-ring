@@ -33,7 +33,7 @@ import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, trivialDie } from './actionText';
+import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, isSecondMusterTarget, trivialDie } from './actionText';
 import { moveBlockReason, musterBlockReason, cardPathBlockReason, regionHops } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial } from './panelFilter';
@@ -415,7 +415,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const finish = legs.find((a) => a.to === head) ?? null;
     return { head, budget, steps, finish, left: budget - route.length };
   }, [selected, route, cardMoveActs, g.view, g.you]);
-  const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...minionActs.map((a) => a.region), ...cardRecruitActs.map((a) => a.region!)]), [recruitActs, minionActs, cardRecruitActs]);
+  // A Muster die's optional SECOND figure takes the same board flow as the first
+  // (player report 6r5a254l3f035e3l); only "no second figure" stays a panel button.
+  const secondMusterActs = useMemo(() => g.legalActions.filter(isSecondMusterTarget), [g.legalActions]);
+  const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...minionActs.map((a) => a.region), ...cardRecruitActs.map((a) => a.region!), ...secondMusterActs.map((a) => a.region!)]), [recruitActs, minionActs, cardRecruitActs, secondMusterActs]);
   const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets, ...cardCharSources]), [boardArmyActs, cardMoveActs, cardCharSources, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
   // The generic "why can't I do that?" hints (moveBlockReason / musterBlockReason)
   // belong to the BASIC Move / Muster actions during Action Resolution, and nowhere
@@ -946,7 +949,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 16, borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 280, boxShadow: '0 8px 40px #000' }}
             onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>Muster in {REGIONS[musterMenu]?.name ?? musterMenu}</div>
-            {[...recruitActs, ...minionActs, ...cardRecruitActs].filter((a) => a.region === musterMenu).map((a, i) => (
+            {[...recruitActs, ...minionActs, ...cardRecruitActs, ...secondMusterActs].filter((a) => a.region === musterMenu).map((a, i) => (
               <button key={i} onClick={() => { setMusterMenu(null); void submit(a); }}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
                 {describeAction(a)}

@@ -142,17 +142,23 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
         On the map {entries.length} {open ? '▴' : '▾'}
       </button>
       {open && (
-        <div ref={ref} style={{ ...roster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
+        <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
           {entries.map(([id, region]) => {
             const d = charDef(id);
+            const shadow = isMinion(id);
+            // Laid out like the Fallen roster — FP / SH tag, name, Level · Leadership —
+            // with the region LAST so the stats line up row to row, all on one line
+            // (player reports 5m6m5x6x4r3f3u5x, 4n143r2r004b0s6f, 246q2j5g30546b3e).
             return (
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
+                <span style={{ ...sideTagCell, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SH' : 'FP'}</span>
                 <span style={charNameCell}>{charName(id)}</span>
+                <span style={{ ...statsCell, color: '#b9b29c' }}>{d ? `Level ${d.level === 'inf' ? '∞' : d.level}${d.leadership ? ` · Leadership ${d.leadership}` : ''}` : ''}</span>
                 {/* The region is an engine id here; the player should read its NAME
                     ("Western Emyn Muil", not western-emyn-muil — player report
                     5l706l6q120i354l). */}
-                <span style={{ color: '#b9b29c', fontSize: 11 }}>{regionName(String(region))}{d ? ` · Level ${d.level === 'inf' ? '∞' : d.level}${d.leadership ? ` · Leadership ${d.leadership}` : ''}` : ''}</span>
+                <span style={{ color: '#b9b29c', fontSize: 11, whiteSpace: 'nowrap' }}>{regionName(String(region))}</span>
               </div>
             );
           })}
@@ -179,16 +185,16 @@ function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (i
         ☠ Fallen {ids.length} {open ? '▴' : '▾'}
       </button>
       {open && (
-        <div ref={ref} style={{ ...roster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
+        <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
           {ids.map((id) => {
             const d = charDef(id);
             const shadow = isMinion(id);
             return (
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
-                <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SH' : 'FP'}</span>
+                <span style={{ ...sideTagCell, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SH' : 'FP'}</span>
                 <span style={{ ...charNameCell, color: '#c9bfae', textDecoration: 'line-through' }}>{charName(id)}</span>
-                {d && <span style={{ color: '#8d8677', fontSize: 11 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
+                {d && <span style={{ ...statsCell, color: '#8d8677' }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
               </div>
             );
           })}
@@ -347,10 +353,20 @@ const pill: React.CSSProperties = { background: '#33302a', padding: '3px 8px', b
 // different x on every row (player report 1q5s140023682d2j). A nowrap column with a
 // floor under it fixes both: short names pad out to the same width, long ones simply
 // push the detail right instead of being hyphen-free-wrapped into nonsense.
-const charNameCell: React.CSSProperties = { fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap', minWidth: 104 };
+const charNameCell: React.CSSProperties = { fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap', minWidth: 140 };
+// The FP / SH tag and the "Level · Leadership" column of the character rosters: fixed
+// floors so every row's columns start at the same x, and never wrapped ("Leadership /
+// 1" on its own line — player report 0q171e05196c6t53).
+const sideTagCell: React.CSSProperties = { flexShrink: 0, fontSize: 10, fontWeight: 700, minWidth: 16 };
+const statsCell: React.CSSProperties = { fontSize: 11, flexShrink: 0, whiteSpace: 'nowrap', minWidth: 130 };
 // Panels wrap their text (they used to be `nowrap`, so a long row overflowed the
 // panel sideways and grew it a horizontal scrollbar of its own — report 2r2g) and
 // are capped at the window width so they can never be the thing that overflows.
 const roster: React.CSSProperties = { position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 70, background: '#1c1710', border: '1px solid #5a4a2a', borderRadius: 8, padding: 6, minWidth: 240, maxWidth: 'calc(100vw - 16px)', boxShadow: '0 8px 30px #000', whiteSpace: 'normal', overflowWrap: 'anywhere' };
+// The character rosters (On the map, Fallen) size to their widest row so each one
+// reads on a single line, like the Fellowship roster (player reports 0q171e05196c6t53,
+// 246q2j5g30546b3e). Still capped at the window; a phone scrolls the panel sideways
+// rather than breaking a row.
+const oneLineRoster: React.CSSProperties = { width: 'max-content', whiteSpace: 'nowrap', overflowWrap: 'normal', overflowX: 'auto' };
 // The two long-list panels (Hunt tiles, Discards) scroll vertically only.
 const wide: React.CSSProperties = { width: 'min(300px, calc(100vw - 16px))', maxHeight: 300, overflowY: 'auto', overflowX: 'hidden' };

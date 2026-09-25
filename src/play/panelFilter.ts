@@ -6,7 +6,7 @@
 // stripping was meant to cure.
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState } from '../engine/types';
-import { isDecisionAction, eventChoiceInModal, isCardRecruitTarget, isCardArmyMoveTarget } from './actionText';
+import { isDecisionAction, eventChoiceInModal, isCardRecruitTarget, isCardArmyMoveTarget, isSecondMusterTarget } from './actionText';
 
 /** Army moves and attacks: spatial, so they are map clicks, never buttons. */
 export type SpatialAction = Extract<WotrAction, { kind: 'moveArmy' | 'attack' }>;
@@ -26,6 +26,7 @@ export const BOARD_PATH: Record<string, string> = {
   armyMove2: 'as moveArmy, for the optional second move with the same Army die',
   moveCharacter: 'click the figure’s region, choose the figure, then a highlighted destination',
   recruitUnit: 'click a highlighted Settlement, then the bundle in the muster menu',
+  recruitSecond: 'the second Muster figure: click a highlighted Settlement, then the figure in the muster menu ("no second figure" stays a button)',
   bringMinion: 'click a highlighted region, then the Minion in the muster menu',
   declareFellowship: 'click a highlighted region to declare the Fellowship there',
   placeGandalf: 'click a highlighted region to place Gandalf the White there',
@@ -80,6 +81,8 @@ export function panelShowsAction(a: WotrAction, legal: WotrAction[], view: GameS
     // Mustering is board-driven (player report: the per-Settlement recruit buttons were
     // tedious to page through): click a highlighted Settlement instead.
     && a.kind !== 'recruitUnit'
+    // …and so is the Muster die's optional SECOND figure (player report 6r5a254l3f035e3l).
+    && !isSecondMusterTarget(a)
     // Playing an Event card is done by clicking it in the HAND — that is how card
     // games work, and the list was half "Play …" buttons (player report
     // 4b4f6o3p5v066c5o). The Ents Awake free play still belongs to its own prompt.

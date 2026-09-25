@@ -109,7 +109,6 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   // Merging onto a friendly army may push the destination over the 10-unit limit;
   // the excess is removed afterward (rulebook p.26). Warn so it isn't a surprise.
   const destUnits = !attackMode && !landingAttack ? Object.values(view.regions[to]?.units ?? {}).reduce((s, u) => s + u!.regular + u!.elite, 0) : 0;
-  const overAll = Math.max(0, destUnits + armyUnits - 10);
   const overSel = Math.max(0, destUnits + totalUnits - 10);
   // A capped card move always states its selection: "the whole Army" is not what the
   // card offers, so the bare action would mean something else.
@@ -199,11 +198,12 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
               : cap2 ? `Only the figures that were already in ${rName(from)} before this die's first move may move again — the ones that just arrived stay.${stayNations.length ? ` ${stayNations.map(cap).join(' and ')} ${stayNations.length === 1 ? 'is' : 'are'} not At War and cannot cross into ${rName(to)}.` : ''}`
               : stayNations.length ? `Choose what moves. ${stayNations.map(cap).join(' and ')} ${stayNations.length === 1 ? 'is' : 'are'} not At War and cannot cross into ${rName(to)}, so those units stay behind.` : 'Choose what moves.'}
         </div>
-        {!attackMode && destUnits > 0 && (
-          <div style={{ fontSize: 12, color: overAll || overSel ? '#f0d090' : '#9c9', marginBottom: 8 }}>
-            {/* Only what the CURRENT selection does (player report 5j706y1s5j1w2r4n). */}
-            {rName(to)} already contains {destUnits} unit{destUnits === 1 ? '' : 's'} (limit 10).
-            {overSel > 0 && ` You'll remove ${overSel} excess after moving.`}
+        {/* Only when the CURRENT selection overstacks (player reports 5j706y1s5j1w2r4n,
+            0c572i714k006v6r): the map already shows what stands there, so a plain
+            head-count under the limit was noise. */}
+        {overSel > 0 && (
+          <div style={{ fontSize: 12, color: '#f0d090', marginBottom: 8 }}>
+            {rName(to)} already contains {destUnits} unit{destUnits === 1 ? '' : 's'} (limit 10). You'll remove {overSel} excess after moving.
           </div>
         )}
         {goNations.map((n) => (
