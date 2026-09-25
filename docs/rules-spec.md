@@ -1260,6 +1260,11 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
     and so is the Shadow's **The Breaking of the Fellowship** (sh-char-14): the FP still
     picks which Companions leave, and each is removed from play instead of placed
     *(player report, 2026-09-08; `scripts/probe-breaking-on-mordor-track.mjs`)*.
+  - **Gollum as the Guide** turns both Lure of the Ring (sh-char-13) and The Breaking of
+    the Fellowship into a flat +1 Corruption: no Companion is drawn, no Hunt tile is
+    drawn, and neither card needs a Companion left in the Fellowship — only that it is
+    revealed (Almanac C13/C14: "directly add 1 Corruption and ignore other text on the
+    card") *(player report 2l3i6v046f3h241i; `scripts/probe-gollum-guide-cards.mjs`)*.
     The card has no destination step there, so the player picks who leaves and stops;
     the card's own effect still happens — the Almanac on "I Will Go Alone": "This card
     may be played on the Mordor Track, but separating Companions from the Fellowship
