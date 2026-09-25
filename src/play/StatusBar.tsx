@@ -107,7 +107,9 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
         Fellowship {companions.length} {open ? '▴' : '▾'}
       </button>
       {open && (
-        <div ref={ref} style={{ ...roster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
+        // One line per row, like the On the map and Fallen rosters (player report
+        // 2v0i4t423i723x3z: "★ Strider Level 3 · Leadership 1" wrapped).
+        <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
           {ids.length === 0 && <div style={{ color: '#998', fontSize: 12 }}>No companions remain.</div>}
           {ids.map((id) => {
             const d = charDef(id);
@@ -116,7 +118,7 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help', background: isGuide ? '#2c2616' : 'transparent' }}>
                 <span style={{ ...charNameCell, color: isGuide ? '#ffd86a' : '#e9e1cc' }}>{isGuide ? '★ ' : ''}{charName(id)}</span>
-                {d && <span style={{ color: '#b9b29c', fontSize: 11 }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
+                {d && <span style={{ ...statsCell, color: '#b9b29c' }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
               </div>
             );
           })}

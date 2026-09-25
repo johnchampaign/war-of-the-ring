@@ -646,7 +646,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || isCardRecruit || isCardMove || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2) ? onRegionClick : undefined;
+  // The Muster die's second figure is a pending choice too, so it must be listed here or
+  // its lit Settlements ignore the click (player report 310b003u0c1j3220).
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || isCardRecruit || isCardMove || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2 || secondMusterActs.length > 0) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
