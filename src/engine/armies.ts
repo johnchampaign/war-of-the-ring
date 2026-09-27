@@ -873,7 +873,25 @@ export function liftSiegeIfAbandoned(state: GameState, id: RegionId): void {
     const u = r.siegeBox.units[n]!;
     if (u.regular + u.elite > 0) { garrison = sideOfNation(n); break; }
   }
-  if (garrison === null) { delete r.siegeBox; r.besieged = false; return; } // empty box: nothing to return
+  if (garrison === null) {
+    // No unit is left defending — but Companions, Leaders or Nazgûl may still stand
+    // inside: a card's split move can march every unit out and leave them there.
+    // Deleting the box used to delete THEM with it, still listed as in play but held by
+    // nothing (player report fdx2xl3oo40orw9h: "my Companions in Moria disappeared").
+    // They step out into the region, like the Characters of a garrison a card wipes out
+    // (siegeFall), and with no unit left defending it the Stronghold falls to the Army
+    // around it (p.32).
+    const box = r.siegeBox;
+    const figures = box.characters.length + box.leaders + box.nazgul > 0;
+    if (figures) mergeForceInto(state, id, box);
+    delete r.siegeBox; r.besieged = false;
+    if (figures) {
+      const field = armySide(state, id);
+      if (field) captureIfEnemySettlement(state, id, field);
+      log(state, null, 'combat', `no unit is left defending ${REGIONS[id]!.name ?? id} — the figures inside step out into the region`);
+    }
+    return;
+  }
   const besieger: Side = garrison === 'fp' ? 'shadow' : 'fp';
   if (armySide(state, id) === besieger) return; // besieger still holds the field — siege continues
   mergeForceInto(state, id, r.siegeBox);

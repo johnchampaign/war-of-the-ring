@@ -2080,10 +2080,15 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
     applyTarget(state, _side, t, applied = []) {
       if (t.mode === 'none') return;                              // deselect: no mutation
       if (t.region) {
-        // Move the whole trailing group (the leader carries the rest — RAW group move).
-        const members = new Set(trailingGroup(applied));
-        members.add(t.companion!);
-        for (const c of members) moveCharacter(state, 'fp', c, state.characters.inPlay[c]!, t.region);
+        // Move the whole trailing group as ONE group: it travels at the highest Level
+        // among them (p.24), which is the range the destination was offered at. Moving
+        // each member alone checked every Companion's own Level, so the slower ones
+        // silently stayed behind — "only Gandalf the White and Strider moved" (player
+        // reports t605mrj7yuywqjij, 1wfqbieamocul425).
+        const members = [...new Set([...trailingGroup(applied), t.companion!])];
+        const from = state.characters.inPlay[members[0]!]!;
+        if (members.length === 1) moveCharacter(state, 'fp', members[0]!, from, t.region);
+        else moveCompanionGroup(state, 'fp', from, t.region, members);
       }
       // pick step (no region): records the Companion; no mutation
     },
