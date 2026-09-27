@@ -3,7 +3,8 @@
 // moment — e.g. "did my regular move, merge, or die?". Built from the redacted
 // view.log (public entries + the viewer's own side-tagged ones), NEWEST FIRST
 // (player report: "I almost always want to look at something recent").
-// No hidden info: it shows exactly what the seat may see.
+// No hidden info: it shows exactly what the seat may see. Lines only this seat can see
+// (its own side-tagged ones) carry a 🔒 so they don't read as public.
 import type { GameState } from '../engine/types';
 import type { LogTime } from '../online/gameClient';
 import { FACE } from './DiceTray';
@@ -72,6 +73,14 @@ export function LogPanel({ view, times, onHoverCard }: {
                 {e.actor === 'fp' ? 'FP' : e.actor === 'shadow' ? 'SH' : ''}
               </span>
               <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 52 }}>{e.kind}</span>
+              {/* A PRIVATE line — "You discard Shadows Gather face down" — reaches only its
+                  own side; the opponent's log carries a nameless public twin instead. Unmarked,
+                  it read as if the card were discarded face up for everyone to see (player
+                  report 5vo9kqqrl81uv3n6). */}
+              {e.secret && (
+                <span title={`Private — only the ${e.side === 'fp' ? 'Free Peoples' : e.side === 'shadow' ? 'Shadow' : 'acting'} player sees this line`}
+                  aria-label="private line" style={{ flexShrink: 0, fontSize: 10, alignSelf: 'center', cursor: 'help' }}>🔒</span>
+              )}
               {e.die && <span title="action die spent" style={{ flexShrink: 0, background: (FACE[e.die] ?? { bg: '#555' }).bg, color: '#fff', borderRadius: 3, padding: '0 4px', fontSize: 8, fontWeight: 700, alignSelf: 'center' }}>{(FACE[e.die] ?? { label: e.die }).label}</span>}
               {/* A card-play entry: hover to read the card's text (report: "tell me what the AI's card does"). */}
               {e.card && onHoverCard
