@@ -796,7 +796,6 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (h.onTable) state.cards[actor].table.push(action.cardId);
       else state.cards[actor].discard[deck].push(action.cardId);
       if (palantirWasActive) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
-      if (guideDrawsNow) guideEventDraw(state, actor, deck); // Gandalf the Grey's Guide ability
       passResolutionTurn(state, actor);
       // A card whose target list is empty still has to follow its OTHER instructions —
       // "Recruit … then draw one Strategy Event card" with nothing recruitable is still
@@ -804,6 +803,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // off the eventTarget path, so those riders were silently dropped; it goes last
       // here for the same reason it does there (its own PendingChoice must survive).
       h.finalize?.(state, actor, []);
+      // Gandalf the Grey's Guide ability — checked once the card has fully resolved,
+      // so it asks who is Guide at the END of the Action (see eventTarget below).
+      if (guideDrawsNow) guideEventDraw(state, actor, deck);
       break;
     }
     case 'eventTarget': {
@@ -824,13 +826,16 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
       state.cards[actor].discard[deck].push(data.card);
       if (data.palantir) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
-      if (data.guideDraw && !state.pendingCombat) guideEventDraw(state, actor, deck); // Gandalf the Grey's Guide ability
       // A card that started a battle (Grond / Uruk-hai) hands off to the combat
       // driver, which resumes the turn itself — don't pass it here.
       if (!state.pendingCombat) passResolutionTurn(state, actor);
       // Post-resolution effect that may itself raise a follow-up choice (e.g. a
       // Fellowship move's Hunt) — run last so its PendingChoice isn't cleared above.
       if (!state.pendingCombat) h.finalize?.(state, actor, data.applied);
+      // Gandalf the Grey's Guide ability asks who is Guide at the END of the Action,
+      // so it waits for finalize: Gandalf separated by Gwaihir no longer draws, and a
+      // Companion who became Guide mid-card does (player report joug252d7gwnw3ke).
+      if (data.guideDraw && !state.pendingCombat) guideEventDraw(state, actor, deck);
       break;
     }
     case 'lureChoice':

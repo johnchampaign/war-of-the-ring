@@ -212,8 +212,8 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
   src.characters.splice(i, 1);
   dst.characters.push(char);
   if (state.characters.inPlay[char]) state.characters.inPlay[char] = to;
+  log(state, null, 'army', `Moved ${char} ${from} -> ${to}`); // before the activation it causes
   activateOnCompanionLand(state, side, [char], to); // ends movement in a City/Stronghold?
-  log(state, null, 'army', `Moved ${char} ${from} -> ${to}`);
   return true;
 }
 
@@ -243,8 +243,8 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
     dst.characters.push(c);
     if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
   }
+  log(state, null, 'army', `Moved ${chars.join(', ')} ${from} -> ${to}`); // before the activation it causes
   activateOnCompanionLand(state, side, chars, to); // group ends movement in a City/Stronghold?
-  log(state, null, 'army', `Moved ${chars.join(', ')} ${from} -> ${to}`);
   return true;
 }
 

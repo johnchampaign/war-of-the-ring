@@ -464,6 +464,8 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
   // the garrison, so a Companion separating there joins the garrison — not the besieging
   // Army holding the open field (player report). `figureForce` picks the right one.
   figureForce(state, dest, 'fp').characters.push(id);
+  // Logged before the Nation it rouses, so the log reads in order (report j59rj32xtre3q5g8).
+  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);
   const nations = activatableNations(id);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
@@ -478,7 +480,6 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
     }
   }
   pruneFellowshipOnTableCards(state);
-  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);
 }
 
 /** Place a GROUP of already-removed Companions (separated together with one Character
@@ -489,6 +490,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
 export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: RegionId): void {
   const fs = state.fellowship;
   for (const id of ids) { state.characters.inPlay[id] = dest; figureForce(state, dest, 'fp').characters.push(id); }
+  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} separated to ${dest}; guide now ${fs.guide}`);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')
     && ids.some((id) => activatableNations(id).includes(dn))) {
@@ -500,7 +502,6 @@ export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: 
     }
   }
   pruneFellowshipOnTableCards(state);
-  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} separated to ${dest}; guide now ${fs.guide}`);
 }
 
 /** Enter Mordor: only when the figure is at Morannon or Minas Morgul. Places the

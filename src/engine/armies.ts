@@ -667,11 +667,13 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   src.leaders -= movingLeaders; dst.leaders += movingLeaders;
   src.nazgul -= movingNazgul; dst.nazgul += movingNazgul;
   for (const c of chars) { src.characters.splice(src.characters.indexOf(c), 1); dst.characters.push(c); }
+  // The move is logged before its consequences (capture, activation) so the log
+  // reads in the order things happen (player report j59rj32xtre3q5g8).
+  log(state, null, 'army', `Moved army ${from} -> ${to} (${movingUnits} unit${movingUnits > 1 ? 's' : ''})`);
   captureIfEnemySettlement(state, to, side);
   liftSiegeIfAbandoned(state, from); // a besieger that vacates the field lifts the siege
   if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
   activateOnCompanionLand(state, side, chars, to);
-  log(state, null, 'army', `Moved army ${from} -> ${to} (${movingUnits} unit${movingUnits > 1 ? 's' : ''})`);
   return true;
 }
 
@@ -718,6 +720,7 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
   const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
   moveOwnLeaders(side, src, dst); dst.characters.push(...movingChars);
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
+  log(state, null, 'army', `Moved army ${from} -> ${to}`); // before its consequences
   // Capture an undefended enemy Settlement.
   captureIfEnemySettlement(state, to, side);
   liftSiegeIfAbandoned(state, from); // a besieger that vacates the field lifts the siege
@@ -726,7 +729,6 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
   const dn = REGIONS[to]!.nation;
   if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
   activateOnCompanionLand(state, side, movingChars, to);
-  log(state, null, 'army', `Moved army ${from} -> ${to}`);
   return true;
 }
 
