@@ -104,8 +104,13 @@ export interface HuntState {
   specialsInPlay: string[];
   /** Special tile ids added to the active pool (after entering Mordor). */
   specialsInPool: string[];
-  /** Special tiles drawn this cycle (reshuffled with the pool when it empties). */
+  /** Special tiles already drawn. They never return: a reshuffle puts back only the
+   *  standard (beige) tiles (rulebook p.40). */
   specialsDrawn: string[];
+  /** Tiles Mithril Coat and Sting has set aside mid-Hunt: out of the bag (so neither
+   *  the redraw nor a reshuffle can bring them back) until the Action ends, when they
+   *  return to the pool (card text: "...then return the first tile to the Hunt Pool"). */
+  setAside?: ({ std: number } | { spec: string })[];
   /** Recent Hunt-tile draws (newest last, capped), for the UI's informational popup.
    *  `seq` increments per draw so the UI can show every not-yet-seen tile (even 0/
    *  blank ones). Public info — drawn tiles are open in WotR. */

@@ -64,14 +64,15 @@ type TileRef = { std: number } | { spec: string };
 
 /** Draw one tile from the active Hunt Pool — standard tiles (indices) PLUS any
  *  special tiles in the pool (card ids; present only once the Fellowship is on
- *  the Mordor Track). When the combined pool empties, all drawn tiles reshuffle.
- *  Returns the tile and a `ref` so a redraw (Mithril Coat) can return it. */
+ *  the Mordor Track). When the combined pool empties, the drawn STANDARD tiles
+ *  return to it; drawn special tiles and permanently removed tiles never do
+ *  (rulebook p.40), nor does a tile Mithril Coat has set aside (it goes back when
+ *  the Action ends). Returns the tile and a `ref` so a redraw can set it aside. */
 function drawTile(state: GameState): { tile: HuntTileDef; ref: TileRef } {
   const h = state.hunt;
   if (!h.specialsDrawn) h.specialsDrawn = []; // tolerate pre-field snapshots
   if (h.pool.length + h.specialsInPool.length === 0) {
     h.pool = h.drawn.slice(); h.drawn = [];
-    h.specialsInPool = h.specialsDrawn.slice(); h.specialsDrawn = [];
   }
   const n = h.pool.length + h.specialsInPool.length;
   if (n === 0) return { tile: STANDARD_TILE_LIST[0]!, ref: { std: 0 } }; // exhausted safety net
@@ -86,12 +87,31 @@ function drawTile(state: GameState): { tile: HuntTileDef; ref: TileRef } {
   return { tile: SPECIAL_TILE_BY_CARD[cardId]!, ref: { spec: cardId } };
 }
 
-/** Return a just-drawn tile to the active pool (Mithril Coat's "return the first
- *  tile to the Hunt Pool"). */
-function returnTileToPool(state: GameState, ref: TileRef): void {
+/** Take a just-drawn tile back off the drawn pile (it is returning to the pool, or
+ *  being set aside). */
+function unDraw(state: GameState, ref: TileRef): void {
   const h = state.hunt;
-  if ('std' in ref) { const i = h.drawn.lastIndexOf(ref.std); if (i >= 0) h.drawn.splice(i, 1); h.pool.push(ref.std); }
-  else { const i = h.specialsDrawn.lastIndexOf(ref.spec); if (i >= 0) h.specialsDrawn.splice(i, 1); h.specialsInPool.push(ref.spec); }
+  if ('std' in ref) { const i = h.drawn.lastIndexOf(ref.std); if (i >= 0) h.drawn.splice(i, 1); }
+  else { const i = h.specialsDrawn.lastIndexOf(ref.spec); if (i >= 0) h.specialsDrawn.splice(i, 1); }
+}
+/** Return a just-drawn tile to the active pool (Challenge of the King's non-Eyes). */
+function returnTileToPool(state: GameState, ref: TileRef): void {
+  unDraw(state, ref);
+  if ('std' in ref) state.hunt.pool.push(ref.std);
+  else state.hunt.specialsInPool.push(ref.spec);
+}
+/** End of the Action: tiles Mithril Coat and Sting set aside go back into the pool.
+ *  Held out until now so that neither the redraw itself nor any tile drawn later in
+ *  the same Action (a Stronghold reveal, Balrog of Moria, a reshuffle) can bring
+ *  the first tile back (player report 2l152j1a1s1d583x). */
+export function returnSetAsideHuntTiles(state: GameState): void {
+  const aside = state.hunt.setAside;
+  if (!aside?.length) return;
+  for (const ref of aside) {
+    if ('std' in ref) state.hunt.pool.push(ref.std);
+    else state.hunt.specialsInPool.push(ref.spec);
+  }
+  state.hunt.setAside = [];
 }
 
 /** Which Hunt re-roll modifiers apply in the Ring-bearers' region (rules-spec §10):
@@ -288,14 +308,18 @@ export function resolveHuntPreventDraw(state: GameState, prevent: boolean): void
   if (d.extra) { doExtraDraw(state, d.extra); return; }
   doHuntDraw(state, d.successes, d.onMordor);
 }
-/** Resolve the redraw choice (Mithril Coat): redraw (return the first tile, draw
+/** Resolve the redraw choice (Mithril Coat): redraw (set the first tile aside, draw
  *  a second, apply it) or keep the first. */
 export function resolveHuntRedraw(state: GameState, redraw: boolean): void {
   const d = state.pendingChoice!.data as { tile: HuntTileDef; ref: TileRef; successes: number; onMordor: boolean; extra?: HuntOpts };
   state.pendingChoice = null;
   if (redraw) {
     discardTableCard(state, MITHRIL_COAT);
-    returnTileToPool(state, d.ref);
+    // The first tile is set aside, not returned yet: the card applies the second tile
+    // "instead of the first one, THEN return[s] the first tile to the Hunt Pool" — so
+    // the redraw can never come up with the very same tile.
+    unDraw(state, d.ref);
+    (state.hunt.setAside ??= []).push(d.ref);
     const { tile, ref } = drawTile(state);
     log(state, null, 'hunt', 'Mithril Coat and Sting: redrew the Hunt tile');
     if (d.extra) applyExtraTile(state, tile, ref, d.extra);

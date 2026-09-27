@@ -3,7 +3,7 @@
 // caller (the AI pushes toward Mordor).
 import type { GameState, RegionId, CharacterId, Nation } from './types';
 import { FP_NATIONS } from './types';
-import { REGIONS, levelOf, COMPANIONS, nationName } from './data';
+import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
 import { activateNation } from './politics';
 import { settlementController, figureForce } from './armies';
@@ -510,7 +510,15 @@ export function enterMordor(state: GameState): boolean {
   if (fs.mordor !== null || !MORDOR_ENTRANCES.includes(fs.location)) return false;
   fs.mordor = 0;
   fs.progress = 0;
-  // Special tiles in play now join the active Hunt Pool (rules-spec §11).
+  // A new Hunt Pool (rulebook p.43 step 2): every Eye tile drawn so far goes back
+  // with the remaining tiles — except any permanently removed, which are no longer
+  // on the drawn pile — and the special tiles in play join it (rules-spec §11).
+  const h = state.hunt;
+  const eyes = h.drawn.filter((i) => STANDARD_TILE_LIST[i]?.value === 'eye');
+  if (eyes.length) {
+    h.drawn = h.drawn.filter((i) => STANDARD_TILE_LIST[i]?.value !== 'eye');
+    h.pool.push(...eyes);
+  }
   if (state.hunt.specialsInPlay.length) {
     state.hunt.specialsInPool.push(...state.hunt.specialsInPlay);
     state.hunt.specialsInPlay = [];

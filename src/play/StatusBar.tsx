@@ -57,7 +57,7 @@ function HuntTilesBrowser({ view }: { view: GameState }) {
   return (
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
-        title="Hunt tiles drawn so far (they return when the pool reshuffles), plus special tiles in play / in the pool">
+        title="Hunt tiles drawn so far (the standard ones return when the pool reshuffles; special tiles never do), plus special tiles in play / in the pool">
         Hunt tiles {total} {open ? '▴' : '▾'}
       </button>
       {open && (

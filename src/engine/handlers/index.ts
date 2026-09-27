@@ -1915,8 +1915,9 @@ register('sh-char-24', { // The Black Captain Commands
 // separation cards (I Will Go Alone etc.) already work. The card used to be refused
 // outright on the Track (player report, 2026-09-08: revealed on Mordor step 1 with
 // a Character die, "it won't let me play 'breaking of the fellowship'").
-// With Gollum as the Guide the card needs only a revealed Fellowship — no Companion,
-// no tile draw: "directly add 1 Corruption and ignore other text" (Almanac, C14).
+// With no Companions left (i.e. Gollum is the Guide — the same thing) there is no
+// tile draw: "directly add 1 Corruption and ignore other text" (Almanac, C14). So
+// any revealed Fellowship is a target, with or without Companions.
 register('sh-char-14', {
   canPlay: (state) => !state.fellowship.hidden && (isGollumGuide(state) || state.fellowship.companions.some((c) => COMPANION_SET.has(c))),
   apply(state) {
@@ -2394,9 +2395,11 @@ register('sh-str-01', {
 });
 
 // Lure of the Ring: a random Companion; the FP chooses Corruption=Level or to
-// eliminate him (Gollum-as-Guide → +1 Corruption instead, no choice). Gollum guiding
-// needs no Companion at all — only the revealed Fellowship (Almanac, C13; player
-// report 2l3i6v046f3h241i: Gollum alone with the Ring-bearers, card refused).
+// eliminate him. "If Gollum is the Guide" and "no Companions are left in the
+// Fellowship" are the same situation (Gollum becomes the Guide exactly when the last
+// Companion leaves), and then the card simply adds 1 Corruption (Almanac, C13) — so
+// any revealed Fellowship is a target, with or without Companions (player report
+// 2l3i6v046f3h241i: Gollum alone with the Ring-bearers, card refused).
 register('sh-char-13', {
   canPlay: (state) => !state.fellowship.hidden && (isGollumGuide(state) || state.fellowship.companions.some((c) => COMPANION_SET.has(c))),
   apply(state) {

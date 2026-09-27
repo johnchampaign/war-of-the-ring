@@ -15,7 +15,7 @@ import {
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders, figureForce, forceUnitCount,
 } from '../engine/armies';
 import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
-import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending } from '../engine/hunt';
+import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending, returnSetAsideHuntTiles } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
 import { canBringMinion, entryRegions, bringMinion, MINION_IDS } from '../engine/minions';
@@ -1395,6 +1395,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
   // that took the Ring-bearers to 12 should hand the game to the SHADOW, but the FP
   // had already been declared the winner.
   if (!huntResolutionPending(state)) checkRingVictory(state);
+  // Nothing left open = the Action is over: a tile Mithril Coat set aside rejoins the
+  // Hunt Pool now, not before (card text; player report 2l152j1a1s1d583x).
+  if (!state.pendingChoice) returnSetAsideHuntTiles(state);
   advance(state);
 }
 
