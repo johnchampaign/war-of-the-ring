@@ -13,7 +13,7 @@
 import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
-import { REGIONS, levelOf } from '../engine/data';
+import { REGIONS, levelOf, characterDef } from '../engine/data';
 import { unitCount, forceUnitCount, STACKING_LIMIT, splitBlockReason } from '../engine/armies';
 import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
@@ -1352,6 +1352,16 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         return (saver && pick(saver)) || decline;
       }
       return (d.leaders > 0 && pick('leader')) || decline;
+    }
+    case 'wordsOfPower': {
+      // Silencing Gandalf the White while The White Rider is in use gives back ALL the
+      // Nazgûl Leadership for the round; otherwise take the most Leadership (+ a
+      // Captain of the West die) off the Free Peoples.
+      const pc = state.pendingCombat;
+      const worth = (c: string) => (c === 'gandalf-white' && pc?.whiteRiderForfeit ? 10 : 0)
+        + (characterDef(c)?.leadership ?? 0) * 2 + (['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'aragorn'].includes(c) ? 1 : 0);
+      const opts = legal.filter((a): a is Extract<WotrAction, { kind: 'wordsOfPower' }> => a.kind === 'wordsOfPower');
+      return opts.sort((x, y) => worth(y.companion) - worth(x.companion))[0] ?? legal[0]!;
     }
     case 'whiteRider': // only offered when there's Nazgûl Leadership to negate → forfeit
       return legal.find((a) => a.kind === 'whiteRider' && a.forfeit) ?? legal[0]!;

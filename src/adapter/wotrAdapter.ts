@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders, figureForce, forceUnitCount,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
+import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveWordsOfPower, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending, returnSetAsideHuntTiles } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
@@ -233,6 +233,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
           ...d.companions.map((c) => ({ kind: 'heroicDeath' as const, sacrifice: c })),
           { kind: 'heroicDeath' as const },
         ];
+      }
+      case 'wordsOfPower': {
+        const d = state.pendingChoice.data as { companions: string[] };
+        return d.companions.map((c) => ({ kind: 'wordsOfPower' as const, companion: c }));
       }
       case 'whiteRider':
         return [{ kind: 'whiteRider', forfeit: true }, { kind: 'whiteRider', forfeit: false }];
@@ -1226,6 +1230,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'heroicDeath':
       requireChoice(state, 'heroicDeath', actor); resolveHeroicDeath(state, action.sacrifice); break;
+    case 'wordsOfPower':
+      requireChoice(state, 'wordsOfPower', actor); resolveWordsOfPower(state, action.companion); break;
     case 'whiteRider':
       requireChoice(state, 'whiteRider', actor); resolveWhiteRider(state, action.forfeit); break;
     case 'crebain':

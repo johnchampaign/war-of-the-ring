@@ -172,6 +172,7 @@ export function describeAction(a: WotrAction): string {
       const lvl = levelOf(a.sacrifice);
       return `Sacrifice ${charName(a.sacrifice)} — cancel up to ${lvl} hit${lvl === 1 ? '' : 's'}`;
     }
+    case 'wordsOfPower': return `Cancel ${charName(a.companion)}`;
     case 'whiteRider': return a.forfeit ? 'Forfeit Gandalf’s Leadership (negate Nazgûl)' : 'Keep Gandalf’s Leadership';
     case 'balrog': return a.use ? 'Discard Balrog of Moria — draw an extra Hunt tile' : 'Don’t use the Balrog';
     case 'crebain': return a.use ? 'Discard Flocks of Crebain — +1 to all Hunt dice' : 'Save Flocks of Crebain';
@@ -287,7 +288,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['freeCharEvent', 'playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'heroicDeath', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
+const DECISION_KINDS = new Set(['freeCharEvent', 'playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'heroicDeath', 'wordsOfPower', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);
 
 /** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)

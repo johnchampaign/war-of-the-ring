@@ -233,6 +233,9 @@ export interface PendingCombat {
    *  means "not asked yet"; both reset when the round's cards are cleared. */
   atkCardCost?: number;
   defCardCost?: number;
+  /** Words of Power this round: the Companion its owner named (null: none to name).
+   *  `undefined` means "not asked yet"; reset when the round's cards are cleared. */
+  wordsOfPowerTarget?: string | null;
   /** Hits scored this round (attacker's hits land on the defender, vice versa). */
   atkHits: number;
   defHits: number;

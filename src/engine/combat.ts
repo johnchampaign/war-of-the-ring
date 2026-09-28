@@ -12,7 +12,7 @@ import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeForMovement, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
-import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, type CombatMods, type VariableCost } from './combatCards';
+import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
 import { log } from './log';
 
 // Safety backstop only — a real field battle terminates when the attacker ceases
@@ -102,11 +102,10 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   // this Companion (CUMULATIVE if more Captains of the West are in the battle) up to a
   // maximum of 5 Combat dice" (Almanac, the Companion entries). It used to be a flat
   // +1 for "any Captain present", so Aragorn and Gimli together bought what Gimli
-  // alone did (player report 3m4h5z). Words of Power cancels ONE chosen Companion's
-  // abilities for the round, so it now takes one Captain off the count rather than
-  // erasing the whole bonus (the target pick itself is still unmodelled).
-  let captains = side === 'fp' ? own.characters.filter((c) => CAPTAINS.has(c)).length : 0;
-  if (enemyMods.enemyCaptainCancel) captains = Math.max(0, captains - 1);
+  // alone did (player report 3m4h5z). Words of Power cancels the abilities of the ONE
+  // Companion its owner named, so only a named Captain comes off the count.
+  const silenced = silencedCompanion(own, side, enemyMods);
+  let captains = side === 'fp' ? own.characters.filter((c) => CAPTAINS.has(c) && c !== silenced).length : 0;
   let count = Math.min(5, forceUnitCount(own) + captains);
   if (enemyMods.maxDiceEnemy != null) count = Math.min(count, enemyMods.maxDiceEnemy);
   // Dread and Despair: "rolls one Combat die less (to a minimum of one)".
@@ -126,8 +125,12 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   if (whiteRiderForfeit) {
     leadVal = Math.max(0, leadVal - (side === 'shadow' ? nazgulLeadership(own) : 1));
   }
+  // Words of Power: the named Companion's Leadership is cancelled this round. (When he
+  // is Gandalf the White with The White Rider in use, the caller has already switched
+  // the ability off for the round, so his Leadership comes off here exactly once.)
+  if (silenced) leadVal = Math.max(0, leadVal - (characterDef(silenced)?.leadership ?? 0));
   // The five-dice cap (p.28) bites only here, after every forfeit and penalty.
-  const lead = Math.min(5, Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0) - (enemyMods.enemyLeadershipPenalty ?? 0)));
+  const lead = Math.min(5, Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0)));
   // Foul Stench cancels the FP Leader re-roll only "if the Nazgûl Leadership equals or
   // exceeds the total Free Peoples Leadership" (p. card text). `side` here is the side
   // ROLLING, so this fires while the FP rolls and the Shadow holds the card. NAZGÛL
@@ -967,8 +970,12 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       if (forceUnitCount(foe) === 0) continue;
       let ownElites = 0;
       for (const n of Object.keys(ownForce.units) as Nation[]) ownElites += ownForce.units[n]!.elite;
+      // Words of Power (initiative 1) resolves before Sudden Strike (2), so a named
+      // Companion's Leadership is already gone when these dice are counted (Almanac).
+      const foeMods = ef.side === pc.attacker ? dMods : aMods;
+      const silenced = silencedCompanion(ownForce, ef.side, foeMods);
       const dice = Math.min(5, ef.mods.preCombatAttackFrom === 'leadership'
-        ? forceLeadership(state, ownForce, ef.side) : ownElites);
+        ? Math.max(0, forceLeadership(state, ownForce, ef.side) - (silenced ? characterDef(silenced)?.leadership ?? 0 : 0)) : ownElites);
       if (dice <= 0) continue;
       const target = ef.side === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
       const faces: number[] = [];
@@ -1375,6 +1382,7 @@ export function combatStep(state: GameState): void {
         // roll — the post-casualty 'onslaught' step reads them; see the note there).
         pc.attackerCard = null; pc.defenderCard = null;
         pc.atkCardCost = undefined; pc.defCardCost = undefined;
+        pc.wordsOfPowerTarget = undefined;
         pc.greatHostDone = false; pc.postAtkDone = false; // fresh cards -> fresh post-casualty evaluation
         if (pc.siegeWithdrawAsked !== pc.round && strongholdWithdrawAvailable(state, pc)) {
           pc.step = 'siegeWithdraw'; continue;
@@ -1404,6 +1412,20 @@ export function combatStep(state: GameState): void {
             data: { card: due.card, kind: due.vc.kind, min: due.range.min, max: due.range.max } };
           return;
         }
+        // Words of Power: "Choose a Companion." Its owner names him before the roll. With
+        // exactly one Companion in the enemy force there is nothing to choose, so he is
+        // named automatically; with none the card has nothing to cancel.
+        if (pc.wordsOfPowerTarget === undefined) {
+          const wop = wordsOfPowerSide(pc);
+          if (wop) {
+            const options = wordsOfPowerCandidates(state, pc, wop);
+            if (options.length > 1 && !outrunByPreCombatRetreat(state, pc, wop)) {
+              state.pendingChoice = { owner: wop, kind: 'wordsOfPower', data: { card: wop === pc.attacker ? pc.attackerCard : pc.defenderCard, companions: options } };
+              return;
+            }
+            pc.wordsOfPowerTarget = options[0] ?? null;
+          } else pc.wordsOfPowerTarget = null;
+        }
         pc.step = 'beginRound'; continue;
       }
       case 'beginRound': {
@@ -1427,8 +1449,8 @@ export function combatStep(state: GameState): void {
         };
         // Each side's combat card (if any) applies THIS round, then is spent —
         // a fresh card may be played next round (rules-spec §7, p.29).
-        const aCtx = { ownCharacters: atkForce(state, pc).characters, cost: pc.atkCardCost };
-        const dCtx = { ownCharacters: defForce(state, pc).characters, cost: pc.defCardCost };
+        const aCtx = { ownCharacters: atkForce(state, pc).characters, cost: pc.atkCardCost, target: pc.wordsOfPowerTarget };
+        const dCtx = { ownCharacters: defForce(state, pc).characters, cost: pc.defCardCost, target: pc.wordsOfPowerTarget };
         let aMods = pc.attackerCard ? (combatModsFor(pc.attackerCard, aCtx) ?? EMPTY_MODS) : EMPTY_MODS;
         let dMods = pc.defenderCard ? (combatModsFor(pc.defenderCard, dCtx) ?? EMPTY_MODS) : EMPTY_MODS;
         // Cancels resolve in initiative order (lower first; tie -> defender). A
@@ -1446,6 +1468,19 @@ export function combatStep(state: GameState): void {
         let aOutrun = false, dOutrun = false;
         if (!aCancelled && outrunByPreCombatRetreat(state, pc, pc.attacker)) { aMods = EMPTY_MODS; aOutrun = true; }
         if (!dCancelled && outrunByPreCombatRetreat(state, pc, pc.defender)) { dMods = EMPTY_MODS; dOutrun = true; }
+        // Words of Power on Strider/Aragorn negates Andúril, which is paid for with his
+        // Leadership — now cancelled (Almanac, Words of Power).
+        const shMods = pc.attacker === 'shadow' ? aMods : dMods;
+        const silencedNow = typeof shMods.cancelCompanion === 'string' ? shMods.cancelCompanion : null;
+        const fpCard = pc.attacker === 'fp' ? pc.attackerCard : pc.defenderCard;
+        let fpSilencedCard = false;
+        if (fpCard && (silencedNow === 'strider' || silencedNow === 'aragorn') && EVENT_BY_ID[fpCard]?.combat?.title === 'Andúril') {
+          if (pc.attacker === 'fp') aMods = EMPTY_MODS; else dMods = EMPTY_MODS;
+          fpSilencedCard = true;
+        }
+        // …and on Gandalf the White it switches The White Rider off for THIS round only:
+        // the Nazgûl Leadership returns until the next round (Almanac, Words of Power).
+        const whiteRider = !!pc.whiteRiderForfeit && silencedNow !== 'gandalf-white';
         // Announce each card WITH what it mechanically does this round, so the dice
         // that follow can be audited against it (player report: a card was played
         // "for an effect without telling me what it did"). Logged after the cancel
@@ -1453,6 +1488,7 @@ export function combatStep(state: GameState): void {
         const played = (card: string | null, mods: CombatMods, cancelled: boolean, outrun = false) => {
           if (!card) return cardName(card);
           if (cancelled) return `${cardName(card)} — CANCELLED by the opposing card`;
+          if (card === fpCard && fpSilencedCard) return `${cardName(card)} — NO EFFECT: Words of Power has cancelled ${characterDef(silencedNow!)?.name ?? silencedNow}'s Leadership`;
           if (outrun) return `${cardName(card)} — TOO SLOW: the opposing card retreats its Army first, so this one never resolves`;
           const what = describeCombatMods(mods);
           return `${cardName(card)}${what ? ` — ${what}` : ''}`;
@@ -1472,14 +1508,14 @@ export function combatStep(state: GameState): void {
         // '5' or higher"), which `fortified: false` already encodes.
         const atkTarget = (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
         const aRoll: CombatRoll = { dice: [], rerolls: [], target: atkTarget };
-        const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, pc.whiteRiderForfeit, aRoll,
+        const atkHits = rollHits(state, pc.from, pc.to, pc.attacker, atkTarget, aMods, dMods, whiteRider, aRoll,
           pc.boxed === pc.attacker ? state.regions[pc.from]!.siegeBox : undefined, defForce(state, pc));
         // Help Unlooked For: cap the defender's dice (min 1) via the existing maxDiceEnemy mod.
         const defEnemyMods = pc.defDicePenalty
           ? { ...aMods, maxDiceEnemy: Math.max(1, Math.min(5, forceUnitCount(defForce(state, pc))) - pc.defDicePenalty) }
           : aMods;
         const dRoll: CombatRoll = { dice: [], rerolls: [], target: 5 };
-        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, pc.whiteRiderForfeit, dRoll,
+        const defHits = rollHits(state, pc.to, pc.from, pc.defender, 5, dMods, defEnemyMods, whiteRider, dRoll,
           pc.boxed === pc.defender ? state.regions[pc.to]!.siegeBox : undefined, atkForce(state, pc));
         pc.atkRoll = aRoll; pc.defRoll = dRoll; pc.rollRound = pc.round;
         // Hit cancellation: Shield-wall. Shield-wall only fires "if your opponent
@@ -2000,6 +2036,38 @@ export function resolveHeroicDeath(state: GameState, sacrifice: 'leader' | strin
   pc.heroicDeath = undefined;
   pc.step = 'attackerCasualties';
   state.pendingChoice = null;
+}
+
+/** The side that played Words of Power this round (always the Shadow), or null. */
+function wordsOfPowerSide(pc: PendingCombat): Side | null {
+  for (const side of [pc.attacker, pc.defender]) {
+    const card = side === pc.attacker ? pc.attackerCard : pc.defenderCard;
+    if (card && EVENT_BY_ID[card]?.combat?.title === 'Words of Power') return side;
+  }
+  return null;
+}
+
+/** The Companions Words of Power may name: those in the card owner's enemy force. */
+export function wordsOfPowerCandidates(state: GameState, pc: PendingCombat, owner: Side): string[] {
+  const foe = owner === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
+  return foe.characters.filter((c) => COMPANION_SET.has(c));
+}
+
+/** Words of Power: the Companion the ENEMY's card cancelled this round, if he is in
+ *  `own` (only the Free Peoples have Companions). */
+function silencedCompanion(own: Force, side: Side, enemyMods: CombatMods): string | null {
+  const t = enemyMods.cancelCompanion;
+  return side === 'fp' && typeof t === 'string' && own.characters.includes(t) ? t : null;
+}
+
+/** Resolve the Words of Power "choose a Companion" prompt (combat resumes via advance). */
+export function resolveWordsOfPower(state: GameState, companion: string): void {
+  const pc = state.pendingCombat!;
+  const d = state.pendingChoice!.data as { companions: string[] };
+  if (!d.companions.includes(companion)) throw new Error(`Words of Power cannot name ${companion}`);
+  pc.wordsOfPowerTarget = companion;
+  state.pendingChoice = null;
+  log(state, null, 'combat', `Words of Power names ${characterDef(companion)?.name ?? companion}: his Leadership and special abilities are cancelled this Combat round`);
 }
 
 /** Resolve the White Rider battle-start choice (combat resumes via advance). */

@@ -46,6 +46,7 @@ const CHOICE_TITLE: Record<string, string> = {
   nazgulStrike: 'The Nazgûl find the Fellowship — discard one Free Peoples card from the table, or roll for the Hunt?',
   relieveAdvance: 'The siege is broken — advance your Army into the region?',
   besiegerAdvance: 'They have fallen back inside — advance and lay siege?',
+  wordsOfPower: 'Words of Power — choose the Companion whose Leadership and special abilities are cancelled this Combat round',
   whiteRider: 'The White Rider — forfeit Gandalf’s Leadership to negate all Nazgûl Leadership?',
   balrog: 'Balrog of Moria — discard it to draw an extra Hunt tile?',
   crebain: 'Flocks of Crebain — discard for +1 to all Hunt dice this roll?',

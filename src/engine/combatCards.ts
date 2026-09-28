@@ -4,7 +4,7 @@
 // faithfully; a few intricate ones (specific Character elimination, forfeit-
 // Leadership bookkeeping, retreat-as-card) are approximated or omitted — a card
 // with no mapped title is simply not offered as a combat card. See D5 note.
-import { EVENT_BY_ID, COMPANIONS, UPGRADES } from './data';
+import { EVENT_BY_ID, COMPANIONS, UPGRADES, characterDef } from './data';
 
 export interface CombatMods {
   /** +N to the owner's COMBAT ROLL dice (lowers the hit target). The cards name the
@@ -81,12 +81,12 @@ export interface CombatMods {
   /** Roll N extra dice as a pre-combat attack on the enemy (hits on 4+),
    *  applied immediately before the normal round (Durin's Bane). */
   preCombatAttackDice?: number;
-  /** Reduce the ENEMY's effective Leadership by N this round (cancel a Companion's
-   *  Leadership — Words of Power). */
-  enemyLeadershipPenalty?: number;
-  /** Cancel the enemy's Captain-of-the-West die bonus this round (the "abilities"
-   *  half of Words of Power). */
-  enemyCaptainCancel?: boolean;
+  /** Words of Power: "Choose a Companion. That Companion's Leadership and special
+   *  abilities are cancelled for this Combat round." `true` until the owner has
+   *  named him (the card's baseline, for valuation); then the chosen figure id. Its
+   *  Leadership, Captain of the West bonus and — for Gandalf the White — The White
+   *  Rider are all cancelled for the round (Almanac, Words of Power). */
+  cancelCompanion?: true | string;
   /** Black Breath: if the owner scored ≥1 hit, additionally eliminate one enemy FP
    *  Leader in the battle, OR a Companion whose Level ≤ the round's hits. */
   blackBreath?: boolean;
@@ -130,7 +130,7 @@ const BY_TITLE: Record<string, CombatMods> = {
   'Confusion': { enemyOnesBackfire: true },
   'Foul Stench': { negateEnemyRerollIfNazgulDominant: true }, // RAW gates it on Leadership (see the field)
   // cancel one enemy Companion's Leadership + abilities for the round
-  'Words of Power': { enemyLeadershipPenalty: 1, enemyCaptainCancel: true },
+  'Words of Power': { cancelCompanion: true }, // the Companion is named by the owner (combatModsFor)
   // eliminate an FP Leader / Companion when the Leader re-roll scores a hit
   'Black Breath': { blackBreath: true },
   // extra attacks
@@ -174,8 +174,8 @@ export function describeCombatMods(mods: CombatMods): string {
   if (mods.maxDiceEnemy != null) p.push(`enemy rolls at most ${mods.maxDiceEnemy} Combat dice`);
   if (mods.enemyDiceReduction) p.push(`enemy rolls ${mods.enemyDiceReduction} fewer Combat ${mods.enemyDiceReduction === 1 ? 'die' : 'dice'} (min 1)`);
   if (mods.ownLeadershipPenalty) p.push(`forfeits ${mods.ownLeadershipPenalty} Leadership (fewer re-roll dice)`);
-  if (mods.enemyLeadershipPenalty) p.push(`enemy Leadership −${mods.enemyLeadershipPenalty}`);
-  if (mods.enemyCaptainCancel) p.push('cancels the Captain of the West bonus');
+  if (typeof mods.cancelCompanion === 'string') p.push(`cancels ${characterDef(mods.cancelCompanion)?.name ?? mods.cancelCompanion}'s Leadership and special abilities this round`);
+  else if (mods.cancelCompanion) p.push("cancels one Companion's Leadership and special abilities this round");
   if (mods.negateEnemyReroll) p.push('cancels the enemy Leader re-roll');
   if (mods.cancelEnemyCard) p.push("cancels the enemy's Combat card");
   if (mods.preCombatAttackDice) p.push(`pre-combat attack: ${mods.preCombatAttackDice} dice, hits on 4+`);
@@ -202,11 +202,14 @@ export interface CombatModContext {
   ownCharacters?: readonly string[];
   /** What the owner chose to pay for a variable-size card this round. */
   cost?: number;
+  /** The enemy Companion the owner named for Words of Power this round (null: none
+   *  could be named). */
+  target?: string | null;
 }
 
 /** Every Companion figure id (the starting five plus the Aragorn / Gandalf the White
  *  upgrades) — what "for each Companion in the battle" counts. */
-const COMPANION_SET = new Set<string>([...Object.keys(COMPANIONS), ...Object.keys(UPGRADES)]);
+export const COMPANION_SET = new Set<string>([...Object.keys(COMPANIONS), ...Object.keys(UPGRADES)]);
 
 /** Cards whose effect is sized by a cost the OWNER chooses when playing them.
  *  RAW wording, and why each is here rather than a flat entry in BY_TITLE:
@@ -266,6 +269,8 @@ export function combatModsFor(cardId: string, ctx?: CombatModContext): CombatMod
     const companions = ctx.ownCharacters.filter((c) => COMPANION_SET.has(c)).length;
     return { ...base, enemyDiceReduction: Math.max(1, companions) };
   }
+  // Words of Power does nothing until its owner names the Companion (or finds none).
+  if (title === 'Words of Power') return ctx?.target ? { cancelCompanion: ctx.target } : (ctx && 'target' in ctx ? {} : base);
   if (title === 'Relentless Assault') return cost > 0 ? { ...base, rollBonus: cost } : base;
   if (title === 'Dread and Despair') return cost > 0 ? { ...base, enemyDiceReduction: cost, ownLeadershipPenalty: cost } : base;
   return base;
