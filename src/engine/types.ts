@@ -371,6 +371,13 @@ export interface GameState {
      *  (a Reveal later in the same Hunt resets Progress to 0), and the destination
      *  choice is raised by `advance` once the Hunt has finished resolving. */
     takenAlive?: { companion: CharacterId; from: RegionId; range: number };
+    /** A card draw owed "after you use an Event Action die result to play an Event
+     *  card" — The Palantír of Orthanc (Shadow) or Gandalf the Grey's Guide ability
+     *  (FP, from the played card's deck). Both wait for the END of the Action (Almanac):
+     *  after the card's follow-up choices, any Hunt it caused, and every round of a
+     *  battle it started. `advance` offers it once nothing else is pending, and only if
+     *  the Palantír is still on the table / Gandalf is still Guide by then. */
+    actionEndDraw?: { palantir?: boolean; guideDeck?: 'character' | 'strategy' };
   };
   pendingChoice: PendingChoice | null;
   /** An interactive battle in progress, or null. */

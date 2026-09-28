@@ -1624,10 +1624,9 @@ register('sh-str-06', {
   finalize(state, _side, applied) {
     const n = applied[0]?.nation; if (!n) return;
     const hasUnit = Object.keys(state.regions).some((id) => { const u = figureForce(state, id, 'fp').units[n]; return !!u && (u.regular > 0 || u.elite > 0); });
-    // A Palantír of Orthanc draw already pending waits until the loss is chosen, rather
-    // than one choice overwriting the other.
-    const thenBonusDraw = state.pendingChoice?.kind === 'bonusDraw';
-    if (hasUnit) state.pendingChoice = { owner: 'fp', kind: 'stormcrowLoss', data: { nation: n, ...(thenBonusDraw ? { thenBonusDraw } : {}) } };
+    // A Palantír of Orthanc draw is owed only at the end of the Action, so it comes
+    // after this loss by itself (advance).
+    if (hasUnit) state.pendingChoice = { owner: 'fp', kind: 'stormcrowLoss', data: { nation: n } };
   },
 });
 /** Every FP Nation, not yet At War, whose borders hold the Fellowship or a Companion. */

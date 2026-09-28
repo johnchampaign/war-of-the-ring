@@ -277,7 +277,11 @@ die already showing an Eye.
   and lets the card persist. Three more persistent cards carry their own machinery:
   *The Palantír of Orthanc* (after the Shadow plays an Event card, a `bonusDraw`
   PendingChoice lets it draw from either Shadow deck — captured before the play so the
-  card can't trigger off itself; adapter `playEvent`/`eventTarget`), *Worn with Sorrow
+  card can't trigger off itself; adapter `playEvent`/`eventTarget`. The draw is owed at
+  the **end of the Action** (`flags.actionEndDraw`, offered by `advance`): after the
+  card's follow-up choices and every round of a battle it started, and not at all if
+  Saruman was eliminated meanwhile — Almanac, The Palantír of Orthanc; report
+  0l2a1m3v0l1p0t3r. Gandalf the Grey's Guide draw uses the same slot), *Worn with Sorrow
   and Toil* (on a Fellowship-Companion casualty the Shadow discards an FP Character card,
   random from hand else from the table; hunt.ts `discardFpCharacterCard`), and *Wormtongue*
   (`activateNation` gains a `trigger` arg — carrying `viaAttack` — so Rohan stays passive

@@ -795,7 +795,6 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const deck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
       if (h.onTable) state.cards[actor].table.push(action.cardId);
       else state.cards[actor].discard[deck].push(action.cardId);
-      if (palantirWasActive) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
       passResolutionTurn(state, actor);
       // A card whose target list is empty still has to follow its OTHER instructions —
       // "Recruit … then draw one Strategy Event card" with nothing recruitable is still
@@ -803,9 +802,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // off the eventTarget path, so those riders were silently dropped; it goes last
       // here for the same reason it does there (its own PendingChoice must survive).
       h.finalize?.(state, actor, []);
-      // Gandalf the Grey's Guide ability — checked once the card has fully resolved,
-      // so it asks who is Guide at the END of the Action (see eventTarget below).
-      if (guideDrawsNow) guideEventDraw(state, actor, deck);
+      // The Palantír / Guide draw waits for the END of the Action (see advance).
+      owePostActionDraw(state, actor, palantirWasActive, guideDrawsNow, deck);
       break;
     }
     case 'eventTarget': {
@@ -825,17 +823,18 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       state.pendingChoice = null;
       const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
       state.cards[actor].discard[deck].push(data.card);
-      if (data.palantir) state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
       // A card that started a battle (Grond / Uruk-hai) hands off to the combat
       // driver, which resumes the turn itself — don't pass it here.
       if (!state.pendingCombat) passResolutionTurn(state, actor);
       // Post-resolution effect that may itself raise a follow-up choice (e.g. a
       // Fellowship move's Hunt) — run last so its PendingChoice isn't cleared above.
       if (!state.pendingCombat) h.finalize?.(state, actor, data.applied);
-      // Gandalf the Grey's Guide ability asks who is Guide at the END of the Action,
-      // so it waits for finalize: Gandalf separated by Gwaihir no longer draws, and a
-      // Companion who became Guide mid-card does (player report joug252d7gwnw3ke).
-      if (data.guideDraw && !state.pendingCombat) guideEventDraw(state, actor, deck);
+      // The Palantír of Orthanc / Gandalf the Grey's Guide draw waits for the END of the
+      // Action — after finalize's choices, any Hunt, and every round of a battle the card
+      // started (Almanac). Gandalf separated by Gwaihir no longer draws, a Companion who
+      // became Guide mid-card does (report joug252d7gwnw3ke), and the Palantír no longer
+      // draws before Grond's battle is even fought (report 0l2a1m3v0l1p0t3r).
+      owePostActionDraw(state, actor, !!data.palantir, !!data.guideDraw, deck);
       break;
     }
     case 'lureChoice':
@@ -853,8 +852,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         if (f !== state.regions[action.region] && forceUnitCount(f) === 0) { f.leaders = 0; garrisonFalls(state, action.region, 'shadow'); }
       }
       log(state, null, 'event', `Stormcrow: Free Peoples lose a ${action.nation} ${action.figure === 'leader' ? 'Leader' : action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
-      // The turn already passed when the Event resolved; a Palantír draw held back
-      // behind this loss comes up now.
+      // A save from before the end-of-Action draw (advance) may still carry the
+      // Palantír draw parked behind this choice.
       state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw
         ? { owner: 'shadow', kind: 'bonusDraw', data: {} } : null;
       break;
@@ -884,8 +883,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       else if (beginSeparation(state, action.companion)) placeSeparatedCompanion(state, action.companion, dest);
       data.left -= 1;
       if (data.left > 0 && state.fellowship.companions.some((c) => c !== 'gollum')) break; // re-prompt for the next
-      // The turn already passed when the Event resolved; a Palantír draw held back
-      // behind this loss comes up now.
+      // A save from before the end-of-Action draw (advance) may still carry the
+      // Palantír draw parked behind this choice.
       state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw
         ? { owner: 'shadow', kind: 'bonusDraw', data: {} } : null;
       break;
@@ -893,8 +892,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'bonusDraw': {
       requireChoice(state, 'bonusDraw', actor); // Palantír of Orthanc bonus draw (or decline)
       if (action.deck !== 'none') drawOne(state, actor, action.deck, 'Palantír of Orthanc');
-      // The turn already passed when the Event resolved; a Palantír draw held back
-      // behind this loss comes up now.
+      // A save from before the end-of-Action draw (advance) may still carry the
+      // Palantír draw parked behind this choice.
       state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw
         ? { owner: 'shadow', kind: 'bonusDraw', data: {} } : null;
       break;
@@ -1659,13 +1658,13 @@ function drawOne(state: GameState, side: Side, deck: 'character' | 'strategy', r
   // Over-limit is resolved by the player's discard choice (engine enforceHandLimit).
 }
 
-/** Gandalf the Grey's Guide ability: after the FP plays an Event card while Gandalf is
- *  the Guide, the FP MAY draw a card from the matching deck — offered as a prompt. If a
- *  choice is already pending (rare chained effect), fall back to drawing automatically. */
-function guideEventDraw(state: GameState, actor: Side, deck: 'character' | 'strategy'): void {
-  if (actor !== 'fp' || state.fellowship.guide !== 'gandalf-grey') return;
-  if (state.pendingChoice) { drawOne(state, 'fp', deck, 'Gandalf the Grey, Guide'); return; }
-  state.pendingChoice = { owner: 'fp', kind: 'guideDraw', data: { deck } };
+/** Record the draw an Event-die play owes at the end of its Action: The Palantír of
+ *  Orthanc (Shadow, either deck) or Gandalf the Grey's Guide ability (FP, the played
+ *  card's deck). `advance` offers it once the Action has fully resolved, re-checking
+ *  that the Palantír is still on the table / Gandalf is still Guide. */
+function owePostActionDraw(state: GameState, actor: Side, palantir: boolean, guide: boolean, deck: 'character' | 'strategy'): void {
+  if (actor === 'shadow' && palantir) state.flags.actionEndDraw = { palantir: true };
+  else if (actor === 'fp' && guide) state.flags.actionEndDraw = { guideDeck: deck };
 }
 
 export const wotrAdapter: GameAdapter<GameState, WotrAction, Side> = {

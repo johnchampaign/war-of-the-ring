@@ -11,7 +11,7 @@ import type { GameState, Side, DieFace, Deck } from './types';
 import { poolSize, rollPool } from './dice';
 import { checkMilitaryVictory, checkRingVictory } from './victory';
 import { combatStep } from './combat';
-import { pruneTableCards } from './persistent';
+import { pruneTableCards, palantirActive } from './persistent';
 import { armySide, sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { log } from './log';
@@ -136,6 +136,22 @@ export function advance(state: GameState): void {
       combatStep(state);
       if (state.pendingChoice) return;
       continue;                                   // combat finished -> resume phases
+    }
+    // The Palantír of Orthanc / Gandalf the Grey's Guide draw, owed at the END of the
+    // Action (Almanac): only now is the played card fully resolved, battle and all. A
+    // Palantír swept off the table meanwhile (Saruman eliminated) or a Gandalf who is
+    // no longer Guide gives nothing.
+    if (state.flags.actionEndDraw) {
+      const d = state.flags.actionEndDraw;
+      delete state.flags.actionEndDraw;
+      if (d.palantir && palantirActive(state)) {
+        state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
+        return;
+      }
+      if (d.guideDeck && state.fellowship.guide === 'gandalf-grey') {
+        state.pendingChoice = { owner: 'fp', kind: 'guideDraw', data: { deck: d.guideDeck } };
+        return;
+      }
     }
     if (enforceHandLimit(state)) return;          // over 6 cards -> pause to discard (choice)
     switch (state.phase) {
