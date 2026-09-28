@@ -74,7 +74,11 @@ export interface CombatRoll { dice: number[]; rerolls: number[]; target: number;
   /** Confusion: unmodified '1's in THIS roll, each one a hit against the roller's
    *  OWN Army (and barred from the Leader re-roll). Scored by the enemy's card, so
    *  it is not part of `hits` — the round machine adds it to the other side's total. */
-  backfire?: number }
+  backfire?: number;
+  /** The enemy's card cancelled this roll's Leader re-roll (Foul Stench, when the
+   *  Nazgûl Leadership is high enough) — and with it every effect paid for or scored
+   *  on that re-roll: Mighty Attack, Andúril, Blade of Westernesse, Fateful Strike. */
+  rerollCancelled?: boolean }
 /** Mûmakil's initiative-5 bonus hit for each side: +N if, right after the Leader
  *  re-roll, that side has scored more hits than the enemy so far (Almanac, Mûmakil).
  *  `atkHits`/`defHits` are the rolled totals including each side's own automatic card
@@ -142,7 +146,13 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     conditionalNegate = nazgulLeadership(shadow, whiteRiderForfeit) >= leadVal;
   }
   const allowReroll = !enemyMods.negateEnemyReroll && !conditionalNegate;
+  // Mighty Attack and Andúril forfeit a Leadership "before rolling the dice for your
+  // Leader re-roll"; with the re-roll cancelled there is nothing to forfeit it for, so
+  // the card is negated outright (Almanac, Foul Stench: it "completely negates
+  // Andúril, Blade of Westernesse, Mighty Attack, and Fateful Strike").
+  const guaranteed = allowReroll ? (ownMods.guaranteedHits ?? 0) : 0;
   if (roll) { roll.dice = []; roll.rerolls = []; roll.target = target; roll.rerollTarget = rerollTarget; }
+  if (roll && !allowReroll) roll.rerollCancelled = true;
   // Confusion (held by the ENEMY): our unmodified '1's hit our own Army and may not
   // be re-rolled. Counted from the RAW face, which is what "unmodified" means — a
   // roll bonus never rescues a 1.
@@ -164,7 +174,7 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     const rerollDice = allowReroll ? Math.min(lead, failed) : 0;
     for (let i = 0; i < rerollDice; i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; failed--; } }
     // Mighty Attack: turn up to N still-missed dice into hits.
-    h += Math.min(ownMods.guaranteedHits ?? 0, failed);
+    h += Math.min(guaranteed, failed);
     return h;
   });
   // AUTOMATIC hits, which no die shows. Record them, or the line reads "[5 6 1 1 6]
@@ -1478,6 +1488,16 @@ export function combatStep(state: GameState): void {
           if (pc.attacker === 'fp') aMods = EMPTY_MODS; else dMods = EMPTY_MODS;
           fpSilencedCard = true;
         }
+        // Mighty Attack forfeits "the Leadership of one Companion participating in the
+        // battle", so it fails only when the named Companion is the ONLY one there; with
+        // another present, he pays instead (Almanac, Mighty Attack; report 5q3i090h581p042m).
+        if (fpCard && silencedNow && EVENT_BY_ID[fpCard]?.combat?.title === 'Mighty Attack') {
+          const fpForce = pc.attacker === 'fp' ? atkForce(state, pc) : defForce(state, pc);
+          if (!fpForce.characters.some((c) => COMPANION_SET.has(c) && c !== silencedNow)) {
+            if (pc.attacker === 'fp') aMods = EMPTY_MODS; else dMods = EMPTY_MODS;
+            fpSilencedCard = true;
+          }
+        }
         // …and on Gandalf the White it switches The White Rider off for THIS round only:
         // the Nazgûl Leadership returns until the next round (Almanac, Words of Power).
         const whiteRider = !!pc.whiteRiderForfeit && silencedNow !== 'gandalf-white';
@@ -1541,6 +1561,18 @@ export function combatStep(state: GameState): void {
         // attacker's card targets the defender's army (pc.to), and vice versa.
         // (Force-keyed, not region-keyed: when either side is boxed the region's figures
         // belong to its opponent, so the region form used to strike the caster's OWN army.)
+        // Blade of Westernesse and Fateful Strike trigger on a Leader re-roll hit; if
+        // Foul Stench cancelled that re-roll they never fire (Almanac, Foul Stench), and
+        // the forfeit cards did nothing either — say so, since the card line above
+        // announced their effect before the roll.
+        const fpRoll = pc.attacker === 'fp' ? aRoll : dRoll;
+        const fpMods = pc.attacker === 'fp' ? aMods : dMods;
+        if (fpRoll.rerollCancelled && fpCard && (fpMods.guaranteedHits || fpMods.eliminateMinion || fpMods.eliminateNazgulIfHit)) {
+          const stripped = { ...fpMods, eliminateMinion: undefined, eliminateNazgulIfHit: undefined };
+          if (pc.attacker === 'fp') aMods = stripped; else dMods = stripped;
+          log(state, null, 'combat', `Round ${pc.round + 1}: the Free Peoples Leader re-roll is cancelled, so ${cardName(fpCard)} has no effect`);
+          state.log[state.log.length - 1]!.card = fpCard;
+        }
         atk = applyCombatEliminations(state, defForce(state, pc), pc.to, aMods, atk);
         def = applyCombatEliminations(state, atkForce(state, pc), pc.from, dMods, def);
         // Heroic Death: "you MAY eliminate one of your Leaders to cancel one hit, or
