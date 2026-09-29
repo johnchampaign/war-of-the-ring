@@ -4,7 +4,7 @@
 //   • vs AI    — the human plays one side; the heuristic AI (src/ai) auto-plays the
 //                other. The human only ever sees their own redacted view and only
 //                acts on their own turn; the AI's moves are applied between turns.
-import { Rng, recordPlay } from 'digital-boardgame-framework';
+import { Rng, recordPlay, recordFinish, type PlayMode } from 'digital-boardgame-framework';
 import { submitReportViaHttp } from 'digital-boardgame-framework/client';
 import { createGame } from '../engine/setup';
 import { wotrAdapter, startGame } from '../adapter/wotrAdapter';
@@ -45,7 +45,21 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
   // is beaconed or persisted.
   const persist = !opts.scenario;
   // Best-effort play-count beacon, once when a local game starts (never throws/blocks).
-  if (persist && !resume) recordPlay('war-of-the-ring', aiSide ? 'ai' : 'hotseat');
+  // The mode is fixed for the life of this client (aiSide never changes), so the finish
+  // beacon below reuses it verbatim.
+  const playMode: PlayMode = aiSide ? 'ai' : 'hotseat';
+  if (persist && !resume) recordPlay('war-of-the-ring', playMode);
+  // Matching "game finished" beacon: fires once, on the transition into game-over only.
+  // Seeded from the starting state, so reopening an already-finished game never fires.
+  // Undo can step back out of game-over, but this client still counts one finish.
+  // Outcome only for vs-AI, from the human's side; hotseat has no single "human" side.
+  let finishRecorded = !!wotrAdapter.result?.(state);
+  const maybeRecordFinish = (): void => {
+    if (!persist || finishRecorded || !wotrAdapter.result?.(state)) return;
+    finishRecorded = true;
+    recordFinish('war-of-the-ring', playMode,
+      aiSide ? { outcome: state.winner === human ? 'win' : 'loss' } : {});
+  };
   // Restoring the AI's tie-break cursor (rather than re-seeding) keeps a resumed game
   // on the same deterministic track it was already following.
   const aiRng = resume ? Rng.fromState(resume.aiRng) : new Rng(seed * 1000 + 7);
@@ -70,6 +84,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
    *  would offer the player a finished game from the lobby. */
   const persistNow = (): void => {
     if (!persist) return;
+    maybeRecordFinish();
     if (wotrAdapter.result?.(state)) { clearLocalGame(); return; }
     saveLocalGame({
       schemaVersion: wotrAdapter.schemaVersion ?? 0, state, aiSide,

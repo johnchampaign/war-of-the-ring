@@ -12,7 +12,9 @@
 //   3. hotseat round-trips (no AI side);
 //   4. a finished game clears the slot instead of offering a dead game back;
 //   5. a save from a different engine schema is discarded, not half-loaded;
-//   6. corrupt JSON is discarded without throwing.
+//   6. corrupt JSON is discarded without throwing;
+//   7. the play-counter beacons: one start + exactly one finish (same mode, outcome
+//      only vs AI), and never a finish for reopening an already-finished game.
 
 // --- localStorage stub, installed before anything imports the save module ----------
 const mem = new Map();
@@ -23,6 +25,18 @@ globalThis.window.localStorage = {
   setItem: (k, v) => { mem.set(k, String(v)); },
   removeItem: (k) => { mem.delete(k); },
 };
+
+// --- fetch stub: capture play-counter beacons instead of pinging the real hub -------
+const beacons = [];
+globalThis.fetch = async (url, init = {}) => {
+  let body = null;
+  try { body = JSON.parse(init.body); } catch { /* not JSON */ }
+  beacons.push({ url: String(url), body });
+  return new Response(null, { status: 204 });
+};
+const finishes = () => beacons.filter((b) => b.url.endsWith('/stats/finish'));
+const starts = () => beacons.filter((b) => b.url.endsWith('/stats/hit'));
+const settle = () => new Promise((r) => setTimeout(r, 0)); // fire-and-forget beacons
 
 const { makeLocalClient } = await import('../src/online/localClient.ts');
 const { loadLocalGame, peekLocalGame, clearLocalGame, saveLocalGame } = await import('../src/online/localSave.ts');
@@ -101,17 +115,65 @@ async function play(client, n) {
 {
   console.log('\n=== a finished game is not offered back ===');
   mem.clear();
+  beacons.length = 0;
   // (a) the live path: play a real game to its end and check the client drops the slot.
   const c = makeLocalClient(5, { aiSide: 'shadow' });
   let last = await c.fetch();
   check('slot populated at the start', !!peekLocalGame(SCHEMA));
+  let finishedBeforeEnd = false;
+  let lastSave = null;
   for (let i = 0; i < 4000 && !last.gameOver; i++) {
+    await settle();
+    if (finishes().length) finishedBeforeEnd = true;
+    lastSave = loadLocalGame(SCHEMA) ?? lastSave;
     const legal = await c.legalActions();
     if (!legal.length) { last = await c.fetch(); continue; }
     last = await c.submit(legal[0]);
   }
   check('the game reached an end', last.gameOver === true, `gameOver=${last.gameOver}`);
   check('slot cleared once the game is over', peekLocalGame(SCHEMA) === null);
+
+  // 7. play-counter beacons for that vs-AI game (human = Free Peoples).
+  await settle();
+  const winner = last.view.winner;
+  const fin = finishes()[0]?.body;
+  check('one start beacon, mode ai', starts().length === 1 && starts()[0].body?.mode === 'ai',
+    JSON.stringify(starts().map((b) => b.body)));
+  check('no finish beacon before the game ended', !finishedBeforeEnd);
+  check('exactly one finish beacon, mode ai', finishes().length === 1 && fin?.mode === 'ai' && fin?.game === 'war-of-the-ring',
+    JSON.stringify(finishes().map((b) => b.body)));
+  check('finish outcome is from the human side', !!winner && fin?.outcome === (winner === 'fp' ? 'win' : 'loss'),
+    `winner=${winner} outcome=${fin?.outcome}`);
+  await c.fetch(); await c.fetch(); await settle();
+  check('re-fetching a finished game fires no second finish', finishes().length === 1, `${finishes().length}`);
+
+  // Reopening a save that is already decided must not fire a finish.
+  beacons.length = 0;
+  if (lastSave) {
+    const done = JSON.parse(JSON.stringify(lastSave));
+    done.state.winner = 'shadow'; done.state.winReason = 'probe'; done.state.phase = 'gameOver';
+    const r = makeLocalClient(5, { resume: done });
+    await r.fetch(); await r.fetch(); await settle();
+    check('reopening a finished game fires no beacons', beacons.length === 0, JSON.stringify(beacons.map((b) => b.body)));
+  } else check('captured a pre-end save to reopen', false);
+
+  // Hotseat: the finish repeats the start's mode and carries no outcome.
+  mem.clear();
+  beacons.length = 0;
+  const h = makeLocalClient(5);
+  let hl = await h.fetch();
+  for (let i = 0; i < 8000 && !hl.gameOver; i++) {
+    const legal = await h.legalActions();
+    if (!legal.length) { hl = await h.fetch(); continue; }
+    hl = await h.submit(legal[0]);
+  }
+  await settle();
+  const hfin = finishes()[0]?.body;
+  check('hotseat game reached an end', hl.gameOver === true);
+  check('hotseat: one start, mode hotseat', starts().length === 1 && starts()[0].body?.mode === 'hotseat');
+  check('hotseat: one finish, mode hotseat, no outcome',
+    finishes().length === 1 && hfin?.mode === 'hotseat' && !('outcome' in (hfin ?? {})),
+    JSON.stringify(finishes().map((b) => b.body)));
 
   // (b) the belt-and-braces path: a decided game sitting in the slot (written by an
   //     older build, or ended by some other route) must still never load.
