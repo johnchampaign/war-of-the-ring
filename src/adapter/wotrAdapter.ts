@@ -872,8 +872,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // from the opponent; only the deck type is public (the card back).
         (p.discardFaceDown ??= []).push(action.card);
         const deckName = EVENT_BY_ID[action.card]?.deck ?? 'Event';
-        log(state, actor, 'event', `You discard ${EVENT_BY_ID[action.card]?.name ?? action.card} face down (over the 6-card limit)`);
-        log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discard a ${deckName} card face down (over the 6-card limit)`);
+        log(state, actor, 'event', `You discard ${EVENT_BY_ID[action.card]?.name ?? action.card} face down (over the hand limit)`);
+        log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discard a ${deckName} card face down (over the hand limit)`);
       }
       state.pendingChoice = null; break; // advance() re-checks and re-prompts if still over 6
     }

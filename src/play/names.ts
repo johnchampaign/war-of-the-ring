@@ -116,7 +116,9 @@ function recruitPhrase(regular: number, elite: number, leaders: number, nationId
 // now, but every game already logged says "fp captured Minas Morgul" / "fp plays combat
 // card …" (player reports 252i1t0s6j6b6o5y, 0l314z0n0j2n3b5q), and the log is replayed
 // from saved state — so the display side fixes those up too.
-const SIDE_ID = /\bfp\b/g;
+// Not the "fp" of a card id ("fp-char-06"): that turned into "Free Peoples-char-06"
+// before the id pass could name the card (player report 3l2d024y3z2u3l5t).
+const SIDE_ID = /\bfp\b(?!-)/g;
 
 export function prettify(msg: string): string {
   if (!msg) return msg;

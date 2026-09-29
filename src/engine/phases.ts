@@ -48,9 +48,12 @@ export function drawEventCards(state: GameState, side: Side): void {
   // One line per side, so a hand that grows is always traceable to something the log
   // said (report 1y0753: a player could not account for the Free Peoples' card count).
   const who = side === 'fp' ? 'Free Peoples' : 'Shadow';
+  // Which deck ran dry is worth saying; which decks a normal draw came from is not
+  // (player report 603q482i326u513e).
+  const empty = got.length === 1 ? (got[0] === 'Character' ? 'Strategy' : 'Character') : null;
   log(state, null, 'event', got.length
-    ? `${who} draw ${got.length} Event card${got.length === 1 ? '' : 's'} at turn start (${got.join(' + ')})`
-    : `${who} cannot draw at turn start — both Event decks are empty`);
+    ? `${who} draw ${got.length} Event card${got.length === 1 ? '' : 's'} at the start of the turn${empty ? ` (the ${empty} deck is empty)` : ''}`
+    : `${who} cannot draw at the start of the turn — both Event decks are empty`);
   // Over the 6-card limit is resolved by the player's CHOICE (enforceHandLimit), not
   // by silently trimming the oldest.
 }
@@ -78,7 +81,8 @@ function runActionRoll(state: GameState): void {
   const eyes = shadowRoll.filter((f) => f === 'eye').length;
   state.hunt.box += eyes;
   state.dice.shadow = shadowRoll.filter((f) => f !== 'eye');
-  log(state, null, 'roll', `Rolled Free Peoples ${state.dice.fp.length}, Shadow ${state.dice.shadow.length} (+${eyes} eyes, hunt box ${state.hunt.box})`,
+  // Player report 3d5o161p5u6r6c4z: "Free Peoples rolled 4 dice, Shadow rolled 5 dice (+1 Eyes)".
+  log(state, null, 'roll', `Free Peoples rolled ${state.dice.fp.length} ${state.dice.fp.length === 1 ? 'die' : 'dice'}, Shadow rolled ${state.dice.shadow.length} ${state.dice.shadow.length === 1 ? 'die' : 'dice'}${eyes ? ` (+${eyes} ${eyes === 1 ? 'Eye' : 'Eyes'})` : ''}`,
     { fp: [...state.dice.fp], shadow: [...state.dice.shadow], eyes, huntBox: state.hunt.box });
 }
 

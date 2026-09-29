@@ -65,12 +65,24 @@ const sweepViaAction = (s) => {
 }
 
 {
+  // Player report 175r51245u0f511j: Flocks of Crebain prints the same clause.
+  console.log('\n=== Flocks of Crebain discards on a declare in an FP haven too ===');
+  const s = startGame(createGame({ seed: 12 }));
+  s.cards.shadow.table.push('sh-char-16');
+  s.fellowship.location = 'lorien'; s.fellowship.progress = 0;
+  declareFellowship(s, 'lorien');
+  check('the card is off the table', !s.cards.shadow.table.includes('sh-char-16'), s.cards.shadow.table.join(','));
+  check('...and in the Shadow Character discard', s.cards.shadow.discard.character.includes('sh-char-16'));
+  check('...with a log line naming it', s.log.some((e) => e.msg.startsWith('Flocks of Crebain is discarded')));
+}
+
+{
   console.log('\n=== ...but a declare in open country leaves it in play ===');
   const s = startGame(createGame({ seed: 12 }));
-  s.cards.shadow.table.push('sh-char-15');
+  s.cards.shadow.table.push('sh-char-15', 'sh-char-16');
   s.fellowship.location = 'hollin'; s.fellowship.progress = 0;
   declareFellowship(s, 'hollin');
-  check('the card stays', s.cards.shadow.table.includes('sh-char-15'));
+  check('the cards stay', s.cards.shadow.table.includes('sh-char-15') && s.cards.shadow.table.includes('sh-char-16'));
 }
 
 {

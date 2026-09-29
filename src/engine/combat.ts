@@ -1149,7 +1149,7 @@ function finishCombat(state: GameState, advance: boolean): void {
     if (won) { advanceOffer = { from: pc.from, to: pc.to, owner: pc.attacker }; r.besieged = false; }
     if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
   }
-  log(state, null, 'combat', `battle at ${pc.to} ended — ${outcome}`, {
+  log(state, null, 'combat', `The battle at ${pc.to} ended — ${outcome}`, {
     from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
     atkLosses: Math.max(0, (pc.atkUnits0 ?? atkAlive) - atkAlive),
     defLosses: Math.max(0, (pc.defUnits0 ?? defAlive) - defAlive),

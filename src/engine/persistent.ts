@@ -144,8 +144,8 @@ const sarumanInPlay = (s: GameState): boolean =>
 /** Why a table card leaves the table, in the words a player would use. `discardIf`
  *  returns null while the card stays, or the reason it must go — so a printed discard
  *  clause ("as soon as the Fellowship is revealed") reads as itself in the log instead
- *  of as the generic "its play condition no longer holds" (player report 29253u). */
-const CEASED = 'its play condition no longer holds (p.22)';
+ *  of as the generic "its play condition no longer holds" (player report 29253u) —
+ *  and every reason names what changed (player report 2g323s27116l725g). */
 const TABLE_CONDITIONS: Array<{ side: 'fp' | 'shadow'; id: string; discardIf: (s: GameState, charWithArmy: (s: GameState, char: string, side: 'fp' | 'shadow') => RegionId | null, nationSideOf: (r: RegionId) => 'fp' | 'shadow' | null) => string | null }> = [
   // fp-str-01 The Last Battle: "if Aragorn is with a Free Peoples Army in a region
   // outside of a Free Peoples Nation". A besieged Aragorn is still with his Army
@@ -159,11 +159,11 @@ const TABLE_CONDITIONS: Array<{ side: 'fp' | 'shadow'; id: string; discardIf: (s
     side: 'fp', id: 'fp-str-01', discardIf: (s, charWithArmy, nationSideOf) => {
       if (!s.fellowship.hidden) return 'the Fellowship is revealed';
       const r = charWithArmy(s, 'aragorn', 'fp');
-      return !!r && nationSideOf(r) !== 'fp' ? null : CEASED;
+      return !!r && nationSideOf(r) !== 'fp' ? null : 'Aragorn is no longer with a Free Peoples Army outside the Free Peoples Nations';
     },
   },
   // sh-str-03 Denethor's Folly: "if Minas Tirith is under siege by a Shadow Army".
-  { side: 'shadow', id: 'sh-str-03', discardIf: (s) => (s.regions['minas-tirith']?.besieged ? null : CEASED) },
+  { side: 'shadow', id: 'sh-str-03', discardIf: (s) => (s.regions['minas-tirith']?.besieged ? null : 'Minas Tirith is no longer under siege') },
   // sh-char-21 Palantír of Orthanc: "if Saruman is in play".
   { side: 'shadow', id: 'sh-char-21', discardIf: (s) => (sarumanInPlay(s) ? null : 'Saruman is no longer in play') },
   // sh-char-22 Wormtongue — the printed card carries its own discard clause on top

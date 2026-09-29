@@ -31,6 +31,13 @@ const ONTABLE_REQUIRES: Record<string, (c: string[]) => boolean> = {
   'fp-char-07': (c) => c.includes('boromir'),                        // Horn of Gondor
   'fp-char-08': (c) => c.includes('gandalf-grey'),                   // Wizard's Staff
 };
+// The log line for each, in the card's own words (player reports 3l2d024y3z2u3l5t,
+// 3a1h736a131y2043, 2g0m2o724m0s0j0z: it printed the card id and "its Companion").
+const ONTABLE_WHY: Record<string, string> = {
+  'fp-char-06': 'Axe and Bow is discarded — Gimli and Legolas have both left the Fellowship',
+  'fp-char-07': 'Horn of Gondor is discarded — Boromir left the Fellowship',
+  'fp-char-08': "Wizard's Staff is discarded — Gandalf the Grey left the Fellowship",
+};
 export function pruneFellowshipOnTableCards(state: GameState): void {
   const t = state.cards.fp.table;
   for (const id of Object.keys(ONTABLE_REQUIRES)) {
@@ -38,7 +45,7 @@ export function pruneFellowshipOnTableCards(state: GameState): void {
     if (i >= 0 && !ONTABLE_REQUIRES[id]!(state.fellowship.companions)) {
       t.splice(i, 1);
       state.cards.fp.discard.character.push(id);
-      log(state, null, 'event', `${id} discarded — its Companion left the Fellowship`);
+      log(state, null, 'event', `${ONTABLE_WHY[id]!}`);
     }
   }
 }
@@ -287,12 +294,15 @@ export function declareFellowship(state: GameState, target: RegionId): void {
     // condition. (The TTS-mod transcription omits the clause; player report + card
     // scans confirm it.) Event-triggered here, not a pruneTableCards condition: the
     // trigger is the DECLARE itself, not a state that persists.
+    // Flocks of Crebain (sh-char-16) prints the very same clause (player report
+    // 175r51245u0f511j), so both go together.
     const t = state.cards.shadow.table;
-    const i = t.indexOf('sh-char-15');
-    if (i >= 0) {
+    for (const [id, name] of [['sh-char-15', 'Worn with Sorrow and Toil'], ['sh-char-16', 'Flocks of Crebain']] as const) {
+      const i = t.indexOf(id);
+      if (i < 0) continue;
       t.splice(i, 1);
-      state.cards.shadow.discard.character.push('sh-char-15');
-      log(state, null, 'event', 'Worn with Sorrow and Toil is discarded — the Fellowship declared in a Free Peoples haven');
+      state.cards.shadow.discard.character.push(id);
+      log(state, null, 'event', `${name} is discarded — the Fellowship was declared in an unconquered Free Peoples City or Stronghold`);
     }
   }
   state.flags.fellowshipDeclaredThisTurn = true;
@@ -306,9 +316,11 @@ export function declareFellowship(state: GameState, target: RegionId): void {
   if (fi >= 0) {
     ft.splice(fi, 1);
     state.cards.fp.discard.strategy.push('fp-str-01');
-    log(state, null, 'event', 'The Last Battle is discarded — the Fellowship declared its position');
+    log(state, null, 'event', 'The Last Battle is discarded — the Fellowship was declared');
   }
-  log(state, null, 'fellowship', `Fellowship declared at ${fs.location} (corruption ${fs.corruption})`);
+  // No Corruption figure here: declaring doesn't change it (the heal above is its own
+  // step), and "(corruption 5)" read as a cost (player report 710l4b504o1m236l).
+  log(state, null, 'fellowship', `The Fellowship declared in ${fs.location}`);
 }
 
 /** Nations a Companion can activate (its own, or all FP if its card shows "any"). */
@@ -465,7 +477,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
   // Army holding the open field (player report). `figureForce` picks the right one.
   figureForce(state, dest, 'fp').characters.push(id);
   // Logged before the Nation it rouses, so the log reads in order (report j59rj32xtre3q5g8).
-  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated to ${dest}; guide now ${fs.guide}`);
+  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated from the Fellowship and moved to ${dest}; guide now ${fs.guide}`);
   const nations = activatableNations(id);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
@@ -490,7 +502,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
 export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: RegionId): void {
   const fs = state.fellowship;
   for (const id of ids) { state.characters.inPlay[id] = dest; figureForce(state, dest, 'fp').characters.push(id); }
-  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} separated to ${dest}; guide now ${fs.guide}`);
+  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} separated from the Fellowship and moved to ${dest}; guide now ${fs.guide}`);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')
     && ids.some((id) => activatableNations(id).includes(dn))) {
