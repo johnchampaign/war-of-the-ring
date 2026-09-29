@@ -44,18 +44,22 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
   // Dev scenarios are throwaway boards; a resumed game is not a NEW play, so neither
   // is beaconed or persisted.
   const persist = !opts.scenario;
+  // Play-counter beacons only from a real page: the probe scripts drive this client
+  // headlessly under vite-node, where they would otherwise ping the live hub and
+  // inflate the counts. (probe-local-save stubs `window` and `fetch` to test them.)
+  const beacons = persist && typeof window !== 'undefined';
   // Best-effort play-count beacon, once when a local game starts (never throws/blocks).
   // The mode is fixed for the life of this client (aiSide never changes), so the finish
   // beacon below reuses it verbatim.
   const playMode: PlayMode = aiSide ? 'ai' : 'hotseat';
-  if (persist && !resume) recordPlay('war-of-the-ring', playMode);
+  if (beacons && !resume) recordPlay('war-of-the-ring', playMode);
   // Matching "game finished" beacon: fires once, on the transition into game-over only.
   // Seeded from the starting state, so reopening an already-finished game never fires.
   // Undo can step back out of game-over, but this client still counts one finish.
   // Outcome only for vs-AI, from the human's side; hotseat has no single "human" side.
   let finishRecorded = !!wotrAdapter.result?.(state);
   const maybeRecordFinish = (): void => {
-    if (!persist || finishRecorded || !wotrAdapter.result?.(state)) return;
+    if (!beacons || finishRecorded || !wotrAdapter.result?.(state)) return;
     finishRecorded = true;
     recordFinish('war-of-the-ring', playMode,
       aiSide ? { outcome: state.winner === human ? 'win' : 'loss' } : {});
