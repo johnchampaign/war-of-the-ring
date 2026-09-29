@@ -99,7 +99,9 @@ export function RollLine({ roll }: { roll: HuntRoll }) {
 /** The Corruption track as a number with a delta, e.g. "Corruption 5 → 8 / 12".
  *  `add` (optional) shows where it lands if this damage is absorbed as Corruption. */
 export function CorruptionLine({ current, add }: { current: number; add?: number }) {
-  const after = add != null ? Math.min(12, current + add) : null;
+  // Not clamped at 12: the player weighing an overkill hit needs to see by how much
+  // (player report 466z1s0l4n112m4x).
+  const after = add != null ? current + add : null;
   const danger = (after ?? current) >= 10;
   return (
     <div style={{ fontSize: 13, margin: '6px 0 2px', color: danger ? '#e88' : '#cbbf9a' }}>

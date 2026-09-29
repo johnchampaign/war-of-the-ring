@@ -455,8 +455,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // 38082l3z263r3e4h: the separate character hint read as excluding the Nazgûl).
     if (boardArmyActs.length || charSources.size) out.push('Move or attack — click a highlighted region on the map.');
     if (musterTargets.size) out.push('Muster — click a highlighted region on the map.');
+    // The Fellowship phase is board-driven too (player report 414d1l3969347125).
+    if (g.legalActions.some((a) => a.kind === 'declareFellowship')) out.push('Declare the Fellowship — click a highlighted region on the map.');
     return out;
-  }, [boardArmyActs, assaultSources, musterTargets, charSources]);
+  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -832,7 +834,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   ⚠ {blockMsg}
                 </div>
               )}
-              {sources.size > 0 && (
+              {/* The idle "click a green region" line is gone (player reports
+                  4k5e3n4x6o6y411g, 5u1y292b0s0o4n35): the side panel already says it,
+                  and the banner sat over the Mordor track. Only the specific,
+                  in-progress placements below still name themselves on the map. */}
+              {sources.size > 0 && (isCardSep || isSeparateMove || isReveal || isRetreatPick || isPlaceGandalf || placeActs.length > 0 || !!charPick || !!selected || isArmyMove2) && (
                 <div style={{ color: '#bfe6bf', background: 'rgba(18,26,18,0.92)', border: '1px solid #2f4a2f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
                   {isCardSep
                     ? (cardSepActs[0]!.companion === 'nazgul'
@@ -855,7 +861,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                       : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : charName(charPick.char)} — click a highlighted region to move there (or click the piece again to cancel).`
                         : selected ? `Selected ${regionName(selected)} — click a highlighted region to move/attack (or click again to cancel).`
                           : isArmyMove2 ? 'Second army move — click a green army to move it (a different army), or “No second army move” on the right.'
-                            : `Click a highlighted (green) region to move an army or a character${musterTargets.size ? ', or to muster in a Settlement' : ''}.`}
+                            : null}
                 </div>
               )}
             </div>
