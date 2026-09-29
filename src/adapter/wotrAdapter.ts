@@ -760,8 +760,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // is preferred so the scarce Event die is saved unless the player picks it.
       const playFaces = playFacesFor(action.cardId);
       let playedWithFace: DieFace | null = null;
+      // Mirror of Galadriel converts an unused Character die, so it never pays with the
+      // last one when an Event or Will die can pay instead.
+      const mirrorSpare = action.cardId === 'fp-char-13' && !action.die && state.dice.fp.filter((f) => f === 'character').length === 1
+        ? (state.dice.fp.includes('event') ? 'event' : state.dice.fp.includes('will') ? 'will' : undefined) : undefined;
       if (freePlay) state.flags.fpFreeCharEventThisTurn = false;
-      else if (!(playedWithFace = consumePreferred(state, actor, playFaces, action.die))) {
+      else if (!(playedWithFace = consumePreferred(state, actor, playFaces, action.die ?? mirrorSpare))) {
         // The Mouth of Sauron's Messenger: spend a Muster die as an Army die (once a
         // turn) to play an Army-icon card when no Army die is left.
         if (actor === 'shadow' && playFaces.includes('army') && mouthMessengerAvailable(state) && consumeDie(state, 'shadow', 'muster')) {

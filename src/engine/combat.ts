@@ -1469,9 +1469,28 @@ export function combatStep(state: GameState): void {
         // defender wins ties.
         const aIni = pc.attackerCard ? cardInitiative(pc.attackerCard) : 99;
         const dIni = pc.defenderCard ? cardInitiative(pc.defenderCard) : 99;
+        // Daring Defiance cancels only by forfeiting "the Leadership of all the Companions
+        // participating in the battle"; while The White Rider has already forfeited
+        // Gandalf's, that is impossible and no part of the card takes effect (Almanac,
+        // Daring Defiance / Gandalf the White).
+        const fpCardNow = pc.attacker === 'fp' ? pc.attackerCard : pc.defenderCard;
+        const fpDefiance = !!fpCardNow && EVENT_BY_ID[fpCardNow]?.combat?.title === 'Daring Defiance';
+        const defianceVoid = fpDefiance && !!pc.whiteRiderForfeit;
+        if (defianceVoid) { if (pc.attacker === 'fp') aMods = EMPTY_MODS; else dMods = EMPTY_MODS; }
         let aCancelled = false, dCancelled = false;
         if (aMods.cancelEnemyCard && pc.defenderCard && aIni < dIni) { dMods = EMPTY_MODS; dCancelled = true; }
         if (dMods.cancelEnemyCard && pc.attackerCard && dIni <= aIni) { aMods = EMPTY_MODS; aCancelled = true; }
+        // …and when it does cancel, every Companion's Leadership is gone for this round,
+        // so the Leader re-roll shrinks by all of it (player report n6r8a72c42xokefc: it
+        // used to cancel for free). With no Shadow card to cancel nothing is forfeited.
+        if (fpDefiance && (pc.attacker === 'fp' ? dCancelled : aCancelled)) {
+          const fpChars = (pc.attacker === 'fp' ? atkForce(state, pc) : defForce(state, pc)).characters;
+          const forfeit = fpChars.filter((c) => COMPANION_SET.has(c)).reduce((n, c) => n + (characterDef(c)?.leadership ?? 0), 0);
+          if (forfeit > 0) {
+            if (pc.attacker === 'fp') aMods = { ...aMods, ownLeadershipPenalty: forfeit };
+            else dMods = { ...dMods, ownLeadershipPenalty: forfeit };
+          }
+        }
         // A pre-combat retreat resolves first and ends the battle before the roll, so
         // the slower card never resolves — same "revealed but does nothing" treatment
         // as a cancelled card (player report: Scouts@1 vs Dread and Despair@3).
@@ -1508,6 +1527,7 @@ export function combatStep(state: GameState): void {
         const played = (card: string | null, mods: CombatMods, cancelled: boolean, outrun = false) => {
           if (!card) return cardName(card);
           if (cancelled) return `${cardName(card)} — CANCELLED by the opposing card`;
+          if (card === fpCard && defianceVoid) return `${cardName(card)} — NO EFFECT: The White Rider has already forfeited Gandalf's Leadership, so the Companions cannot forfeit all of theirs`;
           if (card === fpCard && fpSilencedCard) return `${cardName(card)} — NO EFFECT: Words of Power has cancelled ${characterDef(silencedNow!)?.name ?? silencedNow}'s Leadership`;
           if (outrun) return `${cardName(card)} — TOO SLOW: the opposing card retreats its Army first, so this one never resolves`;
           const what = describeCombatMods(mods);

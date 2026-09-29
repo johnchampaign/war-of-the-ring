@@ -1363,8 +1363,17 @@ register('fp-char-24', {
 
 // --- Action-die manipulation --------------------------------------------------
 // Mirror of Galadriel: turn an unused FP Character die into a Will of the West.
+// Strengthened play condition (the card prints none): playable when either clause can
+// do something — a Character die will still be unused after paying for the card (the
+// last one can't pay AND be converted; the adapter pays with an Event/Will die then),
+// or the Fellowship is in an unconquered Lórien with Corruption to heal (player
+// report 1254046v376z4x4o: it used to demand a Character die even for the heal).
 register('fp-char-13', {
-  canPlay: (state) => state.dice.fp.includes('character'),
+  canPlay: (state) => {
+    const chars = state.dice.fp.filter((f) => f === 'character').length;
+    if (chars >= 2 || (chars === 1 && state.dice.fp.some((f) => f === 'event' || f === 'will'))) return true;
+    return state.fellowship.location === 'lorien' && settlementController(state, 'lorien') !== 'shadow' && state.fellowship.corruption > 0;
+  },
   apply(state) {
     const i = state.dice.fp.indexOf('character');
     if (i >= 0) state.dice.fp[i] = 'will';
