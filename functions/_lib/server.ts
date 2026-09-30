@@ -75,6 +75,10 @@ export function makeServer(env: Env): WotrServer {
     codec: jsonCodec<GameState>(),
     store: new SupabaseStore(supabase(env)),
     aiControllers: wotrControllers, // server-driven AI seats (rated)
+    // maxSteps, not perSeat: the two sides hand off every ~2 actions (dice, combat,
+    // Hunt), so perSeat would split an AI-vs-AI game at each hand-off. 16 actions
+    // is ~45 ms of AI work (~2.7 ms/action in node); a vs-human AI run rarely exceeds it.
+    aiSlice: { maxSteps: 16 },
     playBeacon: { appId: 'war-of-the-ring' }, // best-effort 'online' play beacon on createGame
     notifier: new NoopNotifier(),
     broadcaster: new SupabaseBroadcaster({
