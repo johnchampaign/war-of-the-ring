@@ -3,7 +3,7 @@
 // caller (the AI pushes toward Mordor).
 import type { GameState, RegionId, CharacterId, Nation } from './types';
 import { FP_NATIONS } from './types';
-import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST } from './data';
+import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, characterDef } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
 import { activateNation } from './politics';
 import { settlementController, figureForce } from './armies';
@@ -234,11 +234,11 @@ export function moveFellowship(state: GameState): void {
     // step the Fellowship was LEAVING — the first move in Mordor read "step 0" while the
     // track, the Hunt Box and the status area all correctly showed 1 (player report).
     // `applyDrawnTile` logs the step the Fellowship actually ends on.
-    log(state, null, 'fellowship', 'Fellowship moves on the Mordor Track');
+    log(state, null, 'fellowship', 'The Fellowship moves on the Mordor Track');
     resolveMordorStep(state); // adds the FP die to the Hunt Box internally
   } else {
     fs.progress += 1;
-    log(state, null, 'fellowship', `Fellowship moved (progress ${fs.progress})`);
+    log(state, null, 'fellowship', `The Fellowship moved (progress ${fs.progress})`);
     resolveHunt(state);       // ditto
   }
   state.flags.fellowshipDeclaredOrMovedThisTurn = true;
@@ -254,8 +254,8 @@ export function hideFellowship(state: GameState, viaStrider = false): void {
   state.fellowship.hidden = true;
   state.flags.fellowshipDeclaredOrMovedThisTurn = true; // counts as attempting a move/hide (Mordor penalty)
   log(state, null, 'fellowship', viaStrider
-    ? 'Fellowship hidden — Strider guides, so any Action die result may hide a revealed Fellowship'
-    : 'Fellowship hidden');
+    ? 'The Fellowship is hidden (Strider, the Guide)'
+    : 'The Fellowship is hidden');
 }
 
 /** Declare the Fellowship's position: move the figure up to `progress` regions
@@ -467,6 +467,9 @@ export function removeCompanionOnMordorTrack(state: GameState, id: CharacterId):
   return true;
 }
 
+/** "Gollum", "Strider" — the Guide by name, not by id (player report 543u5x632d622s1c). */
+const guideLabel = (id: string): string => characterDef(id)?.name ?? id;
+
 /** Place an already-removed Companion at `dest`, rousing its Nation if it lands in a
  *  City/Stronghold of one it can activate. */
 export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest: RegionId): void {
@@ -477,7 +480,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
   // Army holding the open field (player report). `figureForce` picks the right one.
   figureForce(state, dest, 'fp').characters.push(id);
   // Logged before the Nation it rouses, so the log reads in order (report j59rj32xtre3q5g8).
-  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated from the Fellowship and moved to ${dest}; guide now ${fs.guide}`);
+  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated from the Fellowship and moved to ${dest}; ${guideLabel(fs.guide)} becomes the Guide`);
   const nations = activatableNations(id);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
@@ -502,7 +505,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
 export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: RegionId): void {
   const fs = state.fellowship;
   for (const id of ids) { state.characters.inPlay[id] = dest; figureForce(state, dest, 'fp').characters.push(id); }
-  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} separated from the Fellowship and moved to ${dest}; guide now ${fs.guide}`);
+  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} separated from the Fellowship and moved to ${dest}; ${guideLabel(fs.guide)} becomes the Guide`);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')
     && ids.some((id) => activatableNations(id).includes(dn))) {

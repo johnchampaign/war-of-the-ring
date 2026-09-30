@@ -42,7 +42,7 @@ export function HuntTileFace({ draw, size = 58 }: { draw: Draw; size?: number })
   // in on, which is how players talk about it ("the Shelob's Lair tile").
   const caption = draw.specialCard ? `“${draw.specialCard}” tile`
     : blank ? 'blank tile' : heal ? `“heal ${-(v as number)}” tile`
-    : v === 'eye' ? 'Eye of Sauron tile' : v === 'die' ? 'die tile' : `the “${v}” tile`;
+    : v === 'eye' ? 'Eye of Sauron tile' : v === 'die' ? 'die tile' : null; // a number says it all (report 264i5v3q6l065747)
   return (
     <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: '0 6px' }}>
       <div style={{
@@ -54,7 +54,7 @@ export function HuntTileFace({ draw, size = 58 }: { draw: Draw; size?: number })
         {draw.reveal && <span title="Reveals the Fellowship" style={{ position: 'absolute', top: -6, right: -6, fontSize: 15 }}>🔴</span>}
         {draw.stop && <span title="Stops the Fellowship" style={{ position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)', fontSize: 9, fontWeight: 700, background: '#a83232', color: '#fff', borderRadius: 5, padding: '1px 5px', letterSpacing: 0.5 }}>STOP</span>}
       </div>
-      <span style={{ fontSize: 11, color: '#cbbf9a' }}>{caption}</span>
+      {caption && <span style={{ fontSize: 11, color: '#cbbf9a' }}>{caption}</span>}
     </div>
   );
 }

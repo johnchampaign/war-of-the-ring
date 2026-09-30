@@ -122,9 +122,9 @@ const BY_TITLE: Record<string, CombatMods> = {
   'Brave Stand': { enemyDiceReduction: 1 },
   'Huorn-dark': { maxDiceEnemy: 2 },
   'Advantageous Position': { enemyRollPenalty: 1 },
-  // Forfeit 1 Nazgûl Leadership → the enemy rolls 1 fewer COMBAT die (not a worse
-  // to-hit). Forfeiting more than one point is a choice — unmodelled (D5).
-  'Dread and Despair': {}, // sized by the Nazgûl Leadership the owner forfeits (VARIABLE_COST)
+  // Each forfeited Nazgûl Leadership point → the enemy rolls 1 fewer COMBAT die (not
+  // a worse to-hit). How many points (1+) is the owner's choice — see VARIABLE_COST.
+  'Dread and Despair': {},
   // NOT enemyRollPenalty: the card never modifies the to-hit. Each unmodified '1'
   // is a hit on the roller's OWN Army, and cannot be re-rolled (player report).
   'Confusion': { enemyOnesBackfire: true },

@@ -143,6 +143,14 @@ function specialOf(tile: HuntTileDef): { special?: 'fp' | 'shadow'; specialCard?
   return { special: tile.introducedBy.startsWith('fp-') ? 'fp' : 'shadow', ...(tile.card ? { specialCard: tile.card } : {}) };
 }
 
+/** A tile named the way players name it, for log lines ("an Eye tile", "the Shelob's
+ *  Lair tile") — a discarded draw used to be logged only as "Eye / Free Peoples
+ *  special", without saying which (player report 4s2j2m6m4n3k192l). */
+function tileLabel(tile: HuntTileDef): string {
+  if (tile.card) return `the “${tile.card}” tile`;
+  return tile.value === 'eye' ? 'an Eye tile' : tile.value === 'die' ? 'a die tile' : `a “${tile.value}” tile`;
+}
+
 /** Apply a drawn tile. Damage>0 with Companions present sets a PendingChoice;
  *  otherwise applies directly. Reveal is applied with the resolution. `opts.source`
  *  names the Event card that caused a no-roll draw (shown in the FP's damage prompt);
@@ -179,8 +187,8 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // Any damage left after the casualty resolves normally.
   if (opts.forceRandomCasualty && state.fellowship.companions.length > 0) {
     const victim = withRng(state, (rng) => rng.pick(fs.companions));
-    const level = eliminateCompanionInline(state, victim);
-    log(state, null, 'hunt', `${opts.source ?? 'Hunt'}: a random Companion is eliminated — ${victim} (damage ${damage} − ${level})`);
+    log(state, null, 'hunt', `${opts.source ?? 'Hunt'}: a random Companion must be eliminated`);
+    const level = eliminateCompanionInline(state, victim, damage);
     damage = Math.max(0, damage - level);
     // The casualty may have made Gollum the Guide — re-ask whether the icon still reveals.
     if (damage === 0) { if (revealIcon && !gollumIgnoresReveal(state, numbered)) beginReveal(state); return; }
@@ -199,7 +207,6 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // Guide to separate, or Gollum's reveal-to-reduce — otherwise apply directly.
   if (fs.companions.length > 0 || huntReductionAvailable(state, reveal)) {
     state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, revealIcon, numbered, ...(opts.source ? { source: opts.source } : {}) } };
-    log(state, null, 'hunt', `Hunt damage ${damage} pending (Free Peoples decision)${opts.source ? ` — ${opts.source}` : ''}`);
   } else {
     fs.corruption = Math.min(12, fs.corruption + damage);
     if (reveal) beginReveal(state);
@@ -359,7 +366,7 @@ const extraTileDiscarded = (tile: HuntTileDef, ref: TileRef): boolean =>
   tile.value === 'eye' || ('spec' in ref && ref.spec.startsWith('fp-'));
 function applyExtraTile(state: GameState, tile: HuntTileDef, ref: TileRef, opts: HuntOpts): void {
   if (extraTileDiscarded(tile, ref)) {
-    log(state, null, 'hunt', `${opts.source ?? 'Extra Hunt'}: tile discarded (Eye / Free Peoples special)`);
+    log(state, null, 'hunt', `${opts.source ?? 'Extra Hunt'}: drew ${tileLabel(tile)}, discarded without effect`);
     // Record the draw anyway, so the Hunt popup shows what came up and why nothing
     // happened (player report 1g6i3l5t05293p4q).
     const prev = state.hunt.draws ?? [];
@@ -435,7 +442,7 @@ function huntRoll(state: GameState, level: number, bonus: number, rerolls: numbe
     return { successes: hits, dice: faces, rerollDice: rfaces };
   });
   state.hunt.lastRoll = { level, bonus, dice, rerolls: rerollDice, successes, mordor: false };
-  log(state, null, 'hunt', `Hunt roll: ${level} ${level === 1 ? 'die' : 'dice'}${bonus ? ` (+${bonus})` : ''} [${dice.join(',')}]${rerollDice.length ? ` re-roll [${rerollDice.join(',')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`,
+  log(state, null, 'hunt', `Hunt roll: ${level} ${level === 1 ? 'die' : 'dice'}${bonus ? ` (+${bonus})` : ''} [${dice.join(' ')}]${rerollDice.length ? ` re-roll [${rerollDice.join(' ')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`,
     { level, bonus, dice, rerolls: rerollDice, successes });
   if (successes >= 1) { beginHuntDraw(state, successes, false); return; }
   // A miss: record it so the player still SEES the roll (dice + box bonus) and knows
@@ -502,8 +509,8 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
   // and the line used to say "Fellowship hidden" one entry before it was revealed
   // (player report: board and status said revealed, the log said hidden).
   const revealPending = reveal && (state.pendingChoice as GameState['pendingChoice'])?.kind === 'revealMove';
-  const status = reveal || !fs.hidden ? (revealPending ? 'revealed (choose where it stands)' : 'revealed') : 'hidden';
-  log(state, null, 'hunt', `Hunt resolved — ${taken}; Corruption now ${fs.corruption}, Fellowship ${status}`);
+  const status = reveal || !fs.hidden ? 'revealed' : 'hidden';
+  log(state, null, 'hunt', `Hunt resolved — ${taken}; Corruption now ${fs.corruption}, the Fellowship is ${status}`);
 }
 /** Log one −1 step of a Hunt-damage reduction, so the running total is legible. */
 function logReduce(state: GameState, from: number, why: string): void {
@@ -596,7 +603,7 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
     const victim = mode === 'guide'
       ? (fs.companions.includes(fs.guide) ? fs.guide : fs.companions[0]!)
       : withRng(state, (rng) => rng.pick(fs.companions));
-    const level = eliminateCompanionInline(state, victim);
+    const level = eliminateCompanionInline(state, victim, d.damage);
     repromptOrFinish(state, Math.max(0, d.damage - level), true);
   } else {
     finishHunt(state, d.damage, revealDueNow(state, d));
@@ -604,7 +611,7 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
 }
 
 // Local copy to avoid a fellowship<->hunt import cycle at module scope.
-function eliminateCompanionInline(state: GameState, id: string): number {
+function eliminateCompanionInline(state: GameState, id: string, damage: number): number {
   const fs = state.fellowship;
   const i = fs.companions.indexOf(id);
   if (i < 0) return 0;
@@ -634,7 +641,9 @@ function eliminateCompanionInline(state: GameState, id: string): number {
   // then go quiet, so the sacrifice was invisible (player report: "it doesn't say what
   // the FP decision was — I assume Gandalf was sacrificed because he wasn't there
   // anymore"). Companion casualties are open information, so this is a public entry.
-  log(state, null, 'hunt', `${charLabel(id)} ${takenAlive ? 'is taken alive' : 'is eliminated'} to absorb ${level} Hunt damage`
+  // Name what the casualty ACTUALLY absorbed — his Level caps it, but so does the damage
+  // left (Gandalf's 3 against 1 damage absorbs 1; player report 604i1v5z0e41414o).
+  log(state, null, 'hunt', `${charLabel(id)} ${takenAlive ? 'is taken alive' : 'is eliminated'} to absorb ${Math.min(level, damage)} Hunt damage`
     + (fs.guide !== oldGuide ? ` — ${charLabel(fs.guide)} becomes the Guide` : ''));
   return level;
 }

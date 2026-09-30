@@ -323,7 +323,6 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
   const draws = view.hunt.draws ?? [];
   const last = draws.length ? draws[draws.length - 1] : undefined;
   const roll = last?.roll ?? view.hunt.lastRoll ?? undefined;
-  const numericTile = last && typeof last.value === 'number' && last.value > 0;
   // An Event-card Hunt (no roll — the card drew a tile directly) names its card.
   const fieldRoll = roll && !roll.mordor && !data.source;
   return (
@@ -357,7 +356,6 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
             <HuntTileFace draw={last} />
             <div style={{ fontSize: 12, color: '#998', alignSelf: 'center' }}>
               {describeDraw(last)}.
-              {numericTile && <> The damage is the <b>tile's value</b>, not the number of successes.</>}
             </div>
           </div>
         </div>

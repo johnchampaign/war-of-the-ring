@@ -82,8 +82,10 @@ function runActionRoll(state: GameState): void {
   state.hunt.box += eyes;
   state.dice.shadow = shadowRoll.filter((f) => f !== 'eye');
   // Player report 3d5o161p5u6r6c4z: "Free Peoples rolled 4 dice, Shadow rolled 5 dice (+1 Eyes)".
-  log(state, null, 'roll', `Free Peoples rolled ${state.dice.fp.length} ${state.dice.fp.length === 1 ? 'die' : 'dice'}, Shadow rolled ${state.dice.shadow.length} ${state.dice.shadow.length === 1 ? 'die' : 'dice'}${eyes ? ` (+${eyes} ${eyes === 1 ? 'Eye' : 'Eyes'})` : ''}`,
-    { fp: [...state.dice.fp], shadow: [...state.dice.shadow], eyes, huntBox: state.hunt.box });
+  // One line per side, like the turn-start card draws (player report 56180q5a5v1r4s53).
+  log(state, null, 'roll', `Free Peoples rolled ${state.dice.fp.length} ${state.dice.fp.length === 1 ? 'die' : 'dice'}`, { fp: [...state.dice.fp] });
+  log(state, null, 'roll', `Shadow rolled ${state.dice.shadow.length} ${state.dice.shadow.length === 1 ? 'die' : 'dice'}${eyes ? ` (+${eyes} ${eyes === 1 ? 'Eye' : 'Eyes'})` : ''}`,
+    { shadow: [...state.dice.shadow], eyes, huntBox: state.hunt.box });
 }
 
 const noDiceLeft = (state: GameState): boolean =>

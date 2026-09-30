@@ -1455,7 +1455,7 @@ export function combatStep(state: GameState): void {
           if (!id) return 'no Combat Card';
           const def = EVENT_BY_ID[id];
           const combat = def?.combat?.title, event = def?.name;
-          return combat && event && combat !== event ? `'${combat}' (combat half of ${event})` : `'${combat ?? event ?? id}'`;
+          return combat && event && combat !== event ? `'${combat}' (${event})` : `'${combat ?? event ?? id}'`;
         };
         // Each side's combat card (if any) applies THIS round, then is spent —
         // a fresh card may be played next round (rules-spec §7, p.29).
@@ -1617,17 +1617,17 @@ export function combatStep(state: GameState): void {
         // `rolled` is what the dice scored; `hits` is what survives card effects.
         // Show both when they differ, so a cancelled hit doesn't read as a bad
         // dice count (player report: "Shield Wall reduced the hits — did it?").
-        const fmt = (roll: CombatRoll, rolled: number, hits: number) =>
+        const fmt = (roll: CombatRoll, rolled: number, hits: number, card: string | null) =>
           `[${roll.dice.join(' ')}] on ${roll.target}+`
           // The re-roll can have its OWN to-hit (cards bonus the two rolls separately).
           + (roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]${roll.rerollTarget != null && roll.rerollTarget !== roll.target ? ` on ${roll.rerollTarget}+` : ''}` : '')
-          + (roll.auto ? ` + ${roll.auto} automatic hit${roll.auto === 1 ? '' : 's'} from the card` : '')
+          + (roll.auto ? ` + ${roll.auto} automatic hit${roll.auto === 1 ? '' : 's'} from ${card ? `'${EVENT_BY_ID[card]?.combat?.title ?? EVENT_BY_ID[card]?.name ?? card}'` : 'the card'}` : '')
           // Confusion's backfire is a hit AGAINST this roller, so it is named on their
           // own segment rather than silently inflating the opponent's total.
           + (roll.backfire ? ` + ${roll.backfire} unmodified '1'${roll.backfire === 1 ? '' : 's'} wounding their own Army (Confusion, no re-roll)` : '')
           + ` → ${rolled} hit${rolled === 1 ? '' : 's'} total`
           + (hits !== rolled ? ` (${hits} after card effects)` : '');
-        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk)}; defender ${fmt(dRoll, defHits, def)}`,
+        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk, pc.attackerCard)}; defender ${fmt(dRoll, defHits, def, pc.defenderCard)}`,
           { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
         // NB the round's cards are NOT cleared here: the 'onslaught' step still
         // needs them AFTER casualties — Onslaught's own post-casualty cost prompt

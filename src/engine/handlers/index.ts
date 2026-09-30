@@ -471,8 +471,8 @@ register('fp-char-09', { // Athelas
     const healed = dice.filter((d) => d >= need).length;
     heal(state, healed);
     // Surface the roll (the report: "Athelas should show the rolls in a popup").
-    notify(state, `Rolled [${dice.join(', ')}], healing on ${need}+${guideIsStrider ? ' (Strider guides)' : ''}: healed ${healed} Corruption (now ${state.fellowship.corruption}/12).`, 'Athelas');
-    log(state, null, 'event', `Athelas heals ${healed} [${dice.join(',')}]`);
+    notify(state, `Rolled [${dice.join(' ')}], healing on ${need}+${guideIsStrider ? ' (Strider guides)' : ''}: healed ${healed} Corruption (now ${state.fellowship.corruption}/12).`, 'Athelas');
+    log(state, null, 'event', `Athelas heals ${healed} [${dice.join(' ')}]`);
   },
 });
 // There Is Another Way: heal 1; then, if Gollum is the Guide, the Fellowship MAY
