@@ -3,7 +3,7 @@
 // caller (the AI pushes toward Mordor).
 import type { GameState, RegionId, CharacterId, Nation } from './types';
 import { FP_NATIONS } from './types';
-import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, characterDef } from './data';
+import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, characterDef, EVENT_BY_ID } from './data';
 import { resolveHunt, resolveMordorStep } from './hunt';
 import { activateNation } from './politics';
 import { settlementController, figureForce } from './armies';
@@ -238,7 +238,7 @@ export function moveFellowship(state: GameState): void {
     resolveMordorStep(state); // adds the FP die to the Hunt Box internally
   } else {
     fs.progress += 1;
-    log(state, null, 'fellowship', `The Fellowship moved (progress ${fs.progress})`);
+    log(state, null, 'fellowship', `The Fellowship moves (progress ${fs.progress})`);
     resolveHunt(state);       // ditto
   }
   state.flags.fellowshipDeclaredOrMovedThisTurn = true;
@@ -254,8 +254,8 @@ export function hideFellowship(state: GameState, viaStrider = false): void {
   state.fellowship.hidden = true;
   state.flags.fellowshipDeclaredOrMovedThisTurn = true; // counts as attempting a move/hide (Mordor penalty)
   log(state, null, 'fellowship', viaStrider
-    ? 'The Fellowship is hidden (Strider, the Guide)'
-    : 'The Fellowship is hidden');
+    ? 'The Fellowship hides (Strider, the Guide)'
+    : 'The Fellowship hides');
 }
 
 /** Declare the Fellowship's position: move the figure up to `progress` regions
@@ -320,7 +320,7 @@ export function declareFellowship(state: GameState, target: RegionId): void {
   }
   // No Corruption figure here: declaring doesn't change it (the heal above is its own
   // step), and "(corruption 5)" read as a cost (player report 710l4b504o1m236l).
-  log(state, null, 'fellowship', `The Fellowship declared in ${fs.location}`);
+  log(state, null, 'fellowship', `The Fellowship is declared in ${fs.location}`);
 }
 
 /** Nations a Companion can activate (its own, or all FP if its card shows "any"). */
@@ -480,7 +480,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
   // Army holding the open field (player report). `figureForce` picks the right one.
   figureForce(state, dest, 'fp').characters.push(id);
   // Logged before the Nation it rouses, so the log reads in order (report j59rj32xtre3q5g8).
-  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separated from the Fellowship and moved to ${dest}; ${guideLabel(fs.guide)} becomes the Guide`);
+  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separates from the Fellowship and moves to ${dest}; ${guideLabel(fs.guide)} becomes the Guide`);
   const nations = activatableNations(id);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
@@ -505,7 +505,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
 export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: RegionId): void {
   const fs = state.fellowship;
   for (const id of ids) { state.characters.inPlay[id] = dest; figureForce(state, dest, 'fp').characters.push(id); }
-  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} separated from the Fellowship and moved to ${dest}; ${guideLabel(fs.guide)} becomes the Guide`);
+  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} ${ids.length === 1 ? 'separates' : 'separate'} from the Fellowship and ${ids.length === 1 ? 'moves' : 'move'} to ${dest}; ${guideLabel(fs.guide)} becomes the Guide`);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')
     && ids.some((id) => activatableNations(id).includes(dn))) {
@@ -535,11 +535,13 @@ export function enterMordor(state: GameState): boolean {
     h.drawn = h.drawn.filter((i) => STANDARD_TILE_LIST[i]?.value !== 'eye');
     h.pool.push(...eyes);
   }
-  if (state.hunt.specialsInPlay.length) {
-    state.hunt.specialsInPool.push(...state.hunt.specialsInPlay);
+  const joining = state.hunt.specialsInPlay;
+  if (joining.length) {
+    state.hunt.specialsInPool.push(...joining);
     state.hunt.specialsInPlay = [];
   }
-  log(state, null, 'fellowship', 'Fellowship entered Mordor');
+  log(state, null, 'fellowship', 'The Fellowship enters Mordor');
+  for (const id of joining) log(state, null, 'event', `The special Hunt tile ${EVENT_BY_ID[id]?.name ?? id} is added to the Hunt Pool`);
   return true;
 }
 

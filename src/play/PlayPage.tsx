@@ -27,7 +27,7 @@ import { HuntPopup, huntResultPending } from './HuntPopup';
 import { BattlePopup, battleResultPending } from './BattlePopup';
 import { NoticePopup, noticePending } from './NoticePopup';
 import { TurnSummary } from './TurnSummary';
-import { LogPanel } from './LogPanel';
+import { LogPanel, CopyLogButton } from './LogPanel';
 import { GameOverUpload, UploadLogButton } from './GameOverUpload';
 import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
@@ -1090,7 +1090,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               looping = the "doubled, flickering" report. */}
           <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', width: 520, maxWidth: '92vw' }}>
             <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', borderRadius: 12, border: '1px solid #5a4a2a', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px #000' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 10px', borderBottom: '1px solid #2a2418' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '6px 10px', borderBottom: '1px solid #2a2418' }}>
+                <CopyLogButton view={g.view} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }} />
                 <button onClick={() => { setLogOpen(false); setLogHover(null); }} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
               </div>
               <div style={{ height: '60vh', overflowY: 'auto' }}>

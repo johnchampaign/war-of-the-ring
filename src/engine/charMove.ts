@@ -15,7 +15,7 @@ import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS } from './data';
 import { settlementController, armySide, unitCount, figureForce, activateOnCompanionLand } from './armies';
 import { activateNation } from './politics';
-import { log } from './log';
+import { log, sideDoes } from './log';
 
 const FLY = 99;
 
@@ -201,7 +201,7 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
     const n = count === undefined ? src.nazgul : Math.min(Math.max(0, Math.floor(count)), src.nazgul);
     if (n <= 0) return false;
     dst.nazgul += n; src.nazgul -= n;
-    log(state, null, 'army', `Moved ${n} Nazgûl ${from} -> ${to}`);
+    log(state, null, 'army', `${sideDoes(side, 'move')} ${n} Nazgûl ${from} -> ${to}`);
     return true;
   }
   // A character figure (Minion or Companion): verify it belongs to this side and
@@ -212,7 +212,7 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
   src.characters.splice(i, 1);
   dst.characters.push(char);
   if (state.characters.inPlay[char]) state.characters.inPlay[char] = to;
-  log(state, null, 'army', `Moved ${char} ${from} -> ${to}`); // before the activation it causes
+  log(state, null, 'army', `${sideDoes(side, 'move')} ${char} ${from} -> ${to}`); // before the activation it causes
   activateOnCompanionLand(state, side, [char], to); // ends movement in a City/Stronghold?
   return true;
 }
@@ -243,7 +243,7 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
     dst.characters.push(c);
     if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
   }
-  log(state, null, 'army', `Moved ${chars.join(', ')} ${from} -> ${to}`); // before the activation it causes
+  log(state, null, 'army', `${sideDoes(side, 'move')} ${chars.join(', ')} ${from} -> ${to}`); // before the activation it causes
   activateOnCompanionLand(state, side, chars, to); // group ends movement in a City/Stronghold?
   return true;
 }

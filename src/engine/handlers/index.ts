@@ -14,7 +14,7 @@ import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../po
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
-import { log, logCardDraw, notify } from '../log';
+import { log, logCardDraw, notify, sideDoes } from '../log';
 
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 /** Roll min(5, count) dice; count hits on `target`+. */
@@ -411,7 +411,7 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
       placeUnits(state, t.nation!, t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0);
       // Log the recruit (previously silent — a player report read the missing log as
       // "the unit/leader wasn't recruited"). Same public format as a Muster recruit.
-      if (recruitStackSize(state, t.region!, side) > before) log(state, null, 'muster', `Recruited ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} ${t.nation} in ${t.region}`);
+      if (recruitStackSize(state, t.region!, side) > before) log(state, null, 'muster', `${sideDoes(side, 'muster')} ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} ${t.nation} in ${t.region}`);
     },
     finalize(state) {
       for (const l of opts.leaders ?? []) {
@@ -421,7 +421,7 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
         const dest = eventRecruitTarget(state, l.region, side);
         const before = dest ? dest.force.leaders : 0;
         placeForce(state, l.nation, l.region, { leader: 1 });
-        if (dest && dest.force.leaders > before) log(state, null, 'muster', `Recruited a ${l.nation} Leader in ${l.region}`);
+        if (dest && dest.force.leaders > before) log(state, null, 'muster', `${sideDoes(side, 'muster')} a ${l.nation} Leader in ${l.region}`);
       }
       opts.then?.(state);
     },
@@ -1525,7 +1525,7 @@ register('fp-str-06', {
     if (t.figure) {
       const before = recruitStackSize(state, t.region!, 'fp');
       placeUnits(state, 'gondor', t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0);
-      if (recruitStackSize(state, t.region!, 'fp') > before) log(state, null, 'muster', `Recruited ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} gondor in ${t.region}`);
+      if (recruitStackSize(state, t.region!, 'fp') > before) log(state, null, 'muster', `${sideDoes('fp', 'muster')} ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} gondor in ${t.region}`);
       return;
     }
     const hits = rollDice(state, 3, 5);
@@ -1663,8 +1663,13 @@ for (const id of ['fp-char-01', 'fp-char-02', 'fp-char-03', 'fp-char-04', 'sh-ch
     apply(state) {
       const h = state.hunt;
       if (h.specialsInPlay.includes(id) || h.specialsInPool.includes(id) || (h.specialsDrawn ?? []).includes(id)) return;
-      (state.fellowship.mordor !== null ? h.specialsInPool : h.specialsInPlay).push(id);
-      log(state, null, 'event', `Special Hunt tile ${EVENT_BY_ID[id]?.name ?? id} now in play`);
+      // Said only when the tile actually joins the Hunt Pool — here on the Mordor
+      // Track, otherwise when the Fellowship enters Mordor (enterMordor). "now in
+      // play" read as if it could already be drawn (player report 18484h0l522h542m).
+      if (state.fellowship.mordor !== null) {
+        h.specialsInPool.push(id);
+        log(state, null, 'event', `The special Hunt tile ${EVENT_BY_ID[id]?.name ?? id} is added to the Hunt Pool`);
+      } else h.specialsInPlay.push(id);
     },
   });
 }

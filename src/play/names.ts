@@ -120,9 +120,34 @@ function recruitPhrase(regular: number, elite: number, leaders: number, nationId
 // before the id pass could name the card (player report 3l2d024y3z2u3l5t).
 const SIDE_ID = /\bfp\b(?!-)/g;
 
-export function prettify(msg: string): string {
+// The engine logs in the present tense with the subject named ("Shadow moves an Army
+// …", player reports 536w3k2o504c6s6i and friends). Lines already saved in a game's
+// log still read "Moved army …" / "Mustered a …" / "The Fellowship moved …", so the
+// display side brings them into line; the entry's actor supplies the missing subject.
+function presentTense(msg: string, actor?: string | null): string {
+  const subj = actor === 'fp' ? 'Free Peoples' : actor === 'shadow' ? 'Shadow' : null;
+  const does = (verb: string) => (actor === 'fp' ? `Free Peoples ${verb}` : `Shadow ${verb}s`);
+  if (subj) {
+    msg = msg.replace(/^Moved army /, `${does('move')} an Army `)
+      .replace(/^Moved /, `${does('move')} `)
+      .replace(/^(Recruited|Mustered) /, `${does('muster')} `)
+      .replace(/^Removed an over-stacked /, `${does('remove')} an over-stacked `);
+  }
+  return msg
+    .replace(/^(Free Peoples|Shadow) (re)?captured /, (_m, s: string, re: string | undefined) => `${s} ${re ?? ''}capture${s === 'Shadow' ? 's' : ''} `)
+    .replace(/^(Free Peoples|Shadow) rolled /, (_m, s: string) => `${s} roll${s === 'Shadow' ? 's' : ''} `)
+    .replace(/^The Fellowship moved \(/, 'The Fellowship moves (')
+    .replace(/^The Fellowship is hidden\b/, 'The Fellowship hides')
+    .replace(/^The Fellowship declared in /, 'The Fellowship is declared in ')
+    .replace(/^Fellowship entered Mordor$/, 'The Fellowship enters Mordor')
+    .replace(/ separated from the Fellowship and moved to /, /^[^;]*, [^;]* separated /.test(msg)
+      ? ' separate from the Fellowship and move to ' : ' separates from the Fellowship and moves to ')
+    .replace(/( to absorb \d+) Hunt damage/, '$1 Corruption');
+}
+
+export function prettify(msg: string, actor?: string | null): string {
   if (!msg) return msg;
-  msg = msg.replace(SIDE_ID, 'Free Peoples');
+  msg = presentTense(msg.replace(SIDE_ID, 'Free Peoples'), actor);
   // Before the id pass, while the Nation is still a bare lowercase id.
   let out = msg.replace(RECRUIT, (_m, r: string, e: string, l: string | undefined, plusLeader: string | undefined, nation: string) =>
     recruitPhrase(Number(r), Number(e), Number(l ?? 0) + (plusLeader ? 1 : 0), nation));

@@ -59,7 +59,7 @@ console.log('\n=== a bare whole-army move takes the At-War half and leaves the r
   check('no Elves left behind', !src.units.elves, JSON.stringify(src.units));
   check('the North stayed', (src.units.north?.regular ?? 0) === 3 && !dst.units.north, JSON.stringify({ src: src.units, dst: dst.units }));
   check('the Leader went with the movers', dst.leaders === 1 && src.leaders === 0, `${src.leaders}/${dst.leaders}`);
-  const said = next.log.some((e) => (e.msg ?? '').includes('not At War and stayed'));
+  const said = next.log.some((e) => (e.msg ?? '').includes('not At War and stays'));
   check('the log says why the North stayed', said, JSON.stringify(next.log.slice(-3).map((e) => e.msg)));
 }
 

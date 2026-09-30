@@ -7,13 +7,13 @@
 // (a card's initiative only matters when both sides' effects collide — see D5)
 // and a few intricate per-effect cards (e.g. Mûmakil's two timings).
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
-import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef } from './data';
+import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName } from './data';
 import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeForMovement, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
-import { log } from './log';
+import { log, sideDoes } from './log';
 
 // Safety backstop only — a real field battle terminates when the attacker ceases
 // or one side is wiped (always, since every round removes units). Set well above
@@ -749,7 +749,7 @@ function payCardCost(state: GameState, pc: PendingCombat, side: Side, vc: Variab
   if (amount <= 0) return;
   if (vc.kind === 'selfHits') {
     const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
-    log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} inflict ${amount} hit${amount === 1 ? '' : 's'} on their own units to power the card`);
+    log(state, null, 'combat', `${sideDoes(side, 'inflict')} ${amount} hit${amount === 1 ? '' : 's'} on their own units to power the card`);
     // The card's own hits are casualties like any others: the OWNER chooses how to
     // absorb them (Regulars removed vs Elites reduced). They used to be applied
     // Regulars-first with no prompt (player report 384n4g074t2k4d01: "I cannot choose
@@ -763,7 +763,7 @@ function payCardCost(state: GameState, pc: PendingCombat, side: Side, vc: Variab
     }
     finishForceCasualties(state, own, side);
   } else {
-    log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} forfeit ${amount} point${amount === 1 ? '' : 's'} of Nazgûl Leadership`);
+    log(state, null, 'combat', `${sideDoes(side, 'forfeit')} ${amount} point${amount === 1 ? '' : 's'} of Nazgûl Leadership`);
   }
 }
 
@@ -865,7 +865,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   const atkDesc = describeForce(state, atkForce(state, pc), attacker);
   const defDesc = describeForce(state, defForce(state, pc), defender);
   log(state, null, 'combat',
-    `${sideLabel(attacker)} attacks ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${sortie ? ' (sortie)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`
+    `${sideDoes(attacker, 'attack')} ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${sortie ? ' (sortie)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`
     + ` — attacker ${atkDesc} vs defender ${defDesc}`,
     { from, to, attacker, attackerForce: atkDesc, defenderForce: defDesc, siege: !!pc.siege, sortie });
 }
@@ -949,7 +949,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
         return true; // pause; resolvePreCombatRetreat resumes
       }
       const dest = dests[0] ?? null;
-      if (dest) { noteWithdrawal(state, pc, ef.side); moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${sideLabel(ef.side)} retreats ${own}→${dest} before combat`); }
+      if (dest) { noteWithdrawal(state, pc, ef.side); moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${sideDoes(ef.side, 'retreat')} ${own}→${dest} before combat`); }
     } else if (ef.mods.preCombatAttackDice) {
       // Aim at the enemy FORCE, not the enemy REGION. In a siege assault (and a
       // sortie) one side stands in the region while the other is in the siege box —
@@ -1020,7 +1020,7 @@ export function resolvePreCombatRetreat(state: GameState, region: RegionId): voi
   const side = armySide(state, from);
   const dests = freeAdjacentRegions(state, from, side!);
   const dest = dests.includes(region) ? region : dests[0];
-  if (dest) { noteWithdrawal(state, pc, side!); moveStack(state, from, dest, side!, true, true); log(state, null, 'combat', `${sideLabel(side!)} retreats ${from}→${dest} before combat`); }
+  if (dest) { noteWithdrawal(state, pc, side!); moveStack(state, from, dest, side!, true, true); log(state, null, 'combat', `${sideDoes(side!, 'retreat')} ${from}→${dest} before combat`); }
 }
 
 /** Move the whole army at `from` into `to` (defender gone), capturing. */
@@ -1218,11 +1218,10 @@ function sorcererDue(state: GameState, pc: PendingCombat): boolean {
 export function resolveAdvanceChoice(state: GameState, sel: { advance: boolean; move?: MoveSelection }): RegionId | null {
   const d = state.pendingChoice!.data as { from: RegionId; to: RegionId; rearguard: PendingCombat['rearguard'] | null };
   const owner = state.pendingChoice!.owner;
-  const who = owner === 'fp' ? 'Free Peoples' : 'Shadow';
   state.pendingChoice = null;
   let advancedTo: RegionId | null = null;
   if (!sel.advance) {
-    log(state, null, 'combat', `${who} hold at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
+    log(state, null, 'combat', `${sideDoes(owner, 'hold')} at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
   } else if (sel.move) {
     // Subset advance: sanitized like every split mover; a selection that clamps to
     // nothing degrades to the whole-army advance rather than silently doing nothing.
@@ -1246,12 +1245,12 @@ export function resolveAdvanceChoice(state: GameState, sel: { advance: boolean; 
       const ownLeft = (Object.keys(src.units) as Nation[]).some((n) => sideOfNation(n) === owner && (src.units[n]!.regular + src.units[n]!.elite) > 0);
       if (owner === 'fp' && !ownLeft && src.leaders > 0) { state.regions[d.to]!.leaders += src.leaders; src.leaders = 0; }
       advancedTo = d.to;
-      log(state, null, 'combat', `${who} advance ${moved} unit${moved === 1 ? '' : 's'} into ${REGIONS[d.to]!.name ?? d.to}`);
+      log(state, null, 'combat', `${sideDoes(owner, 'advance')} ${moved} unit${moved === 1 ? '' : 's'} into ${REGIONS[d.to]!.name ?? d.to}`);
     }
   } else {
     advanceInto(state, owner, d.from, d.to);                       // whole force; advanceInto captures
     advancedTo = d.to;
-    log(state, null, 'combat', `${who} advance into ${REGIONS[d.to]!.name ?? d.to}`);
+    log(state, null, 'combat', `${sideDoes(owner, 'advance')} into ${REGIONS[d.to]!.name ?? d.to}`);
   }
   // Only now — restoring earlier would let the advance sweep the rearguard along (p.28).
   if (d.rearguard) restoreRearguard(state, d.from, d.rearguard);
@@ -1308,7 +1307,7 @@ export function resolveAdvanceHoldBack(state: GameState, back: MoveSelection | n
     for (const c of src.characters) if (characterSide(c) === owner && !sel.characters!.includes(c)) sel.characters!.push(c);
   }
   moveSelectedBack(state, d.to, d.from, owner, sel);
-  log(state, null, 'combat', `${owner === 'fp' ? 'Free Peoples' : 'Shadow'} keep ${moved} unit${moved === 1 ? '' : 's'} back in ${REGIONS[d.from]!.name ?? d.from}`);
+  log(state, null, 'combat', `${sideDoes(owner, 'keep')} ${moved} unit${moved === 1 ? '' : 's'} back in ${REGIONS[d.from]!.name ?? d.from}`);
   return d.from;
 }
 
@@ -1341,12 +1340,11 @@ function moveSelectedBack(state: GameState, from: RegionId, to: RegionId, side: 
 export function resolveRelieveAdvance(state: GameState, advance: boolean): RegionId | null {
   const d = state.pendingChoice!.data as { from: RegionId; to: RegionId; rearguard: PendingCombat['rearguard'] | null };
   const owner = state.pendingChoice!.owner;
-  const who = owner === 'fp' ? 'Free Peoples' : 'Shadow';
   state.pendingChoice = null;
   if (advance) advanceInto(state, owner, d.from, d.to);
   log(state, null, 'combat', advance
-    ? `${who} advance into ${REGIONS[d.to]!.name ?? d.to}, relieving the siege`
-    : `${who} hold at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
+    ? `${sideDoes(owner, 'advance')} into ${REGIONS[d.to]!.name ?? d.to}, relieving the siege`
+    : `${sideDoes(owner, 'hold')} at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
   // Only now — the rearguard must not be swept along by the advance (p.28).
   if (d.rearguard) restoreRearguard(state, d.from, d.rearguard);
   return advance ? d.to : null;
@@ -1452,7 +1450,7 @@ export function combatStep(state: GameState): void {
         // (player report: found "Monsters Roused" in the discard, couldn't find it
         // in the log — it was announced only by its combat title).
         const cardName = (id: string | null) => {
-          if (!id) return 'no Combat Card';
+          if (!id) return 'no Combat card';
           const def = EVENT_BY_ID[id];
           const combat = def?.combat?.title, event = def?.name;
           return combat && event && combat !== event ? `'${combat}' (${event})` : `'${combat ?? event ?? id}'`;
@@ -1530,12 +1528,15 @@ export function combatStep(state: GameState): void {
           if (card === fpCard && defianceVoid) return `${cardName(card)} — NO EFFECT: The White Rider has already forfeited Gandalf's Leadership, so the Companions cannot forfeit all of theirs`;
           if (card === fpCard && fpSilencedCard) return `${cardName(card)} — NO EFFECT: Words of Power has cancelled ${characterDef(silencedNow!)?.name ?? silencedNow}'s Leadership`;
           if (outrun) return `${cardName(card)} — TOO SLOW: the opposing card retreats its Army first, so this one never resolves`;
-          const what = describeCombatMods(mods);
+          // A conditional bonus hit ("+2 hits if it scored any") is named on the dice
+          // line when it actually fires ("+ 2 automatic hits from 'Nameless Wood'"), so
+          // saying it here too only doubled it up (player report 722j600u2v6q3062).
+          const what = describeCombatMods({ ...mods, bonusHitsIfAny: 0 });
           return `${cardName(card)}${what ? ` — ${what}` : ''}`;
         };
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.attacker)} (attacker) play ${played(pc.attackerCard, aMods, aCancelled, aOutrun)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.attacker)} (attacker) ${pc.attacker === 'fp' ? 'play' : 'plays'} ${played(pc.attackerCard, aMods, aCancelled, aOutrun)}`);
         if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.defender)} (defender) play ${played(pc.defenderCard, dMods, dCancelled, dOutrun)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.defender)} (defender) ${pc.defender === 'fp' ? 'play' : 'plays'} ${played(pc.defenderCard, dMods, dCancelled, dOutrun)}`);
         if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
         // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
         // resolve in initiative order before the normal roll; either can end the
@@ -1842,7 +1843,7 @@ export function resolveSiegeExtend(state: GameState, extend: boolean): void {
   const n = (Object.keys(r.units) as Nation[]).find((k) => (r.units[k]?.elite ?? 0) > 0);
   if (!n) { finishCombat(state, false); return; } // no Elite left to spend (shouldn't happen — gated on offer)
   reduceElite(state, r, n, pc.attacker); // Elite figure back to the pool (Shadow) / gone (FP), Regular taken from it
-  log(state, null, 'combat', `${sideLabel(pc.attacker)} presses the assault: an Elite is reduced to a Regular for another round`);
+  log(state, null, 'combat', `${sideDoes(pc.attacker, 'press')} the assault: ${/^[AEIOU]/.test(nationName(n)) ? 'an' : 'a'} ${nationName(n)} Elite is reduced to a Regular`);
   pc.siegeRoundsLeft = 1;
   pc.round += 1;
   pc.step = 'attackerCard'; // advance() re-drives the battle sub-machine
@@ -1912,13 +1913,13 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean): void
     // No besieger, no siege: the garrison returns to the open field it just left.
     if (r.siegeBox) mergeForceInto(state, pc.to, r.siegeBox);
     delete r.siegeBox; r.besieged = false;
-    log(state, null, 'combat', `${sideLabel(pc.defender)} fall back into ${REGIONS[pc.to]!.name ?? pc.to}, but ${sideLabel(pc.attacker)} does not advance — no siege`);
+    log(state, null, 'combat', `${sideDoes(pc.defender, 'fall')} back into ${REGIONS[pc.to]!.name ?? pc.to}, but ${sideLabel(pc.attacker)} ${pc.attacker === 'fp' ? 'do' : 'does'} not advance — no siege`);
     if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
     state.lastBattle = {
       seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
       atkLosses: Math.max(0, (pc.atkUnits0 ?? 0) - unitCount(state, pc.from)),
       defLosses: Math.max(0, (pc.defUnits0 ?? 0) - unitCount(state, pc.to)), captured: false, siege: false,
-      outcome: `${pc.attacker === 'fp' ? 'Free Peoples' : 'Shadow'} decline to besiege ${REGIONS[pc.to]!.name ?? pc.to}`,
+      outcome: `${sideDoes(pc.attacker, 'decline')} to besiege ${REGIONS[pc.to]!.name ?? pc.to}`,
     };
     const opp0 = other(pc.attacker);
     state.currentPlayer = state.dice[opp0].length > 0 ? opp0 : pc.attacker;
@@ -1929,7 +1930,7 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean): void
     capSiegeBox(state, pc.to); // NOW it comes under siege — garrison capped at 5 (p.31)
     moveStack(state, pc.from, pc.to, pc.attacker, false); // besieger occupies the open field (NO capture — the boxed garrison holds the Settlement)
     r.besieged = true;
-    log(state, null, 'combat', `${sideLabel(pc.defender)} withdraws into the siege at ${pc.to}; ${sideLabel(pc.attacker)} besieges`);
+    log(state, null, 'combat', `${sideDoes(pc.defender, 'withdraw')} into the siege at ${pc.to}; ${sideDoes(pc.attacker, 'besiege')}`);
     // The rearguard rejoins `from`; record the siege as established; resume the turn.
     if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
     // `pc.round` is 0-based and counts the rounds ALREADY fought, so it is exactly the
@@ -1939,7 +1940,7 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean): void
       seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
       atkLosses: Math.max(0, (pc.atkUnits0 ?? 0) - unitCount(state, pc.to)), // the besieger has just moved from -> to
       defLosses: Math.max(0, (pc.defUnits0 ?? 0) - (r.siegeBox ? forceUnitCount(r.siegeBox) : 0)), captured: false, siege: true,
-      outcome: `${pc.defender === 'fp' ? 'Free Peoples' : 'Shadow'} withdraw into the siege at ${REGIONS[pc.to]!.name ?? pc.to}`
+      outcome: `${sideDoes(pc.defender, 'withdraw')} into the siege at ${REGIONS[pc.to]!.name ?? pc.to}`
         + (pc.round > 0 ? ` after ${pc.round} round${pc.round === 1 ? '' : 's'}` : ''),
     };
     const opp = other(pc.attacker);
@@ -2215,10 +2216,9 @@ export function resolvePlayCombatCard(state: GameState, cardId: string | null): 
       state.cards[owner].discard[deck].push(cardId);
     }
     if (pc.step === 'attackerCard') pc.attackerCard = cardId; else pc.defenderCard = cardId;
-    // Name the side, don't print its id: "Free Peoples play…", not "fp plays…"
-    // (player report 0l314z0n0j2n3b5q).
-    log(state, owner, 'combat', `${sideLabel(owner)} play combat card ${EVENT_BY_ID[cardId]?.combat?.title ?? cardId}`);
-    state.log[state.log.length - 1]!.card = cardId; // hoverable in the log
+    // No private "you play combat card X" line: the card is revealed and logged
+    // (hoverable) at the start of the round, so the private line only repeated it
+    // (player report 736b255m3c6m5m58).
   }
   // -> 'cardCost', NOT straight to 'beginRound': a variable-size card (Relentless
   // Assault, Dread and Despair) is sized by its owner in the cardCost step, and

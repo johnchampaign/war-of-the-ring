@@ -5,7 +5,7 @@ import { FP_NATIONS } from './types';
 import { REGIONS, sideOfNation, characterDef, characterSide, nationName, COMPANIONS } from './data';
 import { isAtWar, onSettlementCaptured, activateNation } from './politics';
 import { shadowBarredFromRegion } from './persistent';
-import { log } from './log';
+import { log, sideDoes } from './log';
 
 export const STACKING_LIMIT = 10;
 
@@ -169,7 +169,7 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
   u.regular += regular; u.elite += elite;
   into.units[nation] = u;
   if (leader > 0) { pool.leader = (pool.leader ?? 0) - leader; into.leaders += leader; }
-  log(state, null, 'muster', `Recruited ${regular}R/${elite}E${leader ? `/${leader}L` : ''} ${nation} in ${id}`);
+  log(state, null, 'muster', `${sideDoes(sideOfNation(nation), 'muster')} ${regular}R/${elite}E${leader ? `/${leader}L` : ''} ${nation} in ${id}`);
   return true;
 }
 
@@ -246,7 +246,7 @@ export function recruitNazgul(state: GameState, id: RegionId): boolean {
   if (!canRecruitNazgul(state, id)) return false;
   const pool = state.reinforcements.sauron as { nazgul: number };
   pool.nazgul -= 1; state.regions[id]!.nazgul += 1;
-  log(state, null, 'muster', `Mustered a Nazgûl in ${id}`);
+  log(state, null, 'muster', `${sideDoes('shadow', 'muster')} a Nazgûl in ${id}`);
   return true;
 }
 
@@ -669,7 +669,7 @@ export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, si
   for (const c of chars) { src.characters.splice(src.characters.indexOf(c), 1); dst.characters.push(c); }
   // The move is logged before its consequences (capture, activation) so the log
   // reads in the order things happen (player report j59rj32xtre3q5g8).
-  log(state, null, 'army', `Moved army ${from} -> ${to} (${movingUnits} unit${movingUnits > 1 ? 's' : ''})`);
+  log(state, null, 'army', `${sideDoes(side, 'move')} an Army ${from} -> ${to} (${movingUnits} unit${movingUnits > 1 ? 's' : ''})`);
   captureIfEnemySettlement(state, to, side);
   liftSiegeIfAbandoned(state, from); // a besieger that vacates the field lifts the siege
   if (dn && sideOfNation(dn) !== side) activateNation(state, dn, { region: to });
@@ -699,7 +699,7 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
     if (ok && stayers.length) {
       const names = stayers.map(nationName);
       const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-      log(state, null, 'army', `${list} ${names.length === 1 ? 'is' : 'are'} not At War and stayed in ${REGIONS[from]?.name ?? from}`);
+      log(state, null, 'army', `${list} ${names.length === 1 ? 'is' : 'are'} not At War and ${names.length === 1 ? 'stays' : 'stay'} in ${REGIONS[from]?.name ?? from}`);
     }
     return ok;
   }
@@ -720,7 +720,7 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
   const movingChars = src.characters.filter((c) => characterSide(c) === side && c !== 'saruman');
   moveOwnLeaders(side, src, dst); dst.characters.push(...movingChars);
   src.characters = src.characters.filter((c) => !movingChars.includes(c));
-  log(state, null, 'army', `Moved army ${from} -> ${to}`); // before its consequences
+  log(state, null, 'army', `${sideDoes(side, 'move')} an Army ${from} -> ${to}`); // before its consequences
   // Capture an undefended enemy Settlement.
   captureIfEnemySettlement(state, to, side);
   liftSiegeIfAbandoned(state, from); // a besieger that vacates the field lifts the siege
@@ -809,7 +809,7 @@ export function removeStackUnit(state: GameState, id: RegionId, nation: Nation, 
   if (u.regular === 0 && u.elite === 0) delete state.regions[id]!.units[nation];
   const pool = state.reinforcements[nation] as { regular: number; elite: number };
   pool[figure] += 1;
-  log(state, null, 'army', `Removed an over-stacked ${nation} ${figure} from ${id} (over the ${STACKING_LIMIT}-unit limit)`);
+  log(state, null, 'army', `${sideDoes(sideOfNation(nation), 'remove')} an over-stacked ${nation} ${figure} from ${id} (over the ${STACKING_LIMIT}-unit limit)`);
   return true;
 }
 
@@ -843,7 +843,7 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
     state.regions[id]!.besieged = false;
     if (def.vp > 0) {
       state.victoryPoints[enemy] = Math.max(0, state.victoryPoints[enemy] - def.vp);
-      log(state, null, 'army', `${sideLabel(side)} recaptured ${id} (−${def.vp} VP from the ${sideLabel(enemy)}, total ${state.victoryPoints[enemy]})`);
+      log(state, null, 'army', `${sideDoes(side, 'recapture')} ${id} (−${def.vp} VP from the ${sideLabel(enemy)}, total ${state.victoryPoints[enemy]})`);
     }
     return;
   }
@@ -851,7 +851,7 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
   state.regions[id]!.control = side;
   if (def.vp > 0) {
     state.victoryPoints[side] += def.vp;
-    log(state, null, 'army', `${sideLabel(side)} captured ${id} (+${def.vp} VP, total ${state.victoryPoints[side]})`);
+    log(state, null, 'army', `${sideDoes(side, 'capture')} ${id} (+${def.vp} VP, total ${state.victoryPoints[side]})`);
   }
   // (A Fortification never reaches here — it is not a Settlement and returns above —
   // so capturing one still never advances the owning Nation's track, rulebook p.36.)

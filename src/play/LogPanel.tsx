@@ -5,6 +5,7 @@
 // (player report: "I almost always want to look at something recent").
 // No hidden info: it shows exactly what the seat may see. Lines only this seat can see
 // (its own side-tagged ones) carry a 🔒 so they don't read as public.
+import { useState } from 'react';
 import type { GameState } from '../engine/types';
 import type { LogTime } from '../online/gameClient';
 import { FACE } from './DiceTray';
@@ -24,6 +25,26 @@ function shortTime(iso: string): string {
   return d.toDateString() === now.toDateString()
     ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
     : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** The whole log as plain text, oldest first — what this seat can see, nothing more. */
+export function logAsText(view: GameState): string {
+  return (view.log ?? []).map((e) => {
+    const who = e.actor === 'fp' ? 'FP ' : e.actor === 'shadow' ? 'SH ' : '';
+    return `T${e.turn} ${who}${e.kind}: ${prettify(e.msg, e.actor)}`;
+  }).join('\n');
+}
+
+/** "Copy log" for the full-log window (player report 3e6x0e1a3c643e4p). */
+export function CopyLogButton({ view, style }: { view: GameState; style?: React.CSSProperties }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const copy = () => {
+    const done = (ok: boolean) => { setState(ok ? 'copied' : 'failed'); setTimeout(() => setState('idle'), 1800); };
+    try { navigator.clipboard.writeText(logAsText(view)).then(() => done(true), () => done(false)); } catch { done(false); }
+  };
+  return <button onClick={copy} style={style} title="Copy the whole game log to the clipboard">
+    {state === 'copied' ? 'Copied ✓' : state === 'failed' ? 'Copy failed' : 'Copy log'}
+  </button>;
 }
 
 export function LogPanel({ view, times, onHoverCard }: {
@@ -86,8 +107,8 @@ export function LogPanel({ view, times, onHoverCard }: {
               {e.card && onHoverCard
                 ? <span style={{ color: '#cfe0ff', textDecoration: 'underline dotted', textUnderlineOffset: 2, cursor: 'help' }}
                     title="Hover to read this card"
-                    onMouseEnter={() => onHoverCard(e.card!)} onMouseLeave={() => onHoverCard(null)}>{prettify(e.msg)}</span>
-                : <span style={{ color: '#ddd' }}>{prettify(e.msg)}</span>}
+                    onMouseEnter={() => onHoverCard(e.card!)} onMouseLeave={() => onHoverCard(null)}>{prettify(e.msg, e.actor)}</span>
+                : <span style={{ color: '#ddd' }}>{prettify(e.msg, e.actor)}</span>}
             </div>
             );
           })}

@@ -14,7 +14,7 @@ import { combatStep } from './combat';
 import { pruneTableCards, palantirActive } from './persistent';
 import { armySide, sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
-import { log } from './log';
+import { log, sideDoes } from './log';
 
 const opponent = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 
@@ -52,7 +52,7 @@ export function drawEventCards(state: GameState, side: Side): void {
   // (player report 603q482i326u513e).
   const empty = got.length === 1 ? (got[0] === 'Character' ? 'Strategy' : 'Character') : null;
   log(state, null, 'event', got.length
-    ? `${who} draw ${got.length} Event card${got.length === 1 ? '' : 's'} at the start of the turn${empty ? ` (the ${empty} deck is empty)` : ''}`
+    ? `${sideDoes(side, 'draw')} ${got.length} Event card${got.length === 1 ? '' : 's'} at the start of the turn${empty ? ` (the ${empty} deck is empty)` : ''}`
     : `${who} cannot draw at the start of the turn — both Event decks are empty`);
   // Over the 6-card limit is resolved by the player's CHOICE (enforceHandLimit), not
   // by silently trimming the oldest.
@@ -71,6 +71,9 @@ function enforceHandLimit(state: GameState): boolean {
   return false;
 }
 
+/** Action-die faces by name, for the roll log line. */
+const ROLL_FACE: Record<string, string> = { character: 'Character', army: 'Army', muster: 'Muster', armyMuster: 'Army/Muster', event: 'Event', will: 'Will of the West', eye: 'Eye' };
+
 function runActionRoll(state: GameState): void {
   // Shadow's allocated Hunt-Box dice (state.hunt.box) are NOT rolled.
   const fpCount = poolSize(state, 'fp');
@@ -83,8 +86,10 @@ function runActionRoll(state: GameState): void {
   state.dice.shadow = shadowRoll.filter((f) => f !== 'eye');
   // Player report 3d5o161p5u6r6c4z: "Free Peoples rolled 4 dice, Shadow rolled 5 dice (+1 Eyes)".
   // One line per side, like the turn-start card draws (player report 56180q5a5v1r4s53).
-  log(state, null, 'roll', `Free Peoples rolled ${state.dice.fp.length} ${state.dice.fp.length === 1 ? 'die' : 'dice'}`, { fp: [...state.dice.fp] });
-  log(state, null, 'roll', `Shadow rolled ${state.dice.shadow.length} ${state.dice.shadow.length === 1 ? 'die' : 'dice'}${eyes ? ` (+${eyes} ${eyes === 1 ? 'Eye' : 'Eyes'})` : ''}`,
+  // Present tense, with the faces rolled (player report 5y072z2l0v0p1w70).
+  const faces = (d: readonly string[]) => (d.length ? ` [${d.map((f) => ROLL_FACE[f] ?? f).join(', ')}]` : '');
+  log(state, null, 'roll', `Free Peoples roll ${state.dice.fp.length} ${state.dice.fp.length === 1 ? 'die' : 'dice'}${faces(state.dice.fp)}`, { fp: [...state.dice.fp] });
+  log(state, null, 'roll', `Shadow rolls ${state.dice.shadow.length} ${state.dice.shadow.length === 1 ? 'die' : 'dice'}${faces(state.dice.shadow)}${eyes ? ` (+${eyes} ${eyes === 1 ? 'Eye' : 'Eyes'})` : ''}`,
     { shadow: [...state.dice.shadow], eyes, huntBox: state.hunt.box });
 }
 

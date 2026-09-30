@@ -220,7 +220,7 @@ const FOUL_STENCH = 'sh-char-09';
       `${before} -> ${unitCount(after, from)}`);
     // atkCardCost is a PER-ROUND field, cleared when the round's cards are, so by now
     // the round has resolved and it is undefined again. The durable evidence is the log.
-    const paidLine = after.log.filter((e) => /inflict 2 hits on their own units/.test(e.msg ?? ''));
+    const paidLine = after.log.filter((e) => /inflicts? 2 hits on their own units/.test(e.msg ?? ''));
     check('RA: the payment is recorded in the log', paidLine.length === 1,
       JSON.stringify(paidLine.map((e) => e.msg)));
     check('RA: no cost prompt is left hanging', after.pendingChoice?.kind !== 'combatCardCost',
@@ -236,7 +236,7 @@ const FOUL_STENCH = 'sh-char-09';
     check('DnD: paying 0 is accepted', res.ok, res.ok ? '' : res.error);
     const after = res.ok ? res.state : state;
     // "One or more" — 0 is not a legal answer and is clamped up to the mandatory 1.
-    const forfeit = after.log.filter((e) => /forfeit 1 point of Nazgûl Leadership/.test(e.msg ?? ''));
+    const forfeit = after.log.filter((e) => /forfeits? 1 point of Nazgûl Leadership/.test(e.msg ?? ''));
     check('DnD: clamped up to the mandatory 1 point', forfeit.length === 1,
       JSON.stringify(after.log.filter((e) => /forfeit/.test(e.msg ?? '')).map((e) => e.msg)));
   }

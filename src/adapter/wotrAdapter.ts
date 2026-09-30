@@ -9,7 +9,7 @@ import {
 } from '../engine/phases';
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, fellowshipPath } from '../engine/fellowship';
 import { extraHunt } from '../engine/hunt';
-import { log, logCardDraw } from '../engine/log';
+import { log, logCardDraw, sideDoes } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders, figureForce, forceUnitCount,
@@ -653,7 +653,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // "were those dice in the box already, or did the Shadow just put them there?"
       // (report wg37yx) — the Hunt Box is emptied every turn in phase 1, so anything
       // in it belongs to THIS turn.
-      log(state, null, 'hunt', `Shadow allocate ${action.dice} ${action.dice === 1 ? 'die' : 'dice'} to the Hunt Box`);
+      log(state, null, 'hunt', `Shadow allocates ${action.dice} ${action.dice === 1 ? 'die' : 'dice'} to the Hunt Box`);
       state.phase = 'actionRoll';
       break;
     }
@@ -786,7 +786,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Pits of Mordor played with an Army die drew a Palantír card).
       const palantirWasActive = actor === 'shadow' && playedWithFace === 'event' && palantirActive(state);
       // Name the played card in the log (playing an Event reveals it — public info).
-      log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} plays ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId}`);
+      log(state, null, 'event', `${sideDoes(actor, 'play')} ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId}`);
       state.log[state.log.length - 1]!.card = action.cardId; // make it hoverable in the log
       hand.splice(idx, 1);
       // Run the immediate part FIRST, then check the remaining targets — so the choice
@@ -877,7 +877,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         (p.discardFaceDown ??= []).push(action.card);
         const deckName = EVENT_BY_ID[action.card]?.deck ?? 'Event';
         log(state, actor, 'event', `You discard ${EVENT_BY_ID[action.card]?.name ?? action.card} face down (over the hand limit)`);
-        log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discard a ${deckName} card face down (over the hand limit)`);
+        log(state, null, 'event', `${sideDoes(actor, 'discard')} a ${deckName} card face down (over the hand limit)`);
       }
       state.pendingChoice = null; break; // advance() re-checks and re-prompts if still over 6
     }
@@ -957,7 +957,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // PUBLIC log — the Ring flip and both dice pools are open information, and the
       // opponent otherwise can't reconstruct the swap (player report: "used an elven
       // ring to change the [E] to... something, but nothing is in the log").
-      log(state, null, 'event', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} use an Elven Ring: ${aDieFace(action.from)} die becomes ${actor === 'shadow' && action.to === 'eye' ? 'an Eye (into the Hunt Box)' : `${aDieFace(action.to)} die`}`);
+      log(state, null, 'event', `${sideDoes(actor, 'use')} an Elven Ring to change ${aDieFace(action.from)} die to ${actor === 'shadow' && action.to === 'eye' ? 'an Eye (into the Hunt Box)' : `${aDieFace(action.to)} die`}`);
       break; // free action — the player still acts this turn (no turn pass)
     }
     case 'forceDiscardCard': {
@@ -1254,7 +1254,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // of nowhere and reported a Hunt that "shouldn't have happened" — it was the
         // Balrog firing on a path that ran through Moria, and nothing in the log said
         // so (report wg37yx). The card is named here and on the Hunt line itself.
-        log(state, null, 'event', 'Shadow discard Balrog of Moria — the Fellowship passed through Moria: an extra Hunt tile');
+        log(state, null, 'event', 'Shadow discards Balrog of Moria — the Fellowship passes through Moria: an extra Hunt tile');
         state.log[state.log.length - 1]!.card = 'sh-char-17';
         extraHunt(state, { source: 'Balrog of Moria' }); // may set a huntDamage choice for the FP
       }
@@ -1369,13 +1369,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // "an unusable die" overstated it — a die may be discarded whether or not it has
       // a legal use, and in this game a die almost always HAS one (player report
       // 4x501k6r1s450d64). Say what happened, not why we assume it happened.
-      log(state, null, 'pass', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} discard a die without using it`);
+      log(state, null, 'pass', `${sideDoes(actor, 'discard')} a die without using it`);
       passResolutionTurn(state, actor); break;
     case 'pass':
       requirePhase(state, 'actionResolution');
       // Log the pass publicly (player report: "a player passing should be listed in
       // the log") — otherwise a yielded turn leaves no trace and the recap looks empty.
-      log(state, null, 'pass', `${actor === 'fp' ? 'Free Peoples' : 'Shadow'} pass`);
+      log(state, null, 'pass', `${sideDoes(actor, 'pass')}`);
       passResolutionTurn(state, actor); break; // yield to opponent (who has more dice)
     default: throw new Error(`Unknown action ${(action as { kind: string }).kind}`);
   }

@@ -643,7 +643,7 @@ function eliminateCompanionInline(state: GameState, id: string, damage: number):
   // anymore"). Companion casualties are open information, so this is a public entry.
   // Name what the casualty ACTUALLY absorbed — his Level caps it, but so does the damage
   // left (Gandalf's 3 against 1 damage absorbs 1; player report 604i1v5z0e41414o).
-  log(state, null, 'hunt', `${charLabel(id)} ${takenAlive ? 'is taken alive' : 'is eliminated'} to absorb ${Math.min(level, damage)} Hunt damage`
+  log(state, null, 'hunt', `${charLabel(id)} ${takenAlive ? 'is taken alive' : 'is eliminated'} to absorb ${Math.min(level, damage)} Corruption`
     + (fs.guide !== oldGuide ? ` — ${charLabel(fs.guide)} becomes the Guide` : ''));
   return level;
 }

@@ -8,6 +8,17 @@ import type { GameState, Side } from './types';
 
 const LOG_CAP = 500;
 
+/** A side's name as the subject of a log line — "Free Peoples", "Shadow". */
+export const sideName = (s: Side): string => (s === 'fp' ? 'Free Peoples' : 'Shadow');
+/** The log speaks in the present tense with its subject named ("Shadow moves…",
+ *  "Free Peoples capture…"; player reports 536w3k2o504c6s6i, 4w1r36061y2k1v5s).
+ *  "Free Peoples" takes the plural verb, as the rest of the log already does
+ *  ("Free Peoples play", "Free Peoples draw"); "Shadow" the singular. */
+export function sideDoes(s: Side, verb: string): string {
+  if (s === 'fp') return `Free Peoples ${verb}`;
+  return `Shadow ${/(s|sh|ch|x)$/.test(verb) ? `${verb}es` : `${verb}s`}`;
+}
+
 export function log(state: GameState, side: Side | null, kind: string, msg: string, payload?: unknown): void {
   appendGameLog(state.log, {
     turn: state.turn,
@@ -27,11 +38,10 @@ export function log(state: GameState, side: Side | null, kind: string, msg: stri
  *  reconstruct where they came from (report 1y0753: it was King Brand's Men, whose own
  *  text draws a card). Every draw now says so. */
 export function logCardDraw(state: GameState, side: Side, deck: 'character' | 'strategy', drew: boolean, reason?: string): void {
-  const who = side === 'fp' ? 'Free Peoples' : 'Shadow';
   const d = deck === 'character' ? 'Character' : 'Strategy';
   log(state, null, 'event', drew
-    ? `${who} draw a ${d} Event card${reason ? ` (${reason})` : ''}`
-    : `${who} cannot draw — the ${d} deck is empty`);
+    ? `${sideDoes(side, 'draw')} a ${d} Event card${reason ? ` (${reason})` : ''}`
+    : `${sideName(side)} cannot draw — the ${d} deck is empty`);
 }
 
 /** Record a transient informational notice for the UI to pop once (public).
