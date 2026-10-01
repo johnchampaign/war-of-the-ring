@@ -11,6 +11,7 @@ import type { GameState, Side, DieFace, Deck } from './types';
 import { poolSize, rollPool } from './dice';
 import { checkMilitaryVictory, checkRingVictory } from './victory';
 import { combatStep } from './combat';
+import { extraHunt } from './hunt';
 import { pruneTableCards, palantirActive } from './persistent';
 import { armySide, sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
@@ -129,6 +130,14 @@ export function advance(state: GameState): void {
         state.pendingChoice = { owner: 'fp', kind: 'freeCharEvent', data: {} };
         return;
       }
+    }
+    // The rest of a Reveal's Shadow Stronghold tiles (p.39), one at a time, each after
+    // the previous tile's choices are answered and before the Hunt counts as finished.
+    if (state.flags.owedStrongholdTiles?.length) {
+      const r = state.flags.owedStrongholdTiles.shift()!;
+      if (!state.flags.owedStrongholdTiles.length) delete state.flags.owedStrongholdTiles;
+      extraHunt(state, { source: `revealed through ${REGIONS[r]?.name ?? r}` });
+      continue;
     }
     // Meriadoc / Peregrin, "Take Them Alive!": the Hobbit taken as a Hunt casualty
     // goes back on the board "as if he was just separated". Raised HERE, once the

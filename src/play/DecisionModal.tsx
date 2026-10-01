@@ -357,9 +357,14 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
             <HuntTileFace draw={last} />
-            <div style={{ fontSize: 12, color: '#998', alignSelf: 'center' }}>
-              {describeDraw(last)}.
-            </div>
+            {/* A plain numbered tile is its damage, said once in the line below — the
+                caption repeated it (player report 0l4k2t3f4z146z0v). Eye, die and heal
+                tiles still say what they came to. */}
+            {!(typeof last.value === 'number' && last.value > 0) && (
+              <div style={{ fontSize: 12, color: '#998', alignSelf: 'center' }}>
+                {describeDraw(last)}.
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -192,7 +192,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   if (opts.forceRandomCasualty && state.fellowship.companions.length > 0) {
     const victim = withRng(state, (rng) => rng.pick(fs.companions));
     log(state, null, 'hunt', `${opts.source ?? 'Hunt'}: a random Companion must be eliminated`);
-    const level = eliminateCompanionInline(state, victim, damage);
+    const level = eliminateCompanionInline(state, victim, damage, 'random');
     damage = Math.max(0, damage - level);
     // The casualty may have made Gollum the Guide — re-ask whether the icon still reveals.
     if (damage === 0) { if (revealIcon && !gollumIgnoresReveal(state, numbered)) beginReveal(state); return; }
@@ -607,7 +607,7 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
     const victim = mode === 'guide'
       ? (fs.companions.includes(fs.guide) ? fs.guide : fs.companions[0]!)
       : withRng(state, (rng) => rng.pick(fs.companions));
-    const level = eliminateCompanionInline(state, victim, d.damage);
+    const level = eliminateCompanionInline(state, victim, d.damage, mode === 'guide' ? 'guide' : 'random');
     repromptOrFinish(state, Math.max(0, d.damage - level), true);
   } else {
     finishHunt(state, d.damage, revealDueNow(state, d));
@@ -615,7 +615,7 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
 }
 
 // Local copy to avoid a fellowship<->hunt import cycle at module scope.
-function eliminateCompanionInline(state: GameState, id: string, damage: number): number {
+function eliminateCompanionInline(state: GameState, id: string, damage: number, how: 'guide' | 'random'): number {
   const fs = state.fellowship;
   const i = fs.companions.indexOf(id);
   if (i < 0) return 0;
@@ -647,7 +647,9 @@ function eliminateCompanionInline(state: GameState, id: string, damage: number):
   // anymore"). Companion casualties are open information, so this is a public entry.
   // Name what the casualty ACTUALLY absorbed — his Level caps it, but so does the damage
   // left (Gandalf's 3 against 1 damage absorbs 1; player report 604i1v5z0e41414o).
-  log(state, null, 'hunt', `${charLabel(id)} ${takenAlive ? 'is taken alive' : 'is eliminated'} to absorb ${Math.min(level, damage)} Corruption`
+  // Say HOW he was chosen — the Guide taken as the casualty, or a random Companion —
+  // the two read the same (player report 6u3b0u4u5v5u156z).
+  log(state, null, 'hunt', `${how === 'guide' ? `The Guide, ${charLabel(id)},` : `${charLabel(id)}, chosen at random,`} ${takenAlive ? 'is taken alive' : 'is eliminated'} to absorb ${Math.min(level, damage)} Corruption`
     + (fs.guide !== oldGuide ? ` — ${charLabel(fs.guide)} becomes the Guide` : ''));
   return level;
 }

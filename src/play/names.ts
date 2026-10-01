@@ -155,7 +155,14 @@ function presentTense(msg: string, actor?: string | null): string {
     .replace(/^Fellowship entered Mordor$/, 'The Fellowship enters Mordor')
     .replace(/ separated from the Fellowship and moved to /, /^[^;]*, [^;]* separated /.test(msg)
       ? ' separate from the Fellowship and move to ' : ' separates from the Fellowship and moves to ')
-    .replace(/( to absorb \d+) Hunt damage/, '$1 Corruption');
+    .replace(/( to absorb \d+) Hunt damage/, '$1 Corruption')
+    // Older lines named the Nation by its id with a singular verb ("elves advances");
+    // the plural Nations take "advance", and the North is "The North" (player report
+    // 0x3i1w0u5e2n6c3g).
+    .replace(/^(dwarves|elves|southrons) advances to /, '$1 advance to ')
+    .replace(/^(dwarves|elves|southrons) activated$/, '$1 are activated')
+    .replace(/^north (advances to |activated$)/, 'The North $1')
+    .replace(/^(\w+|The North) activated$/, '$1 is activated');
 }
 
 export function prettify(msg: string, actor?: string | null): string {

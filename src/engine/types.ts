@@ -374,6 +374,10 @@ export interface GameState {
      *  (a Reveal later in the same Hunt resets Progress to 0), and the destination
      *  choice is raised by `advance` once the Hunt has finished resolving. */
     takenAlive?: { companion: CharacterId; from: RegionId; range: number };
+    /** Shadow Strongholds a Reveal's traced path crossed whose Hunt tiles (p.39) are
+     *  still to be drawn — `advance` draws the next whenever no choice is open, so a
+     *  tile that asks the FP to assign damage doesn't drop the ones behind it. */
+    owedStrongholdTiles?: RegionId[];
     /** A card draw owed "after you use an Event Action die result to play an Event
      *  card" — The Palantír of Orthanc (Shadow) or Gandalf the Grey's Guide ability
      *  (FP, from the played card's deck). Both wait for the END of the Action (Almanac):

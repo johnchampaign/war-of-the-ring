@@ -1,10 +1,19 @@
 // The Political Track (rules-spec §8). step 0 = "At War"; passive nations can't
 // reach step 0 until activated.
 import type { GameState, Nation } from './types';
-import { sideOfNation } from './data';
+import { sideOfNation, nationName } from './data';
 import type { RegionId } from './types';
 import { threatsAndPromisesActive, wormtongueAllowsActivation } from './persistent';
 import { log } from './log';
+
+/** A Nation as the subject of a log line, with its verb agreeing: "Gondor advances",
+ *  "The North advances", but "Elves advance" — the Dwarves, the Elves and the Southrons
+ *  & Easterlings are plural (player report 0x3i1w0u5e2n6c3g; rulebook p.7, p.9 say
+ *  "The North"). */
+const PLURAL_NATIONS = new Set<string>(['dwarves', 'elves', 'southrons']);
+export function nationSubject(n: Nation): { name: string; plural: boolean } {
+  return { name: n === 'north' ? 'The North' : nationName(n), plural: PLURAL_NATIONS.has(n) };
+}
 
 export const isAtWar = (state: GameState, n: Nation): boolean => state.nations[n].step === 0;
 
@@ -14,7 +23,8 @@ export function activateNation(state: GameState, n: Nation, trigger: { region?: 
   if (!wormtongueAllowsActivation(state, n, trigger)) return; // Wormtongue: Rohan stays passive
   if (!state.nations[n].active) {
     state.nations[n].active = true;
-    log(state, null, 'politics', `${n} activated`);
+    const s = nationSubject(n);
+    log(state, null, 'politics', `${s.name} ${s.plural ? 'are' : 'is'} activated`);
   }
 }
 
@@ -27,7 +37,8 @@ export function advancePolitical(state: GameState, n: Nation, steps = 1, trigger
   const newStep = Math.max(floor, ns.step - steps);
   if (newStep !== ns.step) {
     ns.step = newStep;
-    log(state, null, 'politics', `${n} advances to step ${ns.step}${ns.step === 0 ? ' (At War)' : ''}`);
+    const s = nationSubject(n);
+    log(state, null, 'politics', `${s.name} ${s.plural ? 'advance' : 'advances'} to step ${ns.step}${ns.step === 0 ? ' (At War)' : ''}`);
     if (sideOfNation(n) === 'fp' && (trigger.viaAttack || trigger.viaCompanion)) discardThreatsAndPromises(state, !!trigger.viaAttack);
   }
 }

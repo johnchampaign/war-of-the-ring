@@ -39,8 +39,9 @@ export function HuntIndicator({ view }: { view: GameState }) {
           ))}
           {box === 0 && !(onMordor && fpDice > 0) && <span style={{ fontSize: 11, color: '#776' }}>empty</span>}
           {!onMordor && box > 5 && <span style={{ fontSize: 10, color: '#887' }}>+{box - 5}</span>}
-          {!onMordor && box > 0 && <span style={{ fontSize: 11, color: '#cbbf9a', marginLeft: 3 }}>{hitOn}+</span>}
         </div>
+        {/* The to-hit number on its own line, not trailing the dice (player report 326g4536416k3q0g). */}
+        {!onMordor && box > 0 && <div style={{ fontSize: 11, color: '#cbbf9a' }}>Hits on {hitOn}+</div>}
         {/* Corruption track. */}
         <div style={{ fontSize: 11, color: danger ? '#ff8a8a' : '#cbbf9a', fontWeight: danger ? 700 : 400 }}>
           Corruption {corr}/12

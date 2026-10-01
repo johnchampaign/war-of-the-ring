@@ -67,13 +67,12 @@ function balrogFires(state: GameState, traversed: RegionId[]): boolean {
 }
 
 /** One extra Hunt tile per Shadow Stronghold the revealed Fellowship's traced path
- *  crossed (p.39), in path order. Stops at the first tile that opens a choice — the
- *  draws behind it are lost, deviation D12 in docs/rules-spec.md. */
+ *  crossed (p.39), in path order. They are queued, not drawn here: `advance` draws
+ *  each one as soon as no choice is open, so a tile whose damage the FP must assign
+ *  no longer swallows the Strongholds behind it (player report 3o0b353o6j735w53 —
+ *  "a maximum of one Stronghold tile is drawn"). */
 function drawStrongholdHunts(state: GameState, strongholds: RegionId[]): void {
-  for (const r of strongholds) {
-    if (state.pendingChoice) break;
-    extraHunt(state, { source: `revealed through ${REGIONS[r]!.name}` }); // name the Stronghold that caused it
-  }
+  if (strongholds.length) state.flags.owedStrongholdTiles = [...(state.flags.owedStrongholdTiles ?? []), ...strongholds];
 }
 
 // Companion political abilities (High Warden / Prince of Mirkwood / Dwarf of Erebor):
@@ -1339,17 +1338,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       fs.hidden = false;
       state.pendingChoice = null;
       // Revealing through a Shadow Stronghold draws a Hunt tile per such Stronghold on
-      // the traced path (rulebook p.39). (If a tile opens an FP choice, further
-      // Strongholds' tiles defer — same as declaration; deviation log.)
+      // the traced path (rulebook p.39), each drawn once the one before it resolves.
       const strongholds = traversed.filter((r) => REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow');
       // Balrog of Moria fires on a REVEAL through Moria too, not only on a declaration:
       // "if the Fellowship moves into, out of, or through Moria while being declared or
       // revealed" (card text). Only the declare path offered it, so a Fellowship caught
       // crossing Moria never faced the Balrog (player report 3m4a0q4l643g1s2s).
-      // It is asked BEFORE the Stronghold tiles and carries them with it: the first tile
-      // that opens an FP damage choice drops the draws behind it (deviation D12), and
-      // Moria is itself a Shadow Stronghold — so asking the tiles first would have
-      // swallowed the card's one-shot in exactly the case it exists for.
+      // It is asked BEFORE the Stronghold tiles and carries them with it, so the card's
+      // one-shot is answered before Moria's own Stronghold tile is drawn.
       if (balrogFires(state, traversed)) state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: { strongholds } };
       else drawStrongholdHunts(state, strongholds);
       break; // checkRingVictory + advance run at dispatch end

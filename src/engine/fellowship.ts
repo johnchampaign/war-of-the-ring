@@ -94,8 +94,18 @@ export function setGuide(state: GameState, id: CharacterId): boolean {
 /** Resolve Lure of the Ring (FP's choice on the randomly-selected Companion). */
 export function resolveLureChoice(state: GameState, mode: 'corruption' | 'eliminate'): void {
   const d = state.pendingChoice!.data as { companion: CharacterId; level: number };
-  if (mode === 'corruption') state.fellowship.corruption = Math.min(12, state.fellowship.corruption + d.level);
-  else eliminateCompanion(state, d.companion);
+  const name = characterDef(d.companion)?.name ?? d.companion;
+  if (mode === 'corruption') {
+    state.fellowship.corruption = Math.min(12, state.fellowship.corruption + d.level);
+    log(state, null, 'event', `Lure of the Ring: the Ring-bearers take ${d.level} Corruption to keep ${name}`);
+  } else {
+    // Name the casualty and the new Guide — the log stopped at "tempts Boromir" and never
+    // said that Legolas now led the Fellowship (player report 1d473t08370t5a0n).
+    const oldGuide = state.fellowship.guide;
+    eliminateCompanion(state, d.companion);
+    const g = state.fellowship.guide;
+    log(state, null, 'event', `Lure of the Ring: ${name} is eliminated` + (g !== oldGuide ? ` — ${characterDef(g)?.name ?? g} becomes the Guide` : ''));
+  }
   state.pendingChoice = null;
 }
 
@@ -611,7 +621,7 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     // region after the crowning (player report).
     delete state.characters.inPlay['strider'];
     state.characters.inPlay['aragorn'] = r;
-    log(state, null, 'muster', `Strider becomes Aragorn at ${r} — Will of the West die (+1 Free Peoples die next turn)`);
+    log(state, null, 'muster', `Strider is crowned and becomes Aragorn in ${r}`);
     // p.35: a Companion capable of activating a Nation activates it when he "ends his
     // movement OR ENTERS PLAY in one of its Cities or Strongholds". Aragorn can only be
     // crowned at Minas Tirith, Dol Amroth or Pelargir, so the Almanac states it flatly:
@@ -638,12 +648,13 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     state.characters.entered.push('gandalf-white');
     delete state.characters.inPlay['gandalf-grey'];
     state.characters.inPlay['gandalf-white'] = target;
-    // Name the die in the text as well as the chip: when the placement is deferred to
-    // the `placeGandalf` choice, this line is written in a LATER dispatch that spends
-    // no die, so the adapter's die-chip stamping has nothing to attach and the entry
-    // showed only its green MUSTER kind tag — read by a player as "FP used a [M] to
-    // bring GtW" when a Will of the West die had in fact been spent (p.21).
-    log(state, null, 'muster', `Gandalf the White enters at ${target} — Will of the West die (+1 Free Peoples die next turn)`);
+    // The die is on the entry's chip — a deferred `placeGandalf` answer carries the
+    // die its choice was opened with — so the text needn't name it (player report
+    // 653h101c1i274v41). Replacing the Grey on the map and returning him from the
+    // dead are told apart.
+    log(state, null, 'muster', grey
+      ? `Gandalf the Grey is revealed as Gandalf the White in ${target}`
+      : `Gandalf the Grey returns as Gandalf the White in ${target}`);
     activateOnCompanionLand(state, 'fp', ['gandalf-white'], target); // "…or enters play" (p.35) — an Elven Stronghold rouses the Elves
   }
   return true;
