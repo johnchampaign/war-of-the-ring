@@ -329,7 +329,10 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
     <div style={{ margin: '4px 0 2px' }}>
       {data.source && (
         <div style={{ fontSize: 13, color: '#cbbf9a', marginBottom: 6 }}>
-          The Shadow played <b>{data.source}</b> — no Hunt roll; a tile is drawn directly.
+          {data.source.startsWith('revealed ')
+            // A Shadow Stronghold reveal is not an Event card (cf. player report 6z10320k4z2o0k24).
+            ? <>The Fellowship was {data.source} — a Shadow Stronghold. No Hunt roll; a tile is drawn directly.</>
+            : <>The Shadow played <b>{data.source}</b> — no Hunt roll; a tile is drawn directly.</>}
         </div>
       )}
       {fieldRoll && (

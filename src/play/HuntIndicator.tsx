@@ -11,7 +11,14 @@ export function HuntIndicator({ view }: { view: GameState }) {
   const [open, setOpen] = useState(false);
   const fs = view.fellowship;
   const box = view.hunt.box;
-  const dice = Math.min(5, box);
+  const fpDice = view.hunt.fpDiceInBox;
+  const onMordor = fs.mordor !== null;
+  // Off the Mordor Track the Shadow rolls up to 5 Eye dice, each Free Peoples die in the
+  // box adding +1, so the overlay shows the rolled dice and the number they hit on. On
+  // the track nothing is rolled: an Eye tile's damage counts EVERY die in the box,
+  // Free Peoples dice included, so all of them are shown (player report 381f5t1f3x4k1t08).
+  const dice = onMordor ? box : Math.min(5, box);
+  const hitOn = Math.max(2, 6 - fpDice);
   const corr = fs.corruption;
   const danger = corr >= 10;
 
@@ -22,13 +29,17 @@ export function HuntIndicator({ view }: { view: GameState }) {
           <span style={{ fontSize: 11, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 0.5 }}>⊙ Hunt</span>
           <span style={{ marginLeft: 'auto', fontSize: 10, color: '#887', border: '1px solid #4a4332', borderRadius: 8, width: 14, height: 14, lineHeight: '13px', textAlign: 'center' }}>ⓘ</span>
         </div>
-        {/* Hunt box as die icons (capped at 5 = what's actually rolled), plus any overflow. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, margin: '3px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, margin: '3px 0', maxWidth: 140 }}
+          title={onMordor ? `${box} Eye + ${fpDice} Free Peoples ${fpDice === 1 ? 'die' : 'dice'} in the Hunt Box — an Eye tile deals ${box + fpDice}` : `${dice} Hunt ${dice === 1 ? 'die' : 'dice'}, hitting on ${hitOn}+`}>
           {Array.from({ length: dice }).map((_, i) => (
             <span key={i} style={pip}>⚅</span>
           ))}
-          {box === 0 && <span style={{ fontSize: 11, color: '#776' }}>empty</span>}
-          {box > 5 && <span style={{ fontSize: 10, color: '#887' }}>+{box - 5}</span>}
+          {onMordor && Array.from({ length: fpDice }).map((_, i) => (
+            <span key={`fp${i}`} style={{ ...pip, color: '#7fa6d6' }}>⚅</span>
+          ))}
+          {box === 0 && !(onMordor && fpDice > 0) && <span style={{ fontSize: 11, color: '#776' }}>empty</span>}
+          {!onMordor && box > 5 && <span style={{ fontSize: 10, color: '#887' }}>+{box - 5}</span>}
+          {!onMordor && box > 0 && <span style={{ fontSize: 11, color: '#cbbf9a', marginLeft: 3 }}>{hitOn}+</span>}
         </div>
         {/* Corruption track. */}
         <div style={{ fontSize: 11, color: danger ? '#ff8a8a' : '#cbbf9a', fontWeight: danger ? 700 : 400 }}>

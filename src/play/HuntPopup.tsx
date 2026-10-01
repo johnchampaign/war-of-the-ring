@@ -21,8 +21,16 @@ export const huntResultPending = (view: GameState, seen: number): boolean =>
 
 export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: number; onSeen: (seq: number) => void }) {
   const draws = view.hunt.draws ?? [];
-  const fresh = draws.filter((d) => d.seq > seen);
   if (!huntResultPending(view, seen)) return null;
+  // One popup per independent draw: a Hunt roll's tiles together, but a tile some other
+  // source drew (a Stronghold reveal, an Event card, the Balrog) in a popup of its own,
+  // queued one after the other. They used to share one popup under whichever roll came
+  // first (player reports 0u1q454220715m2b, 4t3r27062w29120h).
+  const unseen = draws.filter((d) => d.seq > seen);
+  const keyOf = (d: (typeof draws)[number]) => d.source ?? JSON.stringify(d.roll ?? null);
+  const firstKey = keyOf(unseen[0]!);
+  const fresh: typeof unseen = [];
+  for (const d of unseen) { if (keyOf(d) !== firstKey) break; fresh.push(d); }
   const maxSeq = Math.max(...fresh.map((d) => d.seq));
   const dismiss = () => onSeen(maxSeq);
   const roll = fresh.find((d) => d.roll)?.roll;
@@ -38,6 +46,13 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
           ⊙ The Hunt for the Ring
         </div>
         {roll && <RollLine roll={roll} />}
+        {!roll && fresh[0]!.source && !fresh.every((d) => d.discarded) && (
+          <div style={{ fontSize: 13, color: '#cbbf9a' }}>
+            {fresh[0]!.source.startsWith('revealed ')
+              ? <>The Fellowship was {fresh[0]!.source} — a Shadow Stronghold: one tile is drawn, with no Hunt roll.</>
+              : <><b>{fresh[0]!.source}</b>: a tile is drawn directly, with no Hunt roll.</>}
+          </div>
+        )}
         {fresh.every((d) => d.discarded) ? (
           <div style={{ margin: '12px 0 4px' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#9cc77a' }}>{fresh[0]!.source}: the tile drawn was {fresh[0]!.value === 'eye' ? 'an Eye' : 'a Free Peoples special tile'} — discarded without effect.</div>
@@ -48,7 +63,7 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
               {fresh.map((d) => <HuntTileFace key={d.seq} draw={d} />)}
             </div>
             {/* Stated per tile kind, not as a base-game-only generalization (player report 0l5o3w4k2y5t6s33). */}
-            <div style={{ fontSize: 11, color: '#887', marginTop: 3 }}>{fresh[0]!.value === 'eye' ? (fresh[0]!.source?.startsWith('revealed through')
+            <div style={{ fontSize: 11, color: '#887', marginTop: 3 }}>{fresh[0]!.value === 'eye' ? (fresh[0]!.source?.startsWith('revealed ')
               // A reveal through a Shadow Stronghold is not an Event card (player report 6z10320k4z2o0k24).
               ? 'Eye tiles drawn because of a Shadow Stronghold presence are discarded without effect.'
               : 'Eye tiles drawn by Event cards are discarded without effect.') : `Free Peoples special tiles drawn by ${fresh[0]!.source} are discarded without effect.`}</div>

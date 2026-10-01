@@ -19,6 +19,11 @@ export function sideDoes(s: Side, verb: string): string {
   return `Shadow ${/(s|sh|ch|x)$/.test(verb) ? `${verb}es` : `${verb}s`}`;
 }
 
+/** "A", "A and B", "A, B and C" — the figures a log line names as its subject. */
+export function andList(items: string[]): string {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 export function log(state: GameState, side: Side | null, kind: string, msg: string, payload?: unknown): void {
   appendGameLog(state.log, {
     turn: state.turn,

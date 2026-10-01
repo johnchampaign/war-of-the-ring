@@ -156,7 +156,11 @@ function tileLabel(tile: HuntTileDef): string {
  *  names the Event card that caused a no-roll draw (shown in the FP's damage prompt);
  *  `opts.noReduce` bars the damage-reduction options (Isildur's Bane). */
 export type HuntOpts = { noReduce?: boolean; forceRandomCasualty?: boolean; source?: string };
-function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, opts: HuntOpts = {}): void {
+/** `extra` marks a draw with no Hunt roll of its own (a Shadow Stronghold reveal, an
+ *  Event card, the Balrog): its record names the source instead of carrying the last
+ *  Hunt's dice, which the popup used to show as if they had been rolled for it
+ *  (player reports 4t3r27062w29120h, 0u1q454220715m2b). */
+function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, opts: HuntOpts = {}, extra = false): void {
   const fs = state.fellowship;
   let damage = 0;
   if (typeof tile.value === 'number') damage = tile.value;
@@ -175,7 +179,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // capped; seq marks a new draw. Public — drawn tiles are open info.
   const prev = state.hunt.draws ?? [];
   const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
-  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, stop: !!tile.stop, onMordor: fs.mordor !== null, roll: state.hunt.lastRoll, ...specialOf(tile) }].slice(-16);
+  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, stop: !!tile.stop, onMordor: fs.mordor !== null, ...(extra ? { source: opts.source ?? 'Extra Hunt' } : { roll: state.hunt.lastRoll }), ...specialOf(tile) }].slice(-16);
 
   if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) beginReveal(state); return; }
   if (damage === 0) { if (reveal) beginReveal(state); return; }
@@ -210,7 +214,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   } else {
     fs.corruption = Math.min(12, fs.corruption + damage);
     if (reveal) beginReveal(state);
-    log(state, null, 'hunt', `Hunt damage ${damage} -> Corruption ${fs.corruption}${opts.source ? ` — ${opts.source}` : ''}`);
+    log(state, null, 'hunt', `Hunt damage ${damage} → Corruption ${fs.corruption}${opts.source ? ` — ${opts.source}` : ''}`);
   }
 }
 
@@ -374,7 +378,7 @@ function applyExtraTile(state: GameState, tile: HuntTileDef, ref: TileRef, opts:
     state.hunt.draws = [...prev, { seq, value: tile.value, damage: 0, reveal: false, stop: false, onMordor: state.fellowship.mordor !== null, discarded: true, source: opts.source ?? 'Extra Hunt', ...specialOf(tile) }].slice(-16);
     return;
   }
-  applyHuntTile(state, tile, Math.min(5, state.hunt.box), opts);
+  applyHuntTile(state, tile, Math.min(5, state.hunt.box), opts, true);
 }
 
 /** Challenge of the King: draw 3 Hunt tiles. If all 3 are Eyes, return them to the

@@ -133,6 +133,19 @@ function presentTense(msg: string, actor?: string | null): string {
       .replace(/^(Recruited|Mustered) /, `${does('muster')} `)
       .replace(/^Removed an over-stacked /, `${does('remove')} an over-stacked `);
   }
+  // Moves name what moved as the subject, with a → arrow: "Boromir moves A → B",
+  // "1 Nazgûl moves …", "Shadow Army moves …" — not "Free Peoples move Boromir A -> B",
+  // which read unlike the separation line beside it (player report 1f5b720r0941332f).
+  const moves = (n: number) => (n === 1 ? 'moves' : 'move');
+  msg = msg
+    .replace(/^(Free Peoples|Shadow) moves? an Army (\S+) -> (\S+)/, '$1 Army moves $2 → $3')
+    .replace(/^(?:Free Peoples move|Shadow moves) (\d+) Nazgûl (\S+) -> (\S+)$/, (_m, n: string, a: string, b: string) => `${n} Nazgûl ${moves(Number(n))} ${a} → ${b}`)
+    .replace(/^(?:Free Peoples move|Shadow moves) (.+?) (\S+) -> (\S+)$/, (_m, who: string, a: string, b: string) => {
+      const xs = who.split(', ');
+      const list = xs.length === 1 ? xs[0] : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+      return `${list} ${moves(xs.length)} ${a} → ${b}`;
+    })
+    .replace(/ -> /g, ' → ');
   return msg
     .replace(/^(Free Peoples|Shadow) (re)?captured /, (_m, s: string, re: string | undefined) => `${s} ${re ?? ''}capture${s === 'Shadow' ? 's' : ''} `)
     .replace(/^(Free Peoples|Shadow) rolled /, (_m, s: string) => `${s} roll${s === 'Shadow' ? 's' : ''} `)

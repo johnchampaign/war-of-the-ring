@@ -91,7 +91,7 @@ const all = ['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc
       s = act(s, done);
     }
     const lines = s.log.map((e) => e.msg ?? '');
-    const moved = lines.findIndex((t) => /move boromir/.test(t));
+    const moved = lines.findIndex((t) => /boromir moves/.test(t));
     const roused = lines.findIndex((t) => /gondor activated/i.test(t));
     check('Gondor was activated', roused >= 0, lines.slice(-6).join(' | '));
     check('the move line comes first', moved >= 0 && moved < roused, `moved@${moved} activated@${roused}`);
