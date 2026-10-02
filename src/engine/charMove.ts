@@ -179,6 +179,29 @@ function rangeOf(state: GameState, char: string, from: RegionId, opts: RangeOpts
   return levelOf(char) + bonus; // mouth-of-sauron = 3, companions = their Level
 }
 
+/** Why `char` may NOT end a Character move in `to`, or null when nothing here explains
+ *  it. The map used to answer a refused Character-move click with the MUSTER hint for
+ *  that Settlement — a Companion clicked onto a besieged Helm's Deep was told "There is
+ *  an enemy Army in Helm's Deep", true but not the reason: Characters can never enter
+ *  their own besieged Stronghold (p.24/p.25; player report 5q0l1z724w6u2742). Mirrors
+ *  `canLand` and the reach check in `moveCharacter`/`moveCompanionGroup`. */
+export function characterMoveBlockReason(state: GameState, side: Side, char: string, from: RegionId, to: RegionId, group?: readonly string[]): string | null {
+  const def = REGIONS[to];
+  if (!def || from === to) return null;
+  const name = def.name ?? to;
+  if (!NAZGUL_FIGURE.has(char) && friendlyStrongholdBesieged(state, to, side)) {
+    return `${name} is your Stronghold under siege — Characters can never enter a friendly Stronghold besieged by an enemy Army (p.24).`;
+  }
+  if (side === 'shadow' && def.settlement === 'Stronghold' && settlementController(state, to) === 'fp' && !state.regions[to]!.besieged) {
+    return `${name} is a Free Peoples Stronghold — Shadow Characters cannot enter it unless it is under siege (p.24).`;
+  }
+  const range = rangeOf(state, char, from, group && group.length > 1 ? { group } : {});
+  if (range > 0 && range < FLY && regionDistance(from, to, side === 'fp' ? companionStop(state) : null) > range) {
+    return `${name} is out of reach — this move covers at most ${range} region${range === 1 ? '' : 's'} (p.24).`;
+  }
+  return null;
+}
+
 /** Execute a character move. `char` is 'nazgul' (a region's Nazgûl group), a
  *  Minion id, or a separated Companion id. Returns false if illegal. */
 export function moveCharacter(state: GameState, side: Side, char: string, from: RegionId, to: RegionId, count?: number): boolean {

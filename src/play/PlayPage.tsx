@@ -37,7 +37,7 @@ import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCa
 import { moveBlockReason, musterBlockReason, cardPathBlockReason, regionHops } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial } from './panelFilter';
-import { movableCharsAt, characterDestinations } from '../engine/charMove';
+import { movableCharsAt, characterDestinations, characterMoveBlockReason } from '../engine/charMove';
 import { separationActivates } from '../engine/fellowship';
 import { REGIONS, levelOf, sideOfNation } from '../engine/data';
 import { threatsAndPromisesActive } from '../engine/persistent';
@@ -181,7 +181,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     setDiePick(null);
     // The card Gandalf the White grants after an Ents card is played WITHOUT a die, so
     // it must not ask which die pays (player report 6v145h2o5w361j27).
-    const dieFree = a.kind === 'playEvent' && g.view?.pendingChoice?.kind === 'freeCharEvent';
+    // Likewise every move after the first in a Character-die move: that die was spent
+    // by the first move, and the rest ride on it (player report 4i6k5k5c6761245r).
+    const dieFree = (a.kind === 'playEvent' && g.view?.pendingChoice?.kind === 'freeCharEvent')
+      || (a.kind === 'moveCharacter' && g.view?.pendingChoice?.kind === 'charMove2');
     if (!dieFree && !activeDie && DIE_BEARING.has(a.kind) && !(a as { die?: DieFace }).die && g.view && g.you) {
       const opts = dieOptions(a, g.view, g.you as Side);
       // The plain-vs-hybrid case is settled without asking (same rule as the action
@@ -618,8 +621,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // Nothing on offer here. If we are inside the basic Move / Muster window, say why;
     // otherwise stay silent — see basicMoveWindow above (report 5f3q6k1f20650635).
     if (basicMoveWindow) {
+      // A Character was picked and this is not one of its destinations: say why in
+      // Character-move terms. It used to fall through to the MUSTER hint for the region
+      // clicked (player report 5q0l1z724w6u2742 — "There is an enemy Army in Helm's
+      // Deep" for a Companion barred from his own besieged Stronghold).
+      if (charPick) {
+        const reason = g.view && g.you ? characterMoveBlockReason(g.view, g.you as Side, charPick.char, charPick.from, id, charPick.group) : null;
+        if (reason) setBlockMsg(reason);
+      }
       // Adjacent-but-illegal (e.g. a refused merge): explain why instead of a silent no-op.
-      if (selected && id !== selected && g.view && REGIONS[selected]?.adjacency.includes(id)) {
+      else if (selected && id !== selected && g.view && REGIONS[selected]?.adjacency.includes(id)) {
         // An Army die's SECOND move and a card-granted move are moves only — they can
         // never turn into an attack, so the hint must not blame the Political Track
         // (player report 4g082f046g241z5i).

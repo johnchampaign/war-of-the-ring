@@ -172,7 +172,11 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // no-choice paths below — when the FP has a damage choice the check is re-run at
   // every step, because a mid-Hunt casualty can hand Gollum the Guide's staff (see
   // gollumIgnoresReveal).
-  const revealIcon = !!tile.reveal, numbered = typeof tile.value === 'number';
+  // A red Shadow Special tile is never a "standard numbered" tile, even when it prints
+  // a number ("Give it to Uss!" is a 1 with a reveal icon): its reveal always applies,
+  // so Gollum can neither ignore it nor reveal on top of it to reduce the damage
+  // (Almanac, Gollum (ii)-(iii); player report osf97egfulfaixb3).
+  const revealIcon = !!tile.reveal, numbered = typeof tile.value === 'number' && !tile.introducedBy;
   const reveal = revealIcon && !gollumIgnoresReveal(state, numbered);
 
   // Record every draw (even 0/blank) for the UI's informational popup. Newest last,

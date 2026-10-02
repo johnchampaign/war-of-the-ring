@@ -1213,7 +1213,11 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
     should be active. This works with the Hobbits, but not Gollum's ignore-reveal.")*
     The `huntDamage` choice carries the tile's **reveal icon** and whether it was a
     numbered tile, and re-asks the question at every step instead of carrying a decided
-    `reveal` flag. Eye tiles and red Shadow Special tiles always reveal.
+    `reveal` flag. Eye tiles and red Shadow Special tiles always reveal — **including
+    "Give it to Uss!", which prints a 1**: a numbered face does not make a special tile a
+    "standard numbered" one, so Gollum can neither ignore its reveal nor reveal on top of
+    it to reduce the damage (Almanac, Gollum (ii)-(iii); player report osf97egfulfaixb3,
+    `scripts/probe-triage-1002.mjs`).
   - **Gollum's reveal-to-reduce is a FULL reveal**, applied at step 4 like any other:
     the FP moves the Ring-bearers up to their Progress (never into an FP-controlled
     City/Stronghold) and Progress resets to 0 (p.39). It used to flip `hidden` in place
