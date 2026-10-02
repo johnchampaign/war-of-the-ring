@@ -189,7 +189,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       const opts = dieOptions(a, g.view, g.you as Side);
       // The plain-vs-hybrid case is settled without asking (same rule as the action
       // list — player report 4w2p23491g062m5l); every other multi-die action asks.
-      const easy = trivialDie(opts);
+      const easy = trivialDie(opts, a.kind);
       if (easy) a = { ...a, die: easy } as WotrAction;
       else if (opts.length > 1) { setDiePick(a); return; }
     }

@@ -205,7 +205,7 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
   // "I can't muster despite nations at war" (reported).
   // A plain Army/Muster die against the Army/Muster hybrid is not a real choice:
   // spend the plain one (trivialDie). Everything else still asks.
-  const trivial = forced ? null : trivialDie(options);
+  const trivial = forced ? null : trivialDie(options, action.kind);
   const tagDie = forced ?? trivial ?? (die && options.includes(die as DieFace) ? (die as DieFace) : options[0] ?? die);
   const ambiguous = !forced && options.length > 1 && !trivial;
   const onMain = () => {

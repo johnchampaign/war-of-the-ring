@@ -45,6 +45,22 @@ function consumeArmyDie(state: GameState, actor: Side): boolean {
   return false;
 }
 
+/** Spend the die the player NAMED for an Army move or attack, checking it can pay:
+ *  an Army / Army-Muster / Will die always can, a Character die only for an Army with
+ *  a Leader or Character (`leaderOk`), and a Muster die only through the Mouth of
+ *  Sauron's Messenger, which it then uses up for the turn. Any named face used to be
+ *  spent unchecked, so a Muster die moved an Army with the Messenger already used (or
+ *  no Mouth at all) — player reports 023j54683q492a41 / 3p6r2o011u3t4t1d. Returns
+ *  whether it paid as an Army die (false = Character die). */
+function spendNamedArmyDie(state: GameState, actor: Side, die: DieFace, leaderOk: boolean): boolean {
+  const muster = die === 'muster' && actor === 'shadow' && mouthMessengerAvailable(state);
+  const ok = die === 'army' || die === 'armyMuster' || (die === 'will' && actor === 'fp')
+    || (die === 'character' && leaderOk) || muster;
+  if (!ok || !consumeDie(state, actor, die)) throw new Error(`That die can't pay for an Army action`);
+  if (muster) state.flags.mouthMusterUsedThisTurn = true;
+  return die !== 'character';
+}
+
 /** Balrog of Moria (sh-char-17, on the table): the Shadow may discard it for an extra
  *  Hunt tile "if the Fellowship moves into, out of, or through Moria while being
  *  declared or revealed" (card text). Both the declare and the reveal path ask.
@@ -1077,7 +1093,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // into a Stronghold this Army holds). (FP use Leaders; Shadow use Nazgûl.)
       const leaderArmy = charDieLeaders(state, src, actor, false) > 0; // Saruman can't leave Orthanc, so he never leads a move
       let viaArmyDie = false;
-      if (action.die && consumeDie(state, actor, action.die)) viaArmyDie = action.die !== 'character';
+      if (action.die) viaArmyDie = spendNamedArmyDie(state, actor, action.die, leaderArmy);
       else if (consumeArmyDie(state, actor)) viaArmyDie = true;
       else if (leaderArmy && consumeDie(state, actor, 'character')) viaArmyDie = false;
       else throw new Error('No Army die');
@@ -1161,7 +1177,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const viaCharacterDie = action.die ? action.die === 'character' : (!hasArmyDie && leaderArmy && faces.has('character'));
       const aErr = attackError(state, action.from, actor, action.rearguard, viaCharacterDie);
       if (aErr) throw new Error(aErr);
-      if (action.die) { if (!consumeDie(state, actor, action.die)) throw new Error('No Army die'); }
+      if (action.die) spendNamedArmyDie(state, actor, action.die, leaderArmy);
       else if (viaCharacterDie) { if (!consumeDie(state, actor, 'character')) throw new Error('No Army die'); }
       else if (!consumeArmyDie(state, actor)) throw new Error('No Army die');
       startBattle(state, actor, action.from, action.to, { rearguard: action.rearguard }); break; // finishCombat resumes the turn

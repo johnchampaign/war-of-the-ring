@@ -242,10 +242,12 @@ function forceBelongsTo(f: { units: Record<string, { regular: number; elite: num
  *  carry costs of their own — The Day Without Dawn discards Will dice — so the player
  *  is always asked). Used by BOTH the action list and the map, so the two behave the
  *  same way; that consistency was the point of making them ask in the first place. */
-export function trivialDie(options: DieFace[]): DieFace | null {
+export function trivialDie(options: DieFace[], kind?: WotrAction['kind']): DieFace | null {
   if (options.length !== 2 || !options.includes('armyMuster')) return null;
   if (options.includes('army')) return 'army';
-  if (options.includes('muster')) return 'muster';
+  // A Muster die paying for an Army move or attack does so through the Mouth of
+  // Sauron's once-a-turn Messenger — spending it is a real choice, so ask.
+  if (options.includes('muster') && kind !== 'moveArmy' && kind !== 'attack') return 'muster';
   return null;
 }
 
@@ -258,6 +260,10 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
     case 'moveFellowship': case 'separateCompanion': case 'moveCharacter': return pick(['character', 'will']);
     case 'recruitUnit': case 'diplomaticAction': case 'bringMinion': case 'sarumanMuster': return pick(['muster', 'armyMuster', 'will']);
     case 'drawEvent': return pick(['event', 'will']);
+    // Crowning Aragorn / summoning Gandalf the White is paid by a Will of the West die
+    // only. Falling to the empty default read as "a free action", so these stayed in
+    // the list whatever die was selected (player report 6n004u6e723a2749).
+    case 'bringUpgrade': return pick(['will']);
     // 'ring'/'die' are paid by any Action die EXCEPT a Will of the West: these cards
     // carry their own Will clause, so spending a Will here would buy the same discard
     // dearer (player report 2r1d613t4d3l6631 — mirrors fpForceDiscardMethods).
@@ -280,7 +286,13 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
       // Saruman leads an attack (its units stay put) but not a move; Isengard Elites
       // are Leaders in their own right while he is in play.
       const leader = !!r && charDieLeaders(view, r, you, a.kind === 'attack') > 0;
-      return pick(['army', 'armyMuster', 'will', ...(leader ? ['character' as DieFace] : [])]);
+      // The Mouth of Sauron's Messenger lets one Muster die a turn act as an Army die.
+      // Without it here, a Shadow holding only Muster dice got an EMPTY list — which reads
+      // as "a free action" — so Army moves stayed lit whatever die was selected (player
+      // report 3p6r2o011u3t4t1d).
+      const messenger = you === 'shadow' && view.characters.entered.includes('mouth-of-sauron')
+        && !view.characters.eliminated.includes('mouth-of-sauron') && !view.flags.mouthMusterUsedThisTurn;
+      return pick(['army', 'armyMuster', 'will', ...(leader ? ['character' as DieFace] : []), ...(messenger ? ['muster' as DieFace] : [])]);
     }
     default: return [];
   }
