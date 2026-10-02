@@ -175,5 +175,40 @@ function huntBoard({ seed = 3, progress = 4, value = 3 } = {}) {
   }
 }
 
+{
+  // Report hkxieyqcu456p06l: "The Nazgûl Strike accidentally gave me 2 turns in a row."
+  // A Shadow card drew the tile, so the Shadow's Action had already passed the turn to
+  // the FP; placing the Hobbit taken alive passed it AGAIN, back to the Shadow.
+  console.log('\n=== a Take Them Alive placement inside the Shadow\'s Action does not pass the turn ===');
+  const s = huntBoard();
+  s.phase = 'actionResolution';
+  s.dice.fp = ['character', 'muster']; s.dice.shadow = ['army', 'muster'];
+  s.currentPlayer = 'fp';          // the Shadow's card Action has just passed to the FP
+  s.hunt.box = 12;
+  s.fellowship.guide = 'peregrin';
+  resolveHunt(s);
+  const t = wotrAdapter.applyAction(s, { kind: 'huntDamage', mode: 'guide' }, 'fp');
+  const dest = wotrAdapter.legalActions(t, 'fp').find((a) => a.kind === 'separateMove' && a.target);
+  const u = wotrAdapter.applyAction(t, dest, 'fp');
+  check('the FP still has the next Action', u.currentPlayer === 'fp' && !u.pendingChoice,
+    `currentPlayer=${u.currentPlayer} pending=${u.pendingChoice?.kind ?? 'none'}`);
+}
+
+{
+  // Report 6a71kow2hoom5fbc: "Horn of Gondor is not discarded even after Boromir died
+  // to a Hunt tile." The Hunt's casualty path skipped the Fellowship table-card sweep.
+  console.log('\n=== Horn of Gondor leaves the table when Boromir is a Hunt casualty ===');
+  const s = huntBoard();
+  s.hunt.box = 12;
+  s.cards.fp.table.push('fp-char-07');
+  s.fellowship.companions = ['boromir', 'gimli'];
+  s.fellowship.guide = 'boromir';
+  resolveHunt(s);
+  const t = wotrAdapter.applyAction(s, { kind: 'huntDamage', mode: 'guide' }, 'fp');
+  check('Boromir is gone', !t.fellowship.companions.includes('boromir'));
+  check('Horn of Gondor is discarded', !t.cards.fp.table.includes('fp-char-07') && t.cards.fp.discard.character.includes('fp-char-07'),
+    JSON.stringify(t.cards.fp.table));
+}
+
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

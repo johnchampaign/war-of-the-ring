@@ -4,7 +4,8 @@
 import type { GameState, RegionId, CharacterId, Nation } from './types';
 import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, characterDef, EVENT_BY_ID } from './data';
-import { resolveHunt, resolveMordorStep } from './hunt';
+import { resolveHunt, resolveMordorStep, pruneFellowshipOnTableCards } from './hunt';
+export { pruneFellowshipOnTableCards };
 import { activateNation } from './politics';
 import { settlementController, figureForce } from './armies';
 import { activateOnCompanionLand } from './charMove';
@@ -23,33 +24,6 @@ export function reassignGuide(state: GameState): void {
 
 /** Eliminate a Companion from the Fellowship (permanent), reassigning the Guide.
  *  Returns the eliminated Companion's Level. */
-// On-table cards that require a specific Companion to remain in the Fellowship; when
-// that Companion leaves (separated/eliminated), the card is discarded (rules: the card
-// stays only while its Companion is in the Fellowship).
-const ONTABLE_REQUIRES: Record<string, (c: string[]) => boolean> = {
-  'fp-char-06': (c) => c.includes('gimli') || c.includes('legolas'), // Axe and Bow
-  'fp-char-07': (c) => c.includes('boromir'),                        // Horn of Gondor
-  'fp-char-08': (c) => c.includes('gandalf-grey'),                   // Wizard's Staff
-};
-// The log line for each, in the card's own words (player reports 3l2d024y3z2u3l5t,
-// 3a1h736a131y2043, 2g0m2o724m0s0j0z: it printed the card id and "its Companion").
-const ONTABLE_WHY: Record<string, string> = {
-  'fp-char-06': 'Axe and Bow is discarded — Gimli and Legolas have both left the Fellowship',
-  'fp-char-07': 'Horn of Gondor is discarded — Boromir left the Fellowship',
-  'fp-char-08': "Wizard's Staff is discarded — Gandalf the Grey left the Fellowship",
-};
-export function pruneFellowshipOnTableCards(state: GameState): void {
-  const t = state.cards.fp.table;
-  for (const id of Object.keys(ONTABLE_REQUIRES)) {
-    const i = t.indexOf(id);
-    if (i >= 0 && !ONTABLE_REQUIRES[id]!(state.fellowship.companions)) {
-      t.splice(i, 1);
-      state.cards.fp.discard.character.push(id);
-      log(state, null, 'event', `${ONTABLE_WHY[id]!}`);
-    }
-  }
-}
-
 export function eliminateCompanion(state: GameState, id: CharacterId): number {
   const fs = state.fellowship;
   const i = fs.companions.indexOf(id);

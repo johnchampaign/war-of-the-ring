@@ -22,6 +22,13 @@ export function shadowBarredFromRegion(s: GameState, region: RegionId): boolean 
   if (onTable(s, 'fp', 'fp-str-03') && TOM_BOMBADIL.includes(region)) return true;
   return false;
 }
+/** The card that bars the Shadow from `region`, by name, or null — so a refused move
+ *  names the card that wards it, not "a card effect" (player report 390h3p652o3a6v28). */
+export function shadowBarringCard(s: GameState, region: RegionId): string | null {
+  if (onTable(s, 'fp', 'fp-str-02') && POWER_TOO_GREAT.includes(region)) return 'A Power too Great';
+  if (onTable(s, 'fp', 'fp-str-03') && TOM_BOMBADIL.includes(region)) return 'The Power of Tom Bombadil';
+  return null;
+}
 
 /** sh-str-05 "Threats and Promises": the Free Peoples player cannot advance a
  *  passive Nation on the Political Track using a Muster Action die. */

@@ -1725,11 +1725,11 @@ register('fp-str-01', { // The Last Battle — see hunt.ts (fpDiceInBox)
 });
 register('fp-str-02', { // A Power too Great — advance Elves; bar Shadow from Lórien/Rivendell/Grey Havens
   onTable: true,
-  apply(state) { advancePolitical(state, 'elves', 1); log(state, null, 'event', 'A Power too Great: Elves advance; Shadow barred from Lórien/Rivendell/Grey Havens'); },
+  apply(state) { advancePolitical(state, 'elves', 1); log(state, null, 'event', 'A Power too Great: Elves advance; Shadow is barred from Lórien, Rivendell, and Grey Havens'); },
 });
 register('fp-str-03', { // The Power of Tom Bombadil — advance North; bar Shadow from Old Forest/Shire/Buckland
   onTable: true,
-  apply(state) { advancePolitical(state, 'north', 1); log(state, null, 'event', 'The Power of Tom Bombadil: North advances; Shadow barred from the Old Forest/Shire/Buckland'); },
+  apply(state) { advancePolitical(state, 'north', 1); log(state, null, 'event', 'The Power of Tom Bombadil: The North advances; Shadow is barred from Old Forest, The Shire, and Buckland'); },
 });
 register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see politics.ts (advanceableNations) */ } });
 // Palantír of Orthanc: printed precondition "Play on the table if Saruman is in play"

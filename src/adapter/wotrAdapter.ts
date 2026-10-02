@@ -709,7 +709,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const dest = dests.includes(action.target!) ? action.target! : data.from;
       placeSeparatedGroup(state, data.companions, dest);
       state.pendingChoice = null;
-      passResolutionTurn(state, actor); break;
+      // Only a Character-die separation is the FP's own Action. A `solo` placement (Take
+      // Them Alive!, a Hobbit Guide's −1) finishes a Hunt inside whoever's Action drew
+      // the tile, and that Action already passed the turn — passing again here handed
+      // the Shadow a second Action in a row after The Nazgûl Strike! (player report
+      // hkxieyqcu456p06l).
+      if (!data.solo) passResolutionTurn(state, actor);
+      break;
     }
     case 'bringUpgrade': {
       requirePhase(state, 'actionResolution');
@@ -983,7 +989,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         const ft = state.cards.fp.table;
         ft.splice(ft.indexOf(action.cardId), 1);
         state.cards.fp.discard[EVENT_BY_ID[action.cardId]?.deck === 'Character' ? 'character' : 'strategy'].push(action.cardId);
-        log(state, null, 'event', `Shadow forces ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId} to be discarded (an Action die + a Strategy and a Character card from hand, face down)`);
+        log(state, null, 'event', `Shadow removes ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId} by discarding one Army Event card and one Character Event card`);
         passResolutionTurn(state, actor); break;
       }
       if (actor !== 'fp') throw new Error('Only the Free Peoples can force-discard a card');

@@ -48,7 +48,11 @@ export function HuntIndicator({ view }: { view: GameState }) {
         </div>
         <div style={{ fontSize: 11, color: '#9bb0c8' }}>
           {fs.mordor !== null ? `Mordor ${fs.mordor}/5` : `Progress ${fs.progress}`}
-          {' · '}{fs.hidden ? '🙈' : '🔴'}
+        </div>
+        {/* Spelled out: the status-bar chit that said this is gone (report 205g5s252m4n2f5t). */}
+        <div style={{ fontSize: 11, color: fs.hidden ? '#bfe6bf' : '#ff8a8a', fontWeight: fs.hidden ? 400 : 700 }}
+          title={fs.hidden ? 'The Fellowship is hidden — it may move.' : 'The Fellowship is revealed — it cannot move until it hides again (a Character die).'}>
+          {fs.hidden ? '🙈 Hidden' : '🔴 Revealed'}
         </div>
       </button>
       {open && <HuntInfoModal view={view} onClose={() => setOpen(false)} />}

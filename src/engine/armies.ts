@@ -4,7 +4,7 @@ import type { GameState, Nation, RegionId, Side, ArmyUnits } from './types';
 import { FP_NATIONS } from './types';
 import { REGIONS, sideOfNation, characterDef, characterSide, nationName, COMPANIONS } from './data';
 import { isAtWar, onSettlementCaptured, activateNation } from './politics';
-import { shadowBarredFromRegion } from './persistent';
+import { shadowBarredFromRegion, shadowBarringCard } from './persistent';
 import { log, sideDoes, sideName } from './log';
 
 export const STACKING_LIMIT = 10;
@@ -339,7 +339,7 @@ export function cardPathBlockReason(state: GameState, from: RegionId, path: read
   let prev = from;
   for (const r of path) {
     if (!REGIONS[prev]?.adjacency.includes(r)) return `${cap1(REGIONS[prev]?.name ?? prev)} and ${cap1(REGIONS[r]?.name ?? r)} are not adjacent.`;
-    if (side === 'shadow' && shadowBarredFromRegion(state, r)) return `A card effect bars the Shadow from ${REGIONS[r]?.name ?? r}.`;
+    if (side === 'shadow' && shadowBarredFromRegion(state, r)) return `${shadowBarringCard(state, r)} wards ${REGIONS[r]?.name ?? r} against the Shadow.`;
     const occ = armySide(state, r);
     if (occ !== null && occ !== side) return `${REGIONS[r]?.name ?? r} holds an enemy Army — an Army may not move through one.`;
     const dn = REGIONS[r]?.nation;
@@ -499,7 +499,7 @@ export function canMoveSomeArmy(state: GameState, from: RegionId, to: RegionId, 
 export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side, opts?: { moveOnly?: boolean }): string | null {
   if (!REGIONS[from]!.adjacency.includes(to)) return 'Those regions are not adjacent.';
   if (armySide(state, from) !== side) return 'You have no Army to move there.';
-  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return 'A card effect bars the Shadow from that region.';
+  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return `${shadowBarringCard(state, to)} wards ${REGIONS[to]?.name ?? to} against the Shadow.`;
   // Enemy units present, so the click was an ATTACK, not a move — nobody can "move into"
   // an occupied region in this UI: clicking one always resolves as an attack. The hint
   // therefore has to answer "why can't I attack?", and telling the player to "attack the
@@ -580,7 +580,7 @@ export function splitBlockReason(state: GameState, from: RegionId, to: RegionId,
   const src = state.regions[from]!;
   if (!REGIONS[from]!.adjacency.includes(to)) return 'Those regions are not adjacent.';
   if (armySide(state, from) !== side) return 'You have no Army to move there.';
-  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return 'A card effect bars the Shadow from that region.';
+  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return `${shadowBarringCard(state, to)} wards ${REGIONS[to]?.name ?? to} against the Shadow.`;
   if (!freeForMovement(state, to, side)) return moveBlockReason(state, from, to, side) ?? 'That region is not free for your Army to enter.';
   let movingUnits = 0;
   for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {

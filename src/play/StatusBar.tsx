@@ -276,23 +276,15 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elven
       <span style={pill}>You: {you === 'fp' ? 'Free Peoples' : you === 'shadow' ? 'Shadow' : '—'}</span>
       <span style={{ ...pill, background: '#2f4f9e' }}>Free Peoples VP {view.victoryPoints.fp}</span>
       <span style={{ ...pill, background: '#a83232' }}>Shadow VP {view.victoryPoints.shadow}</span>
-      <span style={{ ...pill, background: '#6b2d2d' }}>Corruption {fs.corruption}/12</span>
-      <span style={pill}>Fellowship: {fs.mordor !== null ? `Mordor ${fs.mordor}/5` : `progress ${fs.progress}`}</span>
-      <span style={fs.hidden ? { ...pill, background: '#274027', color: '#bfe6bf' } : { ...pill, background: '#a83232', color: '#fff', fontWeight: 700 }}
-        title={fs.hidden ? 'The Fellowship is hidden — you may move it.' : 'The Fellowship is revealed — it cannot move until you hide it again (a Character die).'}>
-        {/* The red chip, the red pip and the bold weight already carry the emphasis;
-            ALL CAPS on top of them was just shouting (player report 050o5k5s1h5s2w24). */}
-        {fs.hidden ? '🙈 Hidden' : '🔴 Revealed'}
-      </span>
+      {/* The Hunt Box, Corruption, Progress / Mordor step and Hidden / Revealed live in
+          the Hunt overlay on the board, grouped with the Hunt they belong to, not here
+          (player report 205g5s252m4n2f5t). */}
       <span style={pill}>Guide: <span
         onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
         style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span></span>
       <FellowshipRoster guide={fs.guide} companions={fs.companions} onHoverChar={onHoverChar} />
       <OnMapRoster view={view} onHoverChar={onHoverChar} />
       <FallenRoster view={view} onHoverChar={onHoverChar} />
-      <span style={pill} title="Shadow dice in the Hunt Box (allocated + Eyes). Free Peoples dice added this turn (from moving the Fellowship) each add +1 to every Hunt die.">
-        Hunt box {view.hunt.box}{view.hunt.fpDiceInBox ? ` · +${view.hunt.fpDiceInBox} Free Peoples` : ''}
-      </span>
       <span style={pill} title="Event cards in hand, split Character/Strategy. The opponent's cards are hidden, but their card BACKS (deck type) are open information on the tabletop.">
         🂠 Free Peoples {handSplit(view.cards?.fp?.hand)} · Shadow {handSplit(view.cards?.shadow?.hand)}
       </span>

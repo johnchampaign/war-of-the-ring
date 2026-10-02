@@ -1190,6 +1190,12 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   *(Player report 506t, 2026-08-25: "I sacrificed a random and got Pippin (-1)…
   he should have been placed on the board as tho separated… Instead he was
   eliminated.")* `scripts/probe-ents-and-take-them-alive.mjs`.
+  Placing him is part of the Hunt, not an Action of his own, so it does **not** pass
+  the turn: when a Shadow card drew the tile (The Nazgûl Strike!, Orc Patrol…) the
+  FP still takes the next Action *(report hkxieyqcu456p06l: the placement used to
+  hand the Shadow two Actions in a row)*. The same Hunt casualty also sweeps Horn of
+  Gondor / Axe and Bow / Wizard's Staff off the table when their Companion is the one
+  lost *(report 6a71kow2hoom5fbc)*.
 - **Multiple tiles** (Stronghold path + Balrog card etc.): resolve the
   reveal-causing tile fully first, then event tiles, then the Stronghold tile
   (p.41).

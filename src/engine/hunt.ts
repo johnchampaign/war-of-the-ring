@@ -191,7 +191,8 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // Any damage left after the casualty resolves normally.
   if (opts.forceRandomCasualty && state.fellowship.companions.length > 0) {
     const victim = withRng(state, (rng) => rng.pick(fs.companions));
-    log(state, null, 'hunt', `${opts.source ?? 'Hunt'}: a random Companion must be eliminated`);
+    // No "a random Companion must be eliminated" preamble: the casualty line just below
+    // already says who was chosen at random (player report 704h4d3l6n3r1n0d).
     const level = eliminateCompanionInline(state, victim, damage, 'random');
     damage = Math.max(0, damage - level);
     // The casualty may have made Gollum the Guide — re-ask whether the icon still reveals.
@@ -651,8 +652,41 @@ function eliminateCompanionInline(state: GameState, id: string, damage: number, 
   // the two read the same (player report 6u3b0u4u5v5u156z).
   log(state, null, 'hunt', `${how === 'guide' ? `The Guide, ${charLabel(id)},` : `${charLabel(id)}, chosen at random,`} ${takenAlive ? 'is taken alive' : 'is eliminated'} to absorb ${Math.min(level, damage)} Corruption`
     + (fs.guide !== oldGuide ? ` — ${charLabel(fs.guide)} becomes the Guide` : ''));
+  // Horn of Gondor / Axe and Bow / Wizard's Staff leave with their Companion — the
+  // Hunt casualty skipped this, so Horn of Gondor stayed on the table after Boromir
+  // died to a Hunt tile (player report 6a71kow2hoom5fbc).
+  pruneFellowshipOnTableCards(state);
   return level;
 }
+// (Lives here, not in fellowship.ts, so the Hunt's own casualty path above can call
+// it without a fellowship<->hunt import cycle; fellowship.ts re-exports it.)
+// On-table cards that require a specific Companion to remain in the Fellowship; when
+// that Companion leaves (separated/eliminated), the card is discarded (rules: the card
+// stays only while its Companion is in the Fellowship).
+const ONTABLE_REQUIRES: Record<string, (c: string[]) => boolean> = {
+  'fp-char-06': (c) => c.includes('gimli') || c.includes('legolas'), // Axe and Bow
+  'fp-char-07': (c) => c.includes('boromir'),                        // Horn of Gondor
+  'fp-char-08': (c) => c.includes('gandalf-grey'),                   // Wizard's Staff
+};
+// The log line for each, in the card's own words (player reports 3l2d024y3z2u3l5t,
+// 3a1h736a131y2043, 2g0m2o724m0s0j0z: it printed the card id and "its Companion").
+const ONTABLE_WHY: Record<string, string> = {
+  'fp-char-06': 'Axe and Bow is discarded — Gimli and Legolas have both left the Fellowship',
+  'fp-char-07': 'Horn of Gondor is discarded — Boromir left the Fellowship',
+  'fp-char-08': "Wizard's Staff is discarded — Gandalf the Grey left the Fellowship",
+};
+export function pruneFellowshipOnTableCards(state: GameState): void {
+  const t = state.cards.fp.table;
+  for (const id of Object.keys(ONTABLE_REQUIRES)) {
+    const i = t.indexOf(id);
+    if (i >= 0 && !ONTABLE_REQUIRES[id]!(state.fellowship.companions)) {
+      t.splice(i, 1);
+      state.cards.fp.discard.character.push(id);
+      log(state, null, 'event', `${ONTABLE_WHY[id]!}`);
+    }
+  }
+}
+
 /** Card name for a character id, for log entries ("Gandalf the Grey", not "gandalf-grey"). */
 const charLabel = (id: string): string => characterDef(id)?.name ?? id;
 
