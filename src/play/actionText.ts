@@ -80,7 +80,7 @@ export function describeAction(a: WotrAction): string {
     case 'placeGandalf': return `Place Gandalf the White in ${rName(a.region)}`;
     case 'drawEvent': return `Draw a ${cap(a.deck)} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
-    case 'diplomaticAction': return `Diplomacy: advance ${a.nation === 'north' ? 'The North' : nationName(a.nation)}`; // report 526e0k1q1q1r2p45
+    case 'diplomaticAction': return `Diplomacy: advance ${a.nation === 'north' ? 'the North' : nationName(a.nation)}`; // reports 526e0k1q1q1r2p45, 71051h5x4j6a2l21
     case 'recruitUnit': {
       const fig = a.nazgul ? 'Nazgûl' : a.leader ? 'Leader' : a.elite ? 'Elite' : 'Regular';
       // No "(+ an optional 2nd figure elsewhere)" tail: it made the buttons unwieldy and

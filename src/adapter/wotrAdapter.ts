@@ -895,7 +895,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // Stronghold falls to the besieger (p.32) — the same ending as any card loss.
         if (f !== state.regions[action.region] && forceUnitCount(f) === 0) { f.leaders = 0; garrisonFalls(state, action.region, 'shadow'); }
       }
-      log(state, null, 'event', `Stormcrow: Free Peoples lose a ${action.nation} ${action.figure === 'leader' ? 'Leader' : action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
+      log(state, null, 'event', action.figure === 'leader' ? `A Free Peoples Leader is eliminated in ${action.region}` : `${action.nation === 'elves' ? 'An' : 'A'} ${action.nation} ${action.figure === 'elite' ? 'Elite' : 'Regular'} is eliminated in ${action.region}`);
       // A save from before the end-of-Action draw (advance) may still carry the
       // Palantír draw parked behind this choice.
       state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw

@@ -537,7 +537,10 @@ function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
       state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + then.naz0; // recycle Nazgûl
       const gone: string[] = [];
       for (const m of then.minions) if (!state.characters.eliminated.includes(m)) { state.characters.eliminated.push(m); delete state.characters.inPlay[m]; gone.push(m); }
-      if (gone.length) log(state, null, 'event', `The Ents Awake: the Orthanc Army is destroyed — eliminated ${gone.join(', ')}`);
+      // Worded like a battle's ending, with the Ents named in the sentence rather than
+      // as a card prefix (report 176h5o1z082o5h16).
+      log(state, null, 'event', then.boxed ? `The garrison of ${then.region} is destroyed by the Ents` : `The Shadow Army in ${then.region} is destroyed by the Ents`);
+      if (gone.length) log(state, null, 'event', `${gone.join(', ')} ${gone.length === 1 ? 'falls' : 'fall'} with the destroyed Army`);
       // The Ents wiped out a BESIEGED garrison: every unit defending the Stronghold
       // is gone, so it falls to the Army standing in the region around it (p.32's
       // second capture trigger) — the same ending as `siegeFall`.
@@ -545,7 +548,7 @@ function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
         delete r.siegeBox; r.besieged = false;
         if (armySide(state, then.region) === 'fp') {
           captureIfEnemySettlement(state, then.region, 'fp'); // not an "attack": no attack-activation
-          log(state, null, 'event', `The Ents Awake: the garrison of ${then.region} is destroyed — the besieging Army takes the Stronghold`);
+          log(state, null, 'event', `The besieging Army takes ${then.region}`);
         }
       }
     }
@@ -1398,6 +1401,7 @@ export function combatStep(state: GameState): void {
         pc.atkCardCost = undefined; pc.defCardCost = undefined;
         pc.wordsOfPowerTarget = undefined;
         pc.greatHostDone = false; pc.postAtkDone = false; // fresh cards -> fresh post-casualty evaluation
+        pc.atkCardVoid = undefined; pc.defCardVoid = undefined;
         if (pc.siegeWithdrawAsked !== pc.round && strongholdWithdrawAvailable(state, pc)) {
           pc.step = 'siegeWithdraw'; continue;
         }
@@ -1524,6 +1528,10 @@ export function combatStep(state: GameState): void {
         // …and on Gandalf the White it switches The White Rider off for THIS round only:
         // the Nazgûl Leadership returns until the next round (Almanac, Words of Power).
         const whiteRider = !!pc.whiteRiderForfeit && silencedNow !== 'gandalf-white';
+        // Remember which card came to nothing, for the after-casualties step.
+        const fpVoid = defianceVoid || fpSilencedCard;
+        pc.atkCardVoid = aCancelled || aOutrun || (pc.attacker === 'fp' && fpVoid);
+        pc.defCardVoid = dCancelled || dOutrun || (pc.defender === 'fp' && fpVoid);
         // Announce each card WITH what it mechanically does this round, so the dice
         // that follow can be audited against it (player report: a card was played
         // "for an effect without telling me what it did"). Logged after the cancel
@@ -1715,6 +1723,7 @@ export function combatStep(state: GameState): void {
         // for each hit you inflicted … and score one hit against the enemy on each
         // result of 4+." Its own step because it is the only card paid after casualties.
         for (const side of [pc.attacker, pc.defender]) {
+          if (side === pc.attacker ? pc.atkCardVoid : pc.defCardVoid) continue; // cancelled at the roll: nothing to pay for
           const due = unpaidCost(state, pc, side, 'postCasualty');
           if (!due) continue;
           if (due.range.max <= 0) {
@@ -1740,7 +1749,7 @@ export function combatStep(state: GameState): void {
           pc.postAtkDone = true;
           for (const side of [pc.attacker, pc.defender] as const) {
             const card = side === pc.attacker ? pc.attackerCard : pc.defenderCard;
-            if (!card) continue;
+            if (!card || (side === pc.attacker ? pc.atkCardVoid : pc.defCardVoid)) continue;
             const mods = combatModsFor(card, { cost: side === pc.attacker ? pc.atkCardCost : pc.defCardCost }) ?? EMPTY_MODS;
             if (!mods.postCasualtyAttackFrom) continue;
             const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
@@ -1770,7 +1779,7 @@ export function combatStep(state: GameState): void {
           pc.greatHostDone = true;
           for (const side of [pc.attacker, pc.defender] as const) {
             const card = side === pc.attacker ? pc.attackerCard : pc.defenderCard;
-            if (!card) continue;
+            if (!card || (side === pc.attacker ? pc.atkCardVoid : pc.defCardVoid)) continue;
             const ctx = { ownCharacters: (side === pc.attacker ? atkForce(state, pc) : defForce(state, pc)).characters, cost: side === pc.attacker ? pc.atkCardCost : pc.defCardCost };
             const mods = combatModsFor(card, ctx) ?? EMPTY_MODS;
             if (!(mods.bonusHitsIfOutnumber ?? 0)) continue;

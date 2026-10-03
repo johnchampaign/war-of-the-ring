@@ -6,7 +6,7 @@
 // cancel for free, keeping Strider's re-roll).
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
-import { startBattle, combatStep, resolvePlayCombatCard, resolveWordsOfPower } from '../src/engine/combat.ts';
+import { startBattle, combatStep, resolvePlayCombatCard, resolveWordsOfPower, resolveCasualties, resolveCombatCardCost } from '../src/engine/combat.ts';
 import { EVENT_BY_ID } from '../src/engine/data.ts';
 
 let failures = 0;
@@ -15,7 +15,7 @@ const check = (label, ok, detail = '') => {
   if (!ok) failures++;
 };
 const byTitle = (t) => Object.keys(EVENT_BY_ID).find((id) => EVENT_BY_ID[id]?.combat?.title === t);
-const DEFIANCE = byTitle('Daring Defiance'), WOP = byTitle('Words of Power');
+const DEFIANCE = byTitle('Daring Defiance'), WOP = byTitle('Words of Power'), ONSLAUGHT = byTitle('Onslaught');
 check('the cards exist', !!(DEFIANCE && WOP), `${DEFIANCE} ${WOP}`);
 
 /** Shadow (5 Isengard Regulars + 2 Nazgûl) out of Orthanc into the Fords of Isen, held
@@ -65,6 +65,49 @@ function survey(label, shadowCard, maxRerolls, logPattern) {
 console.log('\n=== Daring Defiance ===');
 survey('cancelling Words of Power forfeits Strider + Legolas: 1 re-roll left', WOP, 1, /forfeits 2 Leadership.*cancels/);
 survey('no Shadow card to cancel: nothing forfeited, all 3 re-rolls', null, 3, /Daring Defiance/);
+
+// Onslaught is paid AFTER casualties; a Daring Defiance that cancelled it at the roll
+// must stop that later part too (player report btor9s56a6nqjke5: "Daring Defiance
+// didn't work, I was still able to use Onslaught"). Without Defiance it is offered.
+function onslaughtOffered(seed) {
+  const s = battle(seed, ONSLAUGHT);
+  for (let i = 0; i < 80 && s.pendingCombat; i++) {
+    const ch = s.pendingChoice;
+    if (!ch) { combatStep(s); continue; }
+    if (ch.kind === 'combatCardCost') return true;
+    if (ch.kind === 'combatCasualties') { resolveCasualties(s, 'regularsFirst'); continue; }
+    if (ch.kind === 'combatCard') { resolvePlayCombatCard(s, null); continue; }
+    return false; // continue / retreat decision: the round is over
+  }
+  return false;
+}
+let offeredAfterCancel = 0, ran = 0;
+for (let seed = 1; seed < 30; seed++) { ran++; if (onslaughtOffered(seed)) offeredAfterCancel++; }
+check(`Daring Defiance cancels Onslaught's after-casualties hits too (${ran} seeds)`, offeredAfterCancel === 0, `${offeredAfterCancel} offered`);
+{
+  // Control: the same battle with the FP holding no card still offers Onslaught.
+  let offered = 0;
+  for (let seed = 1; seed < 30; seed++) {
+    const s = startGame(createGame({ seed }));
+    for (const r of Object.values(s.regions)) { r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = []; delete r.siegeBox; r.besieged = false; }
+    s.nations.isengard.step = 0; s.nations.rohan.step = 0;
+    s.regions['orthanc'].units = { isengard: { regular: 5, elite: 0 } };
+    s.regions['fords-of-isen'].units = { rohan: { regular: 3, elite: 0 } };
+    s.regions['fords-of-isen'].characters = ['strider'];
+    if (!s.characters.entered.includes('strider')) s.characters.entered.push('strider');
+    s.cards.shadow.hand = [ONSLAUGHT]; s.cards.fp.hand = [];
+    startBattle(s, 'shadow', 'orthanc', 'fords-of-isen');
+    for (let i = 0; i < 80 && s.pendingCombat; i++) {
+      const ch = s.pendingChoice;
+      if (!ch) { combatStep(s); continue; }
+      if (ch.kind === 'combatCardCost') { offered++; break; }
+      if (ch.kind === 'combatCasualties') { resolveCasualties(s, 'regularsFirst'); continue; }
+      if (ch.kind === 'combatCard') { resolvePlayCombatCard(s, ch.owner === 'shadow' ? ONSLAUGHT : null); continue; }
+      break;
+    }
+  }
+  check('control: an uncancelled Onslaught is still offered', offered > 0, `${offered} seeds`);
+}
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

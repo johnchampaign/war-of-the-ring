@@ -292,6 +292,13 @@ export interface PendingCombat {
   /** We Come to Kill's post-casualty extra attack: fired-this-round latch (same
    *  re-entry hazard as greatHostDone). */
   postAtkDone?: boolean;
+  /** This round's attacker / defender Combat card was cancelled or came to nothing
+   *  at the roll (Daring Defiance, a faster pre-combat retreat, Words of Power…), so
+   *  its after-casualties part — Onslaught, Great Host, We Come to Kill — never
+   *  happens either (player report btor9s56a6nqjke5: Onslaught survived Daring
+   *  Defiance). Set at the roll, cleared with the cards at the next round. */
+  atkCardVoid?: boolean;
+  defCardVoid?: boolean;
   /** Onslaught's counter-attack, deferred from the cost prompt to the 'onslaught'
    *  step: the self-hits it is paid with may themselves need a casualty choice, and
    *  the roll must not happen while that prompt is open (player report

@@ -1637,7 +1637,7 @@ register('sh-str-06', {
   applyTarget(state, _side, t) {
     const n = t.nation!;
     state.nations[n].step = Math.min(3, state.nations[n].step + 1); // move back one step
-    log(state, null, 'event', `Stormcrow: ${n} set back one step on the Political Track`);
+    log(state, null, 'event', `${n} is set back one step on the Political Track`); // no card prefix on an immediate effect (report 5x412l1p0k3t4l3o)
   },
   finalize(state, _side, applied) {
     const n = applied[0]?.nation; if (!n) return;
@@ -2411,7 +2411,8 @@ register('sh-str-01', {
         // every unit is lost (otherwise the absorption order is forced).
         if (u.regular > 0 && u.elite > 0 && hits < u.regular + u.elite) anyChoice = true;
       }
-      log(state, null, 'event', `Return to Valinor: ${hits} Elven unit${hits === 1 ? '' : 's'} sail from ${id}`);
+      // No card prefix (report 2d5o6e2472160r5w): the losses may be anywhere in the Stronghold's Army.
+      log(state, null, 'event', `${hits === 0 ? 'No' : hits} Elven unit${hits === 1 ? '' : 's'} ${hits === 1 ? 'departs' : 'depart'} from ${id} and ${hits === 1 ? 'sails' : 'sail'} for Valinor`);
     }
     if (results.length === 0) return;
     // Let the FP choose how the Elves absorb the losses (Regulars first vs Elites first),
