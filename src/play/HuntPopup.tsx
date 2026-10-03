@@ -9,7 +9,7 @@
 // until no choice is pending.
 import type { GameState } from '../engine/types';
 import { huntResolutionPending } from '../engine/hunt';
-import { RollLine, CorruptionLine, HuntTileFace } from './huntView';
+import { RollLine, CorruptionLine, HuntTileFace, strongholdRevealLine } from './huntView';
 
 /** Is there a Hunt result the player hasn't clicked through yet? Suppressed only
  *  while a hunt-RESOLUTION choice is open (the DecisionModal shows that with its own
@@ -49,7 +49,7 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
         {!roll && fresh[0]!.source && !fresh.every((d) => d.discarded) && (
           <div style={{ fontSize: 13, color: '#cbbf9a' }}>
             {fresh[0]!.source.startsWith('revealed ')
-              ? <>The Fellowship was {fresh[0]!.source} — a Shadow Stronghold: one tile is drawn, with no Hunt roll.</>
+              ? <>{strongholdRevealLine(fresh[0]!.source)}</>
               : <><b>{fresh[0]!.source}</b>: a tile is drawn directly, with no Hunt roll.</>}
           </div>
         )}

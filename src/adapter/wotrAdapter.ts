@@ -668,7 +668,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // "were those dice in the box already, or did the Shadow just put them there?"
       // (report wg37yx) — the Hunt Box is emptied every turn in phase 1, so anything
       // in it belongs to THIS turn.
-      log(state, null, 'hunt', `Shadow allocates ${action.dice} ${action.dice === 1 ? 'die' : 'dice'} to the Hunt Box`);
+      log(state, null, 'hunt', `Shadow allocates ${action.dice} ${action.dice === 1 ? 'die' : 'dice'} to the Hunt`);
       state.phase = 'actionRoll';
       break;
     }
@@ -1275,7 +1275,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // of nowhere and reported a Hunt that "shouldn't have happened" — it was the
         // Balrog firing on a path that ran through Moria, and nothing in the log said
         // so (report wg37yx). The card is named here and on the Hunt line itself.
-        log(state, null, 'event', 'Shadow discards Balrog of Moria — the Fellowship passes through Moria: an extra Hunt tile');
+        log(state, null, 'event', 'Shadow discards Balrog of Moria to draw an extra Hunt tile as the Fellowship passes through Moria');
         state.log[state.log.length - 1]!.card = 'sh-char-17';
         extraHunt(state, { source: 'Balrog of Moria' }); // may set a huntDamage choice for the FP
       }

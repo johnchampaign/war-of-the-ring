@@ -178,7 +178,7 @@ export function describeAction(a: WotrAction): string {
     case 'crebain': return a.use ? 'Discard Flocks of Crebain — +1 to all Hunt dice' : 'Save Flocks of Crebain';
     case 'huntDamage':
       switch (a.mode) {
-        case 'corruption': return 'Take Corruption';
+        case 'corruption': return 'Use the Ring'; // the rulebook's term (p.42; player report 5540322n1d113g2o)
         case 'guide': return 'Sacrifice the Guide';
         case 'random': return 'Sacrifice a random Companion';
         case 'reduceSeparate': return 'Separate the Hobbit Guide (−1 damage)';
@@ -189,7 +189,7 @@ export function describeAction(a: WotrAction): string {
     case 'bonusDraw': return a.deck === 'none' ? 'Palantír: don’t draw' : `Palantír: draw a ${cap(a.deck)} card`;
     case 'guideDraw': return a.draw ? 'Gandalf: draw a card' : 'Gandalf: don’t draw';
     case 'sorcererDraw': return a.draw ? 'Sorcerer: draw a card' : 'Sorcerer: don’t draw';
-    case 'lureChoice': return a.mode === 'corruption' ? 'Take Corruption' : 'Eliminate the Companion';
+    case 'lureChoice': return a.mode === 'corruption' ? 'Use the Ring' : 'Eliminate the Companion';
     case 'stormcrowLoss': return `Lose ${nationName(a.nation)} ${a.figure === 'leader' ? 'Leader' : a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
     case 'breakingSep': return `Separate ${charName(a.companion)} from the Fellowship`;
     case 'discardCard': return `Discard "${cardName(a.card)}"`;

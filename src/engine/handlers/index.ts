@@ -14,7 +14,7 @@ import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../po
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
-import { log, logCardDraw, notify, sideDoes } from '../log';
+import { log, logCardDraw, notify, sideDoes, sufferCorruption, shedCorruption } from '../log';
 
 const FACE_LABEL: Record<string, string> = { character: 'a Character', army: 'an Army', muster: 'a Muster', armyMuster: 'an Army/Muster', event: 'an Event', will: 'a Will of the West' };
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
@@ -429,12 +429,9 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
   };
 }
 
-const heal = (state: GameState, n: number): void => {
-  state.fellowship.corruption = Math.max(0, state.fellowship.corruption - n);
-};
-const corrupt = (state: GameState, n: number): void => {
-  state.fellowship.corruption = Math.min(12, state.fellowship.corruption + n);
-};
+// Every Corruption change is logged (player report 5540322n1d113g2o).
+const heal = (state: GameState, n: number): void => { shedCorruption(state, n); };
+const corrupt = (state: GameState, n: number): void => { sufferCorruption(state, n); };
 const isGollumGuide = (state: GameState): boolean => state.fellowship.guide === 'gollum';
 
 /** Recruit via an Event card (may ignore At War): place into the first friendly,
@@ -470,10 +467,10 @@ register('fp-char-09', { // Athelas
     const need = guideIsStrider ? 3 : 5;
     const dice = withRng(state, (rng) => [rng.rollDie(6), rng.rollDie(6), rng.rollDie(6)]);
     const healed = dice.filter((d) => d >= need).length;
+    log(state, null, 'event', `Athelas roll [${dice.join(' ')}] — each ${need}+ sheds 1 Corruption`);
     heal(state, healed);
     // Surface the roll (the report: "Athelas should show the rolls in a popup").
     notify(state, `Rolled [${dice.join(' ')}], healing on ${need}+${guideIsStrider ? ' (Strider guides)' : ''}: healed ${healed} Corruption (now ${state.fellowship.corruption}/12).`, 'Athelas');
-    log(state, null, 'event', `Athelas heals ${healed} [${dice.join(' ')}]`);
   },
 });
 // There Is Another Way: heal 1; then, if Gollum is the Guide, the Fellowship MAY
@@ -508,8 +505,9 @@ register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP Nation OF 
   targets: (state) => FP_NATIONS.filter((n) => state.nations[n].step > 0).map((n) => ({ nation: n })),
   applyTarget(state, _side, t) {
     const n = t.nation!;
+    // No card-level line: the activation and the advance log themselves (player
+    // report 5j4k274u3726514c).
     activateNation(state, n); advancePolitical(state, n, 1);
-    log(state, null, 'event', `Wisdom of Elrond — ${n.charAt(0).toUpperCase() + n.slice(1)} activated and advanced one step`);
   },
 });
 
@@ -569,7 +567,7 @@ register('sh-char-08', { // Candles of Corpses: +1 corruption per die 4+ (6 if G
   apply(state) {
     const t = isGollumGuide(state) ? 6 : 4;
     const c = withRng(state, (rng) => { let n = 0; for (let i = 0; i < 3; i++) if (rng.rollDie(6) >= t) n++; return n; });
-    corrupt(state, c); log(state, null, 'event', `Candles of Corpses +${c} corruption`);
+    corrupt(state, c);
   },
 });
 register('sh-char-12', { // Morgul Wound: +2 if corruption ≤3 else +1; requires revealed
@@ -1396,7 +1394,9 @@ register('sh-str-04', {
     const kept = state.dice.fp.filter((f) => f !== 'will');
     const removed = state.dice.fp.length - kept.length;
     state.dice.fp = kept;
-    log(state, null, 'event', `The Day Without Dawn: discarded ${removed} Free Peoples Will ${removed === 1 ? 'die' : 'dice'}`);
+    // Immediate card effects carry no card-name prefix, in the present tense (player
+    // report 2p395t5k565r5o61).
+    log(state, null, 'event', `${removed} Free Peoples Will of the West ${removed === 1 ? 'die is' : 'dice are'} discarded`);
   },
 });
 
@@ -1943,7 +1943,7 @@ register('sh-char-24', { // The Black Captain Commands
 register('sh-char-14', {
   canPlay: (state) => !state.fellowship.hidden && (isGollumGuide(state) || state.fellowship.companions.some((c) => COMPANION_SET.has(c))),
   apply(state) {
-    if (isGollumGuide(state)) { corrupt(state, 1); log(state, null, 'event', 'The Breaking of the Fellowship: Gollum guides — +1 Corruption'); return; }
+    if (isGollumGuide(state)) { sufferCorruption(state, 1, 'with Gollum as the Guide'); return; }
     const n = drawHuntTileNumber(state);
     if (n === null) { log(state, null, 'event', 'The Breaking of the Fellowship: the tile shows an Eye (or a Fellowship special) — discarded without effect'); return; }
     const avail = state.fellowship.companions.filter((c) => COMPANION_SET.has(c)).length;
@@ -2430,7 +2430,7 @@ register('sh-str-01', {
 register('sh-char-13', {
   canPlay: (state) => !state.fellowship.hidden && (isGollumGuide(state) || state.fellowship.companions.some((c) => COMPANION_SET.has(c))),
   apply(state) {
-    if (isGollumGuide(state)) { corrupt(state, 1); log(state, null, 'event', 'Lure of the Ring: Gollum guides — +1 Corruption'); return; }
+    if (isGollumGuide(state)) { sufferCorruption(state, 1, 'with Gollum as the Guide'); return; }
     const pool = state.fellowship.companions.filter((c) => COMPANION_SET.has(c));
     const companion = withRng(state, (rng) => rng.pick(pool));
     state.pendingChoice = { owner: 'fp', kind: 'lureChoice', data: { companion, level: levelOf(companion) } };
@@ -2510,8 +2510,9 @@ register('fp-str-10', {
   applyTarget(state, _side, t) {
     const box = state.regions[t.to!]!.siegeBox; // the boxed FP garrison
     const garrison = box ? forceUnitCount(box) : 0;
+    // No card-level line: the battle's own opening line says the same (player
+    // report 3c5w2n493z1y3t4b).
     startBattle(state, 'fp', t.from!, t.to!, { defenderDicePenalty: garrison });
-    log(state, null, 'event', `Help Unlooked For: relief attack ${t.from} → ${t.to} (Shadow −${garrison} dice)`);
   },
 });
 

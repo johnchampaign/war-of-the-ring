@@ -24,6 +24,26 @@ export function andList(items: string[]): string {
   return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
+/** Every Corruption change is logged in one voice: "The Ring-bearers suffer N
+ *  Corruption" / "The Ring-bearers shed N Corruption", with the running total
+ *  (player report 5540322n1d113g2o — "shed" rather than the rulebook's "heal",
+ *  which doesn't fit "Corruption" grammatically). Applies the clamped change, logs
+ *  only an actual change, and returns it. `why` is an optional trailing clause. */
+export function sufferCorruption(state: GameState, n: number, why = ''): number {
+  const before = state.fellowship.corruption;
+  state.fellowship.corruption = Math.min(12, before + Math.max(0, n));
+  const d = state.fellowship.corruption - before;
+  if (d > 0) log(state, null, 'hunt', `The Ring-bearers suffer ${d} Corruption${why ? ` ${why}` : ''} (Total: ${state.fellowship.corruption})`);
+  return d;
+}
+export function shedCorruption(state: GameState, n: number, why = ''): number {
+  const before = state.fellowship.corruption;
+  state.fellowship.corruption = Math.max(0, before - Math.max(0, n));
+  const d = before - state.fellowship.corruption;
+  if (d > 0) log(state, null, 'hunt', `The Ring-bearers shed ${d} Corruption${why ? ` ${why}` : ''} (Total: ${state.fellowship.corruption})`);
+  return d;
+}
+
 export function log(state: GameState, side: Side | null, kind: string, msg: string, payload?: unknown): void {
   appendGameLog(state.log, {
     turn: state.turn,

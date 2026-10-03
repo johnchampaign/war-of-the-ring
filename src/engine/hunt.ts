@@ -13,7 +13,7 @@ import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, characterDe
 import { fellowshipDieSkipsHuntBox, wornWithSorrowActive } from './persistent';
 import { withRng } from './rng';
 import { settlementController, armySide } from './armies';
-import { log, notify } from './log';
+import { log, notify, shedCorruption, sufferCorruption } from './log';
 
 /** Begin revealing the Fellowship (rulebook p.39): if it has Progress to spend, pause
  *  for the FP to choose where the figure moves (the `revealMove` choice — the move,
@@ -185,8 +185,15 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
   state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, stop: !!tile.stop, onMordor: fs.mordor !== null, ...(extra ? { source: opts.source ?? 'Extra Hunt' } : { roll: state.hunt.lastRoll }), ...specialOf(tile) }].slice(-16);
 
-  if (damage < 0) { fs.corruption = Math.max(0, fs.corruption + damage); if (reveal) beginReveal(state); return; }
-  if (damage === 0) { if (reveal) beginReveal(state); return; }
+  // A 0 or a healing tile still ends in a "Hunt resolved" line, like every other
+  // Hunt (player report 614c1h504g655n0z).
+  if (damage <= 0) {
+    const wasHidden = fs.hidden;
+    if (damage < 0) shedCorruption(state, -damage);
+    if (reveal) beginReveal(state);
+    logHuntResolved(state, 0, reveal, wasHidden);
+    return;
+  }
 
   // Foul Thing from the Deep: "the Free Peoples player must reduce Hunt Damage (if
   // any) by eliminating a random Companion (unless there are no Companions in the
@@ -200,16 +207,20 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
     const level = eliminateCompanionInline(state, victim, damage, 'random');
     damage = Math.max(0, damage - level);
     // The casualty may have made Gollum the Guide — re-ask whether the icon still reveals.
-    if (damage === 0) { if (revealIcon && !gollumIgnoresReveal(state, numbered)) beginReveal(state); return; }
+    if (damage === 0) {
+      const wasHidden = fs.hidden, rv = revealIcon && !gollumIgnoresReveal(state, numbered);
+      if (rv) beginReveal(state);
+      logHuntResolved(state, 0, rv, wasHidden);
+      return;
+    }
   }
 
   // Isildur's Bane: "Hunt damage may not be reduced in any way before using the
   // Ring" — ruled (per playtester Samuel Carey, confirming the community ruling) as
   // STRAIGHT CORRUPTION: no reductions AND no Guide/Companion casualty either.
   if (opts.noReduce) {
-    fs.corruption = Math.min(12, fs.corruption + damage);
+    sufferCorruption(state, damage, `from ${opts.source ?? 'the Hunt'} — no reduction or casualty allowed`);
     if (reveal) beginReveal(state);
-    log(state, null, 'hunt', `${opts.source ?? 'Hunt'}: damage ${damage} taken as straight Corruption (${fs.corruption}) — no reduction or casualty allowed`);
     return;
   }
   // Interactive resolution when FP has any choice — a Companion to spend, a Hobbit
@@ -217,9 +228,10 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   if (fs.companions.length > 0 || huntReductionAvailable(state, reveal)) {
     state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, revealIcon, numbered, ...(opts.source ? { source: opts.source } : {}) } };
   } else {
+    const wasHidden = fs.hidden;
     fs.corruption = Math.min(12, fs.corruption + damage);
     if (reveal) beginReveal(state);
-    log(state, null, 'hunt', `Hunt damage ${damage} → Corruption ${fs.corruption}${opts.source ? ` — ${opts.source}` : ''}`);
+    logHuntResolved(state, damage, reveal, wasHidden);
   }
 }
 
@@ -320,7 +332,7 @@ function applyDrawnTile(state: GameState, tile: HuntTileDef, successes: number, 
 export function resolveHuntPreventDraw(state: GameState, prevent: boolean): void {
   const d = state.pendingChoice!.data as { successes: number; onMordor: boolean; extra?: HuntOpts };
   state.pendingChoice = null;
-  if (prevent) { discardTableCard(state, WIZARD_STAFF); log(state, null, 'hunt', 'Wizard’s Staff prevents the Hunt tile draw'); return; }
+  if (prevent) { discardTableCard(state, WIZARD_STAFF); log(state, null, 'hunt', 'Free Peoples discard Wizard’s Staff to prevent the Hunt tile draw'); return; }
   if (d.extra) { doExtraDraw(state, d.extra); return; }
   doHuntDraw(state, d.successes, d.onMordor);
 }
@@ -337,7 +349,7 @@ export function resolveHuntRedraw(state: GameState, redraw: boolean): void {
     unDraw(state, d.ref);
     (state.hunt.setAside ??= []).push(d.ref);
     const { tile, ref } = drawTile(state);
-    log(state, null, 'hunt', 'Mithril Coat and Sting: redrew the Hunt tile');
+    log(state, null, 'hunt', 'Free Peoples discard Mithril Coat and Sting to redraw the Hunt tile');
     if (d.extra) applyExtraTile(state, tile, ref, d.extra);
     else applyDrawnTile(state, tile, d.successes, d.onMordor);
   } else if (d.extra) {
@@ -473,7 +485,7 @@ export function resolveCrebain(state: GameState, use: boolean): void {
   if (use) {
     const i = state.cards.shadow.table.indexOf('sh-char-16');
     if (i >= 0) { state.cards.shadow.table.splice(i, 1); state.cards.shadow.discard.character.push('sh-char-16'); bonus += 1; }
-    log(state, null, 'hunt', 'Flocks of Crebain: +1 to all Hunt dice');
+    log(state, null, 'hunt', 'Shadow discards Flocks of Crebain to add +1 to every Hunt die');
   }
   huntRoll(state, d.level, bonus, d.rerolls);
 }
@@ -510,19 +522,23 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
   // revealed on purpose), so record what actually happened.
   const draws = state.hunt.draws;
   if (draws?.length) draws[draws.length - 1]!.reveal = reveal;
+  const wasHidden = fs.hidden;
   if (damage > 0) fs.corruption = Math.min(12, fs.corruption + damage);
   if (reveal) beginReveal(state); // may set the revealMove choice — after clearing this one
-  // Say what the remaining damage actually cost. A long Hunt (redraw → sacrifice →
-  // Guide ability) used to end on a bare "corruption N" with no arithmetic, so the
-  // player couldn't check the total against what they'd spent reducing it (report).
-  const taken = damage > 0 ? `${damage} Corruption taken` : 'no Corruption taken';
-  // Report the tile's OUTCOME, not the transient flag: when the reveal hands the FP
-  // a "where does the figure stand" choice, `hidden` is still true at this instant
-  // and the line used to say "Fellowship hidden" one entry before it was revealed
-  // (player report: board and status said revealed, the log said hidden).
-  const revealPending = reveal && (state.pendingChoice as GameState['pendingChoice'])?.kind === 'revealMove';
-  const status = reveal || !fs.hidden ? 'revealed' : 'hidden';
-  log(state, null, 'hunt', `Hunt resolved — ${taken}; Corruption now ${fs.corruption}, the Fellowship is ${status}`);
+  logHuntResolved(state, damage, reveal, wasHidden);
+}
+/** The closing line of every Hunt. Says what the remaining damage actually cost and
+ *  the running total — a long Hunt (redraw → sacrifice → Guide ability) used to end
+ *  on a bare "corruption N", so the player couldn't check the arithmetic (report) —
+ *  in the shared Corruption voice (player report 5540322n1d113g2o). Reports the
+ *  tile's OUTCOME, not the transient flag: when the reveal hands the FP a "where does
+ *  the figure stand" choice, `hidden` is still true at this instant (player report:
+ *  board and status said revealed, the log said hidden). */
+function logHuntResolved(state: GameState, damage: number, reveal: boolean, wasHidden: boolean): void {
+  const fs = state.fellowship;
+  const taken = damage > 0 ? `The Ring-bearers suffer ${damage} Corruption` : 'no Corruption';
+  const status = reveal && wasHidden ? 'is revealed' : reveal || !fs.hidden ? 'remains revealed' : 'remains hidden';
+  log(state, null, 'hunt', `Hunt resolved — ${taken} (Total: ${fs.corruption}); the Fellowship ${status}`);
 }
 /** Log one −1 step of a Hunt-damage reduction, so the running total is legible. */
 function logReduce(state: GameState, from: number, why: string): void {
@@ -597,7 +613,9 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
     if (i >= 0) {
       const id = state.cards.fp.table.splice(i, 1)[0]!;
       state.cards.fp.discard.character.push(id);
-      logReduce(state, d.damage, `Discard "${EVENT_BY_ID[id]?.name ?? id}" from the table`);
+      // "Side discards X to do Y", active and present tense, like every other
+      // discard-to-use card (player report 352z4n4d3c4c1q5y).
+      log(state, null, 'hunt', `Free Peoples discard ${EVENT_BY_ID[id]?.name ?? id} to reduce the Hunt damage by 1 (${d.damage} → ${Math.max(0, d.damage - 1)})`);
     }
     repromptOrFinish(state, d.damage - 1);
     return;

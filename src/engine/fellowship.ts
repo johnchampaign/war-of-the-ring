@@ -10,7 +10,7 @@ import { activateNation } from './politics';
 import { settlementController, figureForce } from './armies';
 import { activateOnCompanionLand } from './charMove';
 import { MINION_IDS } from './minions';
-import { log, notify } from './log';
+import { log, notify, sufferCorruption, shedCorruption } from './log';
 
 /** Highest-Level Companion in the Fellowship becomes Guide; Gollum if none. */
 export function reassignGuide(state: GameState): void {
@@ -70,8 +70,7 @@ export function resolveLureChoice(state: GameState, mode: 'corruption' | 'elimin
   const d = state.pendingChoice!.data as { companion: CharacterId; level: number };
   const name = characterDef(d.companion)?.name ?? d.companion;
   if (mode === 'corruption') {
-    state.fellowship.corruption = Math.min(12, state.fellowship.corruption + d.level);
-    log(state, null, 'event', `Lure of the Ring: the Ring-bearers take ${d.level} Corruption to keep ${name}`);
+    sufferCorruption(state, d.level, `to keep ${name}`);
   } else {
     // Name the casualty and the new Guide — the log stopped at "tempts Boromir" and never
     // said that Legolas now led the Fellowship (player report 1d473t08370t5a0n).
@@ -262,7 +261,7 @@ export function declareFellowship(state: GameState, target: RegionId): void {
   if ((def.settlement === 'City' || def.settlement === 'Stronghold')
     && def.nation && ['dwarves', 'elves', 'gondor', 'north', 'rohan'].includes(def.nation)
     && state.regions[fs.location]!.control !== 'shadow') {
-    fs.corruption = Math.max(0, fs.corruption - 1);
+    shedCorruption(state, 1, `as the Fellowship is declared in ${def.name ?? fs.location}`);
     // "If the Fellowship is declared in a City or Stronghold of a Free Peoples
     // Nation, that Nation is activated" (rulebook p.19, and the activation list on
     // p.34). The Almanac's declare walkthrough (Ring-bearers entry) ties the heal and

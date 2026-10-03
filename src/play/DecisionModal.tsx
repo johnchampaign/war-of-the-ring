@@ -6,7 +6,7 @@
 // owns the choice; the opponent sees a passive "resolving battle…" note.
 import { useState } from 'react';
 import { describeAction, isDecisionAction, eventChoiceInModal } from './actionText';
-import { RollLine, CorruptionLine, describeDraw, HuntTileFace } from './huntView';
+import { RollLine, CorruptionLine, describeDraw, HuntTileFace, strongholdRevealLine } from './huntView';
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt } from './artCache';
 import { RollRow } from './combatDice';
@@ -331,7 +331,7 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
         <div style={{ fontSize: 13, color: '#cbbf9a', marginBottom: 6 }}>
           {data.source.startsWith('revealed ')
             // A Shadow Stronghold reveal is not an Event card (cf. player report 6z10320k4z2o0k24).
-            ? <>The Fellowship was {data.source} — a Shadow Stronghold. No Hunt roll; a tile is drawn directly.</>
+            ? <>{strongholdRevealLine(data.source)}</>
             : <>The Shadow played <b>{data.source}</b> — no Hunt roll; a tile is drawn directly.</>}
         </div>
       )}

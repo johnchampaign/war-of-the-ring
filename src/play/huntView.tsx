@@ -72,6 +72,17 @@ export function Die({ n, bonus, faded }: { n: number; bonus: number; faded?: boo
   );
 }
 
+/** The line above a Shadow Stronghold reveal tile (source "revealed in X" /
+ *  "revealed through X"). Says what happens, not "no Hunt roll" (player report
+ *  31225n6v10392y5w). */
+export function strongholdRevealLine(source: string): string {
+  const through = source.startsWith('revealed through ');
+  const place = source.replace(/^revealed (through|in) /, '');
+  return through
+    ? `The Fellowship passes through ${place} while revealed — Shadow draws one extra Hunt tile`
+    : `The Fellowship is revealed in ${place} — Shadow draws one extra Hunt tile`;
+}
+
 /** The Hunt roll: dice count + box bonus, the faces (hits gold), re-rolls, successes. */
 export function RollLine({ roll }: { roll: HuntRoll }) {
   if (roll.mordor) {
@@ -83,7 +94,9 @@ export function RollLine({ roll }: { roll: HuntRoll }) {
           (and Flocks of Crebain) had pushed the real threshold down to as little as 2+
           — player report 5u3m2a5t1s1e4l3d. A die hits on 6 AFTER the bonus and a
           natural 1 always misses, so the raw number needed is max(2, 6 − bonus). */}
-      <div>{roll.level} Hunt {roll.level === 1 ? 'die' : 'dice'}{roll.bonus ? ` · +${roll.bonus} box bonus` : ''} <span style={{ color: '#887' }}>(hits on {Math.max(2, 6 - roll.bonus)}+)</span></div>
+      {/* The bonus and the threshold say the same thing — show only the threshold
+          (player report 3d6a0f6x2s4z6m2k). */}
+      <div>{roll.level} Hunt {roll.level === 1 ? 'die' : 'dice'} <span style={{ color: '#887' }}>(hits on {Math.max(2, 6 - roll.bonus)}+)</span></div>
       <div style={{ margin: '4px 0' }}>
         {roll.dice.map((n, i) => <Die key={i} n={n} bonus={roll.bonus} />)}
         {roll.rerolls.length > 0 && <span style={{ color: '#888', margin: '0 4px' }}>re-roll</span>}

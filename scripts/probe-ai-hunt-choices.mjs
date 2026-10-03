@@ -105,7 +105,7 @@ const mordorHit = (damage, corruption, companions, guide) => {
   // stripped-down state then rolls the turn over (which bills the Mordor Track's own
   // +1 for a turn with no Fellowship move) — that Corruption is not the tile's.
   const line = after.log.map((e) => e.msg).find((m) => m.startsWith('Hunt resolved')) ?? '';
-  check('the tile cost no Corruption — the Level-3 casualty covered all 3', line.includes('no Corruption taken'), line);
+  check('the tile cost no Corruption — the Level-3 casualty covered all 3', line.includes('— no Corruption (Total:'), line);
 }
 {
   // A small hit spends a body too — but not necessarily the Guide, who is the only one
@@ -130,7 +130,7 @@ const mordorHit = (damage, corruption, companions, guide) => {
     after = wotrAdapter.applyAction(after, decide(after), 'fp');
   }
   const line = after.log.map((e) => e.msg).find((m) => m.startsWith('Hunt resolved')) ?? '';
-  check('the Ring-bearers survive it — Strider absorbed 3 of the 6, so 10 not 13', line.includes('Corruption now 10'), line);
+  check('the Ring-bearers survive it — Strider absorbed 3 of the 6, so 10 not 13', line.includes('(Total: 10)'), line);
 }
 {
   // The reverse: a hit SMALLER than the Guide's Level wastes his absorption, so a
@@ -189,7 +189,7 @@ console.log('\n=== a lethal hit spends the free reductions before conceding ==='
   // "you neither moved nor hid" Corruption lands on top — the Hunt itself resolved at
   // 11, which is the reduction being tested.)
   check('the Fellowship is revealed and the Hunt resolves at 11, not 12',
-    !after.fellowship.hidden && after.log.some((e) => e.msg.includes('Corruption now 11')),
+    !after.fellowship.hidden && after.log.some((e) => e.msg.includes('(Total: 11)')),
     after.log.filter((e) => e.kind === 'hunt').slice(-1)[0]?.msg ?? '');
 }
 {

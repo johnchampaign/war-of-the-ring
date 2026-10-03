@@ -15,7 +15,7 @@ import { extraHunt } from './hunt';
 import { pruneTableCards, palantirActive } from './persistent';
 import { armySide, sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
-import { log, sideDoes } from './log';
+import { log, sideDoes, sufferCorruption } from './log';
 
 const opponent = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 
@@ -201,8 +201,7 @@ export function advance(state: GameState): void {
         // Mordor Track: if the Fellowship is on the Track and the FP didn't move or hide
         // it this turn, the Ring-bearers take 1 Corruption (rules p.43).
         if (state.fellowship.mordor !== null && !state.flags.fellowshipDeclaredOrMovedThisTurn) {
-          state.fellowship.corruption = Math.min(12, state.fellowship.corruption + 1);
-          log(state, null, 'hunt', 'Mordor Track: +1 Corruption (no Fellowship move/hide this turn)');
+          sufferCorruption(state, 1, 'on the Mordor Track — the Fellowship neither moved nor hid this turn');
           checkRingVictory(state);
         }
         if (!state.winner) checkMilitaryVictory(state);
