@@ -148,6 +148,10 @@ export function advance(state: GameState): void {
     if (state.flags.takenAlive) {
       const ta = state.flags.takenAlive;
       delete state.flags.takenAlive;
+      if (state.flags.takenAliveMore?.length) {
+        state.flags.takenAlive = state.flags.takenAliveMore.shift()!;
+        if (!state.flags.takenAliveMore.length) delete state.flags.takenAliveMore;
+      }
       state.pendingChoice = { owner: 'fp', kind: 'separateMove',
         data: { companions: [ta.companion], from: ta.from, range: ta.range, solo: true } };
       return;

@@ -1478,6 +1478,9 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     if (a.mode === 'hide') return 50;
     if (a.mode === 'none') return 5;
     if (a.mode === 'move' && !a.to && !a.region) return 25;
+    // The Lidless Eye: the Shadow now picks WHICH dice become Eyes — give up the
+    // least flexible faces first (an Event die before an Army/Muster one).
+    if (a.eye && a.face) return 10 + ({ event: 4, muster: 3, character: 2, army: 1, armyMuster: 0 } as Record<string, number>)[a.face]!;
     // Nazgûl-move cards (Nazgûl Search / The Nazgûl Strike!): the whole POINT is
     // landing on the Fellowship (reveal / extra Hunt fires only if a Nazgûl shares
     // its region) — aim there, not at the army campaign target (player report:

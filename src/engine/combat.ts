@@ -431,7 +431,7 @@ function finishForceCasualties(state: GameState, f: Force, side: Side): void {
     delete state.characters.inPlay[c];
   }
   const kind = casualtyLogKind(state);
-  if (mine.length) log(state, null, kind, `${mine.join(', ')} eliminated with the destroyed Army`);
+  if (mine.length) log(state, null, kind, `${mine.join(', ')} ${mine.length === 1 ? 'falls' : 'fall'} with the destroyed Army`);
   f.characters = f.characters.filter((c) => characterSide(c) !== side);
   // The Leaders / Nazgûl that fall with the Army were removed without a log line
   // (player report 704v015z0b68545p: Dreadful Spells took Osgiliath's last unit and
@@ -439,7 +439,7 @@ function finishForceCasualties(state: GameState, f: Force, side: Side): void {
   const lost = side === 'fp' ? f.leaders : f.nazgul;
   if (lost > 0) {
     const what = side === 'fp' ? `Free Peoples Leader${lost === 1 ? '' : 's'}` : `Nazgûl`;
-    log(state, null, kind, `${lost === 1 ? 'a' : lost} ${what} ${lost === 1 ? 'is' : 'are'} eliminated with the destroyed Army`);
+    log(state, null, kind, `${lost === 1 ? 'a' : lost} ${what} ${lost === 1 ? 'falls' : 'fall'} with the destroyed Army`);
   }
   if (side === 'fp') {
     f.leaders = 0;                              // FP Leaders are permanent losses

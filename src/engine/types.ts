@@ -374,6 +374,11 @@ export interface GameState {
      *  (a Reveal later in the same Hunt resets Progress to 0), and the destination
      *  choice is raised by `advance` once the Hunt has finished resolving. */
     takenAlive?: { companion: CharacterId; from: RegionId; range: number };
+    /** Further Hobbits waiting to be placed after `takenAlive` — two can leave in
+     *  one Hunt (the Hobbit Guide separates for −1, then the other is taken alive),
+     *  and a single slot let the second overwrite the first, who then vanished from
+     *  the game (player report 1huuhkxza7mpp4r5). Drained one at a time by `advance`. */
+    takenAliveMore?: Array<{ companion: CharacterId; from: RegionId; range: number }>;
     /** Shadow Strongholds a Reveal's traced path crossed whose Hunt tiles (p.39) are
      *  still to be drawn — `advance` draws the next whenever no choice is open, so a
      *  tile that asks the FP to assign damage doesn't drop the ones behind it. */

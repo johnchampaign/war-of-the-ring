@@ -409,6 +409,9 @@ export function challengeOfTheKing(state: GameState): boolean {
     ? `Drew ${drew}: all three are Eyes, so Aragorn/Strider is eliminated.`
     : `Drew ${drew}${removed ? `: ${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt` : ': no Eyes drawn, nothing removed'}.`,
     'Challenge of the King');
+  // The log line names the draw too (player report 5y4646420q6j1c2f: "Eye tiles
+  // removed" said neither which nor whether any were).
+  if (!allEyes) log(state, null, 'event', `Challenge of the King: drew ${drew.replace(/👁 |🎲 /g, '')} — ${removed ? `${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt Pool` : 'no Eyes drawn, nothing removed'}`);
   return allEyes;
 }
 
@@ -619,6 +622,14 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
   }
 }
 
+/** Owe a Hobbit's re-placement "as if he was just separated" (Take Them Alive!, or
+ *  the Hobbit Guide separating for −1). Queues behind one already owed rather than
+ *  overwriting it, so a second Hobbit leaving in the same Hunt can't erase the first. */
+export function queueTakenAlive(state: GameState, entry: NonNullable<GameState['flags']['takenAlive']>): void {
+  if (state.flags.takenAlive) (state.flags.takenAliveMore ??= []).push(entry);
+  else state.flags.takenAlive = entry;
+}
+
 // Local copy to avoid a fellowship<->hunt import cycle at module scope.
 function eliminateCompanionInline(state: GameState, id: string, damage: number, how: 'guide' | 'random'): number {
   const fs = state.fellowship;
@@ -636,7 +647,7 @@ function eliminateCompanionInline(state: GameState, id: string, damage: number, 
   // casualty. The destination is a real choice, so it is frozen here and raised as
   // the ordinary separation prompt once the Hunt has finished resolving.
   const takenAlive = (id === 'meriadoc' || id === 'peregrin') && fs.mordor === null;
-  if (takenAlive) state.flags.takenAlive = { companion: id, from: fs.location, range: fs.progress + level };
+  if (takenAlive) queueTakenAlive(state, { companion: id, from: fs.location, range: fs.progress + level });
   else if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
   if (wornWithSorrowActive(state)) discardFpCharacterCard(state); // Worn with Sorrow and Toil
   // Reassign Guide: highest-Level remaining Companion, else Gollum.
@@ -708,9 +719,9 @@ function discardFpCharacterCard(state: GameState): void {
     // cards in my hand disappeared"), the opponent sees only that a Character card
     // did (player report 3i3v4o2a2w5y3e15). Same treatment as hand-limit discards.
     (cards.discardFaceDown ??= []).push(pick);
-    log(state, 'fp', 'event', `Worn with Sorrow and Toil: you discard ${EVENT_BY_ID[pick]?.name ?? pick} face down (the Companion casualty's price)`);
+    log(state, 'fp', 'event', `Worn with Sorrow and Toil: you randomly discard ${EVENT_BY_ID[pick]?.name ?? pick}`);
     state.log[state.log.length - 1]!.card = pick;
-    log(state, null, 'event', 'Worn with Sorrow and Toil: the Companion casualty costs the Free Peoples a Character card, discarded face down');
+    log(state, null, 'event', 'Worn with Sorrow and Toil: Free Peoples discard a random Character card');
     return;
   }
   const ti = cards.table.findIndex(isChar);

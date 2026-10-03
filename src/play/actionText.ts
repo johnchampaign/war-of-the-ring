@@ -80,7 +80,7 @@ export function describeAction(a: WotrAction): string {
     case 'placeGandalf': return `Place Gandalf the White in ${rName(a.region)}`;
     case 'drawEvent': return `Draw a ${cap(a.deck)} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
-    case 'diplomaticAction': return `Diplomacy: advance ${nationName(a.nation)}`;
+    case 'diplomaticAction': return `Diplomacy: advance ${a.nation === 'north' ? 'The North' : nationName(a.nation)}`; // report 526e0k1q1q1r2p45
     case 'recruitUnit': {
       const fig = a.nazgul ? 'Nazgûl' : a.leader ? 'Leader' : a.elite ? 'Elite' : 'Regular';
       // No "(+ an optional 2nd figure elsewhere)" tail: it made the buttons unwieldy and
@@ -103,7 +103,7 @@ export function describeAction(a: WotrAction): string {
         const label = a.mode === 'hide' ? 'hide the Fellowship' : a.mode === 'move' ? 'move the Fellowship (triggers a Hunt)' : 'do neither';
         return `${cardName(a.card)}: ${label}`;
       }
-      if (a.eye) return `${cardName(a.card)}: turn a die into an Eye (→ Hunt Box)`;
+      if (a.eye) return a.face ? `${cardName(a.card)}: turn ${aFace(a.face)} die into an Eye (→ Hunt Box)` : `${cardName(a.card)}: turn a die into an Eye (→ Hunt Box)`;
       // Dreadful Spells names its victim army and nothing else — say so, or the bare
       // region name reads like a move rather than "these are the troops you hit".
       if (a.card === 'sh-char-19' && a.region) return `${cardName(a.card)}: strike the Free Peoples Army in ${rName(a.region)}`;
@@ -189,7 +189,7 @@ export function describeAction(a: WotrAction): string {
     case 'bonusDraw': return a.deck === 'none' ? 'Palantír: don’t draw' : `Palantír: draw a ${cap(a.deck)} card`;
     case 'guideDraw': return a.draw ? 'Gandalf: draw a card' : 'Gandalf: don’t draw';
     case 'sorcererDraw': return a.draw ? 'Sorcerer: draw a card' : 'Sorcerer: don’t draw';
-    case 'lureChoice': return a.mode === 'corruption' ? 'Lure: take Corruption' : 'Lure: eliminate the Companion';
+    case 'lureChoice': return a.mode === 'corruption' ? 'Take Corruption' : 'Eliminate the Companion';
     case 'stormcrowLoss': return `Lose ${nationName(a.nation)} ${a.figure === 'leader' ? 'Leader' : a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
     case 'breakingSep': return `Separate ${charName(a.companion)} from the Fellowship`;
     case 'discardCard': return `Discard "${cardName(a.card)}"`;

@@ -16,6 +16,7 @@ import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, 
 import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
 import { log, logCardDraw, notify, sideDoes } from '../log';
 
+const FACE_LABEL: Record<string, string> = { character: 'a Character', army: 'an Army', muster: 'a Muster', armyMuster: 'an Army/Muster', event: 'an Event', will: 'a Will of the West' };
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 /** Roll min(5, count) dice; count hits on `target`+. */
 const rollDice = (state: GameState, count: number, target: number): number =>
@@ -577,16 +578,24 @@ register('sh-char-12', { // Morgul Wound: +2 if corruption ≤3 else +1; require
 });
 
 // --- Shadow: dice --------------------------------------------------------
-// The Lidless Eye: change UP TO 3 unused Shadow dice into Eyes (Shadow chooses how
-// many — each step converts one; stop early with "done").
+// The Lidless Eye: "Change up to three unused Shadow Action dice results into 'Eye'
+// results" — the Shadow player chooses WHICH dice (player reports h0udzn1tyv34r81e,
+// 090q0d2o3a3n480u: it used to convert the last dice silently). One step per die,
+// one option per distinct face (two Army dice are the same choice); stop early with
+// "done".
 register('sh-char-18', {
   canPlay: (state) => state.dice.shadow.some((f) => f !== 'eye'),
   repeat: 3,
-  targets: (state, _side, applied = []) => (applied.length < 3 && state.dice.shadow.some((f) => f !== 'eye')) ? [{ eye: true }] : [],
-  applyTarget(state) {
-    for (let i = state.dice.shadow.length - 1; i >= 0; i--) {
-      if (state.dice.shadow[i] !== 'eye') { state.dice.shadow.splice(i, 1); state.hunt.box += 1; log(state, null, 'event', 'The Lidless Eye: +1 Eye to the Hunt Box'); break; }
-    }
+  targets: (state, _side, applied = []) => {
+    if (applied.length >= 3) return [];
+    const faces = [...new Set(state.dice.shadow.filter((f) => f !== 'eye'))];
+    return faces.map((face) => ({ eye: true, face }));
+  },
+  applyTarget(state, _side, target) {
+    const i = target.face ? state.dice.shadow.indexOf(target.face) : state.dice.shadow.findIndex((f) => f !== 'eye');
+    if (i < 0 || state.dice.shadow[i] === 'eye') return;
+    state.dice.shadow.splice(i, 1); state.hunt.box += 1;
+    log(state, null, 'event', `The Lidless Eye: ${FACE_LABEL[target.face ?? 'event'] ?? 'a'} die becomes an Eye in the Hunt Box`);
   },
 });
 
@@ -2454,7 +2463,7 @@ register('fp-char-14', {
         if (!state.characters.eliminated.includes(who.char)) state.characters.eliminated.push(who.char);
         log(state, null, 'event', `Challenge of the King: all Eyes — ${who.char} is lost`);
       }
-    } else log(state, null, 'event', 'Challenge of the King: Eye tiles removed from the Hunt Pool');
+    }
   },
 });
 

@@ -8,7 +8,7 @@ import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, fellowshipPath } from '../engine/fellowship';
-import { extraHunt } from '../engine/hunt';
+import { extraHunt, queueTakenAlive } from '../engine/hunt';
 import { log, logCardDraw, sideDoes } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, unitCount, STACKING_LIMIT,
@@ -270,7 +270,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'eventTarget': {
         const data = state.pendingChoice!.data as { card: string; applied: EventTarget[]; repeat: number };
         const h = getHandler(data.card);
-        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, range: t.range, direct: t.direct, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye, count: t.count }));
+        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, range: t.range, direct: t.direct, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye, face: t.face, count: t.count }));
         // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
         if ((h?.repeat ?? 1) > 1 && (data.applied.length > 0 || flagValue(h?.optionalFromStart, state)) && !flagValue(h?.noDone, state)) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         return opts;
@@ -841,7 +841,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
-        const target: EventTarget = { path: action.path, from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye, count: action.count, move: action.move };
+        const target: EventTarget = { path: action.path, from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye, face: action.face, count: action.count, move: action.move };
         h.applyTarget(state, actor, target, data.applied);
         data.applied.push(target);
         data.left -= 1;
@@ -897,8 +897,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // from the opponent; only the deck type is public (the card back).
         (p.discardFaceDown ??= []).push(action.card);
         const deckName = EVENT_BY_ID[action.card]?.deck ?? 'Event';
-        log(state, actor, 'event', `You discard ${EVENT_BY_ID[action.card]?.name ?? action.card} face down (over the hand limit)`);
-        log(state, null, 'event', `${sideDoes(actor, 'discard')} a ${deckName} card face down (over the hand limit)`);
+        log(state, actor, 'event', `You discard ${EVENT_BY_ID[action.card]?.name ?? action.card} (over the hand limit)`);
+        log(state, null, 'event', `${sideDoes(actor, 'discard')} a ${deckName} card (over the hand limit)`);
       }
       state.pendingChoice = null; break; // advance() re-checks and re-prompts if still over 6
     }
@@ -1340,7 +1340,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
           const level = characterDef(guide)?.level;
           const range = fsNow.progress + (typeof level === 'number' ? level : 0);
           left = beginSeparation(state, guide);
-          if (left) state.flags.takenAlive = { companion: guide, from: fsNow.location, range };
+          if (left) queueTakenAlive(state, { companion: guide, from: fsNow.location, range });
         }
         if (!left) throw new Error('The Guide cannot use that ability here.');
         reduceHuntDamageBySeparate(state, guide);

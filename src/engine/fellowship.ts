@@ -4,7 +4,7 @@
 import type { GameState, RegionId, CharacterId, Nation } from './types';
 import { FP_NATIONS } from './types';
 import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, characterDef, EVENT_BY_ID } from './data';
-import { resolveHunt, resolveMordorStep, pruneFellowshipOnTableCards } from './hunt';
+import { resolveHunt, resolveMordorStep, pruneFellowshipOnTableCards, queueTakenAlive } from './hunt';
 export { pruneFellowshipOnTableCards };
 import { activateNation } from './politics';
 import { settlementController, figureForce } from './armies';
@@ -38,7 +38,7 @@ export function eliminateCompanion(state: GameState, id: CharacterId): number {
   // choice (Progress + Level, exactly like a separation), raised by `advance` once
   // whatever eliminated him has finished resolving.
   if ((id === 'meriadoc' || id === 'peregrin') && fs.mordor === null) {
-    state.flags.takenAlive = { companion: id, from: fs.location, range: fs.progress + lvl };
+    queueTakenAlive(state, { companion: id, from: fs.location, range: fs.progress + lvl });
     log(state, null, 'hunt', `${COMPANIONS[id]?.name ?? id} is taken alive — he leaves the Fellowship as if separated`);
   } else if (!state.characters.eliminated.includes(id)) {
     state.characters.eliminated.push(id);
@@ -61,7 +61,7 @@ export function eligibleGuides(state: GameState): CharacterId[] {
 export function setGuide(state: GameState, id: CharacterId): boolean {
   if (!eligibleGuides(state).includes(id)) return false;
   state.fellowship.guide = id;
-  log(state, null, 'fellowship', `Guide is now ${id}`);
+  log(state, null, 'fellowship', `${id} becomes the Guide`);
   return true;
 }
 

@@ -58,7 +58,7 @@ const CHOICE_TITLE: Record<string, string> = {
   removeExcess: 'Over the 10-unit stacking limit — remove the excess',
   stormcrowLoss: 'Stormcrow — choose a unit to eliminate',
   breakingSep: 'The Breaking of the Fellowship — choose a Companion to separate',
-  discardCard: 'Over the 6-card hand limit — choose a card to discard',
+  discardCard: 'Over the hand limit — choose a card to discard',
 };
 
 // A variable-size Combat card asks its owner how big to make it — and what that
@@ -390,6 +390,9 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
 function eliteLabel(a: WotrAction, view: GameState): string | undefined {
   const owner = view.pendingChoice?.owner;
   if (!owner) return undefined;
+  // Name the Companion the Lure would claim (player report 54406l4k1y6d5f0b).
+  const lured = (view.pendingChoice?.data as { companion?: string } | undefined)?.companion;
+  if (a.kind === 'lureChoice' && a.mode === 'eliminate' && lured) return `Eliminate ${charName(lured)}`;
   if (a.kind === 'casualtyStep' && a.step === 'reduceElite' && !eliteHasReplacement(view, a.nation, owner)) {
     return `Lose a ${nationName(a.nation)} Elite (no Regular left to replace it)`;
   }

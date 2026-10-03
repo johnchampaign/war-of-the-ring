@@ -4,14 +4,14 @@
 // in hand (handlers are added incrementally). Handlers mutate state in place;
 // randomness goes through withRng. Cite the card id; effects modify the standard
 // rules per the card text.
-import type { GameState, Nation, RegionId, Side } from '../types';
+import type { DieFace, GameState, Nation, RegionId, Side } from '../types';
 
 /** A chosen target for an interactive event card (fields used per card). `mode`
  *  distinguishes a card-granted Army move from an attack (and the Fellowship
  *  hide/move/decline choice on "There Is Another Way"). `move` is an optional
  *  split selection for a card-granted Army move — p.28: "it is possible to split
  *  the Army before moving" (omitted = the whole Army moves). */
-export interface EventTarget { /** The route traced for a multi-region card move: the regions ENTERED, in order, ending at `to`. Omitted = the quiet way round (see moveAllUnits). */ path?: RegionId[]; /** How many regions THE CARD lets this Army walk ("up to three regions"). A UI hint only — the handler re-states it when it validates `path`, so a client cannot widen its own reach. Absent = the destination is the whole move. */ range?: number; /** This card moves the figures DIRECTLY to the destination — there is no route, nothing is entered on the way, and the map must not ask the player to trace one (Paths of the Woses, Corsairs of Umbar, Dead Men of Dunharrow, Rage of the Dunlendings). */ direct?: boolean; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; count?: number; move?: { units?: Partial<Record<Nation, { regular?: number; elite?: number }>>; leaders?: number; nazgul?: number; characters?: string[] } }
+export interface EventTarget { /** The route traced for a multi-region card move: the regions ENTERED, in order, ending at `to`. Omitted = the quiet way round (see moveAllUnits). */ path?: RegionId[]; /** How many regions THE CARD lets this Army walk ("up to three regions"). A UI hint only — the handler re-states it when it validates `path`, so a client cannot widen its own reach. Absent = the destination is the whole move. */ range?: number; /** This card moves the figures DIRECTLY to the destination — there is no route, nothing is entered on the way, and the map must not ask the player to trace one (Paths of the Woses, Corsairs of Umbar, Dead Men of Dunharrow, Rage of the Dunlendings). */ direct?: boolean; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; /** The Lidless Eye: which die face turns into an Eye. */ face?: DieFace; count?: number; move?: { units?: Partial<Record<Nation, { regular?: number; elite?: number }>>; leaders?: number; nazgul?: number; characters?: string[] } }
 
 export interface EventHandler {
   /** "Play on the table" — the card persists (its id goes to cards[side].table)
