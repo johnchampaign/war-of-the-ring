@@ -104,5 +104,58 @@ console.log('\n=== 3. the siege lift itself, directly ===');
   check('a truly empty box is still simply removed', !e.siegeBox && !e.besieged);
 }
 
+
+// 4. THE MORIA GAME ITSELF (follow-up report 4k6a0w1m46216c6u; uploaded game log
+// 4v124g0a1z3s5y5u, turn 4 #145): the Shadow played Dreadful Spells on a Free Peoples
+// garrison besieged in Moria with five Companions inside. The spell lifts the Companions
+// out (it is not an attack, so they are spared) and puts them back once the garrison has
+// taken its hits — but the hits are a QUESTION to the Free Peoples, and the card's
+// cleanup erased that question: no hits were taken and nobody was put back. Driven
+// through the adapter, as a player would; the old probe called the handler directly.
+console.log('\n=== 4. Dreadful Spells on besieged Moria (the reported game) ===');
+{
+  const COMPS = ['boromir', 'gimli', 'meriadoc', 'peregrin', 'legolas'];
+  let asked = 0, before = 0, restored = 0, tookHits = 0, runs = 0;
+  for (const seed of [2, 3, 4, 5, 6, 7, 8, 9]) {
+    let s = startGame(createGame({ seed }));
+    s.turn = 4; s.phase = 'actionResolution'; s.currentPlayer = 'shadow'; s.pendingChoice = null;
+    s.dice.shadow = ['event']; s.dice.fp = [];
+    s.nations.sauron.active = true; s.nations.sauron.step = 0;
+    for (const c of COMPS) { s.fellowship.companions = s.fellowship.companions.filter((x) => x !== c); s.characters.inPlay[c] = 'moria'; }
+    for (const r of Object.values(s.regions)) r.characters = r.characters.filter((c) => !COMPS.includes(c));
+    const m = s.regions['moria'];
+    m.units = { sauron: { regular: 7, elite: 0 } }; m.nazgul = 4; m.characters = ['witch-king']; m.leaders = 0;
+    m.control = 'fp'; m.besieged = true;
+    m.siegeBox = { units: { elves: { regular: 2, elite: 1 } }, leaders: 1, nazgul: 0, characters: [...COMPS] };
+    s.characters.inPlay['witch-king'] = 'moria'; if (!s.characters.entered.includes('witch-king')) s.characters.entered.push('witch-king');
+    s.cards.shadow.hand = ['sh-char-19'];
+    const play = wotrAdapter.legalActions(s, 'shadow').find((a) => a.kind === 'playEvent' && a.cardId === 'sh-char-19');
+    if (!play) continue;
+    s = wotrAdapter.applyAction(s, { ...play, die: 'event' }, 'shadow');
+    const target = wotrAdapter.legalActions(s, 'shadow').find((a) => a.kind === 'eventTarget' && a.region === 'moria');
+    s = wotrAdapter.applyAction(s, target, 'shadow');
+    const hitLine = s.log.filter((e) => e.msg.startsWith('Dreadful Spells:')).pop()?.msg ?? '';
+    const hits = Number(hitLine.match(/— (\d+) hit/)?.[1] ?? 0);
+    if (hits === 0) continue;                                  // the zero-hit path never had the bug
+    runs++;
+    if (s.pendingChoice?.kind === 'eventCasualties' && s.pendingChoice.owner === 'fp') asked++;
+    if (s.turn === 4) before++;                                // still inside the Shadow's Action
+    for (let i = 0; i < 10 && s.pendingChoice?.kind === 'eventCasualties'; i++) {
+      s = wotrAdapter.applyAction(s, wotrAdapter.legalActions(s, 'fp')[0], 'fp');
+    }
+    const box = s.regions['moria'].siegeBox;
+    // Strength, not head-count: a hit may downgrade an Elite to a Regular instead of
+    // killing a unit, so count each Regular 1 and each Elite 2 (2R + 1E = 4 to start).
+    const strength = box ? (box.units.elves?.regular ?? 0) + 2 * (box.units.elves?.elite ?? 0) : 0;
+    if (strength === Math.max(0, 4 - hits)) tookHits++;
+    if (lost(s).length === 0 && COMPS.every((c) => at(s, c) === 'moria')) restored++;
+  }
+  check('the spell scored hits in some replays (so the bug path is exercised)', runs >= 3, `${runs} replays with hits`);
+  check('the Free Peoples are asked which units take the hits', asked === runs, `${asked}/${runs}`);
+  check('...before the turn ends', before === runs, `${before}/${runs}`);
+  check('the hits are actually taken', tookHits === runs, `${tookHits}/${runs}`);
+  check('all five Companions are still in Moria afterwards', restored === runs, `${restored}/${runs}`);
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');
 process.exit(failures ? 1 : 0);

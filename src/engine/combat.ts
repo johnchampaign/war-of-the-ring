@@ -488,7 +488,7 @@ export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, na
   }
   finishForceCasualties(state, f, d.side);
   state.pendingChoice = null;
-  if (isEvent) runCasualtyThen(state, d.then ?? null);
+  if (isEvent) { runCasualtyThen(state, d.then ?? null); resumeQueuedChoice(state, d as { thenChoice?: GameState['pendingChoice'] }); }
   else state.pendingCombat!.step = d.next!;
 }
 
@@ -585,10 +585,16 @@ export function queueOrApplyEventCasualties(state: GameState, side: Side, region
 
 /** Resolve a pending `eventCasualties` choice with the owner's chosen plan. */
 export function resolveEventCasualties(state: GameState, plan: 'regularsFirst' | 'elitesFirst'): void {
-  const d = state.pendingChoice!.data as { region: RegionId; side: Side; hits: number; then: CasualtyThen | null };
+  const d = state.pendingChoice!.data as { region: RegionId; side: Side; hits: number; then: CasualtyThen | null; thenChoice?: GameState['pendingChoice'] };
   applyForceCasualties(state, pendingCasualtyForce(state)!, d.side, d.hits, plan); // honours `boxed`
   state.pendingChoice = null;
   runCasualtyThen(state, d.then);
+  resumeQueuedChoice(state, d);
+}
+/** A choice queued behind an event's casualty question (see the adapter's eventTarget
+ *  case) comes up once the casualties are taken. */
+function resumeQueuedChoice(state: GameState, d: { thenChoice?: GameState['pendingChoice'] }): void {
+  if (d.thenChoice && !state.pendingChoice) state.pendingChoice = d.thenChoice;
 }
 
 // --- Attack split: the rearguard (rulebook p.28) -----------------------------

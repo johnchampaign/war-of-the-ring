@@ -837,17 +837,26 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'eventTarget': {
       requireChoice(state, 'eventTarget', actor);
-      const data = state.pendingChoice!.data as { card: string; left: number; applied: EventTarget[]; palantir?: boolean; guideDraw?: boolean };
+      const targetChoice = state.pendingChoice!;
+      const data = targetChoice.data as { card: string; left: number; applied: EventTarget[]; palantir?: boolean; guideDraw?: boolean };
+      // A follow-up question the target step itself raises — Dreadful Spells asking the
+      // Free Peoples which units absorb its hits. The card's cleanup below clears the
+      // pending choice, and that used to erase this question too: the hits were never
+      // taken, and the Companions the spell lifts out of a besieged Stronghold (to
+      // spare them) were never put back (player report fdx2xl3oo40orw9h, replayed from
+      // the uploaded game log: five Companions lost from besieged Moria).
+      let raised: typeof state.pendingChoice = null;
       const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
         const target: EventTarget = { path: action.path, from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye, face: action.face, count: action.count, move: action.move };
         h.applyTarget(state, actor, target, data.applied);
+        if (state.pendingChoice !== targetChoice) raised = state.pendingChoice;
         data.applied.push(target);
         data.left -= 1;
         // Multi-target card with moves left and still-legal targets? Re-prompt (hold the
         // card) — unless an attack just started a battle (the combat driver takes over).
-        if (!state.pendingCombat && data.left > 0 && (h.targets?.(state, actor, data.applied)?.length ?? 0) > 0) break;
+        if (!raised && !state.pendingCombat && data.left > 0 && (h.targets?.(state, actor, data.applied)?.length ?? 0) > 0) break;
       }
       state.pendingChoice = null;
       const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
@@ -864,6 +873,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // became Guide mid-card does (report joug252d7gwnw3ke), and the Palantír no longer
       // draws before Grond's battle is even fought (report 0l2a1m3v0l1p0t3r).
       owePostActionDraw(state, actor, !!data.palantir, !!data.guideDraw, deck);
+      // The raised question is answered first, inside this Action (advance() waits on
+      // it); anything the cleanup itself asked (finalize) is queued to follow it.
+      if (raised) {
+        if (state.pendingChoice) (raised.data as { thenChoice?: unknown }).thenChoice = state.pendingChoice;
+        state.pendingChoice = raised;
+      }
       break;
     }
     case 'lureChoice':
