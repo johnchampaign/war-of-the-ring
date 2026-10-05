@@ -112,6 +112,16 @@ export function settlementController(state: GameState, id: RegionId): Side | nul
   return state.regions[id]!.control ?? (def.nation ? sideOfNation(def.nation) : null);
 }
 
+/** A Shadow Stronghold "still controlled by the Shadow player" (p.39): one the Shadow
+ *  OWNS and has not lost. A captured Free Peoples Stronghold (Helm's Deep in Shadow
+ *  hands) is Shadow-controlled but is not a Shadow Stronghold, so a revealed Fellowship
+ *  passing it owes no Hunt tile (player report 0t4x0n0j2u436f4j). */
+export function heldShadowStronghold(state: GameState, id: RegionId): boolean {
+  const def = REGIONS[id]!;
+  return def.settlement === 'Stronghold' && !!def.nation && sideOfNation(def.nation) === 'shadow'
+    && settlementController(state, id) === 'shadow';
+}
+
 /** Free for the purposes of Army movement for `side`: no enemy Army present. */
 export function freeForMovement(state: GameState, id: RegionId, side: Side): boolean {
   const occ = armySide(state, id);

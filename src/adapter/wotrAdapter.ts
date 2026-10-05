@@ -11,7 +11,7 @@ import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separat
 import { extraHunt, queueTakenAlive } from '../engine/hunt';
 import { log, logCardDraw, sideDoes } from '../engine/log';
 import {
-  recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, unitCount, STACKING_LIMIT,
+  recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, heldShadowStronghold, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders, figureForce, forceUnitCount,
 } from '../engine/armies';
 import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveWordsOfPower, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
@@ -1376,7 +1376,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       state.pendingChoice = null;
       // Revealing through a Shadow Stronghold draws a Hunt tile per such Stronghold on
       // the traced path (rulebook p.39), each drawn once the one before it resolves.
-      const strongholds = traversed.filter((r) => REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow');
+      const strongholds = traversed.filter((r) => heldShadowStronghold(state, r));
       // Balrog of Moria fires on a REVEAL through Moria too, not only on a declaration:
       // "if the Fellowship moves into, out of, or through Moria while being declared or
       // revealed" (card text). Only the declare path offered it, so a Fellowship caught

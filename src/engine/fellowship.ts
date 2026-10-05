@@ -7,7 +7,7 @@ import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, character
 import { resolveHunt, resolveMordorStep, pruneFellowshipOnTableCards, queueTakenAlive } from './hunt';
 export { pruneFellowshipOnTableCards };
 import { activateNation } from './politics';
-import { settlementController, figureForce } from './armies';
+import { settlementController, figureForce, heldShadowStronghold } from './armies';
 import { activateOnCompanionLand } from './charMove';
 import { MINION_IDS } from './minions';
 import { log, notify, sufferCorruption, shedCorruption } from './log';
@@ -77,7 +77,7 @@ export function resolveLureChoice(state: GameState, mode: 'corruption' | 'elimin
     const oldGuide = state.fellowship.guide;
     eliminateCompanion(state, d.companion);
     const g = state.fellowship.guide;
-    log(state, null, 'event', `Lure of the Ring: ${name} is eliminated` + (g !== oldGuide ? ` — ${characterDef(g)?.name ?? g} becomes the Guide` : ''));
+    log(state, null, 'event', `${name} is eliminated to absorb ${d.level} Corruption` + (g !== oldGuide ? ` — ${characterDef(g)?.name ?? g} becomes the Guide` : ''));
   }
   state.pendingChoice = null;
 }
@@ -123,7 +123,7 @@ export function pathTo(from: RegionId, to: RegionId): RegionId[] {
 export function fellowshipPath(state: GameState, from: RegionId, to: RegionId, budget?: number): RegionId[] {
   const avoid = new Set<RegionId>();
   for (const id of Object.keys(state.regions) as RegionId[]) {
-    if (REGIONS[id]?.settlement === 'Stronghold' && settlementController(state, id) === 'shadow') avoid.add(id);
+    if (heldShadowStronghold(state, id)) avoid.add(id);
   }
   if (state.cards.shadow.table.includes('sh-char-17')) avoid.add('moria'); // Balrog of Moria
   return leastHarmPath(from, to, avoid, budget);

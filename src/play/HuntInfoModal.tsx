@@ -18,7 +18,7 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
   // Concrete re-roll sources only when revealed (location is public then); otherwise
   // describe them generically so we never leak the hidden position.
   const src = !fs.hidden ? huntRerollSources(view) : null;
-  const srcList = src ? [src.stronghold && 'a Shadow Stronghold', src.army && 'a Shadow Army', src.nazgul && 'a Nazgûl'].filter(Boolean) as string[] : [];
+  const srcList = src ? [src.stronghold && 'an enemy Stronghold', src.army && 'a Shadow Army', src.nazgul && 'a Nazgûl'].filter(Boolean) as string[] : [];
 
   return (
     <div style={backdrop} onClick={onClose}>

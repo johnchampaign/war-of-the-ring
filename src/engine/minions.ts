@@ -75,7 +75,8 @@ export function bringMinion(state: GameState, minion: Minion, region: RegionId):
   // Pushing into the region's open field handed him to the besieging enemy Army —
   // player report: "Saruman joined the Free Peoples Army".
   figureForce(state, region, 'shadow').characters.push(minion);
-  if (minion === 'witch-king') for (const n of FP_NATIONS as Nation[]) activateNation(state, n);
+  // Arrival first, then its consequence (player report 091v195c5o6p001a).
   log(state, null, 'muster', `${minion} arrives in ${region}`);
+  if (minion === 'witch-king') for (const n of FP_NATIONS as Nation[]) activateNation(state, n);
   return true;
 }

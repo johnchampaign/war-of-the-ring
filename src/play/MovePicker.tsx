@@ -40,7 +40,15 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   // Leaders, the rearguard left behind in the Stronghold) must come from the box.
   const sortieBox = attackMode && from === to ? sortieForce(view, from, you) : null;
   const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : landingAttack ? 'Land and attack' : holdBackMode ? 'Keep forward' : kind === 'advance' ? 'Advance' : 'Move';
-  const r = sortieBox ?? view.regions[from];
+  // A garrison MARCHING OUT of its besieged Stronghold (Paths of the Woses names "a
+  // Stronghold under siege" as a legal origin): our units are in the siege box and the
+  // open field is the besieger's, so the picker must offer the box. It used to list the
+  // besieging Shadow Army to a Free Peoples player (player report 3a5p3i710y2h6u4a).
+  const box = view.regions[from]?.siegeBox;
+  const boxOurs = !!box && (Object.keys(box.units) as Nation[]).some((n) => sideOfNation(n) === you
+    && ((box.units[n]?.regular ?? 0) + (box.units[n]?.elite ?? 0)) > 0);
+  const marchOut = (kind === 'eventMove' || kind === 'moveArmy' || kind === 'armyMove2') && boxOurs ? box : null;
+  const r = sortieBox ?? marchOut ?? view.regions[from];
   // A card move may be narrower than "the Army": Rage of the Dunlendings moves "up to
   // four ISENGARD units" and nothing else, so the offer carries the Nation it moves
   // (`nation`) and how many figures are still allowed to travel (`count`). Without

@@ -332,21 +332,21 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
           {data.source.startsWith('revealed ')
             // A Shadow Stronghold reveal is not an Event card (cf. player report 6z10320k4z2o0k24).
             ? <>{strongholdRevealLine(data.source)}</>
-            : <>The Shadow played <b>{data.source}</b> — no Hunt roll; a tile is drawn directly.</>}
+            // The Balrog is not "played" — it sits on the table (player report 620d3y0k185z6w3b).
+            : data.source === 'Balrog of Moria'
+              ? <>The Fellowship encounters the <b>Balrog of Moria</b> — the Shadow draws one extra Hunt tile.</>
+              : <>The Shadow played <b>{data.source}</b> — no Hunt roll; a tile is drawn directly.</>}
         </div>
       )}
-      {fieldRoll && (
-        <div style={{ fontSize: 13, color: '#cbbf9a', marginBottom: 6 }}>
-          The Shadow rolled <b>{roll!.level}</b> Hunt {roll!.level === 1 ? 'die' : 'dice'} — one per Eye in the Hunt&nbsp;Box
-          {roll!.bonus ? <>, each <b>+{roll!.bonus}</b> from Free&nbsp;Peoples dice in the box</> : null}. A die hits on <b>6+</b>{roll!.bonus ? <> — so a roll of <b>{Math.max(2, 6 - roll!.bonus)}+</b></> : null}.
-        </div>
-      )}
+      {/* No prose explainer of the roll: the dice graphics say it, the Shadow's own Hunt
+          popup has none, and the full Hunt dialog explains the arithmetic (player
+          report 4n736d460s3t4h57). */}
       {roll && !data.source && <RollLine roll={roll} />}
       {fieldRoll && (
         <div style={{ fontSize: 12, color: '#998', margin: '6px 0 0' }}>
           Modifiers: {roll!.bonus ? `+${roll!.bonus} box bonus` : 'no box bonus'};{' '}
           {roll!.rerolls.length
-            ? `${roll!.rerolls.length} re-roll${roll!.rerolls.length === 1 ? '' : 's'} (a Shadow Stronghold / Army / Nazgûl with the Ring-bearers)`
+            ? `${roll!.rerolls.length} re-roll${roll!.rerolls.length === 1 ? '' : 's'} (an enemy Stronghold, a Shadow Army or a Nazgûl with the Ring-bearers)`
             : 'no re-rolls'}.
         </div>
       )}

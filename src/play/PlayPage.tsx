@@ -682,7 +682,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const undoButton = undoCap ? (
     <button onClick={onUndoClick} disabled={!undoCap.canUndo}
       title={undoCap.reason ?? (undoCap.canUndo ? 'Undo your last action' : 'Nothing to undo')}
-      style={{ padding: '3px 10px', fontSize: 12, fontWeight: 600, borderRadius: 10, whiteSpace: 'nowrap', cursor: undoCap.canUndo ? 'pointer' : 'not-allowed',
+      style={{ padding: '3px 10px', fontSize: 12, fontWeight: 600, borderRadius: 10, whiteSpace: 'nowrap', cursor: undoCap.canUndo ? 'pointer' : 'default',
         background: undoCap.canUndo ? (undoCap.foreknowledge ? '#4a3a1a' : '#2c3a2c') : '#231f18',
         color: undoCap.canUndo ? (undoCap.foreknowledge ? '#ffe08a' : '#cfe6c0') : '#776',
         border: `1px solid ${undoCap.canUndo ? (undoCap.foreknowledge ? '#7a5f24' : '#3a5a3a') : '#3a342a'}` }}>

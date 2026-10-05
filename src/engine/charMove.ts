@@ -190,10 +190,13 @@ export function characterMoveBlockReason(state: GameState, side: Side, char: str
   if (!def || from === to) return null;
   const name = def.name ?? to;
   if (!NAZGUL_FIGURE.has(char) && friendlyStrongholdBesieged(state, to, side)) {
-    return `${name} is your Stronghold under siege — Characters can never enter a friendly Stronghold besieged by an enemy Army (p.24).`;
+    // "Friendly" by CONTROL, not by owner: a captured Stronghold is the captor's, so the
+    // wording names the moving figure type instead (player report 1w684p4r400p0653).
+    return `${name} is under siege — ${side === 'fp' ? 'Companions' : 'Minions'} cannot enter Strongholds besieged by an enemy Army (p.24).`;
   }
   if (side === 'shadow' && def.settlement === 'Stronghold' && settlementController(state, to) === 'fp' && !state.regions[to]!.besieged) {
-    return `${name} is a Free Peoples Stronghold — Shadow Characters cannot enter it unless it is under siege (p.24).`;
+    // Names the figure: plain Nazgûl obey this rule too (player report 686s5h4z562i1c1d).
+    return `The Free Peoples control ${name} — ${NAZGUL_FIGURE.has(char) ? 'Nazgûl' : 'Minions'} cannot enter unbesieged enemy Strongholds (p.24).`;
   }
   const range = rangeOf(state, char, from, group && group.length > 1 ? { group } : {});
   if (range > 0 && range < FLY && regionDistance(from, to, side === 'fp' ? companionStop(state) : null) > range) {

@@ -42,7 +42,9 @@ export function CopyLogButton({ view, style }: { view: GameState; style?: React.
     const done = (ok: boolean) => { setState(ok ? 'copied' : 'failed'); setTimeout(() => setState('idle'), 1800); };
     try { navigator.clipboard.writeText(logAsText(view)).then(() => done(true), () => done(false)); } catch { done(false); }
   };
-  return <button onClick={copy} style={style} title="Copy the whole game log to the clipboard">
+  // A fixed line height: the ✓ glyph is taller than the letters and used to nudge the
+  // button (and the layout around it) when the label changed (player report 4a5q2k245o3z6s3m).
+  return <button onClick={copy} style={{ lineHeight: '16px', ...style }} title="Copy the whole game log to the clipboard">
     {state === 'copied' ? 'Copied ✓' : state === 'failed' ? 'Copy failed' : 'Copy log'}
   </button>;
 }

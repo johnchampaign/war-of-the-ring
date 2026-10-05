@@ -566,8 +566,13 @@ register('sh-char-08', { // Candles of Corpses: +1 corruption per die 4+ (6 if G
   canPlay: (state) => !fellowshipInFpSettlement(state),
   apply(state) {
     const t = isGollumGuide(state) ? 6 : 4;
-    const c = withRng(state, (rng) => { let n = 0; for (let i = 0; i < 3; i++) if (rng.rollDie(6) >= t) n++; return n; });
+    const dice = withRng(state, (rng) => [rng.rollDie(6), rng.rollDie(6), rng.rollDie(6)]);
+    const c = dice.filter((d) => d >= t).length;
+    // Log the roll itself, so a roll that scores nothing still leaves a line (player
+    // report 1h130h255q0g483c: "doesn't log anything if it rolls zero").
+    log(state, null, 'event', `Candles of Corpses roll [${dice.join(' ')}] — each ${t}+ adds 1 Corruption${c === 0 ? ': no Corruption' : ''}`);
     corrupt(state, c);
+    notify(state, `Rolled [${dice.join(' ')}], scoring on ${t}+${t === 6 ? ' (Gollum guides)' : ''}: ${c} Corruption (now ${state.fellowship.corruption}/12).`, 'Candles of Corpses');
   },
 });
 register('sh-char-12', { // Morgul Wound: +2 if corruption ≤3 else +1; requires revealed
@@ -1217,7 +1222,7 @@ register('fp-str-11', {
     // (player report 1b1c5q54732v1a22).
     const wasBesieged = !!state.regions[t.from!]!.besieged;
     moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, undefined, true); // "DIRECTLY to Minas Tirith"
-    log(state, null, 'event', `Paths of the Woses: ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`);
+    log(state, null, 'event', `Free Peoples Army moves ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); // names the mover, not the card (report 6l5p254z1h3s0o5c)
     // A garrison that marches out leaves the Stronghold undefended with the besieging
     // Army already standing in the region, so it falls to the besieger. A split that
     // leaves units behind keeps the siege on: captureIfEnemySettlement checks for a

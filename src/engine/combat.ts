@@ -810,12 +810,19 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   const sortie = inSiegeRegion && armySide(state, to) !== attacker;
   const assault = inSiegeRegion && !sortie;
   // Political reaction lands on the army actually attacked: the box in an assault, the
-  // besieger standing in the open field in a sortie.
-  for (const n of nationsWithUnits(state, to)) if (!assault) onArmyAttacked(state, n, to);
-  if (assault) for (const n of Object.keys(box!.units) as Nation[]) if ((box!.units[n]!.regular + box!.units[n]!.elite) > 0) onArmyAttacked(state, n, to);
-  // …and Wormtongue's own exception is region-keyed, so an attack on Edoras or Helm's
-  // Deep rouses Rohan even if no Rohan unit stood in the battle (see persistent.ts).
-  if (attacker === 'shadow' && wormtongueRousedByAttackAt(state, to)) activateNation(state, 'rohan', { region: to, viaAttack: true });
+  // besieger standing in the open field in a sortie. Run AFTER the attack is logged, so
+  // the Political Track steps and the cards they discard read as consequences of the
+  // attack rather than coming before it (player report 2i2n4m2k1x1b293x). It touches only
+  // the DEFENDER's Nations, so the attacker's rearguard split below is unaffected.
+  const attackedNations = assault
+    ? (Object.keys(box!.units) as Nation[]).filter((n) => (box!.units[n]!.regular + box!.units[n]!.elite) > 0)
+    : nationsWithUnits(state, to);
+  const react = (): void => {
+    for (const n of attackedNations) onArmyAttacked(state, n, to);
+    // …and Wormtongue's own exception is region-keyed, so an attack on Edoras or Helm's
+    // Deep rouses Rohan even if no Rohan unit stood in the battle (see persistent.ts).
+    if (attacker === 'shadow' && wormtongueRousedByAttackAt(state, to)) activateNation(state, 'rohan', { region: to, viaAttack: true });
+  };
   const pc: PendingCombat = {
     attacker, defender, from, to, round: 0,
     // `fortified` means ONLY "this Settlement grants the first-round 6-to-hit", which
@@ -864,6 +871,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   if (pc.atkUnits0 === 0) {
     if (pc.rearguard) { if (sortie) restoreRearguardInto(box!, pc.rearguard); else restoreRearguard(state, from, pc.rearguard); }
     log(state, null, 'combat', `${sideLabel(attacker)} cannot attack ${to} from ${from}: no unit of a Nation At War`);
+    react();
     return;
   }
   state.pendingCombat = pc;
@@ -877,6 +885,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
     `${sideDoes(attacker, 'attack')} ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${sortie ? ' (sortie)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`
     + ` — attacker ${atkDesc} vs defender ${defDesc}`,
     { from, to, attacker, attackerForce: atkDesc, defenderForce: defDesc, siege: !!pc.siege, sortie });
+  react();
 }
 
 function retreatRegion(state: GameState, pc: PendingCombat): RegionId | null {
@@ -1248,18 +1257,21 @@ export function resolveAdvanceChoice(state: GameState, sel: { advance: boolean; 
     else {
       if (owner === 'fp') clamped.leaders = Math.max(0, Math.min(sel.move.leaders ?? 0, src.leaders));
       else clamped.nazgul = Math.max(0, Math.min(sel.move.nazgul ?? 0, src.nazgul));
+      // The advance is logged BEFORE it lands: the capture and any Political Track
+      // step it causes log as it happens, and read backwards otherwise (player report
+      // 2i2n4m2k1x1b293x).
+      log(state, null, 'combat', `${sideDoes(owner, 'advance')} ${moved} unit${moved === 1 ? '' : 's'} into ${REGIONS[d.to]!.name ?? d.to}`);
       moveSelectedBack(state, d.from, d.to, owner, clamped);       // subset mover (shared with hold-back)
       captureIfEnemySettlement(state, d.to, owner);                // units ENTERED, so the capture fires
       // p.26: FP Leaders can never stand without FP units — a full vacate drags them.
       const ownLeft = (Object.keys(src.units) as Nation[]).some((n) => sideOfNation(n) === owner && (src.units[n]!.regular + src.units[n]!.elite) > 0);
       if (owner === 'fp' && !ownLeft && src.leaders > 0) { state.regions[d.to]!.leaders += src.leaders; src.leaders = 0; }
       advancedTo = d.to;
-      log(state, null, 'combat', `${sideDoes(owner, 'advance')} ${moved} unit${moved === 1 ? '' : 's'} into ${REGIONS[d.to]!.name ?? d.to}`);
     }
   } else {
+    log(state, null, 'combat', `${sideDoes(owner, 'advance')} into ${REGIONS[d.to]!.name ?? d.to}`); // before the capture it causes
     advanceInto(state, owner, d.from, d.to);                       // whole force; advanceInto captures
     advancedTo = d.to;
-    log(state, null, 'combat', `${sideDoes(owner, 'advance')} into ${REGIONS[d.to]!.name ?? d.to}`);
   }
   // Only now — restoring earlier would let the advance sweep the rearguard along (p.28).
   if (d.rearguard) restoreRearguard(state, d.from, d.rearguard);
@@ -1350,10 +1362,10 @@ export function resolveRelieveAdvance(state: GameState, advance: boolean): Regio
   const d = state.pendingChoice!.data as { from: RegionId; to: RegionId; rearguard: PendingCombat['rearguard'] | null };
   const owner = state.pendingChoice!.owner;
   state.pendingChoice = null;
-  if (advance) advanceInto(state, owner, d.from, d.to);
   log(state, null, 'combat', advance
     ? `${sideDoes(owner, 'advance')} into ${REGIONS[d.to]!.name ?? d.to}, relieving the siege`
     : `${sideDoes(owner, 'hold')} at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
+  if (advance) advanceInto(state, owner, d.from, d.to); // after its log line, like the field advance
   // Only now — the rearguard must not be swept along by the advance (p.28).
   if (d.rearguard) restoreRearguard(state, d.from, d.rearguard);
   return advance ? d.to : null;

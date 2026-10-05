@@ -132,7 +132,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
         // (player report 1j0k1n13646w0p3f). It is always here, greyed when off.
         <button disabled={busy || passOff} title={passWhyOff} onClick={() => pass && click(pass)}
           style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 3px' : '0 0 8px', padding: compact ? '3px 10px' : '9px 10px', borderRadius: 6, fontSize: compact ? 11 : 14, fontWeight: 700,
-            background: passOff ? '#241f16' : '#4a3a1a', color: passOff ? '#6d6455' : '#ffe08a', border: `1px solid ${passOff ? '#3a342a' : '#7a5f24'}`, cursor: passOff ? 'not-allowed' : 'pointer' }}>
+            background: passOff ? '#241f16' : '#4a3a1a', color: passOff ? '#6d6455' : '#ffe08a', border: `1px solid ${passOff ? '#3a342a' : '#7a5f24'}`, cursor: passOff ? 'default' : 'pointer' }}>
           {/* Same label either way — the greyed look says it's off (player report 1r510z456m0z6p35). */}
           Pass
         </button>
@@ -216,7 +216,7 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
   };
   const base = compact ? { ...btn, margin: '1px 0', padding: '1px 8px', fontSize: 11, lineHeight: 1.2 } : btn;
   // A barred action LOOKS barred — greyed, not clickable — and says why on hover.
-  const bstyle = blockedReason ? { ...base, background: '#241f16', color: '#6d6455', border: '1px solid #3a342a', cursor: 'not-allowed' } : base;
+  const bstyle = blockedReason ? { ...base, background: '#241f16', color: '#6d6455', border: '1px solid #3a342a', cursor: 'default' } : base;
   return (
     <div>
       <button disabled={disabled || !!blockedReason} title={blockedReason} onClick={onMain} {...hov} style={{ ...bstyle, display: 'flex', alignItems: 'center', gap: 8 }}>

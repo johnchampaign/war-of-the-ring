@@ -50,7 +50,9 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
           <div style={{ fontSize: 13, color: '#cbbf9a' }}>
             {fresh[0]!.source.startsWith('revealed ')
               ? <>{strongholdRevealLine(fresh[0]!.source)}</>
-              : <><b>{fresh[0]!.source}</b>: a tile is drawn directly, with no Hunt roll.</>}
+              : fresh[0]!.source === 'Balrog of Moria'
+                ? <>The Fellowship encounters the <b>Balrog of Moria</b> — the Shadow draws one extra Hunt tile.</>
+                : <><b>{fresh[0]!.source}</b>: a tile is drawn directly, with no Hunt roll.</>}
           </div>
         )}
         {fresh.every((d) => d.discarded) ? (

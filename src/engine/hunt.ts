@@ -12,7 +12,7 @@ import type { GameState } from './types';
 import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, characterDef, EVENT_BY_ID, type HuntTileDef } from './data';
 import { fellowshipDieSkipsHuntBox, wornWithSorrowActive } from './persistent';
 import { withRng } from './rng';
-import { settlementController, armySide } from './armies';
+import { settlementController, armySide, heldShadowStronghold } from './armies';
 import { log, notify, shedCorruption, sufferCorruption } from './log';
 
 /** Begin revealing the Fellowship (rulebook p.39): if it has Progress to spend, pause
@@ -39,7 +39,7 @@ export function beginReveal(state: GameState): void {
   // already counts its starting region; this is the no-Progress case.
   const loc = fs.location;
   const wasHidden = fs.hidden && fs.mordor === null;
-  const strongholds = wasHidden && REGIONS[loc]?.settlement === 'Stronghold' && settlementController(state, loc) === 'shadow' ? [loc] : [];
+  const strongholds = wasHidden && heldShadowStronghold(state, loc) ? [loc] : [];
   fs.hidden = false; fs.progress = 0;
   if (state.pendingChoice) return;
   if (wasHidden && loc === 'moria' && state.cards.shadow.table.includes('sh-char-17')) {
