@@ -44,7 +44,8 @@ const enemyOf = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
  *  player". The engine had this exactly backwards for Character-die moves: plain BFS
  *  let a Companion path THROUGH Moria while canLand forbade LANDING there; RAW allows
  *  the landing and forbids the pass-through. (Fliers pass `stops = null`.) */
-function regionDistance(from: RegionId, to: RegionId, stops: ((r: RegionId) => boolean) | null = null): number {
+function regionDistance(from: RegionId, to: RegionId, stops: ((r: RegionId) => boolean) | null = null,
+  blocks: ((r: RegionId) => boolean) | null = null): number {
   if (from === to) return 0;
   const seen = new Set([from]);
   let layer = [from], d = 0;
@@ -54,6 +55,7 @@ function regionDistance(from: RegionId, to: RegionId, stops: ((r: RegionId) => b
     for (const r of layer) {
       if (stops && r !== from && stops(r)) continue; // entered a stop-region earlier: go no further
       for (const adj of REGIONS[r]?.adjacency ?? []) {
+        if (blocks && blocks(adj)) continue; // may not even be entered — neither a stop nor a corridor
         if (adj === to) return d;
         if (!seen.has(adj)) { seen.add(adj); next.push(adj); }
       }
@@ -75,7 +77,8 @@ function regionDistance(from: RegionId, to: RegionId, stops: ((r: RegionId) => b
  *  MUST agree with `regionDistance`: one decides what is OFFERED, the other what is
  *  ACCEPTED, and a disagreement is an offered-then-refused move. Pinned by
  *  `scripts/probe-char-move-enumeration.mjs`. */
-function reachableWithin(from: RegionId, range: number, stops: ((r: RegionId) => boolean) | null): Map<RegionId, number> {
+function reachableWithin(from: RegionId, range: number, stops: ((r: RegionId) => boolean) | null,
+  blocks: ((r: RegionId) => boolean) | null = null): Map<RegionId, number> {
   const dist = new Map<RegionId, number>([[from, 0]]);
   let layer: RegionId[] = [from];
   for (let d = 1; d <= range && layer.length; d++) {
@@ -83,6 +86,7 @@ function reachableWithin(from: RegionId, range: number, stops: ((r: RegionId) =>
     for (const r of layer) {
       if (stops && r !== from && stops(r)) continue; // entered a stop-region: go no further
       for (const adj of REGIONS[r]?.adjacency ?? []) {
+        if (blocks && blocks(adj)) continue;
         if (!dist.has(adj)) { dist.set(adj, d); next.push(adj); }
       }
     }
@@ -115,6 +119,23 @@ function friendlyStrongholdBesieged(state: GameState, to: RegionId, side: Side):
     && settlementController(state, to) === side;
 }
 const NAZGUL_FIGURE = new Set(['nazgul', 'witch-king']);
+
+/** Regions a WALKING figure may not enter at all — at any step of its move, not just
+ *  the last one (p.24/p.25; player report 3m2h093m3g6t2g2c: the Mouth of Sauron walked
+ *  Fords of Bruinen → Moria → Dimrill Dale past an unbesieged Free Peoples Moria). Two
+ *  rules: nobody but the Nazgûl may "leave or enter a region containing a friendly
+ *  Stronghold besieged by an enemy Army", and a Minion "cannot be moved into a region
+ *  containing a Stronghold controlled by the Free Peoples unless it is besieged by a
+ *  Shadow Army". Unlike `companionStop` these are not stops but walls. Nazgûl fly, so
+ *  null; Gwaihir / We Prove the Swifter (`siegeOk`) lift the besieged-Stronghold wall. */
+function walkBlocks(state: GameState, side: Side, char: string, opts: RangeOpts = {}): ((r: RegionId) => boolean) | null {
+  if (NAZGUL_FIGURE.has(char)) return null;
+  return (r: RegionId): boolean => {
+    if (!opts.siegeOk && friendlyStrongholdBesieged(state, r, side)) return true;
+    return side === 'shadow' && REGIONS[r]!.settlement === 'Stronghold'
+      && settlementController(state, r) === 'fp' && !state.regions[r]!.besieged;
+  };
+}
 
 /** Whether a figure may END a move in `to`. The two sides' Stronghold rules differ
  *  (p.24) and were wrongly shared: a SHADOW figure may not enter an FP-controlled
@@ -199,7 +220,10 @@ export function characterMoveBlockReason(state: GameState, side: Side, char: str
     return `The Free Peoples control ${name} — ${NAZGUL_FIGURE.has(char) ? 'Nazgûl' : 'Minions'} cannot enter unbesieged enemy Strongholds (p.24).`;
   }
   const range = rangeOf(state, char, from, group && group.length > 1 ? { group } : {});
-  if (range > 0 && range < FLY && regionDistance(from, to, side === 'fp' ? companionStop(state) : null) > range) {
+  if (range > 0 && range < FLY && regionDistance(from, to, side === 'fp' ? companionStop(state) : null, walkBlocks(state, side, char)) > range) {
+    if (regionDistance(from, to, side === 'fp' ? companionStop(state) : null) <= range) {
+      return `${name} can only be reached through a Stronghold this figure may not enter (p.24-25).`;
+    }
     return `${name} is out of reach — this move covers at most ${range} region${range === 1 ? '' : 's'} (p.24).`;
   }
   return null;
@@ -212,7 +236,7 @@ export function moveCharacter(state: GameState, side: Side, char: string, from: 
   const range = rangeOf(state, char, from);
   if (range <= 0) return false;
   const stops = side === 'fp' ? companionStop(state) : null; // walking Companions stop at Shadow Strongholds (p.24)
-  if (regionDistance(from, to, stops) > range) return false;
+  if (regionDistance(from, to, stops, walkBlocks(state, side, char)) > range) return false;
   if (!canLeave(state, from, side, char)) return false;
   if (!canLand(state, to, side, char)) return false;
   // Both ends go through `figureForce`: a figure garrisoning a besieged friendly
@@ -257,7 +281,7 @@ export function moveCompanionGroup(state: GameState, side: Side, from: RegionId,
   }
   // Companion GROUPS walk too: the p.24 Shadow-Stronghold stop applies (side is
   // always 'fp' here — the guard above rejects anything else).
-  if (range <= 0 || regionDistance(from, to, companionStop(state)) > range) return false;
+  if (range <= 0 || regionDistance(from, to, companionStop(state), walkBlocks(state, side, chars[0]!, opts)) > range) return false;
   if (!canLeave(state, from, side, chars[0])) return false;
   if (!canLand(state, to, side, chars[0], opts)) return false;
   // Gwaihir / We Prove the Swifter (`opts.siegeOk`) are exactly the cards that land
@@ -324,7 +348,7 @@ export function characterDestinations(state: GameState, side: Side, char: string
   // Gandalf boxed in Moria, then the engine silently refused the move).
   if (!canLeave(state, from, side, char)) return [];
   const stops = side === 'fp' ? companionStop(state) : null;
-  const within = reachableWithin(from, range, stops);
+  const within = reachableWithin(from, range, stops, walkBlocks(state, side, char, opts));
   const out: RegionId[] = [];
   for (const to of Object.keys(state.regions)) {
     if (to === from) continue;
@@ -386,7 +410,7 @@ export function characterMoveOptions(state: GameState, side: Side, cap = 18, exc
     // walks through Moria/Morannon that the engine then refuses — the soak caught
     // exactly that (offer/apply disagreement) the moment the stop rule was added.
     const stops = isCompanion(p.char) ? companionStop(state) : null;
-    const within = range > 0 ? reachableWithin(p.from, range, stops) : null;
+    const within = range > 0 ? reachableWithin(p.from, range, stops, walkBlocks(state, side, p.char)) : null;
     const tos: RegionId[] = [];
     if (within) {
       for (const to of candidates) {

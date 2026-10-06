@@ -5,7 +5,7 @@ import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState } from '../engine/types';
 import { useCardArt } from './artCache';
 import { describeAction, actionDie, dieOptions, trivialDie } from './actionText';
-import { aFace, inNationOrder } from './names';
+import { aFace, inNationOrder, cardName } from './names';
 import { FACE } from './DiceTray';
 import type { Hover } from './HoverPreview';
 import type { Side, DieFace } from '../engine/types';
@@ -64,7 +64,26 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   const reasonFor = new Map<WotrAction, string>(blocked.map((b) => [b.action, b.reason]));
   // Barred actions sort in with the real ones (same kind, same Nation order), so a
   // greyed "advance Rohan" sits where the player expects it, not in a footnote.
-  const rest = inNationOrder([...live, ...blocked.map((b) => b.action)]);
+  const ordered = inNationOrder([...live, ...blocked.map((b) => b.action)]);
+  // Removing A Power too Great / The Power of Tom Bombadil costs a die plus one Army
+  // card and one Character card from hand; the engine offers every pairing as its own
+  // action, which listed up to a dozen near-identical lines. One "Remove …" button per
+  // card opens a picker for the two cards instead (player reports 1k51305m1h4v3u6t,
+  // 1fp9k4mwdab07cvs).
+  type ForceDiscard = Extract<WotrAction, { kind: 'forceDiscardCard' }>;
+  const isFD = (a: WotrAction): a is ForceDiscard => a.kind === 'forceDiscardCard' && !reasonFor.has(a);
+  const pairGroups = new Map<string, ForceDiscard[]>();
+  for (const a of ordered) if (isFD(a) && a.via === 'cards') pairGroups.set(a.cardId, [...(pairGroups.get(a.cardId) ?? []), a]);
+  // The Free Peoples' ways to discard a Shadow table card (Will of the West die, or any
+  // other die plus an Elven Ring, or any die under the card's own condition) are one
+  // choice: the die the player spends says which (player report 2y64572r4r1s1e02).
+  const fpGroups = new Map<string, ForceDiscard[]>();
+  for (const a of ordered) if (isFD(a) && a.via !== 'cards') fpGroups.set(a.cardId, [...(fpGroups.get(a.cardId) ?? []), a]);
+  const merged = new Map<ForceDiscard, ForceDiscard[]>(); // first of a group -> the whole group
+  for (const g of fpGroups.values()) if (g.length > 1) merged.set(g[0]!, g);
+  const rest = ordered.filter((a) => !(isFD(a) && (a.via === 'cards'
+    ? pairGroups.get(a.cardId)![0] !== a
+    : (fpGroups.get(a.cardId)?.length ?? 0) > 1 && fpGroups.get(a.cardId)![0] !== a)));
   const sel = selectedDie ?? null;
   // The second half of a die's Action (a second Army move, a second recruit, more
   // Character moves) can't be passed out of — but the Pass button stays in place,
@@ -145,8 +164,27 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
           <span>{hint}</span>
         </div>
       ))}
-      {rest.map((a, i) => <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
-        options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} blockedReason={reasonFor.get(a)} />)}
+      {rest.map((a, i) => {
+        if (isFD(a) && a.via === 'cards') {
+          return <RemoveWithCardsButton key={i} acts={pairGroups.get(a.cardId)!} disabled={busy} onClick={click} onHover={onHover}
+            options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} />;
+        }
+        const group = isFD(a) ? merged.get(a) : undefined;
+        if (group && you) {
+          // Each die face maps to the cheapest way it can pay: a Will die → the Will
+          // clause; any other die → the card's free condition if it holds, else the
+          // Elven Ring clause.
+          const byFace = new Map<DieFace, WotrAction>();
+          for (const via of ['will', 'die', 'ring'] as const) {
+            const g = group.find((x) => x.via === via);
+            if (g) for (const f of dieOptions(g, view, you)) if (!byFace.has(f)) byFace.set(f, g);
+          }
+          return <ActionButton key={i} action={{ ...group[0]!, via: group.some((x) => x.via === 'die') ? 'die' : 'will' }} disabled={busy} onClick={click} onHover={onHover}
+            options={[...byFace.keys()]} pickAction={(f) => byFace.get(f)!} forceDie={sel} compact={compact} />;
+        }
+        return <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
+          options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} blockedReason={reasonFor.get(a)} />;
+      })}
       {skips.length > 0 && <DiscardDieButton skips={skips} disabled={busy} onClick={click} compact={compact} />}
       {live.length === 0 && skips.length === 0 && boardHints.length === 0 && (
         boardPending
@@ -188,8 +226,12 @@ function DiscardDieButton({ skips, disabled, onClick, compact }: { skips: Extrac
 // A normal action button. For "Play event" it shows the card-art thumbnail (when
 // downloaded). When more than one die could pay for the action, the first click opens
 // a die-picker (the player chooses which to spend); one option submits directly.
-function ActionButton({ action, disabled, onClick, onHover, options, forceDie, compact, blockedReason }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null; compact?: boolean; blockedReason?: string }) {
+function ActionButton({ action, disabled, onClick, onHover, options, forceDie, compact, blockedReason, pickAction }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null; compact?: boolean; blockedReason?: string;
+  /** A button standing for several engine actions told apart only by the die that pays
+   *  (the Palantír's Will / Elven Ring clauses): which action a given die submits. */
+  pickAction?: (f: DieFace) => WotrAction }) {
   const [picking, setPicking] = useState(false);
+  const submit = (f: DieFace): void => onClick({ ...(pickAction ? pickAction(f) : action), die: f } as WotrAction);
   const cardId = action.kind === 'playEvent' ? action.cardId : null;
   const art = useCardArt(cardId);
   const target = actionHover(action);
@@ -209,9 +251,10 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
   const tagDie = forced ?? trivial ?? (die && options.includes(die as DieFace) ? (die as DieFace) : options[0] ?? die);
   const ambiguous = !forced && options.length > 1 && !trivial;
   const onMain = () => {
-    if (forced) onClick({ ...action, die: forced } as WotrAction);
-    else if (trivial) onClick({ ...action, die: trivial } as WotrAction);
+    if (forced) submit(forced);
+    else if (trivial) submit(trivial);
     else if (ambiguous) setPicking((p) => !p);
+    else if (pickAction && options.length === 1) submit(options[0]!);
     else onClick(action);
   };
   const base = compact ? { ...btn, margin: '1px 0', padding: '1px 8px', fontSize: 11, lineHeight: 1.2 } : btn;
@@ -239,9 +282,64 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '2px 0 6px 10px' }}>
           <span style={{ fontSize: 11, color: '#998', alignSelf: 'center' }}>spend:</span>
           {options.map((f) => (
-            <button key={f} disabled={disabled} onClick={() => { setPicking(false); onClick({ ...action, die: f } as WotrAction); }}
+            <button key={f} disabled={disabled} onClick={() => { setPicking(false); submit(f); }}
+              title={pickAction && (pickAction(f) as { via?: string }).via === 'ring' ? 'Also spends one Elven Ring' : undefined}
               style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
           ))}
+          {pickAction && options.some((f) => (pickAction(f) as { via?: string }).via === 'ring') && (
+            <span style={{ fontSize: 11, color: '#998', alignSelf: 'center' }}>(any die but Will of the West also spends an Elven Ring)</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Remove A Power too Great / The Power of Tom Bombadil": any die, plus one Army
+ *  Event card and one Character Event card from hand, both the player's pick. One pair
+ *  on offer submits straight away; otherwise the button opens a two-row card picker
+ *  (hover a card to read it), and the die picker after it when more than one die fits. */
+function RemoveWithCardsButton({ acts, disabled, onClick, onHover, options, forceDie, compact }: { acts: Extract<WotrAction, { kind: 'forceDiscardCard' }>[]; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [army, setArmy] = useState<string | null>(null);
+  const [char, setChar] = useState<string | null>(null);
+  const armies = [...new Set(acts.map((a) => a.discardStrategy!))];
+  const chars = [...new Set(acts.map((a) => a.discardCharacter!))];
+  const a = armies.length === 1 ? armies[0]! : army;
+  const c = chars.length === 1 ? chars[0]! : char;
+  const chosen = a && c ? acts.find((x) => x.discardStrategy === a && x.discardCharacter === c) ?? null : null;
+  const base = compact ? { ...btn, margin: '1px 0', padding: '1px 8px', fontSize: 11, lineHeight: 1.2 } : btn;
+  const cardRow = (label: string, ids: string[], pick: string | null, set: (id: string) => void) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', margin: '2px 0' }}>
+      <span style={{ fontSize: 11, color: '#998', width: 92 }}>{label}</span>
+      {ids.map((id) => (
+        <button key={id} disabled={disabled || ids.length === 1} onClick={() => set(id)}
+          onMouseEnter={() => onHover?.({ kind: 'card', id })} onMouseLeave={() => onHover?.(null)}
+          style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, cursor: ids.length === 1 ? 'default' : 'pointer',
+            background: (ids.length === 1 || pick === id) ? '#5a4a26' : '#2c2619', color: '#f0e9d8', border: `1px solid ${(ids.length === 1 || pick === id) ? '#a8873f' : '#554'}` }}>
+          {cardName(id)}
+        </button>
+      ))}
+    </div>
+  );
+  const name = cardName(acts[0]!.cardId);
+  return (
+    <div>
+      {!open && (
+        <button disabled={disabled} onClick={() => setOpen(true)} style={{ ...base, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={DIE_COL}>{options.length === 1 ? <DieTag face={options[0]!} /> : CHOOSE_DIE}</span>
+          <span style={{ minWidth: 0 }}>Remove "{name}" (discard an Army card and a Character card)</span>
+        </button>
+      )}
+      {open && (
+        <div style={{ border: '1px solid #554', borderRadius: 5, padding: '6px 8px', margin: '3px 0', background: '#2a2419' }}>
+          <div style={{ fontSize: 12, marginBottom: 4 }}>Remove "{name}" — choose the two cards to discard:</div>
+          {cardRow('Army card:', armies, army, setArmy)}
+          {cardRow('Character card:', chars, char, setChar)}
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            {chosen && <ActionButton action={chosen} disabled={disabled} onClick={(x) => { setOpen(false); onClick(x); }} options={options} forceDie={forceDie} compact />}
+            <button disabled={disabled} onClick={() => setOpen(false)} style={{ ...base, width: 'auto', fontSize: 11 }}>Cancel</button>
+          </div>
         </div>
       )}
     </div>

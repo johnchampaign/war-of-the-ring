@@ -63,7 +63,9 @@ export function describeAction(a: WotrAction): string {
     // is being spent (player reports 240x236w5m3e3b4p, 1n17492q185h4n2q). The
     // parenthetical is left for what the clause costs ON TOP of the die.
     case 'forceDiscardCard': return a.via === 'cards'
-      ? `Discard "${cardName(a.cardId)}" (and discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
+      // "Remove", not a second "Discard" — the log says the Shadow removes the card, and
+      // two discards in one line read awkwardly (player report 0h190y6n5t302e4r).
+      ? `Remove "${cardName(a.cardId)}" (discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
       : a.via === 'ring' ? `Discard "${cardName(a.cardId)}" (and one Elven Ring)`
       : `Discard "${cardName(a.cardId)}"`;
     // Both labels used to describe the ability in shorthand that reads as something

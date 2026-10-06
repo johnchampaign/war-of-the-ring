@@ -139,6 +139,8 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
             : choice.kind === 'lureChoice'
             // Name the Companion the Ring tempts (player report 6a6y2s416s620a5e).
             ? lureTitle(choice.data as { companion?: string; level?: number } | undefined)
+            : choice.kind === 'removeExcess' && (choice.data as { boxed?: boolean } | undefined)?.boxed
+            ? 'Over the 5-unit siege limit — remove the excess'
             : CHOICE_TITLE[choice.kind] ?? choice.kind}
         </div>}
         {choice?.kind === 'huntDamage' && <HuntDetail view={view} data={(choice as any).data} onExplain={() => setHuntInfo(true)} />}
@@ -299,15 +301,17 @@ function TileDetail({ tile }: { tile?: { value: number | string; reveal?: boolea
   );
 }
 
-function RemoveExcessDetail({ view, data }: { view: GameState; data?: { region?: string } }) {
+function RemoveExcessDetail({ view, data }: { view: GameState; data?: { region?: string; boxed?: boolean } }) {
   const region = data?.region;
   if (!region) return null;
-  const r = view.regions[region];
+  // A besieged garrison is trimmed to 5 after an Event card recruits into it (Almanac).
+  const r = data?.boxed ? view.regions[region]?.siegeBox : view.regions[region];
+  const limit = data?.boxed ? 5 : 10;
   const total = r ? Object.values(r.units).reduce((n, u) => n + u!.regular + u!.elite, 0) : 0;
-  const over = Math.max(0, total - 10);
+  const over = Math.max(0, total - limit);
   return (
     <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 2px' }}>
-      <b>{rName(region)}</b> holds {total} units (limit 10). Choose <b>{over}</b> unit{over === 1 ? '' : 's'} to remove —
+      <b>{rName(region)}</b>{data?.boxed ? '’s besieged garrison' : ''} holds {total} units (limit {limit}). Choose <b>{over}</b> unit{over === 1 ? '' : 's'} to remove —
       they return to reinforcements and can be recruited again later.
     </div>
   );

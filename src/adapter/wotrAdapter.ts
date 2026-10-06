@@ -12,7 +12,7 @@ import { extraHunt, queueTakenAlive } from '../engine/hunt';
 import { log, logCardDraw, sideDoes } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, heldShadowStronghold, unitCount, STACKING_LIMIT,
-  recruitNazgul, canRecruitNazgul, overStack, removeStackUnit, charDieLeaders, figureForce, forceUnitCount,
+  recruitNazgul, canRecruitNazgul, overStack, overStackBox, forceSide, removeStackUnit, charDieLeaders, figureForce, forceUnitCount,
 } from '../engine/armies';
 import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveWordsOfPower, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending, returnSetAsideHuntTiles } from '../engine/hunt';
@@ -354,8 +354,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return recruitSecondTargets(state, actor, data.figure, data.first);
       }
       case 'removeExcess': {
-        const data = state.pendingChoice!.data as { region: RegionId };
-        const r = state.regions[data.region]!;
+        const data = state.pendingChoice!.data as { region: RegionId; boxed?: boolean };
+        const r = data.boxed ? state.regions[data.region]!.siegeBox! : state.regions[data.region]!;
         const acts: WotrAction[] = [];
         for (const n of Object.keys(r.units) as Nation[]) {
           if (r.units[n]!.regular > 0) acts.push({ kind: 'removeExcess', nation: n, figure: 'regular' });
@@ -1165,9 +1165,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'removeExcess': {
       requireChoice(state, 'removeExcess', actor);
-      const data = state.pendingChoice!.data as { region: RegionId; next: MoveNext };
-      if (!removeStackUnit(state, data.region, action.nation, action.figure)) throw new Error('No such unit to remove');
-      if (overStack(state, data.region) > 0) break; // still over the limit — keep prompting
+      const data = state.pendingChoice!.data as { region: RegionId; next: MoveNext; boxed?: boolean };
+      if (!removeStackUnit(state, data.region, action.nation, action.figure, data.boxed)) throw new Error('No such unit to remove');
+      if ((data.boxed ? overStackBox(state, data.region) : overStack(state, data.region)) > 0) break; // still over the limit — keep prompting
       state.pendingChoice = null;
       applyMoveNext(state, actor, data.next);
       break;
@@ -1463,6 +1463,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
 function enforceStackingLimit(state: GameState): void {
   if (state.pendingChoice || state.winner) return;
   for (const id of Object.keys(state.regions) as RegionId[]) {
+    // A besieged garrison is capped at 5 (p.31). Only an Event-card recruit can push it
+    // over, and the Almanac has the owner trim it: "remove units (from any Nation in
+    // that Stronghold), placing them back into reinforcements".
+    if (overStackBox(state, id) > 0) {
+      const owner = forceSide(state.regions[id]!.siegeBox!);
+      if (owner) { state.pendingChoice = { owner, kind: 'removeExcess', data: { region: id, next: { kind: 'none' }, boxed: true } }; return; }
+    }
     if (overStack(state, id) === 0) continue;
     const owner = armySide(state, id);
     if (!owner) continue; // units define the owner; no units means nothing to over-stack

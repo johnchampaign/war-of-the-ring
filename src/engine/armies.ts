@@ -167,7 +167,9 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
   const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
   const leader = opts.leader ?? 0;
   if (regular > pool.regular || elite > pool.elite || leader > (pool.leader ?? 0)) return false;
-  if (forceUnitCount(into) + regular + elite > limit) return false;
+  // A Muster die respects the limit up front; an Event card recruits in full and the
+  // excess is trimmed by the owner afterwards (p.26, Almanac — see placeUnits).
+  if (!opts.ignoreAtWar && forceUnitCount(into) + regular + elite > limit) return false;
   // "Free Peoples Leaders can never be in a region without Free Peoples Army units"
   // (p.26). The movement paths enforce this (moveArmySplit, moveSelectedUnits) but
   // the MUSTER path did not, so a Leader could be recruited alone into an empty
@@ -809,17 +811,26 @@ export function overStack(state: GameState, id: RegionId): number {
   return Math.max(0, unitCount(state, id) - STACKING_LIMIT);
 }
 
+/** Units over the 5-unit limit in a besieged Stronghold's garrison (p.31). Only an
+ *  Event-card recruit can put it there (Almanac: recruit in full, then trim). */
+export function overStackBox(state: GameState, id: RegionId): number {
+  const r = state.regions[id]!;
+  if (!r.besieged || !r.siegeBox) return 0;
+  return Math.max(0, forceUnitCount(r.siegeBox) - SIEGE_LIMIT);
+}
+
 /** Remove one Army figure (a regular or elite of `nation`) from a region back to
  *  its reinforcement pool — units removed for over-stacking "can re-enter the game
  *  later as reinforcements" (p.26). Returns false if there's no such figure. */
-export function removeStackUnit(state: GameState, id: RegionId, nation: Nation, figure: 'regular' | 'elite'): boolean {
-  const u = state.regions[id]!.units[nation];
-  if (!u || u[figure] < 1) return false;
+export function removeStackUnit(state: GameState, id: RegionId, nation: Nation, figure: 'regular' | 'elite', boxed = false): boolean {
+  const f = boxed ? state.regions[id]!.siegeBox : state.regions[id]!;
+  const u = f?.units[nation];
+  if (!f || !u || u[figure] < 1) return false;
   u[figure] -= 1;
-  if (u.regular === 0 && u.elite === 0) delete state.regions[id]!.units[nation];
+  if (u.regular === 0 && u.elite === 0) delete f.units[nation];
   const pool = state.reinforcements[nation] as { regular: number; elite: number };
   pool[figure] += 1;
-  log(state, null, 'army', `${sideDoes(sideOfNation(nation), 'remove')} an over-stacked ${nation} ${figure} from ${id} (over the ${STACKING_LIMIT}-unit limit)`);
+  log(state, null, 'army', `${sideDoes(sideOfNation(nation), 'remove')} an over-stacked ${nation} ${figure} from ${id} (over the ${boxed ? `${SIEGE_LIMIT}-unit siege` : `${STACKING_LIMIT}-unit`} limit)`);
   return true;
 }
 

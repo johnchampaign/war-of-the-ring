@@ -174,7 +174,10 @@ function kingIsRevealed(mutate) {
   check('the Nazgûl joins the boxed garrison', placed === 1 && s.regions['minas-morgul'].siegeBox.nazgul === 1,
     `placed ${placed}, box ${s.regions['minas-morgul'].siegeBox.nazgul}, field ${s.regions['minas-morgul'].nazgul}`);
   check('not the besieger in the open field', s.regions['minas-morgul'].nazgul === 0);
-  check('and the Regulars fill the box to its five-unit cap', (s.regions['minas-morgul'].siegeBox.units.sauron?.regular ?? 0) === 5,
+  // Recruited in full (five Regulars onto the one already there); the owner then trims
+  // the box back to five through the adapter's removeExcess sweep (Almanac;
+  // scripts/probe-triage-1006.mjs). This probe drives the card alone.
+  check('and all five Regulars go into the box (trimmed afterwards)', (s.regions['minas-morgul'].siegeBox.units.sauron?.regular ?? 0) === 6,
     `${s.regions['minas-morgul'].siegeBox.units.sauron?.regular ?? 0}`);
 }
 

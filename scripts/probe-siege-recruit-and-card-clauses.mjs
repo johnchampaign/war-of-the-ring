@@ -72,18 +72,19 @@ function resolveCard(state, id, side) {
 }
 
 {
-  console.log('\n=== the 5-unit siege cap still binds (p.31) ===');
+  console.log('\n=== a full garrison recruits in full, then trims (Almanac) ===');
   const state = fresh();
   const r = besiege(state, 'dol-amroth',
     { units: { southrons: { regular: 2, elite: 0 } } },
     { units: { gondor: { regular: 5, elite: 0 } } });
-  // The card is still playable — p.31 caps ARMY UNITS at five inside a besieged
-  // Stronghold and says Leaders are not affected, so Imrahil's Gondor Leader can
-  // still join a full garrison. What must not happen is a sixth unit.
-  check('the card is playable for its Leader alone', canPlayCard(state, 'fp-str-18', 'fp'));
+  // Almanac, Points common to all Free Peoples recruitment cards: "first, fully perform
+  // the recruitment … and then remove units … to meet the stacking limit of 5". The
+  // sixth unit goes in; the adapter's end-of-action sweep then has the owner pick which
+  // unit goes back (scripts/probe-triage-1006.mjs). This probe drives the card alone.
+  check('the card is playable on a full garrison', canPlayCard(state, 'fp-str-18', 'fp'));
   const leaders0 = state.reinforcements.gondor.leader;
   resolveCard(state, 'fp-str-18', 'fp');
-  check('no sixth Army unit went in', forceUnitCount(r.siegeBox) === 5, String(forceUnitCount(r.siegeBox)));
+  check('the sixth Army unit went in (trimmed afterwards)', forceUnitCount(r.siegeBox) === 6, String(forceUnitCount(r.siegeBox)));
   check('the Leader did', r.siegeBox.leaders === 1 && state.reinforcements.gondor.leader === leaders0 - 1,
     `${leaders0} -> ${state.reinforcements.gondor.leader}`);
 }

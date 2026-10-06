@@ -269,16 +269,24 @@ function moveSelectedUnits(state: GameState, from: string, to: string, side: Sid
 }
 /** Force-place units into a region (a card that recruits in a NAMED region,
  *  bypassing the settlement/control checks recruit() applies). Capped by
- *  reinforcements + the stacking limit. Under a siege the figures join the stack that
- *  belongs to the recruiting side — the boxed garrison (5-unit cap) or the besieger in
- *  the open field (10) — per eventRecruitTarget. */
+ *  reinforcements only. Under a siege the figures join the stack that belongs to the
+ *  recruiting side — the boxed garrison or the besieger in the open field — per
+ *  eventRecruitTarget.
+ *
+ *  NOT by the stacking limit: a card recruits in full and the excess comes off
+ *  afterwards, the owner choosing which (p.26: "if, at the end of any action … more
+ *  than 10 units are in the same region, the excess units must be removed … by the
+ *  controlling player"; Almanac, Points common to all Free Peoples recruitment cards:
+ *  "first, fully perform the recruitment … and then remove units (from any Nation in
+ *  that Stronghold) … to meet the stacking limit of 5"). The adapter's end-of-action
+ *  sweep raises that removeExcess prompt. Capping here instead cost the player the
+ *  Regular-for-Elite swap the rule allows (reports 4v3e2q1x564f0c3c, 9lksjgviw4ui2d3z). */
 function placeUnits(state: GameState, nation: Nation, region: string, regular: number, elite: number): void {
   const pool = state.reinforcements[nation];
   const dest = eventRecruitTarget(state, region, sideOfNation(nation));
   if (!dest) return;
-  const room = dest.limit - forceUnitCount(dest.force);
-  const reg = Math.max(0, Math.min(regular, pool.regular, room));
-  const el = Math.max(0, Math.min(elite, pool.elite, room - reg));
+  const reg = Math.max(0, Math.min(regular, pool.regular));
+  const el = Math.max(0, Math.min(elite, pool.elite));
   if (reg + el === 0) return;
   pool.regular -= reg; pool.elite -= el;
   const u = dest.force.units[nation] ?? { regular: 0, elite: 0 };
@@ -319,11 +327,9 @@ const recruitable = (state: GameState, side: Side, region: string): boolean => {
 /** Units in the stack an event recruit for `side` would join at `region` (the boxed
  *  garrison under a siege, otherwise the region itself). Used to tell "did the recruit
  *  land?" apart from "the stack was full". */
-/** Whether an event-recruit destination exists here and still has room. */
-const hasEventRoom = (state: GameState, region: string, side: Side): boolean => {
-  const dest = eventRecruitTarget(state, region, side);
-  return !!dest && forceUnitCount(dest.force) < dest.limit;
-};
+/** Whether an event-recruit destination exists here. A FULL stack still counts: card
+ *  recruits overstack and trim afterwards (see placeUnits). */
+const hasEventRoom = (state: GameState, region: string, side: Side): boolean => !!eventRecruitTarget(state, region, side);
 const recruitStackSize = (state: GameState, region: string, side: Side): number => {
   const dest = eventRecruitTarget(state, region, side);
   return dest ? forceUnitCount(dest.force) : 0;
@@ -368,8 +374,7 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
     const sl = slots[i]!;
     if (!recruitable(state, side, sl.region)) return [];
     const pool = state.reinforcements[sl.nation];
-    const dest = eventRecruitTarget(state, sl.region, side);
-    const room = dest ? dest.limit - forceUnitCount(dest.force) : 0;
+    const room = eventRecruitTarget(state, sl.region, side) ? 1 : 0; // a full stack still recruits (see placeUnits)
     const o: EventTarget[] = [];
     if (room > 0 && pool.regular > 0) o.push({ nation: sl.nation, region: sl.region, figure: 'regular', slot: i });
     if (room > 0 && pool.elite > 0) o.push({ nation: sl.nation, region: sl.region, figure: 'elite', slot: i });
@@ -442,7 +447,6 @@ function eventRecruit(state: GameState, side: Side, nation: Nation, regular: num
     if (def.nation !== nation || !def.settlement) continue;
     if (settlementController(state, id) !== side) continue;
     if (armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) continue;
-    if (unitCount(state, id) + regular + elite > STACKING_LIMIT) continue;
     if (recruit(state, nation, id, regular, elite, { ignoreAtWar: true })) return true;
   }
   return false;
@@ -452,8 +456,7 @@ const canEventRecruit = (state: GameState, nation: Nation, n = 1): boolean =>
   && Object.keys(state.regions).some((id) => {
     const def = REGIONS[id]!;
     return def.nation === nation && def.settlement
-      && settlementController(state, id) === (FP_NATIONS.includes(nation) ? 'fp' : 'shadow')
-      && unitCount(state, id) < STACKING_LIMIT;
+      && settlementController(state, id) === (FP_NATIONS.includes(nation) ? 'fp' : 'shadow');
   });
 
 // --- Free Peoples: heal / Corruption -------------------------------------
@@ -1127,8 +1130,7 @@ register('fp-char-22', {
     if (applied.some((a) => a.count !== undefined)) return [];
     const dest = deadMenDest(applied);
     if (dest) {
-      const room = Math.max(0, STACKING_LIMIT - unitCount(state, dest));
-      const max = Math.min(3, state.reinforcements.gondor.regular, room);
+      const max = Math.min(3, state.reinforcements.gondor.regular); // overstack trims afterwards (placeUnits)
       return Array.from({ length: max + 1 }, (_, count) => ({ count }));
     }
     const o = aragornRohanOrigin(state); if (!o) return [];
@@ -1143,8 +1145,7 @@ register('fp-char-22', {
     if (t.count !== undefined) {
       // 3. Recruit — and only a real recruit takes control of the Settlement.
       const region = deadMenDest(applied); if (!region || t.count <= 0) return;
-      const room = Math.max(0, STACKING_LIMIT - unitCount(state, region));
-      const n = Math.min(t.count, 3, state.reinforcements.gondor.regular, room);
+      const n = Math.min(t.count, 3, state.reinforcements.gondor.regular);
       if (n <= 0) return;
       captureIfEnemySettlement(state, region, 'fp');
       const dst = state.regions[region]!;
@@ -1269,7 +1270,7 @@ register('fp-str-12', {
 // the player CHOOSES which three (there are 6), rather than the first three found.
 const pitsStrongholds = (state: GameState): string[] => Object.keys(state.regions).filter((id) => {
   const def = REGIONS[id]!;
-  return def.nation === 'sauron' && def.settlement === 'Stronghold' && settlementController(state, id) === 'shadow' && unitCount(state, id) < STACKING_LIMIT;
+  return def.nation === 'sauron' && def.settlement === 'Stronghold' && settlementController(state, id) === 'shadow' && hasEventRoom(state, id, 'shadow');
 });
 register('sh-str-24', {
   repeat: 3,
@@ -1508,7 +1509,7 @@ const faramirStrikes = (state: GameState): string[] => FARAMIR_REGIONS.filter((r
 /** The Osgiliath half: one Gondor unit (R or E) — only while an FP Army holds it. */
 const faramirRecruits = (state: GameState): EventTarget[] => {
   if (armySide(state, 'osgiliath') !== 'fp' || !recruitable(state, 'fp', 'osgiliath')) return [];
-  const pool = state.reinforcements.gondor, room = STACKING_LIMIT - unitCount(state, 'osgiliath');
+  const pool = state.reinforcements.gondor, room = 1; // a full stack still recruits (see placeUnits)
   const o: EventTarget[] = [];
   if (room > 0 && pool.regular > 0) o.push({ nation: 'gondor', region: 'osgiliath', figure: 'regular', slot: 1 });
   if (room > 0 && pool.elite > 0) o.push({ nation: 'gondor', region: 'osgiliath', figure: 'elite', slot: 1 });
@@ -2596,9 +2597,9 @@ register('sh-str-18', {
     // Room is read from the stack the recruit would actually JOIN — under a siege that
     // is the garrison's box (five units), not the region's open field, which holds the
     // besieger. Reading the region made the whole recruit fail silently there.
+    // A full stack still recruits in full; the excess is trimmed afterwards (placeUnits).
     const dest = eventRecruitTarget(state, 'minas-morgul', 'shadow');
-    const room = dest ? dest.limit - forceUnitCount(dest.force) : 0;
-    const n = Math.max(0, Math.min(5, state.reinforcements.sauron.regular, room));
+    const n = dest ? Math.max(0, Math.min(5, state.reinforcements.sauron.regular)) : 0;
     if (n > 0) recruit(state, 'sauron', 'minas-morgul', n, 0, { ignoreAtWar: true });
     // Nazgûl don't count toward the Army stacking limit, but they DO obey the
     // recruiting restrictions — nothing musters into an enemy-held Minas Morgul.

@@ -509,6 +509,19 @@ die already showing an Eye.
   origin region is always a legal destination. `scripts/probe-nazgul-to-siege.mjs`.
   *(Found while checking a player report that a Nazgûl could not join an Army
   conducting a siege — that flight is legal and was, and still is, offered.)*
+  **Both Stronghold walls hold at every step, not only at the destination** (fixed
+  2026-10-06, report 3m2h093m3g6t2g2c). The Mouth of Sauron walked Fords of Bruinen →
+  Moria → Dimrill Dale past a Free Peoples-held Moria, because the path search only
+  knew the Companions' *stop* rule and `canLand` checked the last region alone. p.25:
+  a Minion moving without an Army "cannot be moved into a region containing a
+  Stronghold controlled by the Free Peoples unless it is besieged"; p.24/25: Companions
+  and the Mouth "can never leave or enter a region containing a friendly Stronghold
+  besieged by an enemy Army". Entering such a region at any step is entering it, so
+  `walkBlocks` makes both walls (not stops) in the shared BFS — Character-die moves,
+  group moves, the AI's option list and the map's reach highlight — and separation
+  (`separationDestinations`) no longer walks on through a besieged Free Peoples
+  Stronghold either. Nazgûl fly and are exempt; *Gwaihir* / *We Prove the Swifter*
+  (`siegeOk`) lift the besieged wall. `scripts/probe-triage-1006.mjs`.
   No residual — character movement is now fully RAW.
 - **Where a figure STANDS in a besieged region (`figureForce`) — fixed 2026-09-14.** A
   player report put the principle exactly right: *"figures inside a Stronghold under
@@ -632,10 +645,19 @@ its Companion inside the box.
 requires a *free* region, so a besieged Free Peoples garrison may **not** recruit with
 it (it may still recruit into a Stronghold its own Army is besieging).
 
-**Deviation:** the Almanac lets a garrison over-recruit past five and then choose which
-units to put back ("first, fully perform the recruitment … and then remove units (from
-any Nation in that Stronghold)"), which can be used to trade a Regular for an Elite. The
-engine simply caps the recruit at five rather than raising a remove-which-unit prompt.
+**Over-recruiting, then trimming (RAW since 2026-10-06).** The Almanac lets a garrison
+over-recruit past five and then choose which units to put back ("first, fully perform
+the recruitment … and then remove units (from any Nation in that Stronghold)"), which can
+be used to trade a Regular for an Elite; p.26 says the same of the open field ("if, at
+the end of any action … more than 10 units are in the same region, the excess units must
+be removed … by the controlling player"). Event-card recruits no longer stop at the
+limit: `placeUnits` and `recruit(…, { ignoreAtWar })` place in full, a full stack is
+still a legal card target, and the adapter's end-of-action sweep (`enforceStackingLimit`)
+raises the `removeExcess` prompt — for the siege box too (`data.boxed`, `overStackBox`).
+This used to be a deviation that simply capped the recruit (reports 9lksjgviw4ui2d3z,
+4v3e2q1x564f0c3c; `scripts/probe-triage-1006.mjs`). **Residual:** a *Muster die* still
+refuses a full Settlement up front — p.26 permits the overstack there too, but widening
+the die's options changes the AI's action space and waits for an A/B.
 
 Covered by `scripts/probe-siege-recruit-and-card-clauses.mjs`.
 

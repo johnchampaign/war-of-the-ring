@@ -411,7 +411,9 @@ export function separationDestinations(state: GameState, from: RegionId, maxMove
       // no legal destination at all — the 40-game soak caught it as a stall.
       if (r !== from && blocksFurther(r)) continue; // movement ended here — expand no further
       for (const a of REGIONS[r]!.adjacency) {
-        if (!seen.has(a)) { seen.add(a); next.push(a); if (landable(a)) out.push(a); }
+        // A besieged Free Peoples Stronghold may not be ENTERED at all (p.24), so it is
+        // no corridor either — the search used to walk on through it (report 3m2h093m3g6t2g2c).
+        if (!seen.has(a)) { seen.add(a); if (!landable(a)) continue; next.push(a); out.push(a); }
       }
     }
     layer = next;
