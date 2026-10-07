@@ -30,6 +30,8 @@ const check = (label, ok, detail = '') => {
  *  open field, the Gondor garrison is in the siege box. */
 function besiegedMinasTirith() {
   const s = startGame(createGame({ seed: 9 }));
+  // At War, so the enemy Army is the reason given (a Nation not At War is named first).
+  s.nations.gondor.step = 0;
   const r = s.regions['minas-tirith'];
   r.units = { sauron: { regular: 6, elite: 1 } };
   r.leaders = 0;

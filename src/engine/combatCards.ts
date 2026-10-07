@@ -187,9 +187,9 @@ export function describeCombatMods(mods: CombatMods): string {
   if (mods.bonusHitIfOutscore) p.push(`+${mods.bonusHitIfOutscore} hit if it outscores the enemy`);
   if (mods.cancelHits) p.push(`cancels ${mods.cancelHits} incoming hit${(mods.cancelHitsMinEnemyHits ?? 1) > 1 ? ` (only if the enemy scored ${mods.cancelHitsMinEnemyHits}+)` : ''}`);
   if (mods.sacrificeLeaderToCancelHit) p.push('may sacrifice a Leader to cancel a hit');
-  if (mods.eliminateMinion) p.push('may spend a hit to eliminate a Minion');
-  if (mods.eliminateNazgulIfHit) p.push('eliminates a Nazgûl if it scored a hit');
-  if (mods.blackBreath) p.push('eliminates an enemy Leader/Companion if it scored a hit');
+  // Blade of Westernesse, Fateful Strike and Black Breath get their own line naming
+  // who fell, after the dice — and only if the Leader re-roll scored (player report
+  // 493j1d205i604m69: the card line needn't explain them).
   if (mods.retreatBeforeCombat) p.push('retreats before the Combat roll');
   return p.join('; ');
 }

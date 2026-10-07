@@ -60,9 +60,9 @@ function orthancUnderFpSiege({ seed = 7, garrison = 1 } = {}) {
   const before = forceUnitCount(s.regions['orthanc'].siegeBox);
   const field = forceUnitCount(s.regions['orthanc']);
   getHandler('fp-char-20').apply(s);
-  const fizzled = s.log.some((e) => e.msg.includes('Orthanc holds no Shadow Army'));
+  const fizzled = s.log.some((e) => e.msg.includes('The Ents march on Orthanc but find it empty'));
   check('the card no longer reports an empty Orthanc', !fizzled);
-  check('it rolls against the garrison', s.log.some((e) => /The Ents Awake: \d+ hit\(s\)/.test(e.msg)),
+  check('it rolls against the garrison', s.log.some((e) => /The Ents score \d+ hits? on the Shadow Army in Orthanc/.test(e.msg)),
     s.log.slice(-4).map((e) => e.msg).join(' | '));
   // Any hit lands in the BOX; the Rohan besiegers are never touched.
   check('the besieging Rohan Army is untouched', forceUnitCount(s.regions['orthanc']) === field,
@@ -98,7 +98,7 @@ function orthancUnderFpSiege({ seed = 7, garrison = 1 } = {}) {
   s.nations.isengard.step = 2;
   getHandler('fp-char-21').apply(s);
   check('Orthanc holds a Shadow Army', before > 0, `${before} units`);
-  check('the card rolls against it', s.log.some((e) => /The Ents Awake: \d+ hit\(s\)/.test(e.msg)));
+  check('the card rolls against it', s.log.some((e) => /The Ents score \d+ hits? on the Shadow Army in Orthanc/.test(e.msg)));
   // Almanac: with a Shadow Army in Orthanc the card is an "attack" (Political Track).
   check('it counts as an attack: Isengard advances one step', s.nations.isengard.step === 1,
     `step ${s.nations.isengard.step}`);

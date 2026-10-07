@@ -78,7 +78,11 @@ export interface CombatRoll { dice: number[]; rerolls: number[]; target: number;
   /** The enemy's card cancelled this roll's Leader re-roll (Foul Stench, when the
    *  Nazgûl Leadership is high enough) — and with it every effect paid for or scored
    *  on that re-roll: Mighty Attack, Andúril, Blade of Westernesse, Fateful Strike. */
-  rerollCancelled?: boolean }
+  rerollCancelled?: boolean;
+  /** Hits scored by the Leader re-roll dice alone — what Blade of Westernesse, Fateful
+   *  Strike and Black Breath key off ("If your Leader re-roll scores…", Card Text
+   *  Reference; Almanac: "Only a hit from a Leader re-roll can trigger this"). */
+  rerollHits?: number }
 /** Mûmakil's initiative-5 bonus hit for each side: +N if, right after the Leader
  *  re-roll, that side has scored more hits than the enemy so far (Almanac, Mûmakil).
  *  `atkHits`/`defHits` are the rolled totals including each side's own automatic card
@@ -172,7 +176,9 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     // re-roll die from the ones still owed (player report: 3 misses with Leadership
     // 5 got only 2 re-rolls, because the first re-roll hit).
     const rerollDice = allowReroll ? Math.min(lead, failed) : 0;
-    for (let i = 0; i < rerollDice; i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; failed--; } }
+    let rh = 0;
+    for (let i = 0; i < rerollDice; i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; rh++; failed--; } }
+    if (roll) roll.rerollHits = rh;
     // Mighty Attack: turn up to N still-missed dice into hits.
     h += Math.min(guaranteed, failed);
     return h;
@@ -198,40 +204,61 @@ const MINION_SET = new Set(['witch-king', 'saruman', 'mouth-of-sauron']);
 /** Apply a combat card's enemy-figure eliminations after the rolls. Returns the
  *  owner's remaining hits (Blade of Westernesse spends a hit per Minion killed).
  *  Eliminated Nazgûl return to the Sauron reinforcements; Minions are removed for
- *  good. `enemy` is the region holding the card owner's opponent. */
-/** `e` is the TARGET side's Force and `enemy` the region it is fought in — they differ
- *  whenever one side is in the siege box (assault or sortie), where the region's own
- *  `units`/`characters` belong to the OTHER side. */
-function applyCombatEliminations(state: GameState, e: Force, enemy: RegionId, mods: CombatMods, ownHits: number): number {
+ *  good. All three cards trigger on hits scored by the LEADER RE-ROLL (`rerollHits`),
+ *  not the round's total — they used to fire on any hit, so a Blade of Westernesse
+ *  whose re-roll missed still killed Saruman (player report 2x5x0a1b3f4g2j4t).
+ *  The lines are returned rather than logged: the cards resolve at initiative 6, after
+ *  the dice, so the caller logs them after the round's dice line (same report).
+ *  `e` is the TARGET side's Force — it differs from the region whenever one side is in
+ *  the siege box (assault or sortie), where the region's own `units`/`characters`
+ *  belong to the OTHER side. */
+function applyCombatEliminations(state: GameState, e: Force, mods: CombatMods, ownHits: number,
+  rerollHits: number, lines: string[]): number {
   let hits = ownHits;
-  for (let n = mods.eliminateNazgulIfHit ?? 0; n > 0 && hits > 0 && e.nazgul > 0; n--) {
-    e.nazgul -= 1;
-    state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + 1;
-    log(state, null, 'combat', `a Nazgûl is eliminated at ${enemy}`);
+  const nameOf = (id: string) => characterDef(id)?.name ?? id;
+  const killChar = (id: string) => {
+    e.characters.splice(e.characters.indexOf(id), 1);
+    if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
+    delete state.characters.inPlay[id];
+  };
+  // Fateful Strike: "If your Leader re-roll scores one hit, additionally eliminate a
+  // Nazgûl. If the re-roll scores two or more hits, you can eliminate a Minion instead
+  // of a Nazgûl." No hit is spent ("additionally"). The Witch-king is a Minion, so he
+  // needs the two hits (Almanac). Deviation: the Free Peoples' pick is taken in their
+  // favour — a Minion whenever the re-roll allows one (he is gone for good; a Nazgûl
+  // only returns to the reinforcements).
+  if (mods.eliminateNazgulIfHit && rerollHits > 0) {
+    const minion = rerollHits >= 2 ? e.characters.find((c) => MINION_SET.has(c)) : undefined;
+    if (minion) { killChar(minion); lines.push(`${nameOf(minion)} falls to the Fateful Strike`); }
+    else if (e.nazgul > 0) {
+      e.nazgul -= 1;
+      state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + 1;
+      lines.push('a Nazgûl falls to the Fateful Strike');
+    }
   }
-  for (let n = mods.eliminateMinion ?? 0; n > 0 && hits > 0; n--) {
-    const i = e.characters.findIndex((c) => MINION_SET.has(c));
-    if (i < 0) break;
-    const id = e.characters.splice(i, 1)[0]!;
-    state.characters.eliminated.push(id);
-    hits -= 1; // the hit is spent to make the kill
-    log(state, null, 'combat', `${id} is eliminated at ${enemy}`);
+  // Blade of Westernesse: "Use one hit during the Leader re-roll to eliminate one
+  // Minion" — the hit is spent on the kill (Almanac: it must be, if a Minion is there).
+  for (let n = Math.min(mods.eliminateMinion ?? 0, rerollHits); n > 0 && hits > 0; n--) {
+    const id = e.characters.find((c) => MINION_SET.has(c));
+    if (!id) break;
+    killChar(id);
+    hits -= 1;
+    lines.push(`${nameOf(id)} falls to the Blade of Westernesse`);
   }
-  // Black Breath: on a scoring round, additionally eliminate one enemy FP figure
-  // (no hit spent). Shadow-optimal target: the highest-Level Companion whose Level
-  // ≤ the round's hits, else one FP Leader. (Auto-resolved like the other combat-
-  // card eliminations; the "may"/target choice is taken in the owner's favour.)
-  if (mods.blackBreath && ownHits > 0) {
-    const comps = e.characters.filter((c) => COMPANION_IDS.has(c) && levelOf(c) <= ownHits).sort((a, b) => levelOf(b) - levelOf(a));
+  // Black Breath: "If your Leader re-roll scores at least one hit, you may additionally
+  // eliminate one Free Peoples Leader … or a Companion, if the number of hits equals or
+  // exceeds the Companion's Level" — re-roll hits, and no hit spent. Shadow-optimal
+  // target: the highest-Level Companion the re-roll reaches, else one FP Leader.
+  // (Auto-resolved like the other combat-card eliminations.)
+  if (mods.blackBreath && rerollHits > 0) {
+    const comps = e.characters.filter((c) => COMPANION_IDS.has(c) && levelOf(c) <= rerollHits).sort((a, b) => levelOf(b) - levelOf(a));
     if (comps.length) {
       const id = comps[0]!;
-      e.characters.splice(e.characters.indexOf(id), 1);
-      state.characters.eliminated.push(id);
-      delete state.characters.inPlay[id];
-      log(state, null, 'combat', `Black Breath: ${id} is eliminated at ${enemy}`);
+      killChar(id);
+      lines.push(`${nameOf(id)} falls to the Black Breath`);
     } else if (e.leaders > 0) {
       e.leaders -= 1;
-      log(state, null, 'combat', `Black Breath: a Free Peoples Leader is eliminated at ${enemy}`);
+      lines.push('a Free Peoples Leader falls to the Black Breath');
     }
   }
   return hits;
@@ -1620,8 +1647,13 @@ export function combatStep(state: GameState): void {
           log(state, null, 'combat', `Round ${pc.round + 1}: the Free Peoples Leader re-roll is cancelled, so ${cardName(fpCard)} has no effect`);
           state.log[state.log.length - 1]!.card = fpCard;
         }
-        atk = applyCombatEliminations(state, defForce(state, pc), pc.to, aMods, atk);
-        def = applyCombatEliminations(state, atkForce(state, pc), pc.from, dMods, def);
+        // Tied initiative 6: the defender's card resolves first. Logged after the dice.
+        const kills: { line: string; card: string | null }[] = [];
+        const dLines: string[] = [], aLines: string[] = [];
+        def = applyCombatEliminations(state, atkForce(state, pc), dMods, def, dRoll.rerollHits ?? 0, dLines);
+        atk = applyCombatEliminations(state, defForce(state, pc), aMods, atk, aRoll.rerollHits ?? 0, aLines);
+        for (const line of dLines) kills.push({ line, card: pc.defenderCard });
+        for (const line of aLines) kills.push({ line, card: pc.attackerCard });
         // Heroic Death: "you MAY eliminate one of your Leaders to cancel one hit, or
         // eliminate one Companion to cancel [up to its Level]" — asked below, once the
         // dice are on the table. It used to be applied silently: a Leader was always
@@ -1656,6 +1688,10 @@ export function combatStep(state: GameState): void {
           + (hits !== rolled ? ` (${hits} after card effects)` : '');
         log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk, pc.attackerCard)}; defender ${fmt(dRoll, defHits, def, pc.defenderCard)}`,
           { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
+        for (const k of kills) {
+          log(state, null, 'combat', k.line);
+          if (k.card) state.log[state.log.length - 1]!.card = k.card;
+        }
         // NB the round's cards are NOT cleared here: the 'onslaught' step still
         // needs them AFTER casualties — Onslaught's own post-casualty cost prompt
         // (unpaidCost reads pc.attackerCard/defenderCard) and Great Host's 2:1

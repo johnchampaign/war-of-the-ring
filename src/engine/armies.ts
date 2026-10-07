@@ -286,14 +286,17 @@ export function musterBlockReason(state: GameState, id: RegionId, side: Side): s
   }
   const nation = def.nation;
   if (!def.settlement || !nation || sideOfNation(nation) !== side) return null; // not yours to muster in
+  // A Nation not At War can't muster anywhere, so that is the reason to give first —
+  // "There is an enemy Army in Rivendell" read as the only bar when the Elves weren't
+  // at War either (player report 1g2g5p334g071b0b).
+  if (!isAtWar(state, nation)) {
+    return `${nationName(nation)} is not At War, so it cannot muster (p.26). Advance ${nationName(nation)} to “At War” on the Political Track first.`;
+  }
   if (settlementController(state, id) !== side) {
     return `${name} is under enemy control — you cannot muster in a Settlement the enemy controls (p.27). Retake it first.`;
   }
   if (armySide(state, id) === (side === 'fp' ? 'shadow' : 'fp')) return `There is an enemy Army in ${name}.`;
   if (state.regions[id]!.besieged) return `${name} is under siege — no troops can be mustered into a besieged Stronghold (p.27).`;
-  if (!isAtWar(state, nation)) {
-    return `${nationName(nation)} is not At War, so it cannot muster (p.26). Advance ${nationName(nation)} to “At War” on the Political Track first.`;
-  }
   if (unitCount(state, id) >= STACKING_LIMIT) return `${name} already holds ${STACKING_LIMIT} Army units — the stacking limit (p.26).`;
   const pool = state.reinforcements[nation] as { regular: number; elite: number };
   if (pool.regular < 1 && pool.elite < 1) {

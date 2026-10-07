@@ -1469,9 +1469,9 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
           holder.characters.splice(holder.characters.indexOf('saruman'), 1);
           state.characters.eliminated.push('saruman');
           delete state.characters.inPlay['saruman'];
-          log(state, null, 'event', 'The Ents Awake: Saruman is alone in Orthanc — eliminated');
+          log(state, null, 'event', 'Saruman is eliminated by the Ents');
         } else {
-          log(state, null, 'event', 'The Ents Awake: Orthanc holds no Shadow Army — no effect');
+          log(state, null, 'event', 'The Ents march on Orthanc but find it empty');
         }
         freeChar();
         return;
@@ -1486,7 +1486,7 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       // Men of Dunharrow. With no Army (Saruman alone) it is not.
       for (const n of SHADOW_NATIONS) { const u = force.units[n]; if (u && u.regular + u.elite > 0) onArmyAttacked(state, n, 'orthanc'); }
       const hits = rollDice(state, 3, 4);
-      log(state, null, 'event', `The Ents Awake: ${hits} hit(s) on ${boxed ? 'the Orthanc garrison' : 'Orthanc'}`);
+      log(state, null, 'event', `The Ents score ${hits} hit${hits === 1 ? '' : 's'} on the Shadow Army in Orthanc`);
       freeChar();
       // Shadow chooses how the Orthanc Army absorbs the hits (Regulars vs Elites);
       // if the Army is wiped, its Nazgûl recycle and its Minions are eliminated.
