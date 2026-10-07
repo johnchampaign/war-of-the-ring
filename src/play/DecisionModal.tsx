@@ -108,10 +108,9 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
   const [huntInfo, setHuntInfo] = useState(false);
   const pc = view.pendingCombat;
   const choice = view.pendingChoice;
-  // Simple event-card picks (Regular vs Elite etc.) surface HERE — as quiet panel
-  // buttons they went unnoticed ("played Riders of Rohan and nothing happened").
-  const evModal = eventChoiceInModal(actions);
-  const freeCard = choice?.kind === 'freeCharEvent';
+  // The card shown when nothing is hovered (see the CardBlurb below).
+  const eventCard = choice?.kind === 'eventTarget' ? (choice.data as { card?: string } | undefined)?.card : undefined;
+  const combatCard = pc ? revealedCard(pc.attacker === you ? pc.attackerCard ?? pc.defenderCard : pc.defenderCard ?? pc.attackerCard) : null;
   // A retreat DESTINATION is picked on the map (the highlighted regions), not from a
   // list of buttons — the binary Retreat-or-stand choice above it stays here (player
   // report 0f3003342g666741). The modal keeps its frame so the battle context is
@@ -158,9 +157,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
                 round, at a readable size (player reports 1w0z61380p6d094e,
                 1p5e543o6h015i0r: "there is no card to hover over", "the image is
                 hilariously tiny"). The attacker's card is shown when both are up. */}
-            <CardBlurb id={hoverCard
-              ?? (choice?.kind === 'eventTarget' ? (choice.data as { card?: string } | undefined)?.card ?? null : null)
-              ?? (pc ? revealedCard(pc.attacker === you ? pc.attackerCard ?? pc.defenderCard : pc.defenderCard ?? pc.attackerCard) : null)} />
+            <CardBlurb id={hoverCard ?? eventCard ?? combatCard} />
           </>
         ) : (
           <div style={{ color: '#cc9', marginTop: 12 }}>Waiting for {sideName(pc ? (choice?.owner ?? pc.attacker) : you)} to decide…</div>

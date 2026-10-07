@@ -42,9 +42,9 @@ export const BOARD_PATH: Record<string, string> = {
 /** Whether the right-hand action list shows `a`.
  *
  *  `legal` is the whole legal-action set (some decisions are only "simple" — and so
- *  belong in the modal — relative to what else is on offer); `view` supplies the
- *  pending choice. */
-export function panelShowsAction(a: WotrAction, legal: WotrAction[], view: GameState): boolean {
+ *  belong in the modal — relative to what else is on offer). `_view` is kept for callers but no longer
+ *  consulted. */
+export function panelShowsAction(a: WotrAction, legal: WotrAction[], _view: GameState): boolean {
   return !isSpatial(a)
     // Siege ASSAULTS were buttons as well as a board click, on the theory that an attack
     // with no separate destination needed one. Once the board grew its "⚔ Assault the

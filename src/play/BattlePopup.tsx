@@ -4,7 +4,6 @@
 // and the result. Combat is public info, so it shows for both players.
 import type { GameState, Side } from '../engine/types';
 import mapData from '../../assets/map.json';
-import { RollRow } from './combatDice';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');

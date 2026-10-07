@@ -33,7 +33,7 @@ import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { isDecisionAction, dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, isSecondMusterTarget, trivialDie } from './actionText';
+import { dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, isSecondMusterTarget, trivialDie } from './actionText';
 import { moveBlockReason, musterBlockReason, cardPathBlockReason, regionHops } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial } from './panelFilter';
@@ -441,6 +441,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // A hint already on screen when the window closes is just as misleading as one
   // raised outside it — drop it as the board changes hands.
   useEffect(() => { if (!basicMoveWindow) setBlockMsg(null); }, [basicMoveWindow]);
+  // …and so is one left over from an Action that has ended: every Action spends a die,
+  // so a die leaving either pool clears it (player report 662j57501s6k6d5j).
+  const diceLeft = g.view ? g.view.dice.fp.length + g.view.dice.shadow.length : 0;
+  useEffect(() => { setBlockMsg(null); }, [diceLeft]);
   // Peeking is a look at the board DURING one blocking prompt; once that prompt is gone
   // the peek has to end with it, or the toggle stays latched on and hides the NEXT
   // modal before the player has seen it.
@@ -992,8 +996,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   // "Muster here" under a heading that already says "here" (player
                   // report 4j5g4c352b5u476e).
                   : o.kind === 'muster' ? '🛡 Muster'
-                  : o.kind === 'cardchar' ? `${o.label} (by card)`
-                  : o.kind === 'cardgroup' ? `All of them together, by card (${o.acts.map((a) => charName((a as Extract<WotrAction, { kind: 'eventTarget' }>).companion!)).join(', ')})`
+                  // No "(by card)" / ", by card": while a card is resolving its moves
+                  // are the only ones on offer (player report 2l4d2f146v333i3b).
+                  : o.kind === 'cardchar' ? o.label
+                  : o.kind === 'cardgroup' ? `All of them together (${o.acts.map((a) => charName((a as Extract<WotrAction, { kind: 'eventTarget' }>).companion!)).join(', ')})`
                   : o.kind === 'chargroup' ? `All Companions together (${o.chars.map(charName).join(', ')})`
                   : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
               </button>

@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeForMovement, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
@@ -979,7 +979,6 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
   effects.sort((x, y) => x.ini - y.ini || (x.side === pc.defender ? -1 : 1)); // lower first; tie -> defender
   for (const ef of effects) {
     const own = ef.side === pc.attacker ? pc.from : pc.to;
-    const enemy = ef.side === pc.attacker ? pc.to : pc.from;
     // The OWNER's force is likewise the box when the owner is the boxed side.
     const ownForce = ef.side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
     if (forceUnitCount(ownForce) === 0) continue; // owner already left/wiped by an earlier pre-effect
@@ -1577,20 +1576,25 @@ export function combatStep(state: GameState): void {
         // check so a cancelled card reads as cancelled.
         const played = (card: string | null, mods: CombatMods, cancelled: boolean, outrun = false) => {
           if (!card) return cardName(card);
-          if (cancelled) return `${cardName(card)} — CANCELLED by the opposing card`;
+          // A cancelled card is named plainly; the cancel gets its own line below, and
+          // the cancelling card doesn't restate it (player report 3m5w464l281a6i5o).
+          if (cancelled) return cardName(card);
           if (card === fpCard && defianceVoid) return `${cardName(card)} — NO EFFECT: The White Rider has already forfeited Gandalf's Leadership, so the Companions cannot forfeit all of theirs`;
           if (card === fpCard && fpSilencedCard) return `${cardName(card)} — NO EFFECT: Words of Power has cancelled ${characterDef(silencedNow!)?.name ?? silencedNow}'s Leadership`;
           if (outrun) return `${cardName(card)} — TOO SLOW: the opposing card retreats its Army first, so this one never resolves`;
           // A conditional bonus hit ("+2 hits if it scored any") is named on the dice
           // line when it actually fires ("+ 2 automatic hits from 'Nameless Wood'"), so
           // saying it here too only doubled it up (player report 722j600u2v6q3062).
-          const what = describeCombatMods({ ...mods, bonusHitsIfAny: 0 });
+          const what = describeCombatMods({ ...mods, bonusHitsIfAny: 0, cancelEnemyCard: false });
           return `${cardName(card)}${what ? ` — ${what}` : ''}`;
         };
         log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.attacker)} (attacker) ${pc.attacker === 'fp' ? 'play' : 'plays'} ${played(pc.attackerCard, aMods, aCancelled, aOutrun)}`);
         if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
         log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.defender)} (defender) ${pc.defender === 'fp' ? 'play' : 'plays'} ${played(pc.defenderCard, dMods, dCancelled, dOutrun)}`);
         if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
+        const title = (id: string) => `'${EVENT_BY_ID[id]?.combat?.title ?? EVENT_BY_ID[id]?.name ?? id}'`;
+        if (dCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.defenderCard!)} is cancelled by ${title(pc.attackerCard!)}`);
+        if (aCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.attackerCard!)} is cancelled by ${title(pc.defenderCard!)}`);
         // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
         // resolve in initiative order before the normal roll; either can end the
         // battle (a retreat empties a region, a pre-attack can wipe one).

@@ -609,20 +609,29 @@ register('sh-char-18', {
 
 // --- Shadow: recruit -----------------------------------------------------
 // Fixed-region Shadow recruit cards (named regions / counts).
+// A named-region recruit with no other clause needs a figure it can actually place:
+// a free region AND that figure type left in reinforcements. With only the region
+// checked, Monsters Roused, Orcs Multiplying Again and A New Power is Rising spent a
+// die and the card on an empty pool (player report 396x4h564l1y1h4c). The FP cards are different — the
+// Almanac lets them be played for their other text when recruitment is impossible.
+const canPlaceIn = (s: GameState, nation: Nation, region: string, figure: 'regular' | 'elite'): boolean =>
+  s.reinforcements[nation][figure] > 0 && recruitable(s, sideOfNation(nation), region);
 // A New Power is Rising: 2 Isengard Regulars in each Dunland (no choice) + 2 in Orthanc (R or E each).
 register('sh-str-16', recruitChoiceCard('shadow', [{ nation: 'isengard', region: 'orthanc' }, { nation: 'isengard', region: 'orthanc' }], {
   // Printed precondition: "Play if Saruman is in play" — it was missing, so the card
   // could be played with Saruman still off the board (player report).
   canPlay: (s) => inPlay(s, 'saruman')
-    && (recruitable(s, 'shadow', 'orthanc') || recruitable(s, 'shadow', 'north-dunland') || recruitable(s, 'shadow', 'south-dunland')),
+    && (canPlaceIn(s, 'isengard', 'orthanc', 'regular') || canPlaceIn(s, 'isengard', 'orthanc', 'elite')
+      || canPlaceIn(s, 'isengard', 'north-dunland', 'regular') || canPlaceIn(s, 'isengard', 'south-dunland', 'regular')),
   apply: (s) => { placeForce(s, 'isengard', 'north-dunland', { regular: 2 }); placeForce(s, 'isengard', 'south-dunland', { regular: 2 }); },
 }));
 register('sh-str-20', { // Orcs Multiplying Again: 3 Sauron Regulars in Dol Guldur + 3 in Mount Gundabad
-  canPlay: (s) => recruitable(s, 'shadow', 'dol-guldur') || recruitable(s, 'shadow', 'mount-gundabad'),
+  canPlay: (s) => canPlaceIn(s, 'sauron', 'dol-guldur', 'regular') || canPlaceIn(s, 'sauron', 'mount-gundabad', 'regular'),
   apply: (s) => { placeForce(s, 'sauron', 'dol-guldur', { regular: 3 }); placeForce(s, 'sauron', 'mount-gundabad', { regular: 3 }); },
 });
 register('sh-str-22', { // Monsters Roused: 1 Sauron Regular each in Angmar/Ettenmoors/Weather Hills + 1 Elite in Trollshaws
-  canPlay: (s) => ['angmar', 'ettenmoors', 'weather-hills', 'trollshaws'].some((r) => recruitable(s, 'shadow', r)),
+  canPlay: (s) => ['angmar', 'ettenmoors', 'weather-hills'].some((r) => canPlaceIn(s, 'sauron', r, 'regular'))
+    || canPlaceIn(s, 'sauron', 'trollshaws', 'elite'),
   apply: (s) => { for (const r of ['angmar', 'ettenmoors', 'weather-hills']) placeForce(s, 'sauron', r, { regular: 1 }); placeForce(s, 'sauron', 'trollshaws', { elite: 1 }); },
 });
 

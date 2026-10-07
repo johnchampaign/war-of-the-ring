@@ -7,7 +7,7 @@ import type { WotrAction, MoveSel } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
-import { moveFellowship, hideFellowship, declareFellowship, enterMordor, separateCompanion, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, pathTo, MORDOR_ENTRANCES, fellowshipPath } from '../engine/fellowship';
+import { moveFellowship, hideFellowship, declareFellowship, enterMordor, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, MORDOR_ENTRANCES, fellowshipPath } from '../engine/fellowship';
 import { extraHunt, queueTakenAlive } from '../engine/hunt';
 import { log, logCardDraw, sideDoes } from '../engine/log';
 import {
@@ -20,7 +20,7 @@ import { advancePolitical, advanceableNations, isAtWar } from '../engine/politic
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
 import { canBringMinion, entryRegions, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
-import { REGIONS, sideOfNation, EVENT_BY_ID, characterSide, playFacesFor } from '../engine/data';
+import { REGIONS, sideOfNation, EVENT_BY_ID, playFacesFor } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, flagValue, type EventTarget } from '../engine/handlers/registry';
 import { characterDef } from '../engine/data';

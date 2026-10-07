@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import type { GameState, Nation, Side } from '../engine/types';
 import type { MoveSel, WotrAction } from '../adapter/wotrAction';
-import { characterSide, sideOfNation } from '../engine/data';
+import { characterSide, sideOfNation, nationName, nationSubject, nationsArePlural } from '../engine/data';
 import { isAtWar } from '../engine/politics';
 import { attackError, sortieForce } from '../engine/combat';
 import { splitBlockReason } from '../engine/armies';
@@ -202,9 +202,9 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
           {landingAttack ? `Choose what lands in ${rName(to)} and attacks; the rest stays in ${rName(from)} and sits out the battle.`
             : attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.'
             : holdBackMode ? `Choose who stays in ${rName(from)}; everyone unticked marches back to ${rName(to)}.${holdBackMustHold ? ' At least one unit must hold the Settlement you just took.' : ' You may bring the whole Army back.'}`
-              : evLimit !== undefined ? `Choose what moves — this card moves up to ${evLimit} ${evNation ? cap(evNation) + ' ' : ''}unit${evLimit === 1 ? '' : 's'}.`
-              : cap2 ? `Only the figures that were already in ${rName(from)} before this die's first move may move again — the ones that just arrived stay.${stayNations.length ? ` ${stayNations.map(cap).join(' and ')} ${stayNations.length === 1 ? 'is' : 'are'} not At War and cannot cross into ${rName(to)}.` : ''}`
-              : stayNations.length ? `Choose what moves. ${stayNations.map(cap).join(' and ')} ${stayNations.length === 1 ? 'is' : 'are'} not At War and cannot cross into ${rName(to)}, so those units stay behind.` : 'Choose what moves.'}
+              : evLimit !== undefined ? `Choose what moves — this card moves up to ${evLimit} ${evNation ? nationName(evNation) + ' ' : ''}unit${evLimit === 1 ? '' : 's'}.`
+              : cap2 ? `Only the figures that were already in ${rName(from)} before this die's first move may move again — the ones that just arrived stay.${stayNations.length ? ` ${nationSubject(stayNations)} ${nationsArePlural(stayNations) ? 'are' : 'is'} not At War and cannot cross into ${rName(to)}.` : ''}`
+              : stayNations.length ? `Choose what moves. ${nationSubject(stayNations)} ${nationsArePlural(stayNations) ? 'are' : 'is'} not At War and cannot cross into ${rName(to)}, so those units stay behind.` : 'Choose what moves.'}
         </div>
         {/* Only when the CURRENT selection overstacks (player reports 5j706y1s5j1w2r4n,
             0c572i714k006v6r): the map already shows what stands there, so a plain
@@ -216,19 +216,25 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
         )}
         {goNations.map((n) => (
           <div key={n} style={{ marginBottom: 4 }}>
-            <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{cap(n)}</div>
+            <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{nationName(n)}</div>
             {maxReg(n) > 0 && <Step label="Regulars" val={reg[n] ?? 0} max={Math.min(maxReg(n), (reg[n] ?? 0) + budgetLeft)} set={(v) => setReg({ ...reg, [n]: v })} />}
             {maxEli(n) > 0 && <Step label="Elites" val={eli[n] ?? 0} max={Math.min(maxEli(n), (eli[n] ?? 0) + budgetLeft)} set={(v) => setEli({ ...eli, [n]: v })} />}
           </div>
         ))}
         {stayNations.map((n) => (
           <div key={n} style={{ marginBottom: 4, opacity: 0.6 }}>
-            <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{cap(n)}</div>
+            <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{nationName(n)}</div>
             <div style={{ fontSize: 12, color: '#bbb' }}>
-              {maxReg(n) + maxEli(n)} unit{maxReg(n) + maxEli(n) === 1 ? '' : 's'} stay — {cap(n)} is not At War.
+              {maxReg(n) + maxEli(n)} unit{maxReg(n) + maxEli(n) === 1 ? '' : 's'} stay — {nationSubject(n)} {nationsArePlural([n]) ? 'are' : 'is'} not At War.
             </div>
           </div>
         ))}
+        {/* Leaders, Nazgûl and Characters belong to no one Nation's heading — without
+            their own they read as part of the last Nation listed (player report
+            6n391x553q3c1b39). */}
+        {(goNations.length + stayNations.length) > 0 && (maxLeaders > 0 || maxNazgul > 0 || myChars.length > 0) && (
+          <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8', marginTop: 4 }}>{armySide === 'fp' ? 'Free Peoples' : 'Shadow'}</div>
+        )}
         {maxLeaders > 0 && <Step label="Leaders" val={leaders} max={maxLeaders} set={setLeaders} />}
         {maxNazgul > 0 && <Step label="Nazgûl" val={nazgul} max={maxNazgul} set={setNazgul} />}
         {myChars.map((c) => (
@@ -258,7 +264,6 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
   );
 }
 
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 };
 const card: React.CSSProperties = { background: '#211c14', color: '#eee', padding: 16, borderRadius: 8, width: 320, maxHeight: '80vh', overflow: 'auto', fontFamily: 'system-ui', border: '1px solid #554' };
 const row: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '2px 0' };

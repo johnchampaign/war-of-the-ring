@@ -45,6 +45,26 @@ const NATION_NAME: Record<string, string> = {
   sauron: 'Sauron', isengard: 'Isengard', southrons: 'Southrons & Easterlings',
 };
 export const nationName = (n: string): string => NATION_NAME[n] ?? n;
+// The Elves, the Dwarves and the Southrons & Easterlings are peoples, so they take a
+// plural verb and, in board hints, the article the hints use for the Sides too: "The
+// Elves are not At War — their units…", never "Elves is … its units" (player reports
+// 674z4l1n0w1v1l24, 0w154y2h1j4c0b2w). The game log keeps the bare names.
+const PLURAL_NATIONS = new Set(['dwarves', 'elves', 'southrons']);
+/** Whether these Nations, as one subject, take a plural verb. */
+export const nationsArePlural = (ns: readonly string[]): boolean =>
+  ns.length !== 1 || PLURAL_NATIONS.has(ns[0]!);
+/** A Nation mid-sentence, with its article: "the Elves", "Gondor". */
+export const theNation = (n: string): string => (PLURAL_NATIONS.has(n) ? 'the ' : '') + nationName(n);
+/** Nations mid-sentence: "the Elves", "Rohan and the Dwarves". */
+export function nationList(ns: string | readonly string[]): string {
+  const list = (typeof ns === 'string' ? [ns] : ns).map(theNation);
+  return list.length === 1 ? list[0]! : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
+}
+/** Nations as a sentence's subject: "The Elves", "Rohan and the Dwarves". */
+export function nationSubject(ns: string | readonly string[]): string {
+  const joined = nationList(ns);
+  return joined.charAt(0).toUpperCase() + joined.slice(1);
+}
 
 export const sideOfNation = (n: Nation): Side =>
   NATIONS_DEF[n].side === 'Shadow' ? 'shadow' : 'fp';

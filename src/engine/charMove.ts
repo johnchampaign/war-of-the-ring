@@ -10,11 +10,9 @@
 // figure moves at most once (relay guard). The one residual simplification is the
 // engine's group-granularity (a region's Nazgûl move as a group, not figure by
 // figure); see docs/rules-spec.md §5.
-import type { GameState, RegionId, Side, Nation } from './types';
-import { FP_NATIONS } from './types';
-import { REGIONS, levelOf, COMPANIONS } from './data';
+import type { GameState, RegionId, Side } from './types';
+import { REGIONS, levelOf } from './data';
 import { settlementController, armySide, unitCount, figureForce, activateOnCompanionLand } from './armies';
-import { activateNation } from './politics';
 import { andList, log } from './log';
 
 const FLY = 99;
@@ -183,7 +181,7 @@ export interface RangeOpts { extraMove?: number; levelOverride?: number;
   group?: readonly string[] }
 /** The movement range of a piece: Nazgûl/Witch-king fly; Saruman 0; others by Level.
  *  Gandalf the White's Shadowfax: Level 4 when alone or with a single Hobbit. */
-function rangeOf(state: GameState, char: string, from: RegionId, opts: RangeOpts = {}): number {
+function rangeOf(_state: GameState, char: string, _from: RegionId, opts: RangeOpts = {}): number {
   if (char === 'nazgul' || char === 'witch-king') return FLY;
   if (char === 'saruman') return 0;
   const bonus = opts.extraMove ?? 0;

@@ -2,7 +2,7 @@
 // capture (rules-spec §1, §6). Combat is in combat.ts.
 import type { GameState, Nation, RegionId, Side, ArmyUnits } from './types';
 import { FP_NATIONS } from './types';
-import { REGIONS, sideOfNation, characterDef, characterSide, nationName, COMPANIONS } from './data';
+import { REGIONS, sideOfNation, characterDef, characterSide, nationName, nationSubject, nationList, nationsArePlural, theNation, COMPANIONS } from './data';
 import { isAtWar, onSettlementCaptured, activateNation } from './politics';
 import { shadowBarredFromRegion, shadowBarringCard } from './persistent';
 import { log, sideDoes, sideName } from './log';
@@ -290,7 +290,8 @@ export function musterBlockReason(state: GameState, id: RegionId, side: Side): s
   // "There is an enemy Army in Rivendell" read as the only bar when the Elves weren't
   // at War either (player report 1g2g5p334g071b0b).
   if (!isAtWar(state, nation)) {
-    return `${nationName(nation)} is not At War, so it cannot muster (p.26). Advance ${nationName(nation)} to “At War” on the Political Track first.`;
+    const pl = nationsArePlural([nation]);
+    return `${nationSubject(nation)} ${pl ? 'are' : 'is'} not At War, so ${pl ? 'they' : 'it'} cannot muster (p.26). Advance ${theNation(nation)} to “At War” on the Political Track first.`;
   }
   if (settlementController(state, id) !== side) {
     return `${name} is under enemy control — you cannot muster in a Settlement the enemy controls (p.27). Retake it first.`;
@@ -300,7 +301,9 @@ export function musterBlockReason(state: GameState, id: RegionId, side: Side): s
   if (unitCount(state, id) >= STACKING_LIMIT) return `${name} already holds ${STACKING_LIMIT} Army units — the stacking limit (p.26).`;
   const pool = state.reinforcements[nation] as { regular: number; elite: number };
   if (pool.regular < 1 && pool.elite < 1) {
-    return `${nationName(nation)} has no units left in reinforcements — every figure is already on the board or lost (p.27).`;
+    // Not "units … on the board or lost": Shadow Army units are never lost, and the
+    // pool is the reinforcements as a whole (player report 0w154y2h1j4c0b2w).
+    return `${nationSubject(nation)} ${nationsArePlural([nation]) ? 'have' : 'has'} no reinforcements left.`;
   }
   return null;
 }
@@ -360,7 +363,7 @@ export function cardPathBlockReason(state: GameState, from: RegionId, path: read
     const dn = REGIONS[r]?.nation;
     for (const nation of movingNations) {
       if (!isAtWar(state, nation) && dn && dn !== nation) {
-        return `${nationName(nation)} is not At War — its units cannot enter another Nation's borders (${REGIONS[r]?.name ?? r}).`;
+        return `${nationSubject(nation)} ${nationsArePlural([nation]) ? 'are not At War — their' : 'is not At War — its'} units cannot enter another Nation's borders (${REGIONS[r]?.name ?? r}).`;
       }
     }
     prev = r;
@@ -531,9 +534,8 @@ export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, 
       .filter((n) => sideOfNation(n) === side && (state.regions[from]!.units[n]!.regular + state.regions[from]!.units[n]!.elite) > 0);
     const sleeping = own.filter((n) => !isAtWar(state, n));
     if (own.length > 0 && sleeping.length === own.length) {
-      const names = sleeping.map(nationName);
-      const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-      return `Enemy units there, so this would be an attack — but ${list} ${names.length === 1 ? 'is' : 'are'} not At War, and an Army can only attack with figures of a Nation that is. Advance ${names.length === 1 ? 'it' : 'one of them'} to War on the Political Track first.`;
+      const pl = nationsArePlural(sleeping);
+      return `Enemy units there, so this would be an attack — but ${nationList(sleeping)} ${pl ? 'are' : 'is'} not At War, and an Army can only attack with figures of a Nation that is. Advance ${sleeping.length > 1 ? 'one of them' : pl ? 'them' : 'it'} to War on the Political Track first.`;
     }
     return 'Enemy units there — clicking an occupied region attacks it; an Army can never move into one.';
   }
@@ -546,7 +548,10 @@ export function moveBlockReason(state: GameState, from: RegionId, to: RegionId, 
     if (!isAtWar(state, nation) && dn && dn !== nation) {
       // "another Nation's", not the id possessive — that read "Southrons's borders"
       // (player report 5j5m3419102n5o1g).
-      return `${nationName(nation)} is not At War — its units cannot enter another Nation's borders. Advance ${nationName(nation)} to War first (or split off only its At-War units).`;
+      // No "or split off only its At-War units": the move picker already greys out the
+      // barred Nation's units, so this only ever fires for a single-Nation Army
+      // (player report 674z4l1n0w1v1l24).
+      return `${nationSubject(nation)} ${nationsArePlural([nation]) ? 'are not At War — their' : 'is not At War — its'} units cannot enter another Nation's borders.`;
     }
   }
   return null;
@@ -613,7 +618,8 @@ export function splitBlockReason(state: GameState, from: RegionId, to: RegionId,
   const dn = REGIONS[to]!.nation;
   for (const n of Object.keys(sel.units ?? {}) as Nation[]) {
     if (!isAtWar(state, n) && dn && dn !== n) {
-      return `${nationName(n)} is not At War — its units cannot enter another Nation's borders. Advance ${nationName(n)} to War first (or leave its units behind).`;
+      const pl = nationsArePlural([n]);
+      return `${nationSubject(n)} ${pl ? 'are not At War — their' : 'is not At War — its'} units cannot enter another Nation's borders. Advance ${theNation(n)} to War first (or leave ${pl ? 'their' : 'its'} units behind).`;
     }
   }
   const remainingUnits = unitCount(state, from) - movingUnits;
@@ -714,7 +720,8 @@ export function moveArmy(state: GameState, from: RegionId, to: RegionId, side: S
     if (ok && stayers.length) {
       const names = stayers.map(nationName);
       const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-      log(state, null, 'army', `${list} ${names.length === 1 ? 'is' : 'are'} not At War and ${names.length === 1 ? 'stays' : 'stay'} in ${REGIONS[from]?.name ?? from}`);
+      const pl = nationsArePlural(stayers);
+      log(state, null, 'army', `${list} ${pl ? 'are' : 'is'} not At War and ${pl ? 'stay' : 'stays'} in ${REGIONS[from]?.name ?? from}`);
     }
     return ok;
   }

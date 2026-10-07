@@ -66,8 +66,10 @@ export function describeAction(a: WotrAction): string {
       // "Remove", not a second "Discard" — the log says the Shadow removes the card, and
       // two discards in one line read awkwardly (player report 0h190y6n5t302e4r).
       ? `Remove "${cardName(a.cardId)}" (discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
-      : a.via === 'ring' ? `Discard "${cardName(a.cardId)}" (and one Elven Ring)`
-      : `Discard "${cardName(a.cardId)}"`;
+      // Every way of getting rid of the OPPONENT's table card says "Remove" (player
+      // report 03102x0902160c4r).
+      : a.via === 'ring' ? `Remove "${cardName(a.cardId)}" (spend one Elven Ring)`
+      : `Remove "${cardName(a.cardId)}"`;
     // Both labels used to describe the ability in shorthand that reads as something
     // else: "recruit Isengard" is not a thing you recruit, and "Orthanc Regulars" names
     // a Nation that does not exist (player report 3v6m502j4k3z161y). Say what the card
@@ -98,43 +100,9 @@ export function describeAction(a: WotrAction): string {
         return `Recruit ${a.nation ? `${nationName(a.nation)} ` : ''}${fig} in ${rName(a.region!)}`;
       }
     case 'bringMinion': return `Bring ${charName(a.minion)} into play in ${rName(a.region)}`;
-    case 'eventTarget': {
-      if (a.done) return `${cardName(a.card)}: done`;
-      // Fellowship hide/move/decline choice (There Is Another Way).
-      if (!a.region && !a.to && !a.companion && a.mode) {
-        const label = a.mode === 'hide' ? 'hide the Fellowship' : a.mode === 'move' ? 'move the Fellowship (triggers a Hunt)' : 'do neither';
-        return `${cardName(a.card)}: ${label}`;
-      }
-      if (a.eye) return a.face ? `${cardName(a.card)}: turn ${aFace(a.face)} die into an Eye (→ Hunt Box)` : `${cardName(a.card)}: turn a die into an Eye (→ Hunt Box)`;
-      // Dreadful Spells names its victim army and nothing else — say so, or the bare
-      // region name reads like a move rather than "these are the troops you hit".
-      if (a.card === 'sh-char-19' && a.region) return `${cardName(a.card)}: strike the Free Peoples Army in ${rName(a.region)}`;
-      // A region-only recruit pick ("choose the Settlement", no nation/figure on the
-      // target). Each such card recruits something different, and this line said
-      // "recruit 2 Nazgûl" for all of them — Many Kings recruits Southron Regulars
-      // (player report h9wdkpkz6cx3xw9e).
-      if (a.mode === 'recruit') return `${cardName(a.card)}: recruit ${CARD_RECRUITS[a.card] ?? 'reinforcements'} in ${rName(a.region!)}`;
-      if (a.mode === 'attack' && a.from && a.from === a.to) return `${cardName(a.card)}: ⚔ assault the siege at ${rName(a.to)}`;
-      // Dead Men of Dunharrow: who rides with Strider/Aragorn, and the "may recruit up
-      // to three" step after the Dead Men have struck.
-      if (a.card === 'fp-char-22' && a.count !== undefined) return a.count === 0 ? `${cardName(a.card)}: recruit no Gondor Regulars` : `${cardName(a.card)}: recruit ${a.count} Gondor Regular${a.count === 1 ? '' : 's'} there`;
-      if (a.card === 'fp-char-22' && a.companion && a.from && !a.region) return `${cardName(a.card)}: ${charName(a.companion)} goes too`;
-      if (a.companion === 'nazgul') return a.region ? `${cardName(a.card)}: move ${a.count ?? ''} Nazgûl ${rName(a.from!)} → ${rName(a.region)}`.replace('move  ', 'move ') : `${cardName(a.card)}: move the Nazgûl in ${rName(a.from!)}`;
-      if (a.companion && a.mode === 'none') return `${cardName(a.card)}: deselect (move someone else)`;
-      if (a.companion && a.region) return `${cardName(a.card)}: send ${charName(a.companion)} to ${rName(a.region)}`;
-      // A pick tagged with a region is a figure ALREADY on the map (the "or move"
-      // branch of Gwaihir / We Prove the Swifter, or a Nazgûl-card fly) — say where
-      // from, so it reads differently from separating someone out of the Fellowship.
-      if (a.companion && a.from) return `${cardName(a.card)}: move ${charName(a.companion)} (on the map, in ${rName(a.from)})`;
-      if (a.companion && !a.region) return `${cardName(a.card)}: separate ${charName(a.companion)} (joins the travelling group)`;
-      if (a.figure && a.region && !a.nation && !a.to) return `${cardName(a.card)}: upgrade a Regular to Elite in ${rName(a.region)}`;
-      if (a.figure) return `${cardName(a.card)}: recruit a${a.nation ? ` ${nationName(a.nation)}` : ''} ${a.figure === 'elite' ? 'Elite' : 'Regular'}${a.region ? ` in ${rName(a.region)}` : ''}`;
-      if (a.nation && a.card === 'sh-str-06') return `${cardName(a.card)}: set ${nationName(a.nation)} back one step`;
-      if (a.nation) return `${cardName(a.card)}: activate ${nationName(a.nation)} (advance 1 step)`;
-      const dest = a.companion ? charName(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
-      const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';
-      return `${cardName(a.card)}: ${verb}${a.from ? `${rName(a.from)} → ` : ''}${dest}`;
-    }
+    // No "<card name>: " prefix — the player knows which card they just played, and it
+    // made every button unwieldy (player report 2l4d2f146v333i3b).
+    case 'eventTarget': return cap(eventTargetText(a));
     case 'moveCharacter': return `Move ${a.chars && a.chars.length > 1 ? `${a.chars.map(charName).join(' + ')} (together)` : a.char === 'nazgul' ? `${a.count ?? ''} Nazgûl`.trim() : charName(a.char)} ${rName(a.from)} → ${rName(a.to)}`;
     case 'charMove2': return 'Done moving characters';
     case 'separateMove':
@@ -349,4 +317,42 @@ export function eventChoiceInModal(actions: WotrAction[]): boolean {
   // Its leftover simple options ("done", a deck pick) become list buttons instead.
   if (ets.some((a) => isCardRecruitTarget(a) || isCardArmyMoveTarget(a))) return false;
   return ets.length > 0 && ets.every(simpleEventTarget);
+}
+
+/** The body of an Event-card choice button (see `describeAction`). */
+function eventTargetText(a: Extract<WotrAction, { kind: 'eventTarget' }>): string {
+  if (a.done) return 'done';
+  // Fellowship hide/move/decline choice (There Is Another Way).
+  if (!a.region && !a.to && !a.companion && a.mode) {
+    return a.mode === 'hide' ? 'hide the Fellowship' : a.mode === 'move' ? 'move the Fellowship (triggers a Hunt)' : 'do neither';
+  }
+  if (a.eye) return a.face ? `turn ${aFace(a.face)} die into an Eye (→ Hunt Box)` : `turn a die into an Eye (→ Hunt Box)`;
+  // Dreadful Spells names its victim army and nothing else — say so, or the bare
+  // region name reads like a move rather than "these are the troops you hit".
+  if (a.card === 'sh-char-19' && a.region) return `strike the Free Peoples Army in ${rName(a.region)}`;
+  // A region-only recruit pick ("choose the Settlement", no nation/figure on the
+  // target). Each such card recruits something different, and this line said
+  // "recruit 2 Nazgûl" for all of them — Many Kings recruits Southron Regulars
+  // (player report h9wdkpkz6cx3xw9e).
+  if (a.mode === 'recruit') return `recruit ${CARD_RECRUITS[a.card] ?? 'reinforcements'} in ${rName(a.region!)}`;
+  if (a.mode === 'attack' && a.from && a.from === a.to) return `⚔ Assault the siege at ${rName(a.to)}`;
+  // Dead Men of Dunharrow: who rides with Strider/Aragorn, and the "may recruit up
+  // to three" step after the Dead Men have struck.
+  if (a.card === 'fp-char-22' && a.count !== undefined) return a.count === 0 ? `recruit no Gondor Regulars` : `recruit ${a.count} Gondor Regular${a.count === 1 ? '' : 's'} there`;
+  if (a.card === 'fp-char-22' && a.companion && a.from && !a.region) return `${charName(a.companion)} goes too`;
+  if (a.companion === 'nazgul') return a.region ? `move ${a.count ?? ''} Nazgûl ${rName(a.from!)} → ${rName(a.region)}`.replace('move  ', 'move ') : `move the Nazgûl in ${rName(a.from!)}`;
+  if (a.companion && a.mode === 'none') return `deselect (move someone else)`;
+  if (a.companion && a.region) return `send ${charName(a.companion)} to ${rName(a.region)}`;
+  // A pick tagged with a region is a figure ALREADY on the map (the "or move"
+  // branch of Gwaihir / We Prove the Swifter, or a Nazgûl-card fly) — say where
+  // from, so it reads differently from separating someone out of the Fellowship.
+  if (a.companion && a.from) return `move ${charName(a.companion)} (on the map, in ${rName(a.from)})`;
+  if (a.companion && !a.region) return `separate ${charName(a.companion)} (joins the travelling group)`;
+  if (a.figure && a.region && !a.nation && !a.to) return `upgrade a Regular to Elite in ${rName(a.region)}`;
+  if (a.figure) return `recruit a${a.nation ? ` ${nationName(a.nation)}` : ''} ${a.figure === 'elite' ? 'Elite' : 'Regular'}${a.region ? ` in ${rName(a.region)}` : ''}`;
+  if (a.nation && a.card === 'sh-str-06') return `set ${nationName(a.nation)} back one step`;
+  if (a.nation) return `activate ${nationName(a.nation)} (advance 1 step)`;
+  const dest = a.companion ? charName(a.companion) : a.to ? rName(a.to) : a.region ? rName(a.region) : 'target';
+  const verb = a.mode === 'attack' ? 'attack ' : a.mode === 'move' ? 'move ' : '';
+  return `${verb}${a.from ? `${rName(a.from)} → ` : ''}${dest}`;
 }

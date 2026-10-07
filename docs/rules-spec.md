@@ -423,6 +423,16 @@ die already showing an Eye.
   guiding. Drawing through his ability costs the same Event die as the "Draw an Event
   card" action and additionally spends the card, so it is strictly worse — there is no
   play to protect.
+  **A Shadow named-region recruit card needs a figure it can place.** *Monsters Roused*
+  (sh-str-22), *Orcs Multiplying Again* (sh-str-20) and *A New Power is Rising*
+  (sh-str-16, on top of its printed Saruman condition) have no other clause, yet they
+  checked only that a named region was free — so with the Sauron (or Isengard) Regulars
+  and Elites all on the board they spent a die and the card to recruit nothing *(player
+  report 396x4h564l1y1h4c, 2026-10-07)*. They now need a free named region **and** that
+  figure type in reinforcements (Monsters Roused: a Regular for Angmar / Ettenmoors /
+  Weather Hills, or an Elite for Trollshaws). The other Shadow recruitment cards already
+  gated on reinforcements; the Free Peoples ones keep the Almanac's exception below.
+  `scripts/probe-triage-1007b.mjs`.
   **A recruitment card with nothing to recruit is still playable for the rest of its
   text.** Almanac, "Points common to all Free Peoples recruitment cards": "These cards
   may still be played if recruitment is impossible (e.g., if the required Settlement has
@@ -1068,13 +1078,17 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   Nations' units instead of letting a player tick figures that would be left behind. A
   selection that names a barred Nation is still refused, and a stack with **no** At-War
   Nation still has nowhere to go. `scripts/probe-partial-at-war-move.mjs`.
-- **Open: Free Peoples Leaders are not yet per-Nation.** A Leader figure belongs to a
+- **Deviation: Free Peoples Leaders are not per-Nation.** A Leader figure belongs to a
   Nation and is bound by the same diplomatic restrictions as its units, so an Army whose
   Elves are At War and whose North is not should send the Elven Leader and hold the North
   Leader back *(player report 154q2f5e406s6g32)*. The engine models a region's Leaders as
   a bare count (`leaders: number`), so it cannot tell them apart: every Leader currently
-  travels with the movers. Closing this means giving Leaders a Nation everywhere they are
-  stored (region, siege box, rearguard) and is a schema change.
+  travels with the movers. **Kept deliberately** *(player report 4h6k3l4g51276h15, the
+  same playtester)*: it only matters for a non-belligerent Leader who has first merged
+  into another Nation's Army, and then only when that Army moves or attacks (never when it
+  defends), while one Free Peoples Leader group keeps the pickers and hints simpler.
+  Closing it would mean giving Leaders a Nation everywhere they are stored (region, siege
+  box, rearguard) — a schema change.
 
 ---
 

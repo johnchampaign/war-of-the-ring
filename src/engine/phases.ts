@@ -13,7 +13,7 @@ import { checkMilitaryVictory, checkRingVictory } from './victory';
 import { combatStep } from './combat';
 import { extraHunt } from './hunt';
 import { pruneTableCards, palantirActive } from './persistent';
-import { armySide, sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
+import { sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { log, sideDoes, sufferCorruption } from './log';
 
