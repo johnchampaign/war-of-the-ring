@@ -833,7 +833,9 @@ export function removeStackUnit(state: GameState, id: RegionId, nation: Nation, 
   if (u.regular === 0 && u.elite === 0) delete f.units[nation];
   const pool = state.reinforcements[nation] as { regular: number; elite: number };
   pool[figure] += 1;
-  log(state, null, 'army', `${sideDoes(sideOfNation(nation), 'remove')} an over-stacked ${nation} ${figure} from ${id} (over the ${boxed ? `${SIEGE_LIMIT}-unit siege` : `${STACKING_LIMIT}-unit`} limit)`);
+  // "Shadow disbands a Sauron Regular in Dol Guldur (over the stacking limit)" (player
+  // report 275n2u615l5b2f21).
+  log(state, null, 'army', `${sideDoes(sideOfNation(nation), 'disband')} a ${nation} ${figure === 'elite' ? 'Elite' : 'Regular'} in ${id} (over the ${boxed ? 'siege ' : ''}stacking limit)`);
   return true;
 }
 

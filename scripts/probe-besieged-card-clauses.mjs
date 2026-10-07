@@ -127,7 +127,7 @@ const units = (f) => (f ? forceUnitCount(f) : 0);
   check('one boxed Leader is eliminated', s.regions['minas-tirith'].siegeBox.leaders === 1,
     `box leaders=${s.regions['minas-tirith'].siegeBox.leaders}`);
   check('the garrison units are untouched', units(s.regions['minas-tirith'].siegeBox) === 3);
-  check('logged', s.log.some((e) => e.msg.includes("Denethor's Folly: a Free Peoples Leader")));
+  check('logged', s.log.some((e) => e.msg.includes("Denethor's Folly claims a Free Peoples Leader")));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

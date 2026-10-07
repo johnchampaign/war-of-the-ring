@@ -281,29 +281,44 @@ function moveSelectedUnits(state: GameState, from: string, to: string, side: Sid
  *  that Stronghold) … to meet the stacking limit of 5"). The adapter's end-of-action
  *  sweep raises that removeExcess prompt. Capping here instead cost the player the
  *  Regular-for-Elite swap the rule allows (reports 4v3e2q1x564f0c3c, 9lksjgviw4ui2d3z). */
-function placeUnits(state: GameState, nation: Nation, region: string, regular: number, elite: number): void {
+// Every placement logs what actually landed, in the public Muster format, here at the
+// one seam all card recruits go through: Many Kings, Pits of Mordor, Musterings of
+// Long-planned War, Orcs Multiplying Again, House of the Stewards … recruited in
+// silence because each card was left to log for itself (player reports
+// 5w212u3f3z2h5z2q, 1q1l0052184n2w0v, 0b6k4s40345o5t3u, 18696p1a3o082d1j,
+// 535f44733o564r5v).
+const logCardRecruit = (state: GameState, nation: Nation, region: string, reg: number, el: number, lead: number): void => {
+  if (reg + el + lead <= 0) return;
+  log(state, null, 'muster', `${sideDoes(sideOfNation(nation), 'muster')} ${reg}R/${el}E${lead ? `/${lead}L` : ''} ${nation} in ${region}`);
+};
+function placeUnits(state: GameState, nation: Nation, region: string, regular: number, elite: number, quiet = false): number {
   const pool = state.reinforcements[nation];
   const dest = eventRecruitTarget(state, region, sideOfNation(nation));
-  if (!dest) return;
+  if (!dest) return 0;
   const reg = Math.max(0, Math.min(regular, pool.regular));
   const el = Math.max(0, Math.min(elite, pool.elite));
-  if (reg + el === 0) return;
+  if (reg + el === 0) return 0;
   pool.regular -= reg; pool.elite -= el;
   const u = dest.force.units[nation] ?? { regular: 0, elite: 0 };
   u.regular += reg; u.elite += el; dest.force.units[nation] = u;
+  if (!quiet) logCardRecruit(state, nation, region, reg, el, 0);
+  return reg + el;
 }
 
 // Force-place units + a Leader into a NAMED region for an event recruit (bypasses the
 // At-War gate; capped by reinforcements + stacking). Leaders only go where the units do.
 function placeForce(state: GameState, nation: Nation, region: string, opts: { regular?: number; elite?: number; leader?: number }): void {
-  placeUnits(state, nation, region, opts.regular ?? 0, opts.elite ?? 0);
+  const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
+  const r0 = pool.regular, e0 = pool.elite;
+  placeUnits(state, nation, region, opts.regular ?? 0, opts.elite ?? 0, true);
   const lead = opts.leader ?? 0;
+  let k = 0;
   if (lead > 0) {
     const dest = eventRecruitTarget(state, region, sideOfNation(nation));
-    const pool = state.reinforcements[nation] as { leader?: number };
-    const k = Math.min(lead, pool.leader ?? 0);
+    k = dest ? Math.min(lead, pool.leader ?? 0) : 0;
     if (dest && k > 0) { dest.force.leaders += k; pool.leader = (pool.leader ?? 0) - k; }
   }
+  logCardRecruit(state, nation, region, r0 - pool.regular, e0 - pool.elite, Math.max(0, k));
 }
 /** A region containing a true Settlement — Town, City, or Stronghold. A
  *  Fortification (Osgiliath, Fords of Isen) is NOT a Settlement (rulebook p.10),
@@ -324,16 +339,9 @@ const recruitable = (state: GameState, side: Side, region: string): boolean => {
   return settlementController(state, region) !== enemy && armySide(state, region) !== enemy;
 };
 
-/** Units in the stack an event recruit for `side` would join at `region` (the boxed
- *  garrison under a siege, otherwise the region itself). Used to tell "did the recruit
- *  land?" apart from "the stack was full". */
 /** Whether an event-recruit destination exists here. A FULL stack still counts: card
  *  recruits overstack and trim afterwards (see placeUnits). */
 const hasEventRoom = (state: GameState, region: string, side: Side): boolean => !!eventRecruitTarget(state, region, side);
-const recruitStackSize = (state: GameState, region: string, side: Side): number => {
-  const dest = eventRecruitTarget(state, region, side);
-  return dest ? forceUnitCount(dest.force) : 0;
-};
 
 /** Place up to `n` Nazgûl at `region` for a card recruit, and say how many landed.
  *
@@ -413,21 +421,15 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
       return [];
     },
     applyTarget(state, _side, t) {
-      const before = recruitStackSize(state, t.region!, side);
+      // placeUnits logs the recruit (a missing log read as "the unit wasn't recruited").
       placeUnits(state, t.nation!, t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0);
-      // Log the recruit (previously silent — a player report read the missing log as
-      // "the unit/leader wasn't recruited"). Same public format as a Muster recruit.
-      if (recruitStackSize(state, t.region!, side) > before) log(state, null, 'muster', `${sideDoes(side, 'muster')} ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} ${t.nation} in ${t.region}`);
     },
     finalize(state) {
       for (const l of opts.leaders ?? []) {
         // The region gate the unit half already goes through: `eventRecruitTarget` alone
         // would happily drop a Leader into an empty Settlement the enemy has captured.
         if (!recruitable(state, side, l.region)) continue;
-        const dest = eventRecruitTarget(state, l.region, side);
-        const before = dest ? dest.force.leaders : 0;
-        placeForce(state, l.nation, l.region, { leader: 1 });
-        if (dest && dest.force.leaders > before) log(state, null, 'muster', `${sideDoes(side, 'muster')} a ${l.nation} Leader in ${l.region}`);
+        placeForce(state, l.nation, l.region, { leader: 1 }); // logs what landed
       }
       opts.then?.(state);
     },
@@ -686,13 +688,9 @@ function placeChoiceCard(nation: Nation, regions: (s: GameState) => string[], op
     },
     applyTarget: (s, _side, t) => {
       if (!t.region || !t.figure) return;
-      const before = recruitStackSize(s, t.region, sideOfNation(nation));
+      // placeForce logs the placement (a player report had to guess where Éomer's
+      // reinforcements landed).
       placeForce(s, nation, t.region, { regular: t.figure === 'regular' ? 1 : 0, elite: t.figure === 'elite' ? 1 : 0, leader: opts.leader ? 1 : 0 });
-      // Log the placement (previously silent — a player report had to guess where
-      // Éomer's reinforcements landed). Same public format as a Muster recruit.
-      if (recruitStackSize(s, t.region, sideOfNation(nation)) > before) {
-        log(s, null, 'muster', `Recruited ${t.figure === 'elite' ? '0R/1E' : '1R/0E'}${opts.leader ? ' + Leader' : ''} ${nation} in ${t.region}`);
-      }
     },
   };
 }
@@ -1519,9 +1517,7 @@ const faramirRecruits = (state: GameState): EventTarget[] => {
  *  Leaders don't count against stacking, so this can land even when the unit can't. */
 const faramirLeader = (state: GameState): void => {
   if (armySide(state, 'osgiliath') !== 'fp' || !recruitable(state, 'fp', 'osgiliath')) return;
-  const before = state.regions['osgiliath']!.leaders;
-  placeForce(state, 'gondor', 'osgiliath', { leader: 1 });
-  if (state.regions['osgiliath']!.leaders > before) log(state, null, 'muster', 'Recruited a gondor Leader in osgiliath');
+  placeForce(state, 'gondor', 'osgiliath', { leader: 1 }); // logs what landed
 };
 register('fp-str-06', {
   canPlay: (state) => faramirStrikes(state).length > 0
@@ -1538,9 +1534,7 @@ register('fp-str-06', {
   },
   applyTarget(state, _side, t) {
     if (t.figure) {
-      const before = recruitStackSize(state, t.region!, 'fp');
-      placeUnits(state, 'gondor', t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0);
-      if (recruitStackSize(state, t.region!, 'fp') > before) log(state, null, 'muster', `${sideDoes('fp', 'muster')} ${t.figure === 'elite' ? '0R/1E' : '1R/0E'} gondor in ${t.region}`);
+      placeUnits(state, 'gondor', t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0); // logs
       return;
     }
     const hits = rollDice(state, 3, 5);
@@ -2018,7 +2012,7 @@ register('sh-str-03', { // Denethor's Folly — eliminate an FP Leader in Minas 
     // 9vhwbo79: "Denethor's Folly did not kill a Leader in Minas Tirith").
     const mt = state.regions['minas-tirith']!;
     const holder = mt.siegeBox ?? mt;
-    if (holder.leaders > 0) { holder.leaders -= 1; log(state, null, 'event', "Denethor's Folly: a Free Peoples Leader in Minas Tirith is eliminated"); }
+    if (holder.leaders > 0) { holder.leaders -= 1; log(state, null, 'event', "Denethor's Folly claims a Free Peoples Leader in Minas Tirith"); }
   },
 });
 
@@ -2488,7 +2482,7 @@ register('sh-str-21', {
   canPlay: (state) => isAtWar(state, 'southrons') && state.reinforcements.southrons.regular > 0
     && EAST_EDGE_SE.some((id) => hordeRegionFree(state, id)),
   targets: (state) => EAST_EDGE_SE.filter((id) => hordeRegionFree(state, id)).map((region) => ({ region, mode: 'recruit' as const })),
-  applyTarget(state, _side, t) { placeUnits(state, 'southrons', t.region!, 5, 0); log(state, null, 'event', `Hordes From the East muster in ${t.region}`); },
+  applyTarget(state, _side, t) { placeUnits(state, 'southrons', t.region!, 5, 0); },
 });
 
 // Help Unlooked For: an FP Army relieves a besieged Stronghold — a relief attack
@@ -2586,7 +2580,7 @@ register('sh-str-15', {
     const u = figureForce(state, t.region, 'shadow').units.sauron;
     if (!u || u.regular <= 0 || state.reinforcements.sauron.elite <= 0) return;
     u.regular--; u.elite++; state.reinforcements.sauron.regular++; state.reinforcements.sauron.elite--;
-    log(state, null, 'event', `Hill-Trolls: upgraded a Sauron Regular to Elite in ${t.region}`);
+    log(state, null, 'event', `Shadow replaces a Sauron Regular with an Elite in ${t.region}`);
   },
 });
 
