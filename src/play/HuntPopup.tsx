@@ -38,14 +38,33 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
   // either once it's flipped, or while the reveal-and-move prompt is still pending
   // (a catch with Progress defers the flip until the figure is placed).
   const revealed = fresh.some((d) => d.reveal) && (!view.fellowship.hidden || view.pendingChoice?.kind === 'revealMove');
+  // An Event card that draws tiles without a Hunt (Challenge of the King, The Breaking
+  // of the Fellowship) gets the same tiles-on-the-table popup, with the card's own
+  // result in place of the Corruption track.
+  const cardDraw = fresh[0]!.outcome != null ? fresh[0]! : null;
 
   return (
     <div style={backdrop} onClick={dismiss}>
       <div style={card} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>
-          ⊙ The Hunt for the Ring
+          {cardDraw ? <>⊙ {cardDraw.source} — Hunt tiles drawn</> : <>⊙ The Hunt for the Ring</>}
         </div>
         {roll && <RollLine roll={roll} />}
+        {cardDraw ? (
+          <div style={{ margin: '4px 0' }}>
+            <div style={{ fontSize: 13, color: '#cbbf9a' }}>
+              <b>{cardDraw.source}</b> draws {fresh.length === 1 ? 'a tile' : `${fresh.length} tiles`} from the Hunt Pool — this is not a Hunt.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4, margin: '10px 0 6px' }}>
+              {fresh.map((d) => <HuntTileFace key={d.seq} draw={d} />)}
+            </div>
+            {fresh.some((d) => d.value === 'die' && d.damage > 0) && (
+              <div style={{ fontSize: 13, color: '#cbbf9a' }}>The die tile is rolled: <b>{fresh.find((d) => d.value === 'die')!.damage}</b></div>
+            )}
+            <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, margin: '8px 0 2px' }}>Result</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#e6d6ad' }}>{cardDraw.outcome}</div>
+          </div>
+        ) : <>
         {!roll && fresh[0]!.source && !fresh.every((d) => d.discarded) && (
           <div style={{ fontSize: 13, color: '#cbbf9a' }}>
             {fresh[0]!.source.startsWith('revealed ')
@@ -88,6 +107,7 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
             <CorruptionLine current={view.fellowship.corruption} />
           </>
         )}
+        </>}
         {revealed && (
           <div style={{ marginTop: 10, padding: '8px 10px', background: '#a83232', color: '#fff', borderRadius: 8, fontSize: 13, lineHeight: 1.4 }}>
             🔴 <b>The Fellowship has been revealed!</b><br />

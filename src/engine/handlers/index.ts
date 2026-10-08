@@ -623,7 +623,8 @@ register('sh-char-18', {
     const i = target.face ? state.dice.shadow.indexOf(target.face) : state.dice.shadow.findIndex((f) => f !== 'eye');
     if (i < 0 || state.dice.shadow[i] === 'eye') return;
     state.dice.shadow.splice(i, 1); state.hunt.box += 1;
-    log(state, null, 'event', `The Lidless Eye: ${FACE_LABEL[target.face ?? 'event'] ?? 'a'} die becomes an Eye in the Hunt Box`);
+    // Says who does it, as the other die-changing lines do (player report 4z24585l244k375p).
+    log(state, null, 'event', `Shadow turns ${FACE_LABEL[target.face ?? 'event'] ?? 'a'} die to an Eye`);
   },
 });
 
@@ -1981,9 +1982,13 @@ register('sh-char-14', {
   canPlay: (state) => !state.fellowship.hidden && (isGollumGuide(state) || state.fellowship.companions.some((c) => COMPANION_SET.has(c))),
   apply(state) {
     if (isGollumGuide(state)) { sufferCorruption(state, 1, 'with Gollum as the Guide'); return; }
-    const n = drawHuntTileNumber(state);
-    if (n === null) { log(state, null, 'event', 'The Breaking of the Fellowship: the tile shows an Eye (or a Fellowship special) — discarded without effect'); return; }
     const avail = state.fellowship.companions.filter((c) => COMPANION_SET.has(c)).length;
+    const n = drawHuntTileNumber(state, 'The Breaking of the Fellowship', (num) => num === null
+      ? 'No number on this tile — it is discarded without effect, and no Companions separate.'
+      : Math.min(num, avail) > 0
+        ? `${Math.min(num, avail)} Companion${Math.min(num, avail) === 1 ? '' : 's'} must separate — the Free Peoples choose which.`
+        : 'No Companions separate.');
+    if (n === null) { log(state, null, 'event', 'The Breaking of the Fellowship: the tile shows an Eye (or a Fellowship special) — discarded without effect'); return; }
     const k = Math.min(n, avail);
     // EVERY branch logs the drawn number: a 0 tile legitimately separates nobody,
     // but doing it silently read as the card being broken (player report: 'doesn't
@@ -2494,13 +2499,13 @@ register('fp-char-14', {
   canPlay: (state) => striderAragornArmy(state) !== null,
   apply(state) {
     const who = striderAragornArmy(state);
-    if (challengeOfTheKing(state)) {
+    if (challengeOfTheKing(state, who ? characterDef(who.char)?.name ?? who.char : undefined)) {
       if (who) {
         const r = figureForce(state, who.id, 'fp');
         r.characters = r.characters.filter((c) => c !== who.char);
         delete state.characters.inPlay[who.char];
         if (!state.characters.eliminated.includes(who.char)) state.characters.eliminated.push(who.char);
-        log(state, null, 'event', `Challenge of the King: all Eyes — ${who.char} is lost`);
+        log(state, null, 'event', `Challenge of the King: all Eyes — ${characterDef(who.char)?.name ?? who.char} is lost`);
       }
     }
   },

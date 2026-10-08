@@ -124,6 +124,9 @@ export interface HuntState {
     discarded?: boolean;
     /** The card that caused an extra draw (Foul Thing from the Deep, Orc Patrol, ...). */
     source?: string;
+    /** A tile an Event card drew OUTSIDE a Hunt (Challenge of the King, The Breaking
+     *  of the Fellowship): the card's result, shown in place of the Corruption track. */
+    outcome?: string;
     /** Set when the tile drawn was a SPECIAL one, and whose: the physical game prints
      *  the Shadow's specials red and the Free Peoples' blue, and the face alone can't
      *  tell them from a standard tile (Elven Cloaks is a "0" like the standard blanks).

@@ -13,7 +13,7 @@ import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, characterDe
 import { fellowshipDieSkipsHuntBox, wornWithSorrowActive } from './persistent';
 import { withRng } from './rng';
 import { settlementController, armySide, heldShadowStronghold } from './armies';
-import { log, notify, shedCorruption, sufferCorruption } from './log';
+import { log, shedCorruption, sufferCorruption } from './log';
 
 /** Begin revealing the Fellowship (rulebook p.39): if it has Progress to spend, pause
  *  for the FP to choose where the figure moves (the `revealMove` choice — the move,
@@ -398,10 +398,23 @@ function applyExtraTile(state: GameState, tile: HuntTileDef, ref: TileRef, opts:
   applyHuntTile(state, tile, Math.min(5, state.hunt.box), opts, true);
 }
 
+/** Record tiles an Event card draws OUTSIDE a Hunt (Challenge of the King, The
+ *  Breaking of the Fellowship) so the Hunt popup shows them like any other draw, with
+ *  the card's own result line in place of the Corruption track (player reports
+ *  4t5m0k5b5h264g1e, 5e0i3g330x3b6a6i, 5h4j4w4m671w0l5w, 1o2h3a4u6q6c3a38). They
+ *  used to be a text-only notice, or only a log line. */
+function recordCardDraws(state: GameState, source: string, tiles: { tile: HuntTileDef; rolled?: number }[], outcome: string): void {
+  const prev = state.hunt.draws ?? [];
+  let seq = prev.length ? prev[prev.length - 1]!.seq : 0;
+  const onMordor = state.fellowship.mordor !== null;
+  const added = tiles.map(({ tile, rolled }) => ({ seq: ++seq, value: tile.value, damage: rolled ?? 0, reveal: false, stop: false, onMordor, source, outcome, ...specialOf(tile) }));
+  state.hunt.draws = [...prev, ...added].slice(-16);
+}
+
 /** Challenge of the King: draw 3 Hunt tiles. If all 3 are Eyes, return them to the
  *  pool and report true (the caller eliminates Strider/Aragorn). Otherwise the drawn
  *  Eye tiles are removed from the game and the rest return to the pool. */
-export function challengeOfTheKing(state: GameState): boolean {
+export function challengeOfTheKing(state: GameState, who = 'Strider/Aragorn'): boolean {
   const refs = [drawTile(state), drawTile(state), drawTile(state)];
   const allEyes = refs.every((r) => r.tile.value === 'eye');
   for (const r of refs) {
@@ -412,30 +425,34 @@ export function challengeOfTheKing(state: GameState): boolean {
       returnTileToPool(state, r.ref);
     }
   }
-  // Report the outcome so the player can see what was drawn (player request: show the
-  // tiles + result, not just a silent log line).
-  const face = (v: number | 'eye' | 'die') => (typeof v === 'number' ? String(v) : v === 'eye' ? '👁 Eye' : '🎲 die');
+  const face = (v: number | 'eye' | 'die') => (typeof v === 'number' ? String(v) : v === 'eye' ? 'Eye' : 'die');
   const drew = refs.map((r) => face(r.tile.value)).join(', ');
   const removed = allEyes ? 0 : refs.filter((r) => r.tile.value === 'eye').length;
-  notify(state, allEyes
-    ? `Drew ${drew}: all three are Eyes, so Aragorn/Strider is eliminated.`
-    : `Drew ${drew}${removed ? `: ${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt` : ': no Eyes drawn, nothing removed'}.`,
-    'Challenge of the King');
+  // The player sees the three tiles themselves, like a Hunt draw (player request:
+  // show the tiles + result, not just a silent log line).
+  recordCardDraws(state, 'Challenge of the King', refs, allEyes
+    ? `All three are Eyes — ${who} is eliminated.`
+    : removed
+      ? `${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt Pool; the other tiles go back into it.`
+      : 'No Eyes drawn — nothing is removed, and the tiles go back into the Hunt Pool.');
   // The log line names the draw too (player report 5y4646420q6j1c2f: "Eye tiles
   // removed" said neither which nor whether any were).
-  if (!allEyes) log(state, null, 'event', `Challenge of the King: drew ${drew.replace(/👁 |🎲 /g, '')} — ${removed ? `${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt Pool` : 'no Eyes drawn, nothing removed'}`);
+  if (!allEyes) log(state, null, 'event', `Challenge of the King: drew ${drew} — ${removed ? `${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt Pool` : 'no Eyes drawn, nothing removed'}`);
   return allEyes;
 }
 
 /** Draw a Hunt tile for a card effect (The Breaking of the Fellowship): returns the
- *  tile's number (a 'die' tile is rolled), or null if it's an Eye / FP-special tile. */
-export function drawHuntTileNumber(state: GameState): number | null {
+ *  tile's number (a 'die' tile is rolled), or null if it's an Eye / FP-special tile.
+ *  `outcome` words the result line the Hunt popup shows under the tile. */
+export function drawHuntTileNumber(state: GameState, source: string, outcome: (n: number | null) => string): number | null {
   const { tile, ref } = drawTile(state);
   const isEye = tile.value === 'eye';
   const isFpSpecial = 'spec' in ref && ref.spec.startsWith('fp-');
-  if (isEye || isFpSpecial) return null;
-  if (typeof tile.value === 'number') return tile.value;
-  return withRng(state, (rng) => rng.rollDie(6)); // 'die' tile: roll for the number
+  const n = isEye || isFpSpecial ? null
+    : typeof tile.value === 'number' ? tile.value
+    : withRng(state, (rng) => rng.rollDie(6)); // 'die' tile: roll for the number
+  recordCardDraws(state, source, [{ tile, ...(tile.value === 'die' && n !== null ? { rolled: n } : {}) }], outcome(n));
+  return n;
 }
 
 /** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. If the
