@@ -13,7 +13,7 @@ const json = (data: unknown, status = 200, extra: Record<string, string> = {}): 
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...extra } });
 const randomId = (): string => {
   const a = new Uint8Array(10);
-  (globalThis.crypto ?? require('node:crypto').webcrypto).getRandomValues(a);
+  crypto.getRandomValues(a); // Web Crypto is global in Workers and Node 19+; the old require() fallback was dead code
   return Array.from(a, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 16);
 };
 
@@ -286,6 +286,6 @@ async function safeJson(request: Request): Promise<any> {
 
 function randomSeed(): number {
   const a = new Uint32Array(1);
-  (globalThis.crypto ?? require('node:crypto').webcrypto).getRandomValues(a);
+  crypto.getRandomValues(a); // Web Crypto is global in Workers and Node 19+; the old require() fallback was dead code
   return a[0]!;
 }

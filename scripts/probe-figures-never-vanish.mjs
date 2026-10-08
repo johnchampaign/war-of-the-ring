@@ -134,8 +134,8 @@ console.log('\n=== 4. Dreadful Spells on besieged Moria (the reported game) ==='
     s = wotrAdapter.applyAction(s, { ...play, die: 'event' }, 'shadow');
     const target = wotrAdapter.legalActions(s, 'shadow').find((a) => a.kind === 'eventTarget' && a.region === 'moria');
     s = wotrAdapter.applyAction(s, target, 'shadow');
-    const hitLine = s.log.filter((e) => e.msg.startsWith('Dreadful Spells:')).pop()?.msg ?? '';
-    const hits = Number(hitLine.match(/— (\d+) hit/)?.[1] ?? 0);
+    const hitLine = s.log.filter((e) => e.msg.startsWith('Dreadful Spells scores')).pop()?.msg ?? '';
+    const hits = Number(hitLine.match(/scores (\d+) hit/)?.[1] ?? 0);
     if (hits === 0) continue;                                  // the zero-hit path never had the bug
     runs++;
     if (s.pendingChoice?.kind === 'eventCasualties' && s.pendingChoice.owner === 'fp') asked++;

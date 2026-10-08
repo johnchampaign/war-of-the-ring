@@ -602,11 +602,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const cardHere = cardCharPicks.filter((a) => a.from === id);
     const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }
       | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] }> = [
-      ...cardHere.map((a) => ({ kind: 'cardchar' as const, act: a, label: charName(a.companion!) })),
+      // The Army comes first, ahead of any figures a card moves on their own (player
+      // report 6u1k505o3m1k2i1r).
+      ...(armyHere ? [{ kind: 'army' as const }] : []),
+      ...cardHere.map((a) => ({ kind: 'cardchar' as const, act: a, label: a.companion === 'nazgul' ? 'The Nazgûl' : charName(a.companion!) })),
       // Only Companions travel as a group on a card; Nazgûl each fly on their own, so a
       // Nazgûl "group" pick left the second figure un-pickable (player report 2m6j6f1z5w07390y).
       ...(cardHere.length >= 2 && !cardHere.some((a) => a.companion === 'nazgul' || a.companion === 'witch-king') ? [{ kind: 'cardgroup' as const, acts: cardHere as WotrAction[] }] : []),
-      ...(armyHere ? [{ kind: 'army' as const }] : []),
       ...(assaultHere ? [{ kind: 'assault' as const }] : []),
       ...(compsHere.length >= 2 ? [{ kind: 'chargroup' as const, chars: compsHere }] : []),
       ...charsHere.map((c) => ({ kind: 'char' as const, char: c })),
@@ -991,7 +993,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             {moveMenu.options.map((o, i) => (
               <button key={i} onClick={() => beginMove(moveMenu.region, o)}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
-                {o.kind === 'army' ? 'The army'
+                {o.kind === 'army' ? 'The Army'
                   : o.kind === 'assault' ? (sortieForce(g.view!, moveMenu!.region, me) ? '⚔ Sortie against the besiegers' : '⚔ Assault the besieged Stronghold')
                   // "Muster here" under a heading that already says "here" (player
                   // report 4j5g4c352b5u476e).

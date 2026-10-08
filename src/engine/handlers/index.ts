@@ -19,8 +19,14 @@ import { log, logCardDraw, notify, sideDoes, sufferCorruption, shedCorruption } 
 const FACE_LABEL: Record<string, string> = { character: 'a Character', army: 'an Army', muster: 'a Muster', armyMuster: 'an Army/Muster', event: 'an Event', will: 'a Will of the West' };
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 /** Roll min(5, count) dice; count hits on `target`+. */
-const rollDice = (state: GameState, count: number, target: number): number =>
-  withRng(state, (rng) => { let h = 0; for (let i = 0; i < Math.min(5, count); i++) if (rng.rollDie(6) >= target) h++; return h; });
+const rollDiceFaces = (state: GameState, count: number, target: number): { hits: number; dice: number[] } =>
+  withRng(state, (rng) => { const dice: number[] = []; for (let i = 0; i < Math.min(5, count); i++) dice.push(rng.rollDie(6)); return { hits: dice.filter((d) => d >= target).length, dice }; });
+const rollDice = (state: GameState, count: number, target: number): number => rollDiceFaces(state, count, target).hits;
+/** "<card> scores 3 hits on <target> [5 6 5]" — every Event-card roll is logged with
+ *  its faces, so a roll that scores nothing still shows what came up (player report
+ *  1v3t0v4f3i0q484r). */
+const rollLine = (subject: string, r: { hits: number; dice: number[] }, target: string): string =>
+  `${subject} ${r.hits} hit${r.hits === 1 ? '' : 's'} on ${target} [${r.dice.join(' ')}]`;
 /** [FP-army region, Shadow-Nazgûl region] pairs that are the same or adjacent.
  *  A BESIEGED Army — either side's — is still in its region (p.31), so both ends
  *  read the region's Force for that side rather than the open field: a Gondor
@@ -1492,8 +1498,9 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       // affects the Political Track (Almanac, "The Ents Awake"; p.35) — same as Dead
       // Men of Dunharrow. With no Army (Saruman alone) it is not.
       for (const n of SHADOW_NATIONS) { const u = force.units[n]; if (u && u.regular + u.elite > 0) onArmyAttacked(state, n, 'orthanc'); }
-      const hits = rollDice(state, 3, 4);
-      log(state, null, 'event', `The Ents score ${hits} hit${hits === 1 ? '' : 's'} on the Shadow Army in Orthanc`);
+      const roll = rollDiceFaces(state, 3, 4);
+      const hits = roll.hits;
+      log(state, null, 'event', rollLine('The Ents score', roll, 'the Shadow Army in Orthanc'));
       freeChar();
       // Shadow chooses how the Orthanc Army absorbs the hits (Regulars vs Elites);
       // if the Army is wiped, its Nazgûl recycle and its Minions are eliminated.
@@ -1546,9 +1553,10 @@ register('fp-str-06', {
       placeUnits(state, 'gondor', t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0); // logs
       return;
     }
-    const hits = rollDice(state, 3, 5);
-    if (hits > 0) applyCasualties(state, t.region!, 'shadow', hits, 'regularsFirst');
-    log(state, null, 'event', `Faramir's Rangers: ${hits} hit(s) on ${t.region}`);
+    const roll = rollDiceFaces(state, 3, 5);
+    // The roll is logged before the casualties it causes.
+    log(state, null, 'event', rollLine("Faramir's Rangers score", roll, `the Shadow Army in ${t.region}`));
+    if (roll.hits > 0) applyCasualties(state, t.region!, 'shadow', roll.hits, 'regularsFirst');
   },
   // Leader-only case: nothing to strike and no Gondor unit placeable leaves no target to
   // choose. That used to skip `finalize` entirely (it only ran off the eventTarget path)
@@ -1564,7 +1572,8 @@ register('fp-char-18', {
     if (!pair) return;
     const sh = pair[1];
     const shf = armyForceOf(state, sh, 'shadow') ?? state.regions[sh]!; // may be a boxed garrison
-    const kills = rollDice(state, shf.nazgul, 5);
+    const eagleRoll = rollDiceFaces(state, shf.nazgul, 5);
+    const kills = eagleRoll.hits;
     eliminateNazgul(state, sh, kills);
     // Surviving Nazgûl must move to any one unconquered Sauron Stronghold (card text).
     const survivors = shf.nazgul;
@@ -1573,7 +1582,7 @@ register('fp-char-18', {
     // Nazgûl join its garrison in the siege box, not the besiegers in the field
     // (player report 485p4m2z27363p1o) — `figureForce` is the one seam for that.
     if (survivors > 0 && dest) { figureForce(state, dest, 'shadow').nazgul += survivors; shf.nazgul = 0; }
-    log(state, null, 'event', `The Eagles are Coming!: eliminated ${kills} Nazgûl at ${sh}${survivors > 0 && dest ? `; ${survivors} fled to ${dest}` : ''}`);
+    log(state, null, 'event', `The Eagles are Coming!: eliminated ${kills} Nazgûl at ${sh} [${eagleRoll.dice.join(' ')}]${survivors > 0 && dest ? `; ${survivors} fled to ${dest}` : ''}`);
   },
 });
 // Dreadful Spells (Shadow): hit an FP Army adjacent to/with a Nazgûl force.
@@ -1603,8 +1612,9 @@ register('sh-char-19', {
     const fp = t.region!;
     const caster = dreadfulSpellsCaster(state, fp);
     if (!caster) return;
-    const hits = rollDice(state, Math.min(5, caster.nazgul), 5);
-    log(state, null, 'event', `Dreadful Spells: ${caster.nazgul} Nazgûl at ${caster.region}${caster.wk ? ' (the Witch-king among them)' : ''} — ${hits} hit(s) on ${fp}`);
+    const roll = rollDiceFaces(state, Math.min(5, caster.nazgul), 5);
+    const hits = roll.hits;
+    log(state, null, 'event', rollLine('Dreadful Spells scores', roll, `the Free Peoples Army in ${fp}`));
     // A besieged garrison is a legal target (Almanac, "Dreadful Spells" C 19), but the
     // card is NOT an "attack": Companions inside the Stronghold are unaffected even if
     // the Army around them is wiped out, so lift them out of the box before the hits
@@ -2413,7 +2423,8 @@ register('sh-str-01', {
     let anyChoice = false;
     for (const id of elvenStrongholds(state)) {
       const u = state.regions[id]!.units.elves!;
-      const hits = rollDice(state, Math.min(u.regular + u.elite, 5), 6); // card: max 5 dice
+      const roll = rollDiceFaces(state, Math.min(u.regular + u.elite, 5), 6); // card: max 5 dice
+      const hits = roll.hits;
       if (hits > 0) {
         results.push({ region: id, hits });
         // A choice exists only when the region holds BOTH Regulars and Elites and not
@@ -2421,7 +2432,7 @@ register('sh-str-01', {
         if (u.regular > 0 && u.elite > 0 && hits < u.regular + u.elite) anyChoice = true;
       }
       // No card prefix (report 2d5o6e2472160r5w): the losses may be anywhere in the Stronghold's Army.
-      log(state, null, 'event', `${hits === 0 ? 'No' : hits} Elven unit${hits === 1 ? '' : 's'} ${hits === 1 ? 'departs' : 'depart'} from ${id} and ${hits === 1 ? 'sails' : 'sail'} for Valinor`);
+      log(state, null, 'event', `${hits === 0 ? 'No' : hits} Elven unit${hits === 1 ? '' : 's'} ${hits === 1 ? 'departs' : 'depart'} from ${id} and ${hits === 1 ? 'sails' : 'sail'} for Valinor [${roll.dice.join(' ')}]`);
     }
     if (results.length === 0) return;
     // Let the FP choose how the Elves absorb the losses (Regulars first vs Elites first),
@@ -2544,9 +2555,9 @@ register('fp-str-05', {
   canPlay: (state) => multiNationShadowArmies(state).length > 0,
   targets: multiNationShadowArmies,
   applyTarget(state, _side, t) {
-    const hits = rollDice(state, 5, 5);
-    if (hits > 0) applyCasualties(state, t.region!, 'shadow', hits, 'regularsFirst');
-    log(state, null, 'event', `The Spirit of Mordor scores ${hits} at ${t.region}`);
+    const roll = rollDiceFaces(state, 5, 5);
+    log(state, null, 'event', rollLine('The Spirit of Mordor scores', roll, `the Shadow Army in ${t.region}`));
+    if (roll.hits > 0) applyCasualties(state, t.region!, 'shadow', roll.hits, 'regularsFirst');
   },
 });
 

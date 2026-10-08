@@ -20,7 +20,7 @@ import { advancePolitical, advanceableNations, isAtWar } from '../engine/politic
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
 import { canBringMinion, entryRegions, bringMinion, MINION_IDS } from '../engine/minions';
 import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharMoves, availableNazgul, type CharMoveState } from '../engine/charMove';
-import { REGIONS, sideOfNation, EVENT_BY_ID, playFacesFor } from '../engine/data';
+import { REGIONS, sideOfNation, EVENT_BY_ID, playFacesFor, nationName } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, flagValue, type EventTarget } from '../engine/handlers/registry';
 import { characterDef } from '../engine/data';
@@ -886,6 +886,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'stormcrowLoss': {
       requireChoice(state, 'stormcrowLoss', actor); // FP eliminates one Leader or unit of the targeted Nation
       const f = figureForce(state, action.region, 'fp'); // open field, or a besieged garrison's box
+      // Logged FIRST, naming the card: the loss is the cause of any capture that follows
+      // (player report 6b674j562o2h4d17 — it used to read after the Stronghold fell).
+      const nn = nationName(action.nation);
+      log(state, null, 'event', action.figure === 'leader'
+        ? `Stormcrow banishes a Free Peoples Leader in ${action.region}`
+        : `Stormcrow banishes ${/^[AEIOU]/.test(nn) ? 'an' : 'a'} ${nn} ${action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
       if (action.figure === 'leader') {
         if (f.leaders > 0) f.leaders -= 1; // FP Leaders are permanently removed (not to reinforcements)
       } else {
@@ -895,7 +901,6 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // Stronghold falls to the besieger (p.32) — the same ending as any card loss.
         if (f !== state.regions[action.region] && forceUnitCount(f) === 0) { f.leaders = 0; garrisonFalls(state, action.region, 'shadow'); }
       }
-      log(state, null, 'event', action.figure === 'leader' ? `A Free Peoples Leader is eliminated in ${action.region}` : `${action.nation === 'elves' ? 'An' : 'A'} ${action.nation} ${action.figure === 'elite' ? 'Elite' : 'Regular'} is eliminated in ${action.region}`);
       // A save from before the end-of-Action draw (advance) may still carry the
       // Palantír draw parked behind this choice.
       state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw
@@ -1015,7 +1020,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         hand.splice(hand.indexOf(action.discardStrategy!), 1);
         hand.splice(hand.indexOf(action.discardCharacter!), 1);
         (state.cards.shadow.discardFaceDown ??= []).push(action.discardStrategy!, action.discardCharacter!);
-        log(state, 'shadow', 'event', `You discard ${EVENT_BY_ID[action.discardStrategy!]?.name ?? action.discardStrategy} and ${EVENT_BY_ID[action.discardCharacter!]?.name ?? action.discardCharacter} face down`);
+        log(state, 'shadow', 'event', `You discard ${EVENT_BY_ID[action.discardStrategy!]?.name ?? action.discardStrategy} and ${EVENT_BY_ID[action.discardCharacter!]?.name ?? action.discardCharacter} (to remove ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId})`);
         // The FP table card goes to the FP discard.
         const ft = state.cards.fp.table;
         ft.splice(ft.indexOf(action.cardId), 1);
