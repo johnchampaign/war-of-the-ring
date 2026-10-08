@@ -256,6 +256,11 @@ export function declareFellowship(state: GameState, target: RegionId): void {
   const steps = Math.min(fs.progress, path.length);
   if (steps > 0) fs.location = path[steps - 1]!;
   fs.progress = 0;
+  // Logged first: the heal, the activation and the card discards below all follow from
+  // the declaration, so they read after it (player report 1l3f1j5i4f445h2h). No
+  // Corruption figure here: declaring doesn't change it (the heal is its own step), and
+  // "(corruption 5)" read as a cost (player report 710l4b504o1m236l).
+  log(state, null, 'fellowship', `The Fellowship is declared in ${fs.location}`);
   // Heal in an unconquered FP City/Stronghold.
   const def = REGIONS[fs.location]!;
   if ((def.settlement === 'City' || def.settlement === 'Stronghold')
@@ -301,9 +306,6 @@ export function declareFellowship(state: GameState, target: RegionId): void {
     state.cards.fp.discard.strategy.push('fp-str-01');
     log(state, null, 'event', 'The Last Battle is discarded — the Fellowship was declared');
   }
-  // No Corruption figure here: declaring doesn't change it (the heal above is its own
-  // step), and "(corruption 5)" read as a cost (player report 710l4b504o1m236l).
-  log(state, null, 'fellowship', `The Fellowship is declared in ${fs.location}`);
 }
 
 /** Nations a Companion can activate (its own, or all FP if its card shows "any"). */
@@ -596,7 +598,7 @@ export function bringUpgrade(state: GameState, which: 'aragorn' | 'gandalf-white
     // region after the crowning (player report).
     delete state.characters.inPlay['strider'];
     state.characters.inPlay['aragorn'] = r;
-    log(state, null, 'muster', `Strider is crowned and becomes Aragorn in ${r}`);
+    log(state, null, 'muster', `Aragorn reveals himself as the Heir of Isildur in ${r}`); // he is Aragorn all along (report 58351p1w035o6a1f)
     // p.35: a Companion capable of activating a Nation activates it when he "ends his
     // movement OR ENTERS PLAY in one of its Cities or Strongholds". Aragorn can only be
     // crowned at Minas Tirith, Dol Amroth or Pelargir, so the Almanac states it flatly:

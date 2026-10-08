@@ -80,7 +80,8 @@ export function describeAction(a: WotrAction): string {
       : 'Voice of Saruman: recruit an Isengard Regular in every Isengard Settlement';
     // The button is already prefixed with the die that pays for it, so naming the die
     // again in the label is noise (player report 0c3p44321u1w1f1a).
-    case 'bringUpgrade': return a.which === 'aragorn' ? 'Crown Aragorn' : 'Summon Gandalf the White';
+    // Strider is Aragorn all along; he is not crowned until after the war (player report 58351p1w035o6a1f).
+    case 'bringUpgrade': return a.which === 'aragorn' ? 'Reveal Aragorn, Heir to Isildur' : 'Summon Gandalf the White';
     case 'placeGandalf': return `Place Gandalf the White in ${rName(a.region)}`;
     case 'drawEvent': return `Draw a ${cap(a.deck)} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
@@ -89,7 +90,8 @@ export function describeAction(a: WotrAction): string {
       const fig = a.nazgul ? 'Nazgûl' : a.leader ? 'Leader' : a.elite ? 'Elite' : 'Regular';
       // No "(+ an optional 2nd figure elsewhere)" tail: it made the buttons unwieldy and
       // Event-card musters never carried it (player report 54410w442a1v3w6x).
-      return `Recruit ${nationName(a.nation)} ${fig} in ${rName(a.region)}`; // nation first, as the log says it (report 261i321q390m3a1m)
+      // A Nazgûl is only ever Sauron's, so it goes unprefixed (player report 480b6l0b57445w2z).
+      return `Recruit ${a.nazgul ? '' : `${nationName(a.nation)} `}${fig} in ${rName(a.region)}`; // nation first, as the log says it (report 261i321q390m3a1m)
     }
     case 'recruitSecond':
       // Worded like the first figure: it is picked from the same muster menu now
@@ -97,7 +99,7 @@ export function describeAction(a: WotrAction): string {
       if (a.done) return 'Muster: no second figure';
       {
         const fig = a.figure === 'leader' ? (a.nation === 'sauron' ? 'Nazgûl' : a.nation ? 'Leader' : 'Leader/Nazgûl') : 'Regular';
-        return `Recruit ${a.nation ? `${nationName(a.nation)} ` : ''}${fig} in ${rName(a.region!)}`;
+        return `Recruit ${a.nation && fig !== 'Nazgûl' ? `${nationName(a.nation)} ` : ''}${fig} in ${rName(a.region!)}`;
       }
     case 'bringMinion': return `Bring ${charName(a.minion)} into play in ${rName(a.region)}`;
     // No "<card name>: " prefix — the player knows which card they just played, and it
@@ -348,7 +350,7 @@ function eventTargetText(a: Extract<WotrAction, { kind: 'eventTarget' }>): strin
   // from, so it reads differently from separating someone out of the Fellowship.
   if (a.companion && a.from) return `move ${charName(a.companion)} (on the map, in ${rName(a.from)})`;
   if (a.companion && !a.region) return `separate ${charName(a.companion)} (joins the travelling group)`;
-  if (a.figure && a.region && !a.nation && !a.to) return `upgrade a Regular to Elite in ${rName(a.region)}`;
+  if (a.figure && a.region && !a.nation && !a.to) return `replace a Sauron Regular with an Elite in ${rName(a.region)}`; // as the log says it (report 4y4l1y015l3h451u)
   if (a.figure) return `recruit a${a.nation ? ` ${nationName(a.nation)}` : ''} ${a.figure === 'elite' ? 'Elite' : 'Regular'}${a.region ? ` in ${rName(a.region)}` : ''}`;
   if (a.nation && a.card === 'sh-str-06') return `set ${nationName(a.nation)} back one step`;
   if (a.nation) return `activate ${nationName(a.nation)} (advance 1 step)`;

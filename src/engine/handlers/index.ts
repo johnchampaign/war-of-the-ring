@@ -14,14 +14,13 @@ import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../po
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef } from '../data';
 import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
-import { log, logCardDraw, notify, sideDoes, sufferCorruption, shedCorruption } from '../log';
+import { log, logCardDraw, notify, sideDoes, sideName, sufferCorruption, shedCorruption } from '../log';
 
 const FACE_LABEL: Record<string, string> = { character: 'a Character', army: 'an Army', muster: 'a Muster', armyMuster: 'an Army/Muster', event: 'an Event', will: 'a Will of the West' };
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 /** Roll min(5, count) dice; count hits on `target`+. */
 const rollDiceFaces = (state: GameState, count: number, target: number): { hits: number; dice: number[] } =>
   withRng(state, (rng) => { const dice: number[] = []; for (let i = 0; i < Math.min(5, count); i++) dice.push(rng.rollDie(6)); return { hits: dice.filter((d) => d >= target).length, dice }; });
-const rollDice = (state: GameState, count: number, target: number): number => rollDiceFaces(state, count, target).hits;
 /** "<card> scores 3 hits on <target> [5 6 5]" — every Event-card roll is logged with
  *  its faces, so a roll that scores nothing still shows what came up (player report
  *  1v3t0v4f3i0q484r). */
@@ -207,6 +206,18 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   if (!direct && maxSteps !== undefined && !route.length) {
     throw new Error(`There is no route from ${REGIONS[from]?.name ?? from} to ${REGIONS[to]?.name ?? to} that this card can take — every way round is held by an enemy Army.`);
   }
+  // Every card-driven Army move logs in the die-move format, here at the one seam they
+  // all go through, before anything it captures or rouses on the way: "Shadow Army
+  // moves A → B", with the unit count when only part of the Army goes. Each card used
+  // to write its own "<card>: A → B (split)" line (player reports 0r3b1z3b5l4w1i4k,
+  // 236b25494w2z3s68, 1e36350n6l21072d, 5w6i3n6s2u5g654l, 6u180a1q4h6r1z0e); the card
+  // itself is already named by the play line above it.
+  if (sel) {
+    const bad = cardSplitBlockReason(state, from, side, sel);
+    if (bad) throw new Error(bad);
+    const n = clampCardSel(state, from, side, sel).moved;
+    log(state, null, 'army', `${sideName(side)} Army moves ${from} → ${to} (${n} unit${n === 1 ? '' : 's'})`);
+  } else log(state, null, 'army', `${sideName(side)} Army moves ${from} → ${to}`);
   // Everything entered BEFORE the destination is passed through: it is captured (and
   // its Nation roused) but the Army does not stop, so no stacking check applies.
   for (const r of route.slice(0, -1)) {
@@ -368,6 +379,9 @@ const cardRecruitNazgul = (state: GameState, region: string, n: number): number 
   if (!dest) return 0;
   pool.nazgul = (pool.nazgul ?? 0) - want;
   dest.force.nazgul += want;
+  // Logged here, in the Muster-die format, so every card Nazgûl reads the same — The
+  // King is Revealed's used to land in silence (player report 4b1j6j591j6i5e53).
+  log(state, null, 'muster', `${sideDoes('shadow', 'muster')} ${want === 1 ? 'a Nazgûl' : `${want} Nazgûl`} in ${region}`);
   return want;
 };
 
@@ -814,7 +828,7 @@ const mistyRegions = (s: GameState): string[] => MISTY.filter((r) => recruitable
 const mistyUnits = placeChoiceCard('sauron', mistyRegions, { count: 2 });
 const mistyNazgulLeft = (s: GameState): boolean => (s.reinforcements.sauron.nazgul ?? 0) > 0;
 const placeMistyNazgul = (s: GameState, region: string): void => {
-  if (cardRecruitNazgul(s, region, 1) > 0) log(s, null, 'muster', `Recruited a Nazgûl in ${region}`);
+  cardRecruitNazgul(s, region, 1);
 };
 register('sh-str-19', {
   canPlay: (s, side) => mistyUnits.canPlay!(s, side) || (mistyNazgulLeft(s) && mistyRegions(s).length > 0),
@@ -947,7 +961,6 @@ register('sh-str-10', {
       return;
     }
     moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, undefined, true); // "from Umbar TO a Gondor coastal region" — a landing, not a march
-    log(state, null, 'event', `Corsairs of Umbar: Umbar → ${t.to}${t.move ? ' (split)' : ''}`);
     // "If there is a Free Peoples Army in the region, a battle starts" — a boxed
     // garrison IS a Free Peoples Army in the region (p.31), so landing alongside the
     // besiegers presses the assault. But the card's "cannot cease the attack, unless
@@ -1020,7 +1033,7 @@ function shadowsGatherMoves(state: GameState): EventTarget[] {
 register('sh-str-07', {
   canPlay: (state) => shadowsGatherMoves(state).length > 0,
   targets: shadowsGatherMoves,
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, SHADOWS_GATHER_RANGE); log(state, null, 'event', `Shadows Gather: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, SHADOWS_GATHER_RANGE); },
 });
 // The Shadow Lengthens: move TWO (different) Shadow Armies up to two regions each,
 // every move ending where another Shadow Army stands (not besieged). `applied`
@@ -1050,7 +1063,7 @@ register('sh-str-08', {
   repeat: 2,
   canPlay: (state) => shadowLengthensMoves(state).length > 0,
   targets: (state, _side, applied) => shadowLengthensMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, SHADOW_LENGTHENS_RANGE); log(state, null, 'event', `The Shadow Lengthens: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, SHADOW_LENGTHENS_RANGE); },
 });
 // The Shadow is Moving (all Shadow Nations At War): move up to four DIFFERENT Shadow
 // Armies one region each (to an adjacent region free for movement, merges allowed).
@@ -1073,7 +1086,7 @@ register('sh-str-09', {
   repeat: 4,
   canPlay: (state) => allAtWar(state, SHADOW_NATIONS) && shadowMovingMoves(state).length > 0,
   targets: (state, _side, applied) => shadowMovingMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, 1); log(state, null, 'event', `The Shadow is Moving: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, 1); },
 });
 
 // Dead Men of Dunharrow: move Strider/Aragorn (+ any number of Companions in the same
@@ -1236,7 +1249,6 @@ register('fp-str-11', {
     // (player report 1b1c5q54732v1a22).
     const wasBesieged = !!state.regions[t.from!]!.besieged;
     moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, undefined, true); // "DIRECTLY to Minas Tirith"
-    log(state, null, 'event', `Free Peoples Army moves ${t.from} → ${t.to === 'minas-tirith' ? 'Minas Tirith' : t.to}${t.move ? ' (split)' : ''}`); // names the mover, not the card (report 6l5p254z1h3s0o5c)
     // A garrison that marches out leaves the Stronghold undefended with the besieging
     // Army already standing in the region, so it falls to the besieger. A split that
     // leaves units behind keeps the siege on: captureIfEnemySettlement checks for a
@@ -1274,7 +1286,7 @@ register('fp-str-12', {
     // The clause is this card's alone; see cardMoveEscortReason.
     const escort = t.move ? cardMoveEscortReason('fp-str-12', t.move) : null;
     if (escort) throw new Error(escort);
-    moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, DAY_NIGHT_RANGE); log(state, null, 'event', `Through a Day and a Night: ${t.from} → ${t.to}${t.move ? ' (split)' : ''}`); },
+    moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, DAY_NIGHT_RANGE); },
 });
 
 // --- Recruit / muster cards in named or chosen regions -----------------------
@@ -1300,7 +1312,10 @@ register('sh-str-24', {
 });
 // Musterings of Long-planned War: 5 Southrons in Gorgoroth + 5 Sauron in Nurn.
 register('sh-str-23', {
-  canPlay: (state) => allAtWar(state, SHADOW_NATIONS),
+  // Like the other named-region Shadow recruits, it needs a Regular it can actually
+  // place — otherwise it spent a die and the card on empty pools (player report 0n0p2x0n3u6o0b6i).
+  canPlay: (state) => allAtWar(state, SHADOW_NATIONS)
+    && (canPlaceIn(state, 'southrons', 'gorgoroth', 'regular') || canPlaceIn(state, 'sauron', 'nurn', 'regular')),
   apply(state) {
     placeUnits(state, 'southrons', 'gorgoroth', 5, 0);
     placeUnits(state, 'sauron', 'nurn', 5, 0);
@@ -1321,8 +1336,10 @@ register('sh-str-12', {
     }
     figureForce(state, 'angmar', 'shadow').characters.push('witch-king');
     if (state.characters.inPlay['witch-king']) state.characters.inPlay['witch-king'] = 'angmar';
+    // The move and the recruit log on their own lines, in the die formats (player
+    // report 5k4d0l51525y1m45); placeUnits logs the muster.
+    if (from && from !== 'angmar') log(state, null, 'army', `witch-king moves ${from} → angmar`);
     placeUnits(state, 'sauron', 'angmar', 2, 1);
-    log(state, null, 'event', 'Return of the Witch-king: to Angmar + muster');
   },
 });
 
@@ -1482,7 +1499,7 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
           holder.characters.splice(holder.characters.indexOf('saruman'), 1);
           state.characters.eliminated.push('saruman');
           delete state.characters.inPlay['saruman'];
-          log(state, null, 'event', 'Saruman is eliminated by the Ents');
+          log(state, null, 'event', 'Saruman falls before the Ents'); // active voice, like the other card kills (report 3p4i5t375f5d5w2n)
         } else {
           log(state, null, 'event', 'The Ents march on Orthanc but find it empty');
         }
@@ -1582,7 +1599,8 @@ register('fp-char-18', {
     // Nazgûl join its garrison in the siege box, not the besiegers in the field
     // (player report 485p4m2z27363p1o) — `figureForce` is the one seam for that.
     if (survivors > 0 && dest) { figureForce(state, dest, 'shadow').nazgul += survivors; shf.nazgul = 0; }
-    log(state, null, 'event', `The Eagles are Coming!: eliminated ${kills} Nazgûl at ${sh} [${eagleRoll.dice.join(' ')}]${survivors > 0 && dest ? `; ${survivors} fled to ${dest}` : ''}`);
+    // Active voice, like the other ranged-attack cards (player report 6b495o0r1x585s35).
+    log(state, null, 'event', `The Eagles strike down ${kills} Nazgûl in ${sh} [${eagleRoll.dice.join(' ')}]${survivors > 0 && dest ? `, driving ${survivors} to ${dest}` : ''}`);
   },
 });
 // Dreadful Spells (Shadow): hit an FP Army adjacent to/with a Nazgûl force.
@@ -1753,11 +1771,13 @@ register('fp-str-01', { // The Last Battle — see hunt.ts (fpDiceInBox)
 });
 register('fp-str-02', { // A Power too Great — advance Elves; bar Shadow from Lórien/Rivendell/Grey Havens
   onTable: true,
-  apply(state) { advancePolitical(state, 'elves', 1); log(state, null, 'event', 'A Power too Great: Elves advance; Shadow is barred from Lórien, Rivendell, and Grey Havens'); },
+  // The advance logs itself ("Elves advance to step N"), and only if the Elves moved;
+  // the bar is its own line (player reports 5v5j5i1u2e5f310l, 303g641l5f1i2s6p).
+  apply(state) { advancePolitical(state, 'elves', 1); log(state, null, 'event', 'A Power too Great bars the Shadow from Lórien, Rivendell, and Grey Havens'); },
 });
 register('fp-str-03', { // The Power of Tom Bombadil — advance North; bar Shadow from Old Forest/Shire/Buckland
   onTable: true,
-  apply(state) { advancePolitical(state, 'north', 1); log(state, null, 'event', 'The Power of Tom Bombadil: The North advances; Shadow is barred from Old Forest, The Shire, and Buckland'); },
+  apply(state) { advancePolitical(state, 'north', 1); log(state, null, 'event', 'The Power of Tom Bombadil bars the Shadow from Old Forest, The Shire, and Buckland'); },
 });
 register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see politics.ts (advanceableNations) */ } });
 // Palantír of Orthanc: printed precondition "Play on the table if Saruman is in play"
@@ -1858,7 +1878,6 @@ function applyNazgulArmyAction(state: GameState, t: EventTarget): void {
         ? { ...t.move, characters: [...(t.move.characters ?? []), 'witch-king'] }
         : { ...t.move };
     moveAllUnits(state, t.from!, t.to!, 'shadow', sel, t.path);
-    log(state, null, 'event', `Nazgûl-led Army moves ${t.from} → ${t.to}${sel ? ' (split)' : ''}`);
   }
 }
 
@@ -1941,8 +1960,7 @@ register('sh-char-24', { // The Black Captain Commands
   },
   applyTarget(state, _side, t) {
     if (t.mode === 'recruit' && t.region) {
-      const k = cardRecruitNazgul(state, t.region, 2);
-      if (k > 0) log(state, null, 'event', `The Black Captain Commands: ${k} Nazgûl muster at ${t.region}`);
+      cardRecruitNazgul(state, t.region, 2);
       return;
     }
     if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region, t.count); return; }
@@ -2606,7 +2624,11 @@ register('sh-str-15', {
 
 // --- The King is Revealed: recruit 5 Sauron Regulars + a Nazgûl in Minas Morgul -
 register('sh-str-18', {
-  canPlay: (state) => state.characters.entered.includes('aragorn'),
+  // It also needs something to place in Minas Morgul: a Sauron Regular or a Nazgûl left
+  // in reinforcements, and a Minas Morgul the Shadow can recruit into (player report 632u6l2z0v0w5669).
+  canPlay: (state) => state.characters.entered.includes('aragorn')
+    && (canPlaceIn(state, 'sauron', 'minas-morgul', 'regular')
+      || (((state.reinforcements.sauron as { nazgul?: number }).nazgul ?? 0) > 0 && recruitable(state, 'shadow', 'minas-morgul'))),
   apply(state) {
     // Room is read from the stack the recruit would actually JOIN — under a siege that
     // is the garrison's box (five units), not the region's open field, which holds the

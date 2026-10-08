@@ -432,7 +432,11 @@ die already showing an Eye.
   figure type in reinforcements (Monsters Roused: a Regular for Angmar / Ettenmoors /
   Weather Hills, or an Elite for Trollshaws). The other Shadow recruitment cards already
   gated on reinforcements; the Free Peoples ones keep the Almanac's exception below.
-  `scripts/probe-triage-1007b.mjs`.
+  `scripts/probe-triage-1007b.mjs`. Two had in fact slipped through and now gate the same
+  way *(player reports 632u6l2z0v0w5669, 0n0p2x0n3u6o0b6i, 2026-10-08)*: **The King is
+  Revealed** needs a Sauron Regular or a Nazgûl in reinforcements and a Minas Morgul the
+  Shadow can recruit into; **Musterings of Long-planned War** needs a Southron Regular
+  placeable in Gorgoroth or a Sauron Regular in Nurn. `scripts/probe-triage-1008c.mjs`.
   **A recruitment card with nothing to recruit is still playable for the rest of its
   text.** Almanac, "Points common to all Free Peoples recruitment cards": "These cards
   may still be played if recruitment is impossible (e.g., if the required Settlement has
