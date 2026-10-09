@@ -273,6 +273,9 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, range: t.range, direct: t.direct, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye, face: t.face, count: t.count }));
         // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
         if ((h?.repeat ?? 1) > 1 && (data.applied.length > 0 || flagValue(h?.optionalFromStart, state)) && !flagValue(h?.noDone, state)) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
+        // A card resumed after a raised question whose targets have since run out
+        // can still finish — never a prompt with nothing to click.
+        if (opts.length === 0 && data.applied.length > 0) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         return opts;
       }
       case 'bonusDraw':
@@ -863,6 +866,15 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // Multi-target card with moves left and still-legal targets? Re-prompt (hold the
         // card) — unless an attack just started a battle (the combat driver takes over).
         if (!raised && !state.pendingCombat && data.left > 0 && (h.targets?.(state, actor, data.applied)?.length ?? 0) > 0) break;
+        // The raised question comes first, then the card picks up where it stopped:
+        // Faramir's Rangers' strike asks the Shadow which units fall, and its Osgiliath
+        // recruit still follows (report 29395e6o1y6r4y5e). The casualty resolution
+        // restores the queued target prompt.
+        if (raised && !state.pendingCombat && data.left > 0 && (h.targets?.(state, actor, data.applied)?.length ?? 0) > 0) {
+          (raised.data as { thenChoice?: unknown }).thenChoice = targetChoice;
+          state.pendingChoice = raised;
+          break;
+        }
       }
       state.pendingChoice = null;
       const deck = EVENT_BY_ID[data.card]!.deck === 'Character' ? 'character' : 'strategy';
@@ -1065,7 +1077,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       t.splice(ci, 1);
       const deck = EVENT_BY_ID[action.cardId]?.deck === 'Character' ? 'character' : 'strategy';
       state.cards.shadow.discard[deck].push(action.cardId);
-      log(state, null, 'event', `Free Peoples force ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId} to be discarded${action.via === 'ring' ? ' (Elven Ring + Action die)' : action.via === 'will' ? ' (Will of the West)' : ' (Action die)'}`);
+      // "Remove" is the log's word for discarding the opponent's card, and the line's
+      // die prefix already names the die — only an Elven Ring needs saying (report
+      // 614y1i2c4s001c1g).
+      log(state, null, 'event', `Free Peoples remove ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId}${action.via === 'ring' ? ' with an Elven Ring' : ''}`);
       passResolutionTurn(state, actor); break;
     }
     case 'sarumanMuster': {

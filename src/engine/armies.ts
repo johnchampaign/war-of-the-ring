@@ -630,7 +630,7 @@ export function splitBlockReason(state: GameState, from: RegionId, to: RegionId,
   if (viaCharacterDie && charDieLeaders(state, movingSel, side, false) < 1) {
     return side === 'fp'
       ? 'A Character-die Army move must take a Leader or Companion along with the moving units.'
-      : 'A Character-die Army move must take a Leader or Character (a Nazgûl or Minion) along with the moving units.';
+      : 'A Character-die Army move must take a Nazgûl or Minion along with the moving units.';
   }
   return null;
 }

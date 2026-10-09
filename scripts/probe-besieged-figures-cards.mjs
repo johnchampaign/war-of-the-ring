@@ -23,6 +23,7 @@ import { getHandler, canPlayCard } from '../src/engine/handlers/registry.ts';
 import { forceUnitCount } from '../src/engine/armies.ts';
 import { characterDestinations, moveCompanionGroup } from '../src/engine/charMove.ts';
 import { bringUpgrade } from '../src/engine/fellowship.ts';
+import { pendingCasualtyOptions, resolveCasualtyStep } from '../src/engine/combat.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -137,7 +138,12 @@ for (const [id, name] of [['sh-char-08b', 'The Nazgûl Strike!'], ['sh-char-09',
   const boxBefore = forceUnitCount(s.regions['minas-morgul'].siegeBox);
   // Roll until the dice score (the seeded RNG is deterministic per state).
   let tries = 0;
-  while (forceUnitCount(s.regions['minas-morgul'].siegeBox ?? { units: {} }) === boxBefore && tries++ < 20) getHandler('fp-str-05').applyTarget(s, 'fp', t);
+  // The Shadow now chooses how the garrison absorbs the hits (report 29395e6o1y6r4y5e):
+  // answer that question with its first option.
+  while (forceUnitCount(s.regions['minas-morgul'].siegeBox ?? { units: {} }) === boxBefore && tries++ < 20) {
+    getHandler('fp-str-05').applyTarget(s, 'fp', t);
+    while (s.pendingChoice?.kind === 'eventCasualties') { const o = pendingCasualtyOptions(s)[0]; resolveCasualtyStep(s, o.step, o.nation); }
+  }
   check('the hits land on the garrison', forceUnitCount(s.regions['minas-morgul'].siegeBox ?? { units: {} }) < boxBefore);
   check('the Free Peoples besiegers are untouched', forceUnitCount(s.regions['minas-morgul']) === fieldBefore);
 }

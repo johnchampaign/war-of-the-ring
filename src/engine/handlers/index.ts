@@ -12,7 +12,7 @@ import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef } from '../data';
-import { moveFellowship, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
+import { moveFellowship, findCharacterRegion, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
 import { log, logCardDraw, notify, sideDoes, sideName, sufferCorruption, shedCorruption } from '../log';
 
@@ -65,18 +65,6 @@ const SAURON_STRONGHOLDS = Object.keys(REGIONS).filter((id) => REGIONS[id]!.nati
 const MINIONS = ['witch-king', 'saruman', 'mouth-of-sauron'];
 const allAtWar = (state: GameState, nations: Nation[]): boolean => nations.every((n) => state.nations[n].step === 0);
 const isFpNation = (n: string): boolean => (FP_NATIONS as string[]).includes(n);
-/** The region holding character `id` (separated/in play), or null. A figure inside a
- *  besieged Stronghold IS in that region — the siege box is a place within it, not a
- *  region of its own — so the box is searched too. Missing it made every card that
- *  names a Character unplayable the moment he was besieged: Boromir shut inside Minas
- *  Tirith switched House of the Stewards off (player report 6x6f3v1h1y5r3k4u). */
-function charRegion(state: GameState, id: string): string | null {
-  for (const r of Object.keys(state.regions)) {
-    const reg = state.regions[r]!;
-    if (reg.characters.includes(id) || reg.siegeBox?.characters.includes(id)) return r;
-  }
-  return null;
-}
 /** Draw one card from a deck into `side`'s hand (hand max 6). */
 function drawCard(state: GameState, side: Side, deck: 'character' | 'strategy'): void {
   const p = state.cards[side]; const top = p.draw[deck].shift();
@@ -1329,7 +1317,7 @@ register('sh-str-12', {
     // Take him from wherever he stands — a besieged Shadow Stronghold keeps him in its
     // siege box, and searching the open field alone left him there while a second
     // Witch-king appeared in Angmar (player report 3y2y1w091o1c3o57).
-    const from = charRegion(state, 'witch-king');
+    const from = findCharacterRegion(state, 'witch-king');
     if (from) {
       const f = figureForce(state, from, 'shadow');
       const i = f.characters.indexOf('witch-king');
@@ -1349,9 +1337,9 @@ register('sh-str-12', {
 register('fp-char-23', {
   // Printed precondition: "Play if Boromir is in a GONDOR region" — anywhere else
   // (Rohan, Rivendell, …) doesn't qualify.
-  canPlay: (state) => { const r = charRegion(state, 'boromir'); return !!r && REGIONS[r]!.nation === 'gondor' && state.reinforcements.gondor.regular + state.reinforcements.gondor.elite > 0; },
+  canPlay: (state) => { const r = findCharacterRegion(state, 'boromir'); return !!r && REGIONS[r]!.nation === 'gondor' && state.reinforcements.gondor.regular + state.reinforcements.gondor.elite > 0; },
   targets(state) {
-    const r = charRegion(state, 'boromir'); if (!r) return [];
+    const r = findCharacterRegion(state, 'boromir'); if (!r) return [];
     // Room is measured where the unit would actually land: the boxed garrison (5) when
     // Boromir is shut inside a besieged Stronghold, the open field (10) otherwise —
     // the same seam placeUnits recruits through (p.28 opens Event-card recruiting to
@@ -1373,7 +1361,7 @@ register('fp-str-20', recruitChoiceCard('fp', [{ nation: 'north', region: 'the-s
 // The Grey Company: in Strider's Army, upgrade one Regular to an Elite.
 // The Grey Company: in Strider/Aragorn's Army, upgrade one Regular to an Elite of the
 // SAME Nation — the player CHOOSES which Nation (his Army can hold several).
-const greyCompanyRegion = (state: GameState): string | null => charRegion(state, 'strider') ?? charRegion(state, 'aragorn');
+const greyCompanyRegion = (state: GameState): string | null => findCharacterRegion(state, 'strider') ?? findCharacterRegion(state, 'aragorn');
 // His Army is wherever he stands in the region: the siege box when he is shut inside a
 // besieged Stronghold, the open field otherwise (player report 4a643h5l3p664m23 — the
 // card found no Regulars to upgrade while Strider was besieged).
@@ -1469,7 +1457,7 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       if (force && forceUnitCount(force) > 0) return true;
       const orthanc = state.regions['orthanc']!;
       if (orthanc.characters.includes('saruman') || !!orthanc.siegeBox?.characters.includes('saruman')) return true;
-      const gw = charRegion(state, 'gandalf-white');
+      const gw = findCharacterRegion(state, 'gandalf-white');
       if (!gw || !(gw === 'fangorn' || REGIONS[gw]!.nation === 'rohan')) return false;
       // The free-card clause is only worth a die if there IS another Character card to
       // play with it.
@@ -1480,7 +1468,7 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       const freeChar = () => {
         // If Gandalf the White is in Fangorn or a Rohan region, the FP may play one more
         // Character Event card without an Action die (consumed in the next playEvent).
-        const gw = charRegion(state, 'gandalf-white');
+        const gw = findCharacterRegion(state, 'gandalf-white');
         if (gw && (gw === 'fangorn' || REGIONS[gw]!.nation === 'rohan')) {
           state.flags.fpFreeCharEventThisTurn = true;
           // "...you may IMMEDIATELY play another Character Event card" — the prompt is
@@ -1587,7 +1575,9 @@ register('fp-str-06', {
     const roll = rollDiceFaces(state, 3, 5);
     // The roll is logged before the casualties it causes.
     log(state, null, 'event', rollLine("Faramir's Rangers score", roll, `the Shadow Army in ${t.region}`));
-    if (roll.hits > 0) applyCasualties(state, t.region!, 'shadow', roll.hits, 'regularsFirst');
+    // The Shadow chooses which units absorb the hits, as with Dreadful Spells (report
+    // 29395e6o1y6r4y5e). No siege case: Osgiliath and Ithilien hold no Stronghold.
+    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits);
   },
   // Leader-only case: nothing to strike and no Gondor unit placeable leaves no target to
   // choose. That used to skip `finalize` entirely (it only ran off the eventTarget path)
@@ -1913,7 +1903,7 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
     if (armyActs.length === 0) {
       // Phase 1 still open: pick Nazgûl that have not flown yet on this card.
       for (const from of Object.keys(state.regions)) if (unmovedNazgul(state, applied, from) > 0) out.push({ companion: 'nazgul', from });
-      const wk = charRegion(state, 'witch-king');
+      const wk = findCharacterRegion(state, 'witch-king');
       if (wk && !applied.some((a) => a.companion === 'witch-king')) out.push({ companion: 'witch-king', from: wk });
     }
     // Phase 2: move a Nazgûl-led Army (≤2, different armies) or attack with one (first action only).
@@ -1954,7 +1944,7 @@ register('sh-char-24', { // The Black Captain Commands
   optionalFromStart: true, // the recruit/fly clause and the army clause are both optional
   canPlay: (state) => inPlay(state, 'witch-king'),
   targets(state, _side, applied = []) {
-    const wk = charRegion(state, 'witch-king');
+    const wk = findCharacterRegion(state, 'witch-king');
     const last = applied[applied.length - 1];
     // Destination step of a Nazgûl figure-fly (the Witch-king flies too — p.25).
     if (last && isNazgulFigure(last.companion) && last.from && !last.region) return nazgulFlyTargets(state, last.companion!, last.from, applied);
@@ -2182,7 +2172,7 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
  *  only, so a board where the Witch-king was the last Ringwraith standing refused the
  *  card outright. */
 function nazgulFigureOnMap(state: GameState): boolean {
-  return Object.keys(state.regions).some((id) => shadowNazgulAt(state, id) > 0) || !!charRegion(state, 'witch-king');
+  return Object.keys(state.regions).some((id) => shadowNazgulAt(state, id) > 0) || !!findCharacterRegion(state, 'witch-king');
 }
 function moveNazgulCard(after: (state: GameState) => void): EventHandler {
   return {
@@ -2208,7 +2198,7 @@ function moveNazgulCard(after: (state: GameState) => void): EventHandler {
       // Fellowship. He was the one figure the card could not move, while the other
       // Nazgûl cards (The Black Captain Commands, The Ringwraiths Are Abroad) have
       // always flown him (player report 5vw7t8btxx0r2dq7).
-      const wk = charRegion(state, 'witch-king');
+      const wk = findCharacterRegion(state, 'witch-king');
       if (wk && !applied.some((a) => a.companion === 'witch-king')) out.push({ companion: 'witch-king', from: wk as RegionId });
       return out;
     },
@@ -2348,7 +2338,7 @@ register('fp-char-16', separateViaCard({ extraMove: 2, mapMove: true, siegeOk: t
 // captured"; player report 3a3e73174f1m1s4b).
 const THERE_AND_BACK_REGIONS: RegionId[] = ['dale', 'erebor', 'woodland-realm'];
 const thereAndBackRousing = (state: GameState): boolean =>
-  ['gimli', 'legolas'].some((c) => { const r = charRegion(state, c); return !!r && THERE_AND_BACK_REGIONS.includes(r as RegionId) && settlementController(state, r as RegionId) !== 'shadow'; });
+  ['gimli', 'legolas'].some((c) => { const r = findCharacterRegion(state, c); return !!r && THERE_AND_BACK_REGIONS.includes(r as RegionId) && settlementController(state, r as RegionId) !== 'shadow'; });
 register('fp-char-17', separateViaCard({
   extraMove: 1,
   // The "Then, …" clause stands on its own: it reads where Gimli and Legolas ARE, not
@@ -2499,7 +2489,7 @@ register('sh-char-13', {
 // tiles — all 3 Eyes eliminates him; otherwise the drawn Eye tiles leave the game.
 function striderAragornArmy(state: GameState): { id: string; char: string } | null {
   for (const char of ['aragorn', 'strider']) {
-    const id = charRegion(state, char);
+    const id = findCharacterRegion(state, char);
     // "With a Free Peoples Army" — a garrison besieged in a Gondor or Rohan Stronghold
     // is one (p.31), with him inside it; the open field there is the besieger's, so
     // asking who holds the field refused the card (player report 043e6x3t254g264z).
@@ -2593,7 +2583,12 @@ register('fp-str-05', {
   applyTarget(state, _side, t) {
     const roll = rollDiceFaces(state, 5, 5);
     log(state, null, 'event', rollLine('The Spirit of Mordor scores', roll, `the Shadow Army in ${t.region}`));
-    if (roll.hits > 0) applyCasualties(state, t.region!, 'shadow', roll.hits, 'regularsFirst');
+    // The Shadow chooses which units absorb the hits, as with Dreadful Spells (report
+    // 29395e6o1y6r4y5e). A besieged garrison wiped out leaves its Stronghold to the
+    // besieger, as before.
+    const boxed = armyForceOf(state, t.region!, 'shadow') !== state.regions[t.region!];
+    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits,
+      boxed ? { kind: 'siegeFall', region: t.region!, besieger: 'fp', spare: [] } : undefined);
   },
 });
 

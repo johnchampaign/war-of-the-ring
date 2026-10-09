@@ -166,9 +166,11 @@ export function describeAction(a: WotrAction, view?: GameState): string {
         case 'reduceCard': return a.card ? `Discard ${cardName(a.card)} (−1 damage)` : 'Discard a table card (−1 damage)';
       }
       return 'Resolve Hunt';
-    case 'bonusDraw': return a.deck === 'none' ? 'Palantír: don’t draw' : `Palantír: draw a ${cap(a.deck)} card`;
-    case 'guideDraw': return a.draw ? 'Gandalf: draw a card' : 'Gandalf: don’t draw';
-    case 'sorcererDraw': return a.draw ? 'Sorcerer: draw a card' : 'Sorcerer: don’t draw';
+    // Decision-modal buttons: the heading already names the card or Character, so the
+    // buttons don't repeat it (report 6r5i5b0o1u4i5x3k).
+    case 'bonusDraw': return a.deck === 'none' ? 'Don’t draw' : `Draw a ${cap(a.deck)} card`;
+    case 'guideDraw': return a.draw ? 'Draw a card' : 'Don’t draw';
+    case 'sorcererDraw': return a.draw ? 'Draw a card' : 'Don’t draw';
     case 'lureChoice': return a.mode === 'corruption' ? 'Use the Ring' : 'Eliminate the Companion';
     case 'stormcrowLoss': return `Lose ${nationName(a.nation)} ${a.figure === 'leader' ? 'Leader' : a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
     case 'breakingSep': return `Separate ${charName(a.companion)} from the Fellowship`;

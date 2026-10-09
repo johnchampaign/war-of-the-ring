@@ -13,7 +13,7 @@ import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeRegion,
 import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
-import { log, sideDoes } from './log';
+import { log, sideDoes, andList } from './log';
 
 // Safety backstop only — a real field battle terminates when the attacker ceases
 // or one side is wiped (always, since every round removes units). Set well above
@@ -377,13 +377,11 @@ function absorbForced(state: GameState, f: Force, side: Side, hits: number): num
     const opts = casualtyOptions(f, left, { state, side });
     if (left <= 0 || opts.length !== 1) break;
     const o = opts[0]!;
-    const replaced = o.step === 'reduceElite' && eliteHasReplacement(state, o.nation, side); // before the Regular is taken
+    const what = casualtyPhrase(state, side, o); // before the Regular is taken
     const spent = applyCasualtyOption(state, f, side, o);
     if (spent <= 0) break; // defensive: never spin
     left -= spent;
-    taken.push(o.step === 'removeRegular' ? `a ${cap1(o.nation)} Regular is eliminated`
-      : replaced ? `a ${cap1(o.nation)} Elite is reduced to a Regular`
-        : `a ${cap1(o.nation)} Elite is eliminated`);
+    taken.push(what);
   }
   // Forced allocations skip the prompt (there is no decision), but they must NOT
   // skip the log: an invisible casualty reads as a broken battle. Two reports in
@@ -393,6 +391,13 @@ function absorbForced(state: GameState, f: Force, side: Side, hits: number): num
   return left;
 }
 const cap1 = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
+/** "a Sauron Regular is eliminated" — read BEFORE the option is applied (whether an
+ *  Elite is reduced or eliminated depends on a Regular being available to replace it). */
+function casualtyPhrase(state: GameState, side: Side, o: CasualtyOption): string {
+  return o.step === 'removeRegular' ? `a ${cap1(o.nation)} Regular is eliminated`
+    : o.step === 'reduceElite' && eliteHasReplacement(state, o.nation, side) ? `a ${cap1(o.nation)} Elite is reduced to a Regular`
+      : `a ${cap1(o.nation)} Elite is eliminated`;
+}
 // Casualties dealt by an Event card outside a battle (Dreadful Spells, The Ents
 // Awake, …) were tagged COMBAT in the log (player report 153x114o2d4a0u73).
 const casualtyLogKind = (state: GameState): string => (state.pendingCombat ? 'combat' : 'event');
@@ -458,16 +463,15 @@ function finishForceCasualties(state: GameState, f: Force, side: Side): void {
     delete state.characters.inPlay[c];
   }
   const kind = casualtyLogKind(state);
-  if (mine.length) log(state, null, kind, `${mine.join(', ')} ${mine.length === 1 ? 'falls' : 'fall'} with the destroyed Army`);
   f.characters = f.characters.filter((c) => characterSide(c) !== side);
   // The Leaders / Nazgûl that fall with the Army were removed without a log line
   // (player report 704v015z0b68545p: Dreadful Spells took Osgiliath's last unit and
-  // its Leader silently).
+  // its Leader silently). Characters and Leaders/Nazgûl share ONE line — two lines
+  // for the same event read as two separate losses (report 5j234w1m2r370a5k).
   const lost = side === 'fp' ? f.leaders : f.nazgul;
-  if (lost > 0) {
-    const what = side === 'fp' ? `Free Peoples Leader${lost === 1 ? '' : 's'}` : `Nazgûl`;
-    log(state, null, kind, `${lost === 1 ? 'a' : lost} ${what} ${lost === 1 ? 'falls' : 'fall'} with the destroyed Army`);
-  }
+  const fallen = [...mine];
+  if (lost > 0) fallen.push(`${lost === 1 ? 'a' : lost} ${side === 'fp' ? `Free Peoples Leader${lost === 1 ? '' : 's'}` : 'Nazgûl'}`);
+  if (fallen.length) log(state, null, kind, `${andList(fallen)} ${fallen.length === 1 && (mine.length === 1 || lost === 1) ? 'falls' : 'fall'} with the destroyed Army`);
   if (side === 'fp') {
     f.leaders = 0;                              // FP Leaders are permanent losses
   } else {
@@ -507,7 +511,13 @@ export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, na
   const opts = casualtyOptions(f, d.hits, { state, side: d.side });
   const chosen = opts.find((o) => o.step === step && o.nation === nation) ?? opts[0];
   let left = d.hits;
-  if (chosen) left -= applyCasualtyOption(state, f, d.side, chosen);
+  if (chosen) {
+    // The chosen losses are logged like the forced ones — a card's hits used to say
+    // how many landed but never which units fell (report 3i5z6d36724x115m).
+    const what = casualtyPhrase(state, d.side, chosen);
+    const spent = applyCasualtyOption(state, f, d.side, chosen);
+    if (spent > 0) { left -= spent; log(state, null, casualtyLogKind(state), `${sideLabel(d.side)} casualties: ${what}`); }
+  }
   left = absorbForced(state, f, d.side, left);
   if (meaningfulForceCasualty(state, f, d.side, left)) {
     state.pendingChoice = { ...ch, data: { ...d, hits: left } };

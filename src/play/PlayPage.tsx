@@ -680,7 +680,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // be clicked through — the opponent recap holds until it is.
   const resultPending = huntResultPending(g.view, huntSeen) || battleResultPending(g.view, battleSeen) || noticePending(g.view, noticeSeen);
 
-  // Army moves/attacks AND independent-character (Nazgûl/Companion) moves are done on
+  // Army moves/attacks AND independent-character (Nazgûl/Minion/Companion) moves are done on
   // the board; combat/hunt decisions go to the modal. Keep them out of the button list.
   // Undo availability (re-read each render; reflects the local client's history).
   const undoCap = client.undo ? client.undoStatus?.() : undefined;
@@ -740,6 +740,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       // already sitting on the step above "At War" that passive Nations may not pass.
       if (sideOfNation(n) !== 'fp' || ns.active || ns.step <= 1) continue;
       const action: WotrAction = { kind: 'diplomaticAction', nation: n };
+      // Only while a die that could advance it is left — with no Muster or Will die
+      // there is nothing the card is barring (report 2z4h2h0f6w732o4s).
+      if (dieOptions(action, g.view, 'fp').length === 0) continue;
       if (activeDie && !dieAllowsAction(action, g.view, 'fp', activeDie)) continue;
       blockedPanel.push({ action, reason: 'Threats and Promises is in play — the Free Peoples cannot advance a passive Nation' });
     }
