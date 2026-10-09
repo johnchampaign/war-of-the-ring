@@ -125,8 +125,11 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // (e.g. moved Gandalf to activate Rohan) sees their Muster dice dead and no
   // explanation (player report: "I should now be able to advance Rohan using [M]
   // dice but can't" — filed mid-chain).
+  // Worded and styled like the other "finish this first" notes, below the list (player
+  // report 2w1m6i103h1m286n); the "your other dice unlock" line went — the Action ends
+  // with the move and play passes to the opponent (reports 101p3k1y524x2v48, 231u2i4l5p19426w).
   const chainNote = view.pendingChoice?.kind === 'charMove2'
-    ? 'Character move in progress — move more characters on the map, or click "Done moving characters". Your other dice unlock when the move ends.'
+    ? 'Character move in progress — move more Characters on the map, or click "Done moving characters" to end the Action.'
     : undefined;
 
   // Combat/hunt decisions are handled by the DecisionModal; this list is the
@@ -137,9 +140,6 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
           selection and shoved the whole list up and down, and the dice tray above
           already says "click a die to see its actions / click again to show all"
           (player report 563w3w120q5v372d). */}
-      {chainNote && (
-        <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '6px 9px', margin: '2px 0 6px', fontSize: 12 }}>⚑ {chainNote}</div>
-      )}
       {(
         // Picking a die means you are acting with it, so Pass is off until you clear
         // the selection (player report 111g4j5g2n4q3x2g).
@@ -186,6 +186,9 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
           options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} blockedReason={reasonFor.get(a)} view={view} />;
       })}
       {skips.length > 0 && <DiscardDieButton skips={skips} disabled={busy} onClick={click} compact={compact} />}
+      {chainNote && (
+        <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', margin: '4px 0', fontSize: 13 }}>⚑ {chainNote}</div>
+      )}
       {live.length === 0 && skips.length === 0 && boardHints.length === 0 && (
         boardPending
           ? <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', fontSize: 13 }}>⚑ {boardPending}</div>

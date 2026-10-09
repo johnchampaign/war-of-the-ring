@@ -34,13 +34,13 @@ import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, isSecondMusterTarget, trivialDie } from './actionText';
-import { moveBlockReason, musterBlockReason, cardPathBlockReason, regionHops } from '../engine/armies';
+import { moveBlockReason, musterBlockReason, cardPathBlockReason, regionHops, companionLandingActivates } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial, isCardCompanionMove } from './panelFilter';
 import { movableCharsAt, characterDestinations, characterMoveBlockReason, companionGroupLeader, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS } from '../engine/charMove';
 import { CompanionPicker } from './CompanionPicker';
 import { separationActivates } from '../engine/fellowship';
-import { REGIONS, levelOf, sideOfNation } from '../engine/data';
+import { REGIONS, levelOf, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import { threatsAndPromisesActive } from '../engine/persistent';
 import { charName } from './charInfo';
 
@@ -484,22 +484,20 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (musterTargets.size) out.push('Muster — click a highlighted region on the map.');
     // The Fellowship phase is board-driven too (player report 414d1l3969347125).
     if (g.legalActions.some((a) => a.kind === 'declareFellowship')) out.push('Declare the Fellowship — click a highlighted region on the map.');
+    // A card moving Companions already on the map points at the map like a Character
+    // die does (player report 231u2i4l5p19426w).
+    if (cardCompMoves.length) {
+      const name = EVENT_BY_ID[cardCompMoves[0]!.card]?.name ?? 'The card';
+      out.push(`${name}: move Companions — click a highlighted region on the map, then where they go.`);
+    }
     return out;
-  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions]);
+  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
     if (isCardSep) { const c = cardSepActs[0]?.companion; return c && c !== 'nazgul' ? c : null; }
     return null;
   }, [isSeparateMove, isCardSep, cardSepActs, g.view]);
-  // Among the separation destinations, the ones that ROUSE a Free Peoples nation
-  // (a City/Stronghold of one this Companion activates, not yet At War) — marked ★.
-  const activateTargets = useMemo(() => {
-    const set = new Set<RegionId>();
-    if (!g.view || !sepCompanion) return set;
-    for (const r of (isCardSep ? cardSepTargets : declareTargets)) if (separationActivates(g.view, sepCompanion, r)) set.add(r);
-    return set;
-  }, [g.view, sepCompanion, isCardSep, cardSepTargets, declareTargets]);
   // The region currently "selected" for highlighting (an army source, a char source, or a menu region).
   // While a card route is being traced, the ACTIVE region is where the Army has
   // walked to, not where it set out — that is the one the next step leaves from.
@@ -514,6 +512,21 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       : characterDestinations(g.view, g.you as Side, charPick.char, charPick.from)) : new Set<RegionId>()),
     [g.view, charPick, g.you],
   );
+  // Among the destinations of a separation OR any Companion move (die or card), the
+  // ones that ROUSE a passive Free Peoples Nation — marked ★, the same way everywhere
+  // (player report 395d3n1w3f085y56). One rule decides it (companionLandingActivates).
+  const activateTargets = useMemo(() => {
+    const set = new Set<RegionId>();
+    if (!g.view) return set;
+    if (sepCompanion) {
+      for (const r of (isCardSep ? cardSepTargets : declareTargets)) if (separationActivates(g.view, sepCompanion, r)) set.add(r);
+    }
+    if (charPick && g.you === 'fp' && charPick.char !== 'nazgul') {
+      const group = charPick.group ?? [charPick.char];
+      for (const r of charDestinations) if (companionLandingActivates(g.view, group, r)) set.add(r);
+    }
+    return set;
+  }, [g.view, g.you, sepCompanion, isCardSep, cardSepTargets, declareTargets, charPick, charDestinations]);
   const destinations = useMemo(
     () => new Set<RegionId>([...boardArmyActs.filter((a) => a.from === selected).map((a) => a.to!), ...(trace ? trace.steps : cardMoveActs.filter((a) => a.from === selected).map((a) => a.to!)), ...charDestinations]),
     [boardArmyActs, cardMoveActs, trace, selected, charDestinations],
@@ -725,7 +738,19 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     clearMove();
   }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
-  const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
+  // Where a Character or a Nazgûl may GO is always lit as a destination — a separation
+  // and a card's Companion or Nazgûl move included — never in the green of "click here
+  // to start something" (player report 395d3n1w3f085y56: separation and card moves
+  // were green, the die's Character moves orange).
+  const highlights = useMemo(() => {
+    const charGoals = new Set<RegionId>([...cardSepTargets, ...(isSeparateMove ? declareTargets : [])]);
+    return {
+      sources: new Set([...sources].filter((r) => !charGoals.has(r))),
+      selected: activeRegion,
+      destinations: new Set([...destinations, ...charGoals]),
+      activate: activateTargets,
+    };
+  }, [sources, activeRegion, destinations, activateTargets, cardSepTargets, isSeparateMove, declareTargets]);
   // The Muster die's second figure is a pending choice too, so it must be listed here or
   // its lit Settlements ignore the click (player report 310b003u0c1j3220).
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || cardCompMoves.length > 0 || isCardRecruit || isCardMove || cardAssaultActs.length > 0 || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2 || secondMusterActs.length > 0) ? onRegionClick : undefined;
@@ -972,7 +997,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               Politics reinforcement pips can't run off the right edge (report 6q0s). */}
           <div style={{ display: 'flex', flexWrap: 'wrap', flexShrink: 0, maxHeight: '42%', overflowY: 'auto', borderBottom: '1px solid #2a2418' }}>
             <div style={{ flex: '1 1 200px', minWidth: 0, overflow: 'auto' }}>
-              <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn ? setDie : undefined} />
+              <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn && !g.view.pendingChoice ? setDie : undefined} />
               {/* `g.yourTurn` as well: online, the turn can pass to the opponent while
                   the prompt is open (a pendingChoice resolving, a timeout), and a
                   prompt for an action you can no longer take is worse than none. */}

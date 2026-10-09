@@ -7,7 +7,7 @@ import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, character
 import { resolveHunt, resolveMordorStep, pruneFellowshipOnTableCards, queueTakenAlive } from './hunt';
 export { pruneFellowshipOnTableCards };
 import { activateNation } from './politics';
-import { settlementController, figureForce, heldShadowStronghold } from './armies';
+import { settlementController, figureForce, heldShadowStronghold, companionLandingActivates } from './armies';
 import { activateOnCompanionLand } from './charMove';
 import { MINION_IDS } from './minions';
 import { log, notify, sufferCorruption, shedCorruption } from './log';
@@ -321,11 +321,10 @@ function activatableNations(id: CharacterId): Nation[] {
  *  when a Companion separates (so it isn't a hidden consequence). Presence activates
  *  only — it never advances the Political Track. */
 export function separationActivates(state: GameState, companion: CharacterId, region: RegionId): boolean {
-  const dn = REGIONS[region]?.nation as Nation | null;
-  if (!dn || !activatableNations(companion).includes(dn)) return false;
-  const st = REGIONS[region]?.settlement;
-  if (st !== 'City' && st !== 'Stronghold') return false;
-  return !state.nations[dn]?.active; // still passive — activation still matters
+  // The same rule as the activation itself (armies.ts companionLandingNation) — it
+  // used to restate it and missed "unless controlled by the enemy", starring a
+  // captured City that would not wake anyone.
+  return companionLandingActivates(state, [companion], region);
 }
 
 /** BFS for the nearest region within `maxMove` steps satisfying `pred`. */

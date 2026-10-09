@@ -7,6 +7,7 @@
 import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
 import { companionGroupLeader, companionGroupRange, companionGroupDestinations, companionGroupBlockReason } from '../src/engine/charMove.ts';
+import { companionLandingActivates } from '../src/engine/armies.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -118,6 +119,31 @@ console.log('\n=== We Prove the Swifter and Gwaihir carry their range terms into
     const res = wotrAdapter.tryApplyAction(s, { kind: 'eventTarget', card, companion: 'legolas', from: 'edoras', region: far, group: ['legolas', 'peregrin'] }, 'fp');
     check('the group moves together under the card', res.ok && res.state.characters.inPlay.legolas === far && res.state.characters.inPlay.peregrin === far, res.reason);
   }
+}
+
+console.log('\n=== the map\'s ★ and the activation are one rule ===');
+{
+  // Every destination of a Strider + Pippin group (Pippin rouses any Nation): the star
+  // says a passive Nation wakes exactly when the move wakes one. Then a captured City:
+  // no star, and no activation ("unless controlled by the enemy").
+  const base = board(['strider', 'peregrin']);
+  const group = ['strider', 'peregrin'];
+  const dests = companionGroupDestinations(base, 'fp', 'edoras', group);
+  const wrong = [];
+  let starred = 0;
+  for (const to of dests) {
+    const star = companionLandingActivates(base, group, to);
+    if (star) starred++;
+    const before = Object.fromEntries(Object.entries(base.nations).map(([n, v]) => [n, v.active]));
+    const res = wotrAdapter.tryApplyAction(base, { kind: 'moveCharacter', char: 'strider', from: 'edoras', to, die: 'character', chars: group }, 'fp');
+    const woke = res.ok && Object.entries(res.state.nations).some(([n, v]) => v.active && !before[n]);
+    if (star !== woke) wrong.push(`${to}: star=${star} woke=${woke}`);
+  }
+  check(`star and activation agree on all ${dests.length} destinations (${starred} starred)`, wrong.length === 0 && starred > 0, wrong.join(' | '));
+  const cap = board(['strider', 'peregrin']);
+  cap.regions['helms-deep'].control = 'shadow';
+  cap.regions['helms-deep'].units = {};
+  check('a captured Stronghold gets no star', !companionLandingActivates(cap, group, 'helms-deep'));
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');

@@ -581,14 +581,28 @@ const FP_NATION_SET = new Set<string>(FP_NATIONS);
  *  Strider marched an Army into The Shire and the North stayed passive). */
 export function activateOnCompanionLand(state: GameState, side: Side, chars: string[], to: RegionId): void {
   if (side !== 'fp') return;
+  const dn = companionLandingNation(state, chars, to);
+  if (dn) activateNation(state, dn, { viaCompanion: true });
+}
+/** The Free Peoples Nation that Companions `chars` ending a move in `to` would
+ *  activate (p.24: a City or Stronghold of their Nation — any Nation for Gandalf and
+ *  Strider's line — unless the enemy controls it), or null. The ONE rule behind both
+ *  the activation and the map's ★ on every Companion move and separation. */
+export function companionLandingNation(state: GameState, chars: readonly string[], to: RegionId): Nation | null {
   const dn = REGIONS[to]?.nation as Nation | undefined;
   const st = REGIONS[to]?.settlement;
-  if (!dn || !FP_NATION_SET.has(dn) || (st !== 'City' && st !== 'Stronghold')) return;
-  if (settlementController(state, to) === 'shadow') return; // "unless controlled by the enemy"
+  if (!dn || !FP_NATION_SET.has(dn) || (st !== 'City' && st !== 'Stronghold')) return null;
+  if (settlementController(state, to) === 'shadow') return null; // "unless controlled by the enemy"
   for (const c of chars) {
     const cn = COMPANIONS[c]?.nation; // 'any' companion (Gandalf/Aragorn-line) activates any FP Nation
-    if (!cn || cn === 'any' || cn === dn) { activateNation(state, dn, { viaCompanion: true }); return; }
+    if (!cn || cn === 'any' || cn === dn) return dn;
   }
+  return null;
+}
+/** The map's ★: would this landing wake a Nation that is still passive? */
+export function companionLandingActivates(state: GameState, chars: readonly string[], to: RegionId): boolean {
+  const dn = companionLandingNation(state, chars, to);
+  return !!dn && !state.nations[dn]?.active;
 }
 
 // ===== THE Army-movement composition rules — one implementation =====================

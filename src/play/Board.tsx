@@ -260,11 +260,13 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
               source) paint a stroke. Without the image the polygons ARE the map, so
               they keep their nation fill + a faint outline. */}
           <path d={polyPath(e.poly)} fill={e.fill} style={{ pointerEvents: 'all' }}
-            fillOpacity={boardArt ? (hl.selected === e.id ? 0.3 : hl.activate?.has(e.id) ? 0.28 : hl.destinations?.has(e.id) || hl.sources?.has(e.id) ? 0.18 : 0) : (hl.selected === e.id ? 0.75 : 0.5)}
-            stroke={hl.selected === e.id ? '#fff200' : hl.activate?.has(e.id) ? '#ffae20' : hl.destinations?.has(e.id) ? '#ffd23f' : hl.sources?.has(e.id) ? '#5dff7a' : (boardArt ? 'none' : '#3a3a3a')}
+            // A rousing destination is a destination like any other: the ★ banner alone
+            // marks it, not a second outline colour (player report 395d3n1w3f085y56).
+            fillOpacity={boardArt ? (hl.selected === e.id ? 0.3 : hl.destinations?.has(e.id) || hl.activate?.has(e.id) || hl.sources?.has(e.id) ? 0.18 : 0) : (hl.selected === e.id ? 0.75 : 0.5)}
+            stroke={hl.selected === e.id ? '#fff200' : hl.destinations?.has(e.id) || hl.activate?.has(e.id) ? '#ffd23f' : hl.sources?.has(e.id) ? '#5dff7a' : (boardArt ? 'none' : '#3a3a3a')}
             strokeWidth={hl.selected === e.id || hl.destinations?.has(e.id) || hl.activate?.has(e.id) ? 4 : hl.sources?.has(e.id) ? 3 : 1.2} />
-          {/* A separation destination that would ROUSE a Free Peoples nation — a gold
-              ★ banner so the player sees where landing the Companion calls a Nation to war. */}
+          {/* A Companion destination (separation or move) that would ROUSE a Free Peoples
+              Nation — a gold ★ banner so the player sees where landing calls it to war. */}
           {hl.activate?.has(e.id) && (() => {
             const p = clampToCrop({ x: e.poly[0]!.x, y: e.poly[0]!.y - 16 });
             return (
