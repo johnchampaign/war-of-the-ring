@@ -38,5 +38,18 @@ check('no Character die, in Lórien with no Corruption: not playable', !canPlayC
     check('paid with the Event die, Character converted to Will', JSON.stringify(n.dice.fp) === '["will"]', JSON.stringify(n.dice.fp));
   }
 }
+// Reports 3r1l6z5k6v3s3o23 / 52056m29415s3q6f: a die CHOSEN by the player that is the
+// last Character die is refused (it used to play the card for nothing), and the picker
+// offers only the dice that leave a Character die to convert.
+import { dieOptions } from '../src/play/actionText.ts';
+{
+  const s = state(['character', 'will']);
+  s.cards.fp.hand = [MIRROR]; s.phase = 'actionResolution'; s.currentPlayer = 'fp'; s.pendingChoice = null;
+  const r = wotrAdapter.tryApplyAction(s, { kind: 'playEvent', cardId: MIRROR, die: 'character' }, 'fp');
+  check('the last Character die, chosen, is refused', !r.ok, r.ok ? 'accepted' : r.reason);
+  check('the picker offers only the Will die (no choice to make)', JSON.stringify(dieOptions({ kind: 'playEvent', cardId: MIRROR }, s, 'fp')) === '["will"]', JSON.stringify(dieOptions({ kind: 'playEvent', cardId: MIRROR }, s, 'fp')));
+  const t = state(['character', 'character', 'event']);
+  check('two Character dice + Event: both offered', JSON.stringify(dieOptions({ kind: 'playEvent', cardId: MIRROR }, t, 'fp')) === '["character","event"]');
+}
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

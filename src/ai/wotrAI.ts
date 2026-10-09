@@ -1313,6 +1313,8 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const heavy = typeof tile.value === 'number' ? tile.value >= 2 : true; // eye/die ⇒ redraw
       return legal.find((a) => a.kind === 'huntRedraw' && a.redraw === heavy) ?? legal[0]!;
     }
+    case 'wornDiscard': // Worn with Sorrow and Toil: a known tabled card over a random hand card
+      return legal.find((a) => a.kind === 'wornDiscard' && a.card) ?? legal[0]!;
     case 'bonusDraw': // Shadow Palantír: take a Strategy card (army-building)
       return legal.find((a) => a.kind === 'bonusDraw' && a.deck === 'strategy') ?? legal[0]!;
     case 'freeCharEvent': { // The Ents Awake: a free Character card — play the best one worth playing

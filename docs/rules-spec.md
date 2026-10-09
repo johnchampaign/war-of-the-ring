@@ -282,8 +282,11 @@ die already showing an Eye.
   card's follow-up choices and every round of a battle it started, and not at all if
   Saruman was eliminated meanwhile — Almanac, The Palantír of Orthanc; report
   0l2a1m3v0l1p0t3r. Gandalf the Grey's Guide draw uses the same slot), *Worn with Sorrow
-  and Toil* (on a Fellowship-Companion casualty the Shadow discards an FP Character card,
-  random from hand else from the table; hunt.ts `discardFpCharacterCard`), and *Wormtongue*
+  and Toil* (on a Fellowship-Companion casualty the Shadow discards an FP Character card —
+  a random one from the hand **or** a tabled one, the Shadow's choice, prompted as
+  `wornDiscard` once the Hunt has resolved whenever more than one option exists; logged
+  after the casualty and the cards that leave with him; hunt.ts `resolveWornWithSorrow`,
+  reports 3r2z092k3w6c475c / 6q6o6a2e4a3k2a08), and *Wormtongue*
   (`activateNation` gains a `trigger` arg — carrying `viaAttack` — so Rohan stays passive
   unless roused by an appropriate Companion or a genuine **attack** on Edoras/Helm's Deep;
   politics.ts. A plain army move into those regions, or a walk-in occupation of an

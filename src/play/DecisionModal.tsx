@@ -59,6 +59,7 @@ const CHOICE_TITLE: Record<string, string> = {
   stormcrowLoss: 'Stormcrow — choose a unit to eliminate',
   breakingSep: 'The Breaking of the Fellowship — choose a Companion to separate',
   discardCard: 'Over the hand limit — choose a card to discard',
+  wornDiscard: 'Worn with Sorrow and Toil — discard a Free Peoples Character card',
 };
 
 // A variable-size Combat card asks its owner how big to make it — and what that
@@ -408,7 +409,7 @@ function eliteLabel(a: WotrAction, view: GameState): string | undefined {
 function DecisionButton({ action, disabled, onClick, onHover, guide, label }: { action: WotrAction; disabled: boolean; onClick: () => void; onHover?: (id: string | null) => void; guide?: string; label?: string }) {
   // Card-referencing choices (play a Combat card, or pick a card to discard) get the
   // card thumbnail + hover preview so you can read what you're choosing.
-  const cardId = action.kind === 'playCombatCard' ? action.cardId : action.kind === 'discardCard' ? action.card : null;
+  const cardId = action.kind === 'playCombatCard' ? action.cardId : action.kind === 'discardCard' ? action.card : action.kind === 'wornDiscard' ? action.card ?? null : null;
   const art = useCardArt(cardId);
   const hov = cardId && onHover ? { onMouseEnter: () => onHover(cardId), onMouseLeave: () => onHover(null) } : {};
   return (

@@ -183,7 +183,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
             options={[...byFace.keys()]} pickAction={(f) => byFace.get(f)!} forceDie={sel} compact={compact} />;
         }
         return <ActionButton key={i} action={a} disabled={busy} onClick={click} onHover={onHover}
-          options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} blockedReason={reasonFor.get(a)} />;
+          options={you ? dieOptions(a, view, you) : []} forceDie={sel} compact={compact} blockedReason={reasonFor.get(a)} view={view} />;
       })}
       {skips.length > 0 && <DiscardDieButton skips={skips} disabled={busy} onClick={click} compact={compact} />}
       {live.length === 0 && skips.length === 0 && boardHints.length === 0 && (
@@ -226,10 +226,10 @@ function DiscardDieButton({ skips, disabled, onClick, compact }: { skips: Extrac
 // A normal action button. For "Play event" it shows the card-art thumbnail (when
 // downloaded). When more than one die could pay for the action, the first click opens
 // a die-picker (the player chooses which to spend); one option submits directly.
-function ActionButton({ action, disabled, onClick, onHover, options, forceDie, compact, blockedReason, pickAction }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null; compact?: boolean; blockedReason?: string;
+function ActionButton({ action, disabled, onClick, onHover, options, forceDie, compact, blockedReason, pickAction, view }: { action: WotrAction; disabled: boolean; onClick: (a: WotrAction) => void; onHover?: (h: Hover) => void; options: DieFace[]; forceDie?: DieFace | null; compact?: boolean; blockedReason?: string;
   /** A button standing for several engine actions told apart only by the die that pays
    *  (the Palantír's Will / Elven Ring clauses): which action a given die submits. */
-  pickAction?: (f: DieFace) => WotrAction }) {
+  pickAction?: (f: DieFace) => WotrAction; view?: GameState }) {
   const [picking, setPicking] = useState(false);
   const submit = (f: DieFace): void => onClick({ ...(pickAction ? pickAction(f) : action), die: f } as WotrAction);
   const cardId = action.kind === 'playEvent' ? action.cardId : null;
@@ -276,7 +276,7 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
           {ambiguous ? CHOOSE_DIE : tagDie && <DieTag face={tagDie} />}
         </span>
         {art && <img src={art} alt="" style={{ height: compact ? 30 : 48, borderRadius: 3, flexShrink: 0 }} />}
-        <span style={{ minWidth: 0 }}>{describeAction(action)}</span>
+        <span style={{ minWidth: 0 }}>{describeAction(action, view)}</span>
       </button>
       {picking && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '2px 0 6px 10px' }}>

@@ -119,6 +119,8 @@ export type WotrAction =
   | { kind: 'breakingSep'; companion: string }
   // Over the 6-card hand limit: choose which Event card to discard (to its deck).
   | { kind: 'discardCard'; card: string }
+  // Worn with Sorrow and Toil (Shadow): a tabled FP Character card, or (no card) a random one from the FP hand.
+  | { kind: 'wornDiscard'; card?: string }
   // Palantír of Orthanc bonus draw (Shadow): a deck to draw from, or 'none' to decline.
   | { kind: 'bonusDraw'; deck: 'character' | 'strategy' | 'none' }
   // Gandalf the Grey Guide draw (FP): take the matching-deck card, or decline.

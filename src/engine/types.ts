@@ -389,6 +389,12 @@ export interface GameState {
      *  and a single slot let the second overwrite the first, who then vanished from
      *  the game (player report 1huuhkxza7mpp4r5). Drained one at a time by `advance`. */
     takenAliveMore?: Array<{ companion: CharacterId; from: RegionId; range: number }>;
+    /** Worn with Sorrow and Toil discards still owed for this Hunt's Companion
+     *  casualties. The card lets the SHADOW choose "from his hand (choosing it randomly)
+     *  or from the table" (report 3r2z092k3w6c475c), so whenever a tabled Character
+     *  card is on offer the pick is a prompt, raised by `advance` once the Hunt has
+     *  finished resolving (like `takenAlive`). */
+    wornWithSorrowOwed?: number;
     /** Shadow Strongholds a Reveal's traced path crossed whose Hunt tiles (p.39) are
      *  still to be drawn — `advance` draws the next whenever no choice is open, so a
      *  tile that asks the FP to assign damage doesn't drop the ones behind it. */

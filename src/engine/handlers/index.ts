@@ -2,7 +2,7 @@
 // cards (heal/Corruption, political, recruit, dice). Each cites its card id from
 // assets/event-cards.json. Cards not registered here stay unimplemented (not
 // offered) until added. Effects modify the standard rules per the card text.
-import type { GameState, Side, Nation, RegionId, CharacterId } from '../types';
+import type { GameState, Side, Nation, RegionId, CharacterId, DieFace } from '../types';
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
@@ -1412,12 +1412,23 @@ register('fp-char-24', {
 // last one can't pay AND be converted; the adapter pays with an Event/Will die then),
 // or the Fellowship is in an unconquered Lórien with Corruption to heal (player
 // report 1254046v376z4x4o: it used to demand a Character die even for the heal).
+const mirrorHeals = (state: GameState): boolean =>
+  state.fellowship.location === 'lorien' && settlementController(state, 'lorien') !== 'shadow' && state.fellowship.corruption > 0;
+/** The dice that may pay for Mirror of Galadriel: a Character, Event or Will die that
+ *  leaves a Character die behind to convert — or any of them when the Lórien heal
+ *  alone makes the card worth playing. Paying with the LAST Character die used to be
+ *  accepted (and the card did nothing), and the die picker offered it (player reports
+ *  3r1l6z5k6v3s3o23, 52056m29415s3q6f). In the order the engine prefers them. */
+export function mirrorPayFaces(state: GameState): DieFace[] {
+  const pool = state.dice.fp;
+  const chars = pool.filter((f) => f === 'character').length;
+  return (['character', 'event', 'will'] as DieFace[]).filter((f) => pool.includes(f)
+    && (mirrorHeals(state) || chars - (f === 'character' ? 1 : 0) >= 1));
+}
 register('fp-char-13', {
-  canPlay: (state) => {
-    const chars = state.dice.fp.filter((f) => f === 'character').length;
-    if (chars >= 2 || (chars === 1 && state.dice.fp.some((f) => f === 'event' || f === 'will'))) return true;
-    return state.fellowship.location === 'lorien' && settlementController(state, 'lorien') !== 'shadow' && state.fellowship.corruption > 0;
-  },
+  canPlay: (state) => mirrorPayFaces(state).length > 0
+    // The Ents Awake's free play spends no die, so any Character die is convertible.
+    || (!!state.flags.fpFreeCharEventThisTurn && (state.dice.fp.includes('character') || mirrorHeals(state))),
   apply(state) {
     const i = state.dice.fp.indexOf('character');
     if (i >= 0) state.dice.fp[i] = 'will';
@@ -1478,9 +1489,11 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
           // follow-up used to wait for the FP's next action, handing the Shadow a turn
           // in between).
           state.flags.fpFreeCharEventPrompt = true;
-          // The LOG line is written where the prompt is actually raised (advance()), so
-          // it lands after this card's own hits and casualties instead of ahead of them
-          // (player report 4533406k6q0e4d4a: the offer read as happening first).
+          // No log line of its own for the OFFER — nothing has happened yet (player
+          // report 44356n1p2p07390m); the card's play line names why a free card may
+          // follow, and the free play (or the decline) is logged when it happens.
+          const played = [...state.log].reverse().find((e) => e.card === id);
+          if (played && !played.msg.endsWith('(Gandalf the White)')) played.msg += ' (Gandalf the White)';
         }
       };
       // A BESIEGED Army is still IN its region (p.31) — only its units sit in the

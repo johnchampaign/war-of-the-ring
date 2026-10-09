@@ -684,7 +684,6 @@ function eliminateCompanionInline(state: GameState, id: string, damage: number, 
   const takenAlive = (id === 'meriadoc' || id === 'peregrin') && fs.mordor === null;
   if (takenAlive) queueTakenAlive(state, { companion: id, from: fs.location, range: fs.progress + level });
   else if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
-  if (wornWithSorrowActive(state)) discardFpCharacterCard(state); // Worn with Sorrow and Toil
   // Reassign Guide: highest-Level remaining Companion, else Gollum.
   const oldGuide = fs.guide;
   if (!fs.companions.includes(fs.guide)) {
@@ -706,6 +705,10 @@ function eliminateCompanionInline(state: GameState, id: string, damage: number, 
   // Hunt casualty skipped this, so Horn of Gondor stayed on the table after Boromir
   // died to a Hunt tile (player report 6a71kow2hoom5fbc).
   pruneFellowshipOnTableCards(state);
+  // Worn with Sorrow and Toil comes LAST, after the casualty and the cards that leave
+  // with him are logged — it is the casualty's consequence (player reports
+  // 6q6o6a2e4a3k2a08, 733j0g125g3n3r52: the discard read before the elimination).
+  if (wornWithSorrowActive(state)) oweWornWithSorrow(state);
   return level;
 }
 // (Lives here, not in fellowship.ts, so the Hunt's own casualty path above can call
@@ -740,29 +743,50 @@ export function pruneFellowshipOnTableCards(state: GameState): void {
 /** Card name for a character id, for log entries ("Gandalf the Grey", not "gandalf-grey"). */
 const charLabel = (id: string): string => characterDef(id)?.name ?? id;
 
-/** Worn with Sorrow and Toil: discard one FP Character Event card — randomly from
- *  the hand (it's hidden), else from the table if the hand has none. */
-function discardFpCharacterCard(state: GameState): void {
+/** Worn with Sorrow and Toil: "you may also discard one of the Free Peoples player's
+ *  Character Event cards from his hand (choosing it randomly) or from the table."
+ *  Hand or table is the SHADOW's choice (report 3r2z092k3w6c475c — it used to take
+ *  from the hand whenever it held one). The "you may" is still auto-applied (always
+ *  to the Shadow's benefit). The options are: 'hand' (a random Character card from
+ *  the hidden hand), or a specific tabled Character card. */
+export function wornWithSorrowOptions(state: GameState): Array<'hand' | string> {
   const cards = state.cards.fp;
   const isChar = (id: string) => EVENT_BY_ID[id]?.deck === 'Character';
-  const handChars = cards.hand.filter(isChar);
-  if (handChars.length) {
-    const pick = withRng(state, (rng) => rng.pick(handChars));
-    cards.hand.splice(cards.hand.indexOf(pick), 1);
+  return [...(cards.hand.some(isChar) ? ['hand'] : []), ...cards.table.filter(isChar)];
+}
+
+/** A Companion casualty under Worn with Sorrow and Toil: discard now when there is
+ *  nothing to choose (only the hand, or a single tabled card and an empty hand),
+ *  otherwise owe the Shadow the pick once the Hunt has resolved (`advance`). */
+function oweWornWithSorrow(state: GameState): void {
+  const opts = wornWithSorrowOptions(state);
+  if (opts.length === 1) resolveWornWithSorrow(state, opts[0]!);
+  else if (opts.length > 1) state.flags.wornWithSorrowOwed = (state.flags.wornWithSorrowOwed ?? 0) + 1;
+}
+
+/** Carry out a Worn with Sorrow and Toil discard: `pick` is 'hand' or a tabled card id. */
+export function resolveWornWithSorrow(state: GameState, pick: 'hand' | string): void {
+  const cards = state.cards.fp;
+  const isChar = (id: string) => EVENT_BY_ID[id]?.deck === 'Character';
+  if (pick === 'hand') {
+    const handChars = cards.hand.filter(isChar);
+    if (!handChars.length) return;
+    const card = withRng(state, (rng) => rng.pick(handChars));
+    cards.hand.splice(cards.hand.indexOf(card), 1);
     // A card discarded from a HAND is discarded face down (p.22): the owner sees
     // which one went (so a vanished card is not a mystery — player report: "two
     // cards in my hand disappeared"), the opponent sees only that a Character card
     // did (player report 3i3v4o2a2w5y3e15). Same treatment as hand-limit discards.
-    (cards.discardFaceDown ??= []).push(pick);
-    log(state, 'fp', 'event', `Worn with Sorrow and Toil: you randomly discard ${EVENT_BY_ID[pick]?.name ?? pick}`);
-    state.log[state.log.length - 1]!.card = pick;
+    (cards.discardFaceDown ??= []).push(card);
+    log(state, 'fp', 'event', `Worn with Sorrow and Toil: you randomly discard ${EVENT_BY_ID[card]?.name ?? card}`);
+    state.log[state.log.length - 1]!.card = card;
     log(state, null, 'event', 'Worn with Sorrow and Toil: Free Peoples discard a random Character card');
     return;
   }
-  const ti = cards.table.findIndex(isChar);
-  if (ti >= 0) {
-    const id = cards.table.splice(ti, 1)[0]!;
-    cards.discard.character.push(id);
-    log(state, null, 'event', `Worn with Sorrow and Toil: the Free Peoples discard a tabled Character card (${EVENT_BY_ID[id]?.name ?? id})`);
-  }
+  const ti = cards.table.indexOf(pick);
+  if (ti < 0 || !isChar(pick)) return;
+  cards.table.splice(ti, 1);
+  cards.discard.character.push(pick);
+  log(state, null, 'event', `Worn with Sorrow and Toil: the Shadow discards ${EVENT_BY_ID[pick]?.name ?? pick} from the Free Peoples' table`);
+  state.log[state.log.length - 1]!.card = pick;
 }

@@ -5,6 +5,7 @@
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState, Side, DieFace } from '../engine/types';
 import { charDieLeaders } from '../engine/armies';
+import { mirrorPayFaces } from '../engine/handlers';
 import { playFacesFor, nationName, levelOf } from '../engine/data';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
@@ -36,7 +37,9 @@ const CARD_RECRUITS: Record<string, string> = {
   'sh-str-11': '2 Isengard Regulars',                // Rage of the Dunlendings
 };
 
-export function describeAction(a: WotrAction): string {
+/** `view`, when the caller has it, lets a label tell apart cases the action itself does not
+ *  carry (Gandalf the White revealed in place vs. returning). */
+export function describeAction(a: WotrAction, view?: GameState): string {
   switch (a.kind) {
     // "Skip" reads as "nothing happened" — the phase is over either way, and the
     // Fellowship may well have moved in it (player report 454t6b484u0v0k0c).
@@ -81,7 +84,12 @@ export function describeAction(a: WotrAction): string {
     // The button is already prefixed with the die that pays for it, so naming the die
     // again in the label is noise (player report 0c3p44321u1w1f1a).
     // Strider is Aragorn all along; he is not crowned until after the war (player report 58351p1w035o6a1f).
-    case 'bringUpgrade': return a.which === 'aragorn' ? 'Reveal Aragorn, Heir to Isildur' : 'Summon Gandalf the White';
+    // Gandalf the White either replaces the Grey standing on the map ("revealed") or
+    // comes back after the Grey was lost ("awakened") — the label names which, like
+    // the log does (player report 6z3z6l434s1n1k03).
+    case 'bringUpgrade': return a.which === 'aragorn' ? 'Reveal Aragorn, Heir to Isildur'
+      : !view ? 'Summon Gandalf the White'
+      : view.characters.inPlay['gandalf-grey'] ? 'Reveal Gandalf the White' : 'Awaken Gandalf the White';
     case 'placeGandalf': return `Place Gandalf the White in ${rName(a.region)}`;
     case 'drawEvent': return `Draw a ${cap(a.deck)} Event card`;
     case 'playEvent': return `Play "${cardName(a.cardId)}"`;
@@ -164,6 +172,7 @@ export function describeAction(a: WotrAction): string {
     case 'lureChoice': return a.mode === 'corruption' ? 'Use the Ring' : 'Eliminate the Companion';
     case 'stormcrowLoss': return `Lose ${nationName(a.nation)} ${a.figure === 'leader' ? 'Leader' : a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
     case 'breakingSep': return `Separate ${charName(a.companion)} from the Fellowship`;
+    case 'wornDiscard': return a.card ? `Discard "${cardName(a.card)}" from the table` : 'Discard a random Character card from their hand';
     case 'discardCard': return `Discard "${cardName(a.card)}"`;
     case 'huntPreventDraw': return a.prevent ? 'Discard Wizard’s Staff — no Hunt tile' : 'Let the Shadow draw';
     case 'huntRedraw': return a.redraw ? 'Discard Mithril Coat — redraw the tile' : 'Keep the drawn tile';
@@ -245,7 +254,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
     // Muster-icon cards, and this used to offer either die for any of them: the picker
     // let you choose a Muster die for an Army card, then the engine (which reads the
     // icon) spent the Army die and ignored the choice (player report 013366181q4c5r40).
-    case 'playEvent': return pick(playFacesFor(a.cardId));
+    case 'playEvent': return a.cardId === 'fp-char-13' && you === 'fp' ? mirrorPayFaces(view) : pick(playFacesFor(a.cardId)); // reports 3r1l6z5k6v3s3o23, 52056m29415s3q6f
     case 'moveArmy': case 'attack': {
       // A SORTIE (attack from === to out of a besieged Stronghold) is fought by the
       // figures in the Stronghold Box; the region itself holds the BESIEGER. Reading
@@ -272,7 +281,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['freeCharEvent', 'playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'heroicDeath', 'wordsOfPower', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard']);
+const DECISION_KINDS = new Set(['freeCharEvent', 'playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'heroicDeath', 'wordsOfPower', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard', 'wornDiscard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);
 
 /** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)

@@ -656,7 +656,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         const def = REGIONS[id];
         const yours = !!def?.settlement && !!def.nation && sideOfNation(def.nation) === g.you;
         const reason = musterBlockReason(g.view, id, g.you as Side);
-        if (yours && !(g.view.dice[g.you as Side] ?? []).some((f) => f === 'muster' || f === 'armyMuster' || f === 'will')) {
+        const canMusterDie = (g.view.dice[g.you as Side] ?? []).some((f) => f === 'muster' || f === 'armyMuster' || f === 'will');
+        // A Fortification (Fords of Isen, Osgiliath) is never a muster site, so it only
+        // explains itself when a muster was actually on the table — without a Muster
+        // die, clicking it says nothing about mustering at all (report 0l3g3q43552l6j1x).
+        if (def?.settlement === 'Fortification') { if (canMusterDie && reason) setBlockMsg(reason); }
+        else if (yours && !canMusterDie) {
           setBlockMsg(`You have no die left that can Muster — that takes a Muster, an Army/Muster or a Will of the West die (p.23).${reason ? ` (Even with one: ${reason})` : ''}`);
         } else if (reason) setBlockMsg(reason);
       }
@@ -829,12 +834,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                     <button onClick={() => { const act = trace.finish!; const path = [...route]; clearMove();
                       if (act.mode === 'attack' && !isSplitCardAttack(act)) void submit({ ...act, path });
                       else setMoveDraft({ from: act.from!, to: act.to!, kind: 'eventMove', base: { ...act, path } }); }}
-                      style={{ padding: '3px 10px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: '#2c6a3a', color: '#f0f7ee', border: '1px solid #6ea84f' }}>
+                      style={{ padding: '3px 10px', fontSize: 12, lineHeight: '16px', fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: '#2c6a3a', color: '#f0f7ee', border: '1px solid #6ea84f' }}>
+                      {/* Fixed line height: the ✓ glyph is taller than the letters (report 35634l1x431r4a4a). */}
                       ✓ Stop here ({regionName(trace.head)})
                     </button>
                   )}
                   <button onClick={() => clearMove()}
-                    style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 12, borderRadius: 6, cursor: 'pointer', background: 'transparent', color: '#cb8', border: '1px solid #5a4a2a' }}>
+                    style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 12, lineHeight: '16px', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: '#cb8', border: '1px solid #5a4a2a' }}>
                     cancel
                   </button>
                 </div>
@@ -899,7 +905,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   prompt for an action you can no longer take is worse than none. */}
               {diePick && g.yourTurn && g.view && g.you && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, margin: '4px 0', padding: '6px 9px', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, fontSize: 12, color: '#f0d090' }}>
-                  <span>Which die pays for “{describeAction(diePick)}”?</span>
+                  <span>Which die pays for “{describeAction(diePick, g.view)}”?</span>
                   {dieOptions(diePick, g.view, g.you as Side).map((f) => (
                     <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
                       style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>

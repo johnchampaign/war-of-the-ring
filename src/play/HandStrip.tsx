@@ -144,7 +144,9 @@ const label: React.CSSProperties = { fontSize: 11, color: '#998', alignSelf: 'ce
 // swallow the click — the type badge over its corner did both (player report
 // 12295h3l3m5w3y3t).
 const img: React.CSSProperties = { height: 104, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', cursor: 'pointer', userSelect: 'none' };
-const zoomBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.8)', display: 'grid', placeItems: 'center', zIndex: 60, cursor: 'zoom-out' };
+// Above the status bar's drop-downs (70) and the Report button (71) — an enlarged card
+// opened from a drop-down sat under it (player report 5657121k373p5j0w).
+const zoomBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.8)', display: 'grid', placeItems: 'center', zIndex: 78, cursor: 'zoom-out' };
 const zoomText: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 10, maxWidth: 440, cursor: 'default' };
 const zoomReq: React.CSSProperties = { color: '#d8b48c', fontStyle: 'italic' };
 const textCard: React.CSSProperties = { width: 76, height: 104, flexShrink: 0, borderRadius: 4, padding: 4, userSelect: 'none', color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443', fontSize: 9 };

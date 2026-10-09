@@ -11,8 +11,8 @@ import type { GameState, Side, DieFace, Deck } from './types';
 import { poolSize, rollPool } from './dice';
 import { checkMilitaryVictory, checkRingVictory } from './victory';
 import { combatStep } from './combat';
-import { extraHunt } from './hunt';
-import { pruneTableCards, palantirActive } from './persistent';
+import { extraHunt, wornWithSorrowOptions, resolveWornWithSorrow } from './hunt';
+import { pruneTableCards, palantirActive, wornWithSorrowActive } from './persistent';
 import { sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { log, sideDoes, sufferCorruption } from './log';
@@ -126,7 +126,6 @@ export function advance(state: GameState): void {
     if (state.flags.fpFreeCharEventPrompt) {
       state.flags.fpFreeCharEventPrompt = false;
       if (state.flags.fpFreeCharEventThisTurn && state.phase === 'actionResolution') {
-        log(state, null, 'event', 'The Ents Awake: Free Peoples may play a Character Event now, without a die');
         state.pendingChoice = { owner: 'fp', kind: 'freeCharEvent', data: {} };
         return;
       }
@@ -137,6 +136,16 @@ export function advance(state: GameState): void {
       const r = state.flags.owedStrongholdTiles.shift()!;
       if (!state.flags.owedStrongholdTiles.length) delete state.flags.owedStrongholdTiles;
       extraHunt(state, { source: `revealed through ${REGIONS[r]?.name ?? r}` });
+      continue;
+    }
+    // Worn with Sorrow and Toil: the Shadow picks the card each Companion casualty
+    // costs — a random one from the FP hand, or a tabled one (card text). Raised once
+    // the Hunt has resolved; re-checked here in case the choice has since vanished.
+    if (state.flags.wornWithSorrowOwed) {
+      if (--state.flags.wornWithSorrowOwed <= 0) delete state.flags.wornWithSorrowOwed;
+      const opts = wornWithSorrowActive(state) ? wornWithSorrowOptions(state) : [];
+      if (opts.length > 1) { state.pendingChoice = { owner: 'shadow', kind: 'wornDiscard', data: {} }; return; }
+      if (opts.length === 1) resolveWornWithSorrow(state, opts[0]!);
       continue;
     }
     // Meriadoc / Peregrin, "Take Them Alive!": the Hobbit taken as a Hunt casualty

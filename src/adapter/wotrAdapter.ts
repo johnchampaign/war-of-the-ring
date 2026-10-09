@@ -8,7 +8,7 @@ import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, MORDOR_ENTRANCES, fellowshipPath } from '../engine/fellowship';
-import { extraHunt, queueTakenAlive } from '../engine/hunt';
+import { extraHunt, queueTakenAlive, wornWithSorrowOptions, resolveWornWithSorrow } from '../engine/hunt';
 import { log, logCardDraw, sideDoes } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, heldShadowStronghold, unitCount, STACKING_LIMIT,
@@ -24,7 +24,7 @@ import { REGIONS, sideOfNation, EVENT_BY_ID, playFacesFor, nationName } from '..
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, flagValue, type EventTarget } from '../engine/handlers/registry';
 import { characterDef } from '../engine/data';
-import { resolveNazgulStrike } from '../engine/handlers/index';
+import { resolveNazgulStrike, mirrorPayFaces } from '../engine/handlers/index';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
 import { redactStateForViewer } from './redact';
 
@@ -312,6 +312,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // FP chooses which Companion to separate (The Breaking of the Fellowship).
         return state.fellowship.companions.filter((c) => c !== 'gollum').map((companion) => ({ kind: 'breakingSep', companion }));
       }
+      case 'wornDiscard':
+        // Worn with Sorrow and Toil (Shadow): a random Character card from the FP hand,
+        // or a named tabled one. The hand's cards stay hidden — only "the hand" is offered.
+        return wornWithSorrowOptions(state).map((o) => (o === 'hand' ? { kind: 'wornDiscard' } : { kind: 'wornDiscard', card: o }));
       case 'discardCard':
         // Over the hand limit: choose which Event card to discard.
         return [...new Set(state.cards[actor].hand)].map((card) => ({ kind: 'discardCard', card }));
@@ -782,11 +786,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const playFaces = playFacesFor(action.cardId);
       let playedWithFace: DieFace | null = null;
       // Mirror of Galadriel converts an unused Character die, so it never pays with the
-      // last one when an Event or Will die can pay instead.
-      const mirrorSpare = action.cardId === 'fp-char-13' && !action.die && state.dice.fp.filter((f) => f === 'character').length === 1
-        ? (state.dice.fp.includes('event') ? 'event' : state.dice.fp.includes('will') ? 'will' : undefined) : undefined;
+      // last one — only with a die that leaves a Character die to convert (or any, when
+      // the Lórien heal alone is the point). A chosen die outside that set is refused
+      // rather than silently swapped (player report 3r1l6z5k6v3s3o23).
+      const payFaces = action.cardId === 'fp-char-13' && !freePlay ? mirrorPayFaces(state) : playFaces;
+      if (action.die && !freePlay && action.cardId === 'fp-char-13' && !payFaces.includes(action.die)) throw new Error('Mirror of Galadriel needs a Character die left to convert');
       if (freePlay) state.flags.fpFreeCharEventThisTurn = false;
-      else if (!(playedWithFace = consumePreferred(state, actor, playFaces, action.die ?? mirrorSpare))) {
+      else if (!(playedWithFace = consumePreferred(state, actor, payFaces, action.die))) {
         // The Mouth of Sauron's Messenger: spend a Muster die as an Army die (once a
         // turn) to play an Army-icon card when no Army die is left.
         if (actor === 'shadow' && playFaces.includes('army') && mouthMessengerAvailable(state) && consumeDie(state, 'shadow', 'muster')) {
@@ -906,6 +912,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw
         ? { owner: 'shadow', kind: 'bonusDraw', data: {} } : null;
       break;
+    }
+    case 'wornDiscard': {
+      requireChoice(state, 'wornDiscard', actor); // Worn with Sorrow and Toil: hand (random) or a tabled card
+      const pick = action.card ?? 'hand';
+      if (!wornWithSorrowOptions(state).includes(pick)) throw new Error('Worn with Sorrow and Toil: that card is not on offer');
+      resolveWornWithSorrow(state, pick);
+      state.pendingChoice = null; break;
     }
     case 'discardCard': {
       requireChoice(state, 'discardCard', actor); // discard down to the 6-card limit (player's choice)
