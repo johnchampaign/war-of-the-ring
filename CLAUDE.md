@@ -37,6 +37,9 @@ project's `docs/new-game-playbook.md` once; this file is the game-specific brief
   art/PDF rule below is load-bearing, secrets stay in Cloudflare/Supabase only, and playtesters may be
   reading the same source you are.
   Commit + push before the second hour. New commits, never `--amend`/force-push.
+- **Push and deploy without asking — this project only.** The global note says pushing
+  waits for John; here John has said otherwise (2026-10-08): sessions and the triage
+  routine push to `main` and deploy their verified fixes on their own.
 - **Never `git add -A`** — stage files by name.
 - **Never commit or deploy publisher art or rulebook PDFs.** `.gitignore`
   enforces it. The repo ships **metadata + URLs only** (`assets/asset-urls.json`

@@ -23,6 +23,7 @@ otherwise leave it open as backlog. Add a line here whenever John makes a new ca
 | The GitHub repo is public; nothing publisher-owned or secret is ever committed. | 2026-09-14 |
 | Undo past a dice roll or card draw is allowed in hotseat as well as vs the AI, with the warning and a public log record. | 2026-09-14 |
 | Event cards recruit to the maximum extent possible (no stopping early); a Muster die may recruit partially. | 2026-09-14 |
+| Push to `main` and deploy verified fixes without asking (an exception to John's global "pushing waits for me" note). | 2026-10-08 |
 | Board art: the download prompt stays (legal reasons). John won't seek permission for or pay for replacement art, but would include it as an option if someone provided it. | 2026-09-10 |
 | Sign-in: anonymous play stays; optional profile features are welcome but not scheduled. | 2026-09-10 |
 | Hover reach rings: left as they are (players disagree). | 2026-09-10 |
