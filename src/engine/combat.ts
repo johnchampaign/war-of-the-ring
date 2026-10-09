@@ -423,19 +423,24 @@ export function applyCasualties(state: GameState, id: RegionId, side: Side, hits
 }
 /** Apply casualties to a Force (a region or a siege box). */
 function applyForceCasualties(state: GameState, f: Force, side: Side, hits: number, plan: 'regularsFirst' | 'elitesFirst'): void {
+  // Named like the per-hit path: Return to Valinor, Dead Men of Dunharrow and the
+  // pre-combat additional attacks said how many hits landed but not which units fell
+  // (report 3i5z6d36724x115m).
+  const taken: string[] = [];
   for (let h = 0; h < hits; h++) {
     const nations = (Object.keys(f.units) as Nation[]).filter((n) => (f.units[n]!.regular + f.units[n]!.elite) > 0);
     if (!nations.length) break;
     if (plan === 'regularsFirst') {
       const wr = nations.find((n) => f.units[n]!.regular > 0);
-      if (wr) { f.units[wr]!.regular -= 1; if (side === 'shadow') state.reinforcements[wr].regular += 1; }
-      else reduceElite(state, f, nations[0]!, side);
+      if (wr) { taken.push(casualtyPhrase(state, side, { step: 'removeRegular', nation: wr, cost: 1 })); f.units[wr]!.regular -= 1; if (side === 'shadow') state.reinforcements[wr].regular += 1; }
+      else { taken.push(casualtyPhrase(state, side, { step: 'reduceElite', nation: nations[0]!, cost: 1 })); reduceElite(state, f, nations[0]!, side); }
     } else {
       const we = nations.find((n) => f.units[n]!.elite > 0);
-      if (we) reduceElite(state, f, we, side);
-      else { const n = nations[0]!; f.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
+      if (we) { taken.push(casualtyPhrase(state, side, { step: 'reduceElite', nation: we, cost: 1 })); reduceElite(state, f, we, side); }
+      else { const n = nations[0]!; taken.push(casualtyPhrase(state, side, { step: 'removeRegular', nation: n, cost: 1 })); f.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
     }
   }
+  if (taken.length) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties: ${taken.join('; ')}`);
   finishForceCasualties(state, f, side);
 }
 

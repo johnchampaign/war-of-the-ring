@@ -110,6 +110,16 @@ console.log('\n=== 3. one line for everything that falls with a destroyed Army =
   check('it names the Companions and the Leader', /legolas and boromir|legolas, boromir and a Free Peoples Leader/i.test(lines[0] ?? '') && /a Free Peoples Leader fall with/.test(lines[0] ?? ''), lines[0]);
 }
 
+console.log('\n=== 3b. batch-plan casualties are named too (Return to Valinor, Dead Men) ===');
+{
+  const s = startGame(createGame({ seed: 4 }));
+  s.regions['gorgoroth'].units = { sauron: { regular: 2, elite: 1 } };
+  const mark = s.log.length;
+  applyCasualties(s, 'gorgoroth', 'shadow', 2, 'regularsFirst');
+  const line = msgs(s, mark).find((m) => /^Shadow casualties: /.test(m));
+  check('one line naming both losses', line === 'Shadow casualties: a Sauron Regular is eliminated; a Sauron Regular is eliminated', line);
+}
+
 console.log('\n=== 4. removing a Shadow table card ===');
 {
   const s = board(5, 'fp-str-06');
