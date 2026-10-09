@@ -331,7 +331,10 @@ export const isSplitCardAttack = (a: WotrAction): boolean =>
  *  click the army, then the highlighted destination (same report). A from === to
  *  card assault is not a move and keeps its button. */
 export const isCardArmyMoveTarget = (a: WotrAction): boolean =>
-  a.kind === 'eventTarget' && !!a.from && !!a.to && a.from !== a.to && !a.companion && !a.done;
+  a.kind === 'eventTarget' && !!a.from && !!a.to && !a.companion && !a.done
+  // from === to is a siege ASSAULT — or, for a ranged MOVE, a round trip out and back
+  // (Through a Day and a Night, player report 6z2m220l620p5r0g), traced on the map.
+  && (a.from !== a.to || (a.mode !== 'attack' && (a.range ?? 0) > 1));
 /** When EVERY pending event-card target is a simple pick, surface them in the
  *  DecisionModal instead of the quiet panel list — a player report ("played Riders
  *  of Rohan and nothing happened") showed the Regular-vs-Elite pick going unnoticed

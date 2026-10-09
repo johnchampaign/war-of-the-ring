@@ -13,6 +13,7 @@
 //    rearguard", and The Ringwraiths Are Abroad follows "all normal attack rules".
 import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
+import { settlementController } from '../src/engine/armies.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -160,6 +161,49 @@ console.log('\n=== an assault thrown back: the rearguard keeps up the siege (Alm
   }
   check('some assaults were thrown back with the rearguard standing', wiped > 0, `${wiped} of 40`);
   check('…and every one of them kept the siege, with the 3 rearguard units in the field', held === wiped, `${held}/${wiped}`);
+}
+
+
+console.log('\n=== held-back figures are out of the battle — assault and sortie (reports 591e3v2k0l5v4o0y, 6f5g141x533t3i4e) ===');
+{
+  const base = () => { const s = startGame(createGame({ seed: 5 })); s.phase = 'actionResolution'; s.pendingChoice = null; for (const n of ['sauron', 'elves']) { s.nations[n].active = true; s.nations[n].step = 0; } return s; };
+  const fighting = (s) => { const pc = s.pendingCombat; const box = pc.boxed === pc.attacker ? s.regions[pc.from].siegeBox : null; const f = box ?? s.regions[pc.from];
+    return Object.entries(f.units).filter(([n]) => (n === 'sauron') === (pc.attacker === 'shadow')).reduce((t, [, u]) => t + u.regular + u.elite, 0); };
+  let s = base(); s.currentPlayer = 'shadow'; s.dice.shadow = ['army']; s.dice.fp = [];
+  const rv = s.regions['rivendell']; rv.units = { sauron: { regular: 3, elite: 0 } }; rv.nazgul = 4; rv.characters = []; rv.leaders = 0; rv.besieged = true; rv.control = 'fp';
+  rv.siegeBox = { units: { elves: { regular: 1, elite: 1 } }, leaders: 0, nazgul: 0, characters: [] };
+  const a = wotrAdapter.legalActions(s, 'shadow').find((x) => x.kind === 'attack' && x.from === 'rivendell' && x.to === 'rivendell');
+  const t = wotrAdapter.applyAction(s, { ...a, die: 'army', rearguard: { units: { sauron: { regular: 2 } } } }, 'shadow');
+  check('an assault on Rivendell with 2 of 3 held back fights with 1 (the reported battle)', fighting(t) === 1, String(fighting(t)));
+  let u = base(); u.currentPlayer = 'fp'; u.dice.fp = ['army']; u.dice.shadow = [];
+  const rv2 = u.regions['rivendell']; rv2.units = { sauron: { regular: 2, elite: 0 } }; rv2.nazgul = 0; rv2.characters = []; rv2.leaders = 0; rv2.besieged = true; rv2.control = 'fp';
+  rv2.siegeBox = { units: { elves: { regular: 3, elite: 0 } }, leaders: 0, nazgul: 0, characters: [] };
+  const so = wotrAdapter.legalActions(u, 'fp').find((x) => x.kind === 'attack' && x.from === 'rivendell' && x.to === 'rivendell');
+  const v = so && wotrAdapter.applyAction(u, { ...so, die: 'army', rearguard: { units: { elves: { regular: 2 } } } }, 'fp');
+  check('a sortie with 2 of 3 held back fights with 1', !!v && fighting(v) === 1, v ? String(fighting(v)) : 'no sortie offered');
+}
+
+console.log('\n=== Through a Day and a Night may go out and back (report 6z2m220l620p5r0g) ===');
+{
+  const s = startGame(createGame({ seed: 5 }));
+  s.phase = 'actionResolution'; s.currentPlayer = 'fp'; s.pendingChoice = null; s.dice.fp = ['event']; s.dice.shadow = [];
+  s.nations.rohan.active = true; s.nations.rohan.step = 0;
+  // A Rohan Army with Legolas in Westemnet; the Fords of Isen beside it are a Fortification,
+  // so use Helm's Deep's neighbour Westemnet → Edoras (empty, Shadow-held) and back.
+  const w = s.regions['westemnet']; w.units = { rohan: { regular: 2, elite: 0 } }; w.leaders = 1; w.characters = ['legolas'];
+  s.characters.inPlay['legolas'] = 'westemnet'; s.fellowship.companions = s.fellowship.companions.filter((c) => c !== 'legolas');
+  const e = s.regions['edoras']; e.units = {}; e.leaders = 0; e.characters = []; e.control = 'shadow';
+  s.cards.fp.hand = ['fp-str-12'];
+  const p = wotrAdapter.legalActions(s, 'fp').find((a) => a.kind === 'playEvent' && a.cardId === 'fp-str-12');
+  let t = p && wotrAdapter.applyAction(s, { ...p, die: 'event' }, 'fp');
+  const back = t && wotrAdapter.legalActions(t, 'fp').find((a) => a.kind === 'eventTarget' && a.from === 'westemnet' && a.to === 'westemnet');
+  check('the round trip is offered', !!back);
+  if (back) {
+    t = wotrAdapter.applyAction(t, { ...back, path: ['edoras', 'westemnet'] }, 'fp');
+    const w2 = t.regions['westemnet'];
+    check('…the Army ends where it began, every figure still there', (w2.units.rohan?.regular ?? 0) === 2 && w2.leaders === 1 && w2.characters.includes('legolas'), JSON.stringify({ u: w2.units, l: w2.leaders, c: w2.characters }));
+    check('…and Edoras, passed through, is taken back', settlementController(t, 'edoras') === 'fp', String(settlementController(t, 'edoras')));
+  }
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');

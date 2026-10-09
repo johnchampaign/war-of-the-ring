@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
@@ -2129,6 +2129,28 @@ function noteWithdrawal(state: GameState, pc: PendingCombat, who: Side): void {
  *  attacker happening to still have units on the square. */
 function retreatOptions(state: GameState, pc: PendingCombat): RegionId[] {
   return freeAdjacentRegions(state, pc.to, pc.defender).filter((r) => r !== pc.from);
+}
+
+/** Why a region is not on the retreat list — the map's answer to a click on a region
+ *  that is not highlighted while a retreat destination is being picked (player report
+ *  6z172r5s4x731j62). Mirrors retreatOptions / preCombatRetreatDestinations rule by
+ *  rule; null when the region IS a destination (or no retreat is being picked). Reads
+ *  only public board state, so it runs on the redacted view too. */
+export function retreatBlockReason(state: GameState, region: RegionId): string | null {
+  const pc = state.pendingCombat;
+  const kind = state.pendingChoice?.kind;
+  if (!pc || (kind !== 'retreatTo' && kind !== 'preCombatRetreat')) return null;
+  const origin = kind === 'preCombatRetreat' ? pc.preCombatRetreatFrom : pc.to;
+  const side = kind === 'preCombatRetreat' ? (origin ? armySide(state, origin) : null) : pc.defender;
+  if (!origin || !side) return null;
+  const name = (r: RegionId) => REGIONS[r]!.name ?? r;
+  if (region === origin) return `Your Army is retreating out of ${name(origin)} — click one of the highlighted neighbouring regions.`;
+  if (!REGIONS[origin]!.adjacency.includes(region)) return `A retreat moves one region — into a free region next to ${name(origin)} (p.31).`;
+  if (kind === 'retreatTo' && region === pc.from) return `The attack came from ${name(region)} — a retreat never moves into the attackers (p.31).`;
+  if (!freeForMovement(state, region, side)) return `There is an enemy Army in ${name(region)} — a retreat needs a free region (p.31).`;
+  const ctrl = settlementController(state, region);
+  if (ctrl && ctrl !== side) return `${name(region)} is a Settlement controlled by the enemy — a retreat can't enter it, even when it is empty (p.31).`;
+  return null;
 }
 
 /** Free regions the defender may retreat into (for the 'retreatTo' choice). */

@@ -102,18 +102,6 @@ function clampCardSel(state: GameState, from: string, side: Side, sel: CardMoveS
   const chars = (sel.characters ?? []).filter((c) => src.characters.includes(c) && characterSide(c) === side && c !== 'saruman');
   return { take, moved, chars };
 }
-/** Why this card cannot move THIS half of the Army, or null. A few cards move "the Army
- *  containing the X", which is a requirement on the part that GOES, not on the Army as a
- *  whole — a split that leaves the qualifying figure at home is not the move the card
- *  describes (player report 0c2d6s4y07386h19). Exported so the picker can say it before
- *  the click rather than swallowing a refusal afterwards (report 1b1c5q54732v1a22, which
- *  also caught this rule being thrown at *Paths of the Woses*, a card that names no
- *  figure at all). */
-export function cardMoveEscortReason(card: string | undefined, sel: CardMoveSel): string | null {
-  if (card !== 'fp-str-12') return null; // Through a Day and a Night — the only FP card that names one
-  return (sel.characters ?? []).some((c) => COMPANION_SET.has(c)) ? null
-    : 'Through a Day and a Night moves the Army containing the Companion(s) — at least one Companion must go with it.';
-}
 /** Why this card-move split cannot be made, or null. A card move splits under the same
  *  composition rules as any other Army move (p.27-28): at least one unit goes, and Free
  *  Peoples Leaders are never left standing in a region with no combat units. The engine
@@ -209,6 +197,14 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
       captureIfEnemySettlement(state, r, side);
       if (settlementController(state, r) === side) log(state, null, 'army', `${REGIONS[r]?.name ?? r} is taken in passing`);
     }
+  }
+  // A ROUND TRIP (Through a Day and a Night, out and back) ends where it began: its
+  // captures on the way have happened above, and no figure changes region. Moving a
+  // region "into itself" would add the units to the same stack and then delete them.
+  if (from === to) {
+    const { take, chars } = clampCardSel(state, from, side, sel ?? { units: Object.fromEntries((Object.keys(src.units) as Nation[]).filter((n) => sideOfNation(n) === side).map((n) => [n, { regular: src.units[n]!.regular, elite: src.units[n]!.elite }])), characters: src.characters });
+    log(state, null, 'army', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} Army goes out and back to ${REGIONS[from]?.name ?? from}`);
+    return { units: Object.fromEntries(take.map(([n, mr, me]) => [n, { regular: mr, elite: me }])), leaders: 0, nazgul: 0, characters: chars };
   }
   if (sel) {
     const { take, chars } = clampCardSel(state, from, side, sel);
@@ -1322,6 +1318,13 @@ function dayNightMoves(state: GameState): EventTarget[] {
       // limit, resolve after the movement" allowance as the Shadow move cards.
       if (freeForMovement(state, to, 'fp')) out.push({ from, to, range: DAY_NIGHT_RANGE });
     }
+    // Out and BACK. The Almanac's "cannot end movement in the region that it started
+    // from" belongs to The Shadow Lengthens and Shadows Gather, whose destination must
+    // hold another Shadow Army; this card "does not require the presence of an Army in
+    // the destination region", and a round trip still takes the empty Settlement it
+    // passes through (player report 6z2m220l620p5r0g). Offered when there is a first
+    // step to take; the route is traced, or the quiet one is used.
+    if (reach.size > 0 && out.length < 120) out.push({ from, to: from, range: DAY_NIGHT_RANGE });
   }
   return out;
 }
@@ -1332,9 +1335,13 @@ register('fp-str-12', {
     // "Move the Army containing the Companion(s)": a split may leave units behind, but
     // "at least one Companion must move along with the Army" (Almanac) — this card let
     // the Army march off and leave them all at home (player report 0c2d6s4y07386h19).
-    // The clause is this card's alone; see cardMoveEscortReason.
-    const escort = t.move ? cardMoveEscortReason('fp-str-12', t.move) : null;
-    if (escort) throw new Error(escort);
+    // The clause is this card's alone.
+    // The escort is a rule of the shared Army-movement rules (escortCompanion), the one
+    // the picker asks before the click.
+    if (t.move) {
+      const escort = armySelectionReason(state, { kind: 'move', side: 'fp', force: figureForce(state, t.from! as RegionId, 'fp'), escortCompanion: 'Through a Day and a Night' }, t.move);
+      if (escort) throw new Error(escort);
+    }
     moveAllUnits(state, t.from!, t.to!, 'fp', t.move, t.path, DAY_NIGHT_RANGE); },
 });
 

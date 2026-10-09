@@ -13,10 +13,11 @@
 import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
-import { REGIONS, levelOf, characterDef } from '../engine/data';
+import { REGIONS, levelOf, characterDef, sideOfNation, characterSide } from '../engine/data';
 import { unitCount, forceUnitCount, STACKING_LIMIT, splitBlockReason } from '../engine/armies';
 import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
+import { cardSplitBlockReason } from '../engine/handlers/index';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
 
@@ -1511,6 +1512,17 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     }
     if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
     if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;
+    // A card move may overstack (the excess is removed afterwards), so every unit past
+    // the limit is simply thrown away. The Shadow used The Shadow Lengthens to pile two
+    // Armies into South Ithilien and then removed eleven of its own Regulars (player
+    // report 3ykowo95on5omwd6, "The Shadow Lengthens massacre again"). A card move may
+    // split the Army (p.28), so send only what fits (cardMoveFit); price whatever still
+    // spills over well above any distance gain, and the leftovers a little, so a full
+    // move to a roomier destination wins. Shadow only: the FP AI is the other session's.
+    if (a.to && a.from && owner === 'shadow' && a.mode !== 'attack') {
+      const fit = cardMoveFit(state, a, owner);
+      return 30 - (target ? dist(a.to, target) : 0) - fit.excess * 12 - fit.left * 0.5;
+    }
     if (a.to) return 30 - (target ? dist(a.to, target) : 0);          // move toward the target
     // Recruit placements: same region, Regular-or-Elite — take the Elite (two
     // player reports: Riders of Rohan / Dain's Ironfoot Guard mustered Regulars).
@@ -1518,5 +1530,41 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     if (a.region) return 20 - (target ? dist(a.region, target) : 0) + (a.figure === 'elite' ? 0.5 : 0);
     return 10;
   };
-  return ets.reduce((best, a) => (score(a) > score(best) ? a : best), ets[0]!);
+  const best = ets.reduce((b, a) => (score(a) > score(b) ? a : b), ets[0]!);
+  if (best.to && best.from && owner === 'shadow' && best.mode !== 'attack') {
+    const fit = cardMoveFit(state, best, owner);
+    if (fit.move) return { ...best, move: fit.move };
+  }
+  return best;
+}
+
+/** How a Shadow card move lands against the stacking limit: the units that would spill
+ *  over, the units it leaves behind, and — when the whole Army would overstack — the
+ *  split that moves only what fits (Elites first, the Nazgûl and Minions along with
+ *  them; at least one unit, so a move into a full region still spills one). */
+function cardMoveFit(state: GameState, a: Extract<WotrAction, { kind: 'eventTarget' }>, owner: Side): { excess: number; left: number; move?: MoveSel } {
+  const from = state.regions[a.from!]!;
+  const own = (r: string) => Object.entries(state.regions[r]!.units).reduce((t, [n, u]) => t + (sideOfNation(n as Nation) === owner ? u!.regular + u!.elite : 0), 0);
+  const avail = a.movable?.units ?? Object.fromEntries(Object.entries(from.units).filter(([n]) => sideOfNation(n as Nation) === owner));
+  const moving = Object.values(avail).reduce((t, u) => t + (u?.regular ?? 0) + (u?.elite ?? 0), 0);
+  const there = a.to === a.from ? 0 : own(a.to!);
+  if (moving + there <= STACKING_LIMIT || a.to === a.from || moving === 0) return { excess: Math.max(0, moving + there - STACKING_LIMIT), left: 0 };
+  let room = Math.max(1, STACKING_LIMIT - there);
+  const units: NonNullable<MoveSel['units']> = {};
+  for (const kind of ['elite', 'regular'] as const) {
+    for (const [n, u] of Object.entries(avail)) {
+      const take = Math.min(room, u?.[kind] ?? 0);
+      if (take <= 0) continue;
+      units[n as Nation] = { regular: 0, elite: 0, ...units[n as Nation], [kind]: take };
+      room -= take;
+    }
+  }
+  const goes = Object.values(units).reduce((t, u) => t + (u?.regular ?? 0) + (u?.elite ?? 0), 0);
+  const move: MoveSel = {
+    units,
+    nazgul: a.movable ? a.movable.nazgul ?? 0 : from.nazgul,
+    characters: a.movable ? a.movable.characters ?? [] : from.characters.filter((c) => characterSide(c) === owner),
+  };
+  if (cardSplitBlockReason(state, a.from!, owner, move)) return { excess: moving + there - STACKING_LIMIT, left: 0 };
+  return { excess: Math.max(0, goes + there - STACKING_LIMIT), left: moving - goes, move };
 }

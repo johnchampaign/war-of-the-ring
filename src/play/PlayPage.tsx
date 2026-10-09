@@ -21,7 +21,7 @@ import { HandStrip, TabledStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal, modalDecisions } from './DecisionModal';
 import { MovePicker, type MovePickerKind } from './MovePicker';
-import { sortieForce } from '../engine/combat';
+import { sortieForce, retreatBlockReason } from '../engine/combat';
 import { DiceTray } from './DiceTray';
 import { HuntPopup, huntResultPending } from './HuntPopup';
 import { BattlePopup, battleResultPending } from './BattlePopup';
@@ -450,6 +450,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // so a die leaving either pool clears it (player report 662j57501s6k6d5j).
   const diceLeft = g.view ? g.view.dice.fp.length + g.view.dice.shadow.length : 0;
   useEffect(() => { setBlockMsg(null); }, [diceLeft]);
+  // A retreat hint belongs to the retreat pick; it goes when the pick does.
+  useEffect(() => { setBlockMsg(null); }, [isRetreatPick]);
   // Peeking is a look at the board DURING one blocking prompt; once that prompt is gone
   // the peek has to end with it, or the toggle stays latched on and hides the NEXT
   // modal before the player has seen it.
@@ -548,6 +550,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (declareTargets.has(id)) {
       const a = placeActs.find((x) => x.target === id) ?? gandalfActs.find((x) => x.region === id) ?? retreatActs.find((x) => x.region === id);
       if (a) { clearMove(); void submit(a); }
+      return;
+    }
+    // Picking a retreat destination: a region that is not highlighted says why not
+    // (player report 6z172r5s4x731j62), instead of the click doing nothing.
+    if (isRetreatPick) {
+      const reason = g.view ? retreatBlockReason(g.view, id) : null;
+      if (reason) setBlockMsg(reason);
       return;
     }
     // A character move is in progress: click a highlighted destination to move it there.
