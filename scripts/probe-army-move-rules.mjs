@@ -12,7 +12,9 @@
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
 import { splitBlockReason, armySelectionReason, armyMoveOffer } from '../src/engine/armies.ts';
-import { attackError } from '../src/engine/combat.ts';
+import { attackError, advanceRules } from '../src/engine/combat.ts';
+import { wotrAdapter } from '../src/adapter/wotrAdapter.ts';
+import { dieOptions } from '../src/play/actionText.ts';
 import { cardSplitBlockReason } from '../src/engine/handlers/index.ts';
 
 let failures = 0;
@@ -92,6 +94,61 @@ console.log('\n=== figures that already moved (the "movable" limit) ===');
   check('only the figures that had not moved are offered', elves.regular === 1 && elves.elite === 0, JSON.stringify(elves));
   const r = armySelectionReason(s, rules, { units: { elves: { regular: 1, elite: 1 } } });
   check('…and asking for more names the rule', !!r && /cannot move twice/.test(r), r ?? 'null');
+}
+
+
+// ---------------- stage 2: every advance is a move; the die follows the goers ----------
+console.log('\n=== every advance asks the same rules (field battle, laying siege, relieving one) ===');
+{
+  const s = board();
+  // The Elves won at Dale and may advance into Northern Rhovanion; one Elven Regular is
+  // held back in the rearguard.
+  const rg = { units: { elves: { regular: 1, elite: 0 } }, leaders: 0, nazgul: 0, characters: [] };
+  s.regions['dale'].units = { elves: { regular: 1, elite: 1 } };
+  const rules = advanceRules(s, 'fp', 'dale', 'northern-rhovanion', rg);
+  check('a Leader staying with the rearguard\'s unit is not stranded',
+    armySelectionReason(s, rules, { units: { elves: { regular: 1, elite: 1 } }, leaders: 0 }) === null);
+  check('…but the rearguard itself may not advance (only who fought may)',
+    /cannot move twice/.test(armySelectionReason(s, rules, { units: { elves: { regular: 2, elite: 1 } } }) ?? ''));
+  const none = armySelectionReason(s, advanceRules(s, 'fp', 'dale', 'northern-rhovanion', null), { units: {} });
+  check('an advance of nobody is refused with the move wording', none === 'At least one Army unit must move.', none ?? 'null');
+  // Field advance through the adapter: an illegal selection is REFUSED, not trimmed.
+  s.phase = 'actionResolution'; s.currentPlayer = 'fp';
+  s.regions['dale'].units = { elves: { regular: 1, elite: 0 } }; s.regions['dale'].leaders = 1; s.regions['dale'].characters = [];
+  s.pendingChoice = { owner: 'fp', kind: 'advanceChoice', data: { from: 'dale', to: 'northern-rhovanion', rearguard: null } };
+  const bad = wotrAdapter.tryApplyAction(s, { kind: 'advanceChoice', advance: true, move: { units: { elves: { regular: 1 } }, leaders: 0 } }, 'fp');
+  check('a field advance that strands a Leader is refused with the reason', !bad.ok && /Leaders can never be left/.test(bad.reason ?? ''), bad.reason ?? 'accepted');
+  const good = wotrAdapter.tryApplyAction(s, { kind: 'advanceChoice', advance: true, move: { units: { elves: { regular: 1 } }, leaders: 1 } }, 'fp');
+  check('…and the legal one moves exactly the goers', good.ok && good.state.regions['northern-rhovanion'].leaders === 1 && (good.state.regions['northern-rhovanion'].units.elves?.regular ?? 0) === 1, good.reason ?? '');
+}
+{
+  // Laying siege with PART of the Army (report 405e1k232p3h3j4m): it used to take everyone.
+  const s = startGame(createGame({ seed: 3 }));
+  s.nations.sauron.active = true; s.nations.sauron.step = 0;
+  s.phase = 'actionResolution'; s.currentPlayer = 'shadow'; s.dice.shadow = []; s.dice.fp = [];
+  const lo = s.regions['lorien']; lo.units = {}; lo.leaders = 0; lo.besieged = false;
+  lo.siegeBox = { units: { elves: { regular: 2, elite: 0 } }, leaders: 0, nazgul: 0, characters: [] };
+  const dd = s.regions['dimrill-dale']; dd.units = { sauron: { regular: 5, elite: 0 } }; dd.nazgul = 1; dd.characters = [];
+  s.pendingCombat = { attacker: 'shadow', defender: 'fp', from: 'dimrill-dale', to: 'lorien', round: 0, step: 'besiegerAdvance', atkUnits0: 5, defUnits0: 2 };
+  s.pendingChoice = { owner: 'shadow', kind: 'besiegerAdvance' };
+  const r = wotrAdapter.tryApplyAction(s, { kind: 'besiegerAdvance', advance: true, move: { units: { sauron: { regular: 3 } }, nazgul: 0 } }, 'shadow');
+  const t = r.state;
+  check('laying siege with part of the Army is accepted', r.ok, r.reason ?? '');
+  check('…three besiege, two and the Nazgûl stay behind', r.ok && t.regions['lorien'].units.sauron?.regular === 3 && t.regions['dimrill-dale'].units.sauron?.regular === 2 && t.regions['dimrill-dale'].nazgul === 1,
+    r.ok ? `lorien ${JSON.stringify(t.regions['lorien'].units)} / dimrill ${JSON.stringify(t.regions['dimrill-dale'].units)} naz ${t.regions['dimrill-dale'].nazgul}` : '');
+  check('…and the siege is laid', r.ok && t.regions['lorien'].besieged === true);
+}
+
+console.log('\n=== the Character die follows who GOES (report 5w5l396p391y5t30) ===');
+{
+  const s = board();
+  s.dice.fp = ['character', 'army'];
+  const whole = dieOptions({ kind: 'moveArmy', from: 'dale', to: 'woodland-realm' }, s, 'fp');
+  check('the whole Army (with its Leader) may be paid by either die', whole.includes('character') && whole.includes('army'), whole.join(','));
+  const leaderless = dieOptions({ kind: 'moveArmy', from: 'dale', to: 'woodland-realm', move: { units: { elves: { regular: 1 } }, leaders: 0 } }, s, 'fp');
+  check('a leaderless selection is not offered the Character die', !leaderless.includes('character') && leaderless.includes('army'), leaderless.join(','));
+  const led = dieOptions({ kind: 'moveArmy', from: 'dale', to: 'woodland-realm', move: { units: { elves: { regular: 1 } }, characters: ['legolas'] } }, s, 'fp');
+  check('…and one with Legolas going is', led.includes('character'), led.join(','));
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');

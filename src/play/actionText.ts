@@ -3,7 +3,7 @@
 // (ActionPanel, DecisionModal) export only components — otherwise React Fast
 // Refresh can't hot-update them ("incompatible export") and forces full reloads.
 import type { WotrAction } from '../adapter/wotrAction';
-import type { GameState, Side, DieFace } from '../engine/types';
+import type { GameState, Side, DieFace, Nation } from '../engine/types';
 import { charDieLeaders } from '../engine/armies';
 import { mirrorPayFaces } from '../engine/handlers';
 import { playFacesFor, nationName, levelOf } from '../engine/data';
@@ -268,7 +268,20 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
       const r = sortie ?? reg;
       // Saruman leads an attack (its units stay put) but not a move; Isengard Elites
       // are Leaders in their own right while he is in play.
-      const leader = !!r && charDieLeaders(view, r, you, a.kind === 'attack') > 0;
+      // When the player has CHOSEN who goes, it is the goers who must include the Leader
+      // or Character — a Leader left at home does not let a Character die pay (player
+      // report 5w5l396p391y5t30: a leaderless selection was offered the Character die,
+      // then refused with a red hint). The whole Army is judged otherwise.
+      const goers = !r ? null
+        : a.kind === 'moveArmy' && a.move ? { units: a.move.units ?? {}, leaders: a.move.leaders ?? 0, nazgul: a.move.nazgul ?? 0, characters: a.move.characters ?? [] }
+        : a.kind === 'attack' && a.rearguard ? {
+          units: Object.fromEntries(Object.entries(r.units).map(([n, u]) => [n, {
+            regular: (u?.regular ?? 0) - (a.rearguard!.units?.[n as Nation]?.regular ?? 0),
+            elite: (u?.elite ?? 0) - (a.rearguard!.units?.[n as Nation]?.elite ?? 0) }])),
+          leaders: r.leaders - (a.rearguard.leaders ?? 0), nazgul: r.nazgul - (a.rearguard.nazgul ?? 0),
+          characters: r.characters.filter((c) => !(a.rearguard!.characters ?? []).includes(c)) }
+        : r;
+      const leader = !!goers && charDieLeaders(view, goers, you, a.kind === 'attack') > 0;
       // The Mouth of Sauron's Messenger lets one Muster die a turn act as an Army die.
       // Without it here, a Shadow holding only Muster dice got an EMPTY list — which reads
       // as "a free action" — so Army moves stayed lit whatever die was selected (player

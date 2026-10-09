@@ -1270,7 +1270,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'siegeExtend':
       requireChoice(state, 'siegeExtend', actor); resolveSiegeExtend(state, action.extend); break;
     case 'besiegerAdvance':
-      requireChoice(state, 'besiegerAdvance', actor); resolveBesiegerAdvance(state, action.advance); break;
+      requireChoice(state, 'besiegerAdvance', actor); resolveBesiegerAdvance(state, action.advance, action.move); break;
     case 'combatCardCost': {
       requireChoice(state, 'combatCardCost', actor);
       resolveCombatCardCost(state, action.amount);
@@ -1295,7 +1295,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'relieveAdvance': {
       requireChoice(state, 'relieveAdvance', actor);
-      const to = resolveRelieveAdvance(state, action.advance);
+      const to = resolveRelieveAdvance(state, action.advance, action.move);
       // The freed garrison is back on the field, so the advance can breach the 10-unit
       // limit (p.26). `none`: finishCombat already handed the resolution turn over.
       if (to) afterMove(state, actor, to, { kind: 'none' });

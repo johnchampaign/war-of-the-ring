@@ -1,189 +1,181 @@
-// Split-move picker (rulebook p.27): after choosing an army move on the board, the
-// player may move the WHOLE army or split it — moving only some units/Leaders/
-// Nazgûl/Characters and leaving the rest behind. Defaults to "move all"; the engine
-// validates the split rules (≥1 unit, FP Leaders can't be stranded, etc.).
+// The Army-move picker (rulebook p.27-28, p.31): after choosing a move, an attack or
+// an advance, the player chooses WHO goes — all of the Army or part of it.
+//
+// It asks the engine's ONE set of Army-movement rules (armies.ts: armyMoveOffer and
+// armySelectionReason) for every kind of move, so what it greys out, what it explains
+// and what it lets through are exactly what the engine will accept. It used to keep
+// its own copy of each rule per kind — the politics greying existed for moves but not
+// attacks, the already-moved cap for an Army die's second move but not for cards, the
+// Character-die escort nowhere — and every fix to one kind left the others behind
+// (player reports 4f0z2o2y1t2d3y6v, hppnre6r525e7n97, 543r3s3u1012175v,
+// 1x5m1f3d44734l0o, 3i096w3f0b1e6r2j, 405e1k232p3h3j4m, 382m030i1j5w3d57).
 import { useState } from 'react';
 import type { GameState, Nation, Side } from '../engine/types';
 import type { MoveSel, WotrAction } from '../adapter/wotrAction';
-import { characterSide, sideOfNation, nationName, nationSubject, nationsArePlural } from '../engine/data';
-import { isAtWar } from '../engine/politics';
-import { attackError, sortieForce } from '../engine/combat';
-import { splitBlockReason } from '../engine/armies';
-import { cardSplitBlockReason, cardMoveEscortReason } from '../engine/handlers';
+import { sideOfNation, nationName } from '../engine/data';
+import { sortieForce, advanceRules } from '../engine/combat';
+import { armyMoveOffer, armySelectionReason, type ArmyMoveRules, type Force } from '../engine/armies';
 import { charName } from './charInfo';
 import mapData from '../../assets/map.json';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 
-export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCancel }: {
-  from: string; to: string; kind: 'moveArmy' | 'armyMove2' | 'attack' | 'eventMove' | 'holdBack' | 'advance'; view: GameState; you: Side;
-  /** For kind 'eventMove': the eventTarget action this picker decorates with a split
-   *  selection (p.28 — an Army moved by an Event card may be split before moving). */
+export type MovePickerKind = 'moveArmy' | 'armyMove2' | 'attack' | 'eventMove' | 'holdBack' | 'advance' | 'besiegerAdvance' | 'relieveAdvance';
+
+// The engine's reasons, said shorter where the picker has less room. Anything not
+// listed is shown as the engine words it.
+const HINTS: Record<string, string> = {
+  'A rearguard must contain at least one unit': 'Leaders or Characters left behind need at least one unit to stay with them — keep a unit back, or send them into the attack',
+  'The attacking army must keep at least one unit': 'The attacking Army needs at least one unit',
+  'At least one Army unit must move.': 'At least one unit must move',
+  'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.':
+    'Free Peoples Leaders can never be left without a unit — keep a unit back with them, or take them along',
+};
+
+export function MovePicker({ from, to, kind, view, you, base, charOnly, onConfirm, onCancel }: {
+  from: string; to: string; kind: MovePickerKind; view: GameState; you: Side;
+  /** For kind 'eventMove' / 'armyMove2': the offered action this picker decorates with a
+   *  selection (it carries the card's limits, or the second move's already-moved cap). */
   base?: WotrAction;
+  /** Only a Character die can pay for this move or attack (the player picked one, or
+   *  holds no other): the goers must then include a Leader or Character (p.28). */
+  charOnly?: boolean;
   onConfirm: (a: WotrAction) => void; onCancel: () => void;
 }) {
   const attackMode = kind === 'attack';
-  // A card ATTACK that lands first (Corsairs of Umbar): the picker chooses who lands and
-  // attacks; whoever stays behind sits out the battle. The destination's units are the
-  // ENEMY Army being attacked, so they are no stacking concern here.
-  const landingAttack = kind === 'eventMove' && base?.kind === 'eventTarget' && base.mode === 'attack';
-  // Hold-back (p.31): the Army has ALREADY advanced into `from` (the captured region);
-  // the tick-boxes choose who STAYS forward, and everyone unticked marches back to
-  // `to` (the region attacked from) — the same inversion the attack rearguard uses.
   const holdBackMode = kind === 'holdBack';
-  // A Settlement this advance put under our Control must keep a unit holding it; in
-  // any other region the winner may pull the whole Army back (mirrors the engine's
-  // holdBackMinimum).
-  const holdBackMustHold = holdBackMode && view.regions[from]?.control === you;
-  // SORTIE (p.32): our Army is the besieged garrison in the siege box, NOT the region —
-  // the region holds the besieger we're attacking. Everything the picker offers (units,
-  // Leaders, the rearguard left behind in the Stronghold) must come from the box.
+  const advanceMode = kind === 'advance' || kind === 'besiegerAdvance' || kind === 'relieveAdvance';
+  // A card ATTACK that lands first (Corsairs of Umbar): the picker chooses who lands and
+  // attacks; whoever stays behind sits out the battle.
+  const landingAttack = kind === 'eventMove' && base?.kind === 'eventTarget' && base.mode === 'attack';
+  const evBase = kind === 'eventMove' ? (base as Extract<WotrAction, { kind: 'eventTarget' }> | undefined) : undefined;
+
+  // WHERE the figures come from. A SORTIE (p.32) is fought by the garrison in the siege
+  // box; a garrison MARCHING OUT of its besieged Stronghold (Paths of the Woses) leaves
+  // from the box too (player report 3a5p3i710y2h6u4a). Otherwise the region.
   const sortieBox = attackMode && from === to ? sortieForce(view, from, you) : null;
-  const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : landingAttack ? 'Land and attack' : holdBackMode ? 'Keep forward' : kind === 'advance' ? 'Advance' : 'Move';
-  // A garrison MARCHING OUT of its besieged Stronghold (Paths of the Woses names "a
-  // Stronghold under siege" as a legal origin): our units are in the siege box and the
-  // open field is the besieger's, so the picker must offer the box. It used to list the
-  // besieging Shadow Army to a Free Peoples player (player report 3a5p3i710y2h6u4a).
   const box = view.regions[from]?.siegeBox;
   const boxOurs = !!box && (Object.keys(box.units) as Nation[]).some((n) => sideOfNation(n) === you
     && ((box.units[n]?.regular ?? 0) + (box.units[n]?.elite ?? 0)) > 0);
   const marchOut = (kind === 'eventMove' || kind === 'moveArmy' || kind === 'armyMove2') && boxOurs ? box : null;
-  const r = sortieBox ?? marchOut ?? view.regions[from];
-  // A card move may be narrower than "the Army": Rage of the Dunlendings moves "up to
-  // four ISENGARD units" and nothing else, so the offer carries the Nation it moves
-  // (`nation`) and how many figures are still allowed to travel (`count`). Without
-  // those the picker offered the whole stack and the engine silently trimmed the
-  // selection down to what the card allows (player reports 0g40604w245d6w3q,
-  // 4z4d6h18592c546r).
-  const evBase = kind === 'eventMove' ? (base as Extract<WotrAction, { kind: 'eventTarget' }> | undefined) : undefined;
-  const evNation = evBase?.nation;
-  const evLimit = evBase?.count;
-  // The second move of an Army die, out of the region the FIRST move just entered:
-  // only the figures that already stood there may go (p.27, "cannot move the same
-  // Army twice"), and the offer carries exactly that selection. The picker used to
-  // show the merged stack and submit it whole, which the engine refused — the player
-  // saw the map lock up (player report 9icd5tomjalpoeld).
-  const cap2 = kind === 'armyMove2' && base?.kind === 'armyMove2' ? base.move : undefined;
-  const maxReg = (n: Nation) => cap2 ? Math.min(r.units[n]?.regular ?? 0, cap2.units?.[n]?.regular ?? 0) : r.units[n]!.regular;
-  const maxEli = (n: Nation) => cap2 ? Math.min(r.units[n]?.elite ?? 0, cap2.units?.[n]?.elite ?? 0) : r.units[n]!.elite;
-  const nations = (Object.keys(r.units) as Nation[])
-    .filter((n) => (maxReg(n) + maxEli(n)) > 0)
-    .filter((n) => !evNation || n === evNation);
-  // Only the MOVING army's OWN Characters can travel with it — never an enemy Companion
-  // who happens to share the region (e.g. one who separated into a besieged Stronghold).
-  const armySide: Side = nations.length ? sideOfNation(nations[0]!) : 'fp';
-  // Saruman can never leave Orthanc (character card) — he may fight from it (attack
-  // mode; the advance holds him) but is never offered as a mover.
-  const myChars = r.characters.filter((c) => characterSide(c) === armySide && (attackMode || c !== 'saruman'))
-    .filter((c) => !cap2 || (cap2.characters ?? []).includes(c));
-  // Only the MOVING side's own Leader figures are on offer: FP Leaders for the Free
-  // Peoples, Nazgûl for the Shadow. Nazgûl are not Army units, so a region holding
-  // them is still "free" and a Free Peoples Army may sit there — the picker used to
-  // show that region's Nazgûl as movable (player report), and moving one produced a
-  // selection the engine flatly refuses (moveArmySplit: a split may only take its own
-  // Leader figures). Same in mirror for FP Leaders under a Shadow Army.
-  const maxLeaders = armySide === 'fp' ? Math.min(r.leaders, cap2 ? cap2.leaders ?? 0 : Infinity) : 0;
-  const maxNazgul = armySide === 'shadow' ? Math.min(r.nazgul, cap2 ? cap2.nazgul ?? 0 : Infinity) : 0;
-  // A Nation not At War can never cross another Nation's border (p.27), so on an
-  // ordinary Army move its units are not on offer at all — the move takes the At-War
-  // half and leaves them standing. Showing them as movable let the player tick figures
-  // the engine would then quietly leave behind (player report 615m5q0t090g205d).
-  const destNation = (mapData as any).regions[to]?.nation as string | undefined;
-  const moveMode = kind === 'moveArmy' || kind === 'armyMove2';
-  const barred = (n: Nation) => moveMode && !isAtWar(view, n) && !!destNation && destNation !== n;
-  const stayNations = nations.filter(barred);
-  const goNations = nations.filter((n) => !barred(n));
-  // Default selection = the whole Army (so an unchanged picker is a normal move).
-  const capped = (): [Record<string, number>, Record<string, number>] => {
+  const region: Force = (sortieBox ?? marchOut ?? view.regions[from]) as Force;
+
+  // THE RULES for this kind of move — the same description the engine validates with.
+  const rules: ArmyMoveRules | null = holdBackMode ? null
+    : advanceMode ? (() => {
+      // The advance's own record: the field battle's and the relief's are in the pending
+      // choice; the siege advance reads the battle still on the table.
+      const pc = view.pendingCombat;
+      const data = (view.pendingChoice?.data ?? {}) as { rearguard?: NonNullable<GameState['pendingCombat']>['rearguard'] | null };
+      const rg = kind === 'besiegerAdvance' ? pc?.rearguard ?? null : data.rearguard ?? null;
+      return advanceRules(view, you, from, to, rg);
+    })()
+    : attackMode ? { kind: 'attack', side: you, force: region, viaCharacterDie: !!charOnly }
+    : kind === 'armyMove2' ? { kind: 'move', side: you, force: region, to, movable: base?.kind === 'armyMove2' ? base.move : undefined }
+    : kind === 'eventMove' ? {
+      kind: 'move', side: you, force: region, to,
+      // A card move may be narrower than "the Army": Rage of the Dunlendings moves "up
+      // to four ISENGARD units" (player reports 0g40604w245d6w3q, 4z4d6h18592c546r).
+      onlyNation: evBase?.nation, maxUnits: evBase?.count,
+      escortCompanion: evBase?.card === 'fp-str-12' ? 'Through a Day and a Night' : undefined,
+      movable: evBase?.movable,
+    }
+    : { kind: 'move', side: you, force: region, to, viaCharacterDie: !!charOnly };
+  const offer = rules ? armyMoveOffer(view, rules) : null;
+  const capped = !!rules && (rules.movable !== undefined || rules.maxUnits !== undefined || rules.onlyNation !== undefined);
+
+  // Hold-back (p.31) is the one inversion: the Army has ALREADY advanced into `from`;
+  // the counters choose who STAYS forward, and the rest marches back to `to`. A
+  // Settlement the advance captured must keep a unit (the engine's holdBackMinimum).
+  const holdBackMustHold = holdBackMode && view.regions[from]?.control === you;
+  const own = (n: Nation) => sideOfNation(n) === you;
+  const rows = offer ? offer.nations
+    : (Object.keys(region.units) as Nation[]).filter((n) => own(n) && (region.units[n]!.regular + region.units[n]!.elite) > 0)
+      .map((n) => ({ nation: n, regular: region.units[n]!.regular, elite: region.units[n]!.elite, reason: null as string | null }));
+  const maxLeaders = offer ? offer.leaders : you === 'fp' ? region.leaders : 0;
+  const maxNazgul = offer ? offer.nazgul : you === 'shadow' ? region.nazgul : 0;
+  const charRows = offer ? offer.characters.filter((c) => !(rules!.kind === 'move' && c.id === 'saruman'))
+    : region.characters.filter((c) => (you === 'fp') === !['witch-king', 'saruman', 'mouth-of-sauron'].includes(c) && c !== 'saruman').map((id) => ({ id, reason: null as string | null }));
+
+  // Default = everyone who may go (within a card's unit budget).
+  const initial = (): [Record<string, number>, Record<string, number>] => {
     const rr: Record<string, number> = {}, ee: Record<string, number> = {};
-    let left = evLimit ?? Infinity;
-    for (const n of nations) {
-      if (barred(n)) { rr[n] = 0; ee[n] = 0; continue; }
-      rr[n] = Math.min(maxReg(n), left); left -= rr[n]!;
-      ee[n] = Math.min(maxEli(n), left); left -= ee[n]!;
+    let left = rules?.maxUnits ?? Infinity;
+    for (const row of rows) {
+      rr[row.nation] = Math.min(row.regular, left); left -= rr[row.nation]!;
+      ee[row.nation] = Math.min(row.elite, left); left -= ee[row.nation]!;
     }
     return [rr, ee];
   };
-  const [reg, setReg] = useState<Record<string, number>>(() => capped()[0]);
-  const [eli, setEli] = useState<Record<string, number>>(() => capped()[1]);
+  const [reg, setReg] = useState<Record<string, number>>(() => initial()[0]);
+  const [eli, setEli] = useState<Record<string, number>>(() => initial()[1]);
   const [leaders, setLeaders] = useState(maxLeaders);
   const [nazgul, setNazgul] = useState(maxNazgul);
-  const [chars, setChars] = useState<Set<string>>(() => new Set(myChars));
+  const [chars, setChars] = useState<Set<string>>(() => new Set(charRows.filter((c) => !c.reason).map((c) => c.id)));
 
-  const totalUnits = nations.reduce((s, n) => s + (reg[n] ?? 0) + (eli[n] ?? 0), 0);
-  // What CAN travel — the barred Nations' units are not part of "the whole Army" for
-  // this move, so an untouched picker still submits the plain whole-army action.
-  const armyUnits = goNations.reduce((s, n) => s + maxReg(n) + maxEli(n), 0);
-  // Merging onto a friendly army may push the destination over the 10-unit limit;
-  // the excess is removed afterward (rulebook p.26). Warn so it isn't a surprise.
-  const destUnits = !attackMode && !landingAttack ? Object.values(view.regions[to]?.units ?? {}).reduce((s, u) => s + u!.regular + u!.elite, 0) : 0;
-  const overSel = Math.max(0, destUnits + totalUnits - 10);
-  // A capped card move always states its selection: "the whole Army" is not what the
-  // card offers, so the bare action would mean something else.
-  // Likewise a capped second move: the bare action would mean the merged stack.
-  const isWhole = evLimit === undefined && !cap2 && totalUnits === armyUnits && leaders === maxLeaders && nazgul === maxNazgul && chars.size === myChars.length;
-  const budgetLeft = evLimit === undefined ? Infinity : Math.max(0, evLimit - totalUnits);
+  const totalUnits = rows.reduce((s, r) => s + (reg[r.nation] ?? 0) + (eli[r.nation] ?? 0), 0);
+  const offeredUnits = rows.reduce((s, r) => s + r.regular + r.elite, 0);
+  const budgetLeft = rules?.maxUnits === undefined ? Infinity : Math.max(0, rules.maxUnits - totalUnits);
+  // An untouched picker submits the plain action (the whole Army). A capped move always
+  // states its selection: "the whole Army" is not what it offers.
+  const isWhole = !capped && totalUnits === offeredUnits && leaders === maxLeaders && nazgul === maxNazgul
+    && chars.size === charRows.filter((c) => !c.reason).length;
 
   const buildSel = (): MoveSel => {
     const units: MoveSel['units'] = {};
-    for (const n of nations) { const u: { regular?: number; elite?: number } = {}; if (reg[n]) u.regular = reg[n]; if (eli[n]) u.elite = eli[n]; if (u.regular || u.elite) units[n] = u; }
+    for (const r of rows) { const u: { regular?: number; elite?: number } = {}; if (reg[r.nation]) u.regular = reg[r.nation]; if (eli[r.nation]) u.elite = eli[r.nation]; if (u.regular || u.elite) units[r.nation] = u; }
     const sel: MoveSel = { units };
     if (leaders) sel.leaders = leaders;
     if (nazgul) sel.nazgul = nazgul;
     if (chars.size) sel.characters = [...chars];
     return sel;
   };
-  // For an attack, the selection is the ATTACKING force; the rearguard is the rest.
-  const buildRearguard = (): MoveSel => {
+  // An attack submits its REARGUARD (who stays); the hold-back submits who goes BACK.
+  const buildStayers = (): MoveSel => {
     const units: MoveSel['units'] = {};
-    for (const n of nations) { const rr = r.units[n]!.regular - (reg[n] ?? 0), re = r.units[n]!.elite - (eli[n] ?? 0); const u: { regular?: number; elite?: number } = {}; if (rr) u.regular = rr; if (re) u.elite = re; if (u.regular || u.elite) units[n] = u; }
+    for (const r of rows) {
+      const have = region.units[r.nation]!;
+      const rr = have.regular - (reg[r.nation] ?? 0), re = have.elite - (eli[r.nation] ?? 0);
+      const u: { regular?: number; elite?: number } = {}; if (rr) u.regular = rr; if (re) u.elite = re; if (u.regular || u.elite) units[r.nation] = u;
+    }
     const rg: MoveSel = { units };
-    // The rearguard is what OUR army leaves behind — never the enemy figures standing
-    // in the same region, which were never ours to hold back (see maxLeaders/maxNazgul).
     if (maxLeaders - leaders) rg.leaders = maxLeaders - leaders;
     if (maxNazgul - nazgul) rg.nazgul = maxNazgul - nazgul;
-    const left = myChars.filter((c) => !chars.has(c));
+    const left = charRows.filter((c) => !c.reason && !chars.has(c.id)).map((c) => c.id);
     if (left.length) rg.characters = left;
     return rg;
   };
-  // An attack split the engine would refuse (e.g. a rearguard of Leaders with no unit)
-  // used to submit anyway and fail silently with only a console error (player report
-  // 2r1m6q3i35365j1a). Check it here and say why, instead of letting the click vanish.
-  // The Character-die Leader requirement depends on the die, so the engine still
-  // owns that one.
-  const SPLIT_HINTS: Record<string, string> = {
-    'A rearguard must contain at least one unit': 'Leaders or Characters left behind need at least one unit to stay with them — keep a unit back, or send them into the attack',
-    'The attacking army must keep at least one unit': 'The attacking Army needs at least one unit',
-  };
-  // The same goes for an ordinary Army move: the split rules (at least one unit moves;
-  // Free Peoples Leaders never stay behind without a unit, p.27) are checked here, as
-  // the attack's are, instead of being reported after the click (player report
-  // 6l3g4j5c6s30290e).
-  const MOVE_HINTS: Record<string, string> = {
-    'At least one Army unit must move.': 'At least one unit must move',
-    'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.':
-      'Free Peoples Leaders can never be left without a unit — keep a unit back with them, or take them along',
-  };
-  // A card move splits under the same composition rules (p.28), so the picker asks the
-  // same question for it — the engine used to answer an impossible card split by
-  // quietly moving the whole Army, with no message anywhere (player report
-  // 2w0k3j4k1q026q3r). Only the composition half applies: a card move need not be
-  // adjacent, and each card's own enumerator owns where it may land.
-  const rawMoveError = !isWhole
-    ? (moveMode ? splitBlockReason(view, from, to, you, buildSel())
-      : kind === 'eventMove' && !landingAttack ? (cardMoveEscortReason(evBase?.card, buildSel()) ?? cardSplitBlockReason(view, from, armySide, buildSel()))
-        : null)
-    : null;
-  const rawSplitError = attackMode && !isWhole ? attackError(view, from, you, buildRearguard()) : null;
-  const splitError = rawSplitError ? (SPLIT_HINTS[rawSplitError] ?? rawSplitError)
-    : rawMoveError ? (MOVE_HINTS[rawMoveError] ?? rawMoveError.replace(/\.$/, '')) : null;
+
+  // The ONE check, before the click.
+  const raw = rules ? armySelectionReason(view, rules, buildSel())
+    : holdBackMustHold && totalUnits < 1 ? 'At least one unit must hold the Settlement you just took' : null;
+  const error = raw ? (HINTS[raw] ?? raw.replace(/\.$/, '')) : null;
+
   const make = (split: boolean): WotrAction =>
     kind === 'advance' ? { kind: 'advanceChoice', advance: true, move: split ? buildSel() : undefined }
-      : kind === 'holdBack' ? { kind: 'advanceHoldBack', back: split ? buildRearguard() : undefined }
-      : kind === 'attack' ? { kind: 'attack', from, to, rearguard: split ? buildRearguard() : undefined }
+      : kind === 'besiegerAdvance' ? { kind: 'besiegerAdvance', advance: true, move: split ? buildSel() : undefined }
+      : kind === 'relieveAdvance' ? { kind: 'relieveAdvance', advance: true, move: split ? buildSel() : undefined }
+      : kind === 'holdBack' ? { kind: 'advanceHoldBack', back: split ? buildStayers() : undefined }
+      : kind === 'attack' ? { kind: 'attack', from, to, rearguard: split ? buildStayers() : undefined }
       : kind === 'eventMove' ? { ...(base as Extract<WotrAction, { kind: 'eventTarget' }>), move: split ? buildSel() : undefined }
         : kind === 'armyMove2' ? { kind: 'armyMove2', from, to, move: split ? buildSel() : undefined }
           : { kind: 'moveArmy', from, to, move: split ? buildSel() : undefined };
+
+  const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : landingAttack ? 'Land and attack' : holdBackMode ? 'Keep forward'
+    : kind === 'besiegerAdvance' ? 'Advance and lay siege' : advanceMode ? 'Advance' : 'Move';
+  const intro = landingAttack ? `Choose what lands in ${rName(to)} and attacks; the rest stays in ${rName(from)} and sits out the battle.`
+    : attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle).'
+    : holdBackMode ? `Choose who stays in ${rName(from)}; everyone unticked marches back to ${rName(to)}.${holdBackMustHold ? ' At least one unit must hold the Settlement you just took.' : ' You may bring the whole Army back.'}`
+    : kind === 'besiegerAdvance' ? `Choose who advances into ${rName(to)} and lays siege; the rest stays in ${rName(from)}.`
+    : advanceMode ? `Choose who advances into ${rName(to)}; the rest stays in ${rName(from)}.`
+    : rules?.maxUnits !== undefined ? `Choose what moves — this card moves up to ${rules.maxUnits} ${rules.onlyNation ? nationName(rules.onlyNation) + ' ' : ''}unit${rules.maxUnits === 1 ? '' : 's'}.`
+    : 'Choose what moves.';
+
+  // Merging onto a friendly Army may breach the 10-unit limit; the excess is removed
+  // afterwards (p.26). Only said when the CURRENT selection overstacks.
+  const destUnits = !attackMode && !landingAttack && !holdBackMode ? Object.entries(view.regions[to]?.units ?? {})
+    .filter(([n]) => own(n as Nation)).reduce((s, [, u]) => s + u!.regular + u!.elite, 0) : 0;
+  const overSel = Math.max(0, destUnits + totalUnits - 10);
 
   const Step = ({ label, val, max, set }: { label: string; val: number; max: number; set: (v: number) => void }) => (
     <div style={row}>
@@ -198,65 +190,49 @@ export function MovePicker({ from, to, kind, view, you, base, onConfirm, onCance
     <div style={backdrop} onClick={onCancel}>
       <div style={card} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 6px' }}>{verb} {rName(from)} → {rName(to)}</h3>
-        <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
-          {landingAttack ? `Choose what lands in ${rName(to)} and attacks; the rest stays in ${rName(from)} and sits out the battle.`
-            : attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle). Not-At-War units always stay.'
-            : holdBackMode ? `Choose who stays in ${rName(from)}; everyone unticked marches back to ${rName(to)}.${holdBackMustHold ? ' At least one unit must hold the Settlement you just took.' : ' You may bring the whole Army back.'}`
-              : evLimit !== undefined ? `Choose what moves — this card moves up to ${evLimit} ${evNation ? nationName(evNation) + ' ' : ''}unit${evLimit === 1 ? '' : 's'}.`
-              : cap2 ? `Only the figures that were already in ${rName(from)} before this die's first move may move again — the ones that just arrived stay.${stayNations.length ? ` ${nationSubject(stayNations)} ${nationsArePlural(stayNations) ? 'are' : 'is'} not At War and cannot cross into ${rName(to)}.` : ''}`
-              : stayNations.length ? `Choose what moves. ${nationSubject(stayNations)} ${nationsArePlural(stayNations) ? 'are' : 'is'} not At War and cannot cross into ${rName(to)}, so those units stay behind.` : 'Choose what moves.'}
-        </div>
-        {/* Only when the CURRENT selection overstacks (player reports 5j706y1s5j1w2r4n,
-            0c572i714k006v6r): the map already shows what stands there, so a plain
-            head-count under the limit was noise. */}
+        <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>{intro}</div>
         {overSel > 0 && (
           <div style={{ fontSize: 12, color: '#f0d090', marginBottom: 8 }}>
             {rName(to)} already contains {destUnits} unit{destUnits === 1 ? '' : 's'} (limit 10). You'll remove {overSel} excess after moving.
           </div>
         )}
-        {goNations.map((n) => (
-          <div key={n} style={{ marginBottom: 4 }}>
-            <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{nationName(n)}</div>
-            {maxReg(n) > 0 && <Step label="Regulars" val={reg[n] ?? 0} max={Math.min(maxReg(n), (reg[n] ?? 0) + budgetLeft)} set={(v) => setReg({ ...reg, [n]: v })} />}
-            {maxEli(n) > 0 && <Step label="Elites" val={eli[n] ?? 0} max={Math.min(maxEli(n), (eli[n] ?? 0) + budgetLeft)} set={(v) => setEli({ ...eli, [n]: v })} />}
-          </div>
-        ))}
-        {stayNations.map((n) => (
-          <div key={n} style={{ marginBottom: 4, opacity: 0.6 }}>
-            <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{nationName(n)}</div>
+        {rows.map((r) => r.reason ? (
+          // A Nation that may not take part stays — and the picker says why, in the rule's
+          // own words (politics, already moved, the card's limit).
+          <div key={r.nation} style={{ marginBottom: 4, opacity: 0.6 }} data-reason={r.reason}>
+            <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{nationName(r.nation)}</div>
             <div style={{ fontSize: 12, color: '#bbb' }}>
-              {maxReg(n) + maxEli(n)} unit{maxReg(n) + maxEli(n) === 1 ? '' : 's'} stay — {nationSubject(n)} {nationsArePlural([n]) ? 'are' : 'is'} not At War.
+              {(region.units[r.nation]?.regular ?? 0) + (region.units[r.nation]?.elite ?? 0)} unit{(region.units[r.nation]?.regular ?? 0) + (region.units[r.nation]?.elite ?? 0) === 1 ? '' : 's'} stay — {r.reason.replace(/\.$/, '')}.
             </div>
+          </div>
+        ) : (
+          <div key={r.nation} style={{ marginBottom: 4 }}>
+            <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8' }}>{nationName(r.nation)}</div>
+            {r.regular > 0 && <Step label="Regulars" val={reg[r.nation] ?? 0} max={Math.min(r.regular, (reg[r.nation] ?? 0) + budgetLeft)} set={(v) => setReg({ ...reg, [r.nation]: v })} />}
+            {r.elite > 0 && <Step label="Elites" val={eli[r.nation] ?? 0} max={Math.min(r.elite, (eli[r.nation] ?? 0) + budgetLeft)} set={(v) => setEli({ ...eli, [r.nation]: v })} />}
           </div>
         ))}
         {/* Leaders, Nazgûl and Characters belong to no one Nation's heading — without
             their own they read as part of the last Nation listed (player report
             6n391x553q3c1b39). */}
-        {(goNations.length + stayNations.length) > 0 && (maxLeaders > 0 || maxNazgul > 0 || myChars.length > 0) && (
-          <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8', marginTop: 4 }}>{armySide === 'fp' ? 'Free Peoples' : 'Shadow'}</div>
+        {rows.length > 0 && (maxLeaders > 0 || maxNazgul > 0 || charRows.length > 0) && (
+          <div style={{ fontWeight: 600, fontSize: 12, color: '#d8cfa8', marginTop: 4 }}>{you === 'fp' ? 'Free Peoples' : 'Shadow'}</div>
         )}
         {maxLeaders > 0 && <Step label="Leaders" val={leaders} max={maxLeaders} set={setLeaders} />}
         {maxNazgul > 0 && <Step label="Nazgûl" val={nazgul} max={maxNazgul} set={setNazgul} />}
-        {myChars.map((c) => (
-          <label key={c} style={{ ...row, cursor: 'pointer' }}>
-            <input type="checkbox" name={`move-char-${c}`} checked={chars.has(c)} onChange={(e) => { const s = new Set(chars); e.target.checked ? s.add(c) : s.delete(c); setChars(s); }} />
-            <span style={{ flex: 1 }}>{charName(c)}</span>
+        {charRows.map((c) => (
+          <label key={c.id} style={{ ...row, cursor: c.reason ? 'not-allowed' : 'pointer', opacity: c.reason ? 0.6 : 1 }} title={c.reason ?? undefined}>
+            <input type="checkbox" name={`move-char-${c.id}`} disabled={!!c.reason} checked={chars.has(c.id)}
+              onChange={(e) => { const s = new Set(chars); e.target.checked ? s.add(c.id) : s.delete(c.id); setChars(s); }} />
+            <span style={{ flex: 1 }}>{charName(c.id)}{c.reason ? ` — ${c.reason.replace(/\.$/, '')}` : ''}</span>
           </label>
         ))}
-        {splitError && <div style={{ fontSize: 12, color: '#f0a080', marginTop: 8 }}>{splitError}.</div>}
+        {error && <div style={{ fontSize: 12, color: '#f0a080', marginTop: 8 }} data-testid="move-picker-error">{error}.</div>}
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-          {/* ONE confirm button. There used to be two — "{verb} all" and "{verb}
-              selected" — but the default selection IS the whole Army, so the second was
-              dead whenever the first was the obvious choice and vice versa (player
-              report 3t0a420x2k1t2m0g: '"Move all" is the same as moving all selected
-              figures, and that is already the default'). An untouched picker still
-              submits the plain whole-army move (no split selection at all); touch a
-              counter and the same button submits the split.
-              Hold-back: keeping NOBODY forward is a legal answer (p.31's advance is
-              optional) unless the advance captured the Settlement — every other picker
-              still needs at least one moving unit. */}
-          <button style={primary} disabled={!!splitError || (!isWhole && totalUnits < 1 && !(holdBackMode && !holdBackMustHold))}
-            onClick={() => onConfirm(make(!isWhole))}>{verb}</button>
+          {/* ONE confirm button (player report 3t0a420x2k1t2m0g). An untouched picker
+              submits the plain whole-Army action; change anything and it submits the
+              selection. It is off whenever the shared rules refuse the selection. */}
+          <button style={primary} disabled={!!error} onClick={() => onConfirm(make(!isWhole))}>{verb}</button>
           <button style={ghost} onClick={onCancel}>Cancel</button>
         </div>
       </div>

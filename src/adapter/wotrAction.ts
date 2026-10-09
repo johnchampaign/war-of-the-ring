@@ -81,8 +81,8 @@ export type WotrAction =
   | { kind: 'advanceChoice'; advance: boolean; move?: MoveSel }
   // The Nazgûl Strike!: discard the named FP Character table card, or omit to Hunt.
   | { kind: 'nazgulStrike'; discard?: string }
-  | { kind: 'relieveAdvance'; advance: boolean } // reliever: march into the region whose siege it just broke (p.31, p.32)
-  | { kind: 'besiegerAdvance'; advance: boolean } // attacker: advance into the region a defender just vacated, establishing the siege (p.31)
+  | { kind: 'relieveAdvance'; advance: boolean; move?: MoveSel } // reliever: march into the region whose siege it just broke (p.31, p.32)
+  | { kind: 'besiegerAdvance'; advance: boolean; move?: MoveSel } // attacker: advance into the region a defender just vacated, establishing the siege (p.31)
   | { kind: 'combatCardCost'; amount: number } // size a variable-cost combat card (self-hits / Nazgûl Leadership forfeited)
   // Heroic Death: sacrifice a Free Peoples Leader ('leader') or the named Companion to cancel hits; omit to sacrifice no one.
   | { kind: 'heroicDeath'; sacrifice?: string }
@@ -112,7 +112,7 @@ export type WotrAction =
    *  the Army walk, so the board's route tracer knows its budget instead of guessing
    *  it from the nearest destination on offer. The engine re-states the range itself
    *  when it validates `path`, so a client that inflates this field gains nothing. */
-  | { kind: 'eventTarget'; card: string; path?: RegionId[]; range?: number; direct?: boolean; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; face?: DieFace; done?: boolean; count?: number; move?: MoveSel }
+  | { kind: 'eventTarget'; card: string; /** Only these figures may move: the rest already moved under this card (stage 3). */ movable?: MoveSel; path?: RegionId[]; range?: number; direct?: boolean; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; face?: DieFace; done?: boolean; count?: number; move?: MoveSel }
   // Stormcrow (FP responds): choose which unit of the targeted Nation to eliminate.
   | { kind: 'stormcrowLoss'; region: RegionId; nation: Nation; figure: 'regular' | 'elite' | 'leader' }
   // The Breaking of the Fellowship (FP responds): choose which Companion to separate.

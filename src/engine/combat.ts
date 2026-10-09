@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
@@ -1275,6 +1275,63 @@ function sorcererDue(state: GameState, pc: PendingCombat): boolean {
  *  With `sel.move` a chosen subset advances; without it the whole force does. The
  *  rearguard held aside for the battle is restored to the origin either way and
  *  never advances (p.28). */
+/** Every advance after a battle is an Army MOVE whose destination is already decided
+ *  (player reports 4f0z2o2y1t2d3y6v, 405e1k232p3h3j4m, 382m030i1j5w3d57): the field
+ *  battle's advance, the advance after the enemy falls back into its Stronghold (laying
+ *  siege), and the advance that relieves a siege. They take "all or part" of the Army
+ *  (p.31) under the same rules as any move, so they ask the shared rules — the picker
+ *  asks the same function before the click.
+ *
+ *  The rearguard is held aside during the battle and rejoins `from` afterwards, so who
+ *  is LEFT is judged against what stands there plus the rearguard (a Leader staying
+ *  with the rearguard's units is not stranded), while only the figures that fought may
+ *  go (the `movable` limit). */
+export function advanceRules(state: GameState, owner: Side, from: RegionId, to: RegionId, rearguard?: PendingCombat['rearguard'] | null): ArmyMoveRules {
+  const src = state.regions[from]!;
+  const units: Force['units'] = {};
+  const movableUnits: NonNullable<MoveSelection['units']> = {};
+  for (const n of Object.keys(src.units) as Nation[]) {
+    if (sideOfNation(n) !== owner) continue;
+    const u = src.units[n]!;
+    units[n] = { regular: u.regular, elite: u.elite };
+    movableUnits[n] = { regular: u.regular, elite: u.elite };
+  }
+  for (const [n, u] of Object.entries(rearguard?.units ?? {})) {
+    const cur = units[n as Nation] ?? { regular: 0, elite: 0 };
+    units[n as Nation] = { regular: cur.regular + u.regular, elite: cur.elite + u.elite };
+  }
+  const force: Force = {
+    units,
+    leaders: src.leaders + (rearguard?.leaders ?? 0),
+    nazgul: src.nazgul + (rearguard?.nazgul ?? 0),
+    characters: [...src.characters, ...(rearguard?.characters ?? [])],
+  };
+  const movable: MoveSelection = {
+    units: movableUnits,
+    leaders: owner === 'fp' ? src.leaders : 0,
+    nazgul: owner === 'shadow' ? src.nazgul : 0,
+    characters: src.characters.filter((c) => characterSide(c) === owner),
+  };
+  return { kind: 'move', side: owner, force, to, movable };
+}
+
+/** Advance the selected figures: validated by the shared rules (refused, not quietly
+ *  trimmed), logged before what they cause, then the usual consequences of entering —
+ *  a capture (unless the garrison still holds the Settlement), a Companion rousing a
+ *  Nation, and lifting a siege the Army leaves behind. */
+function advanceSelected(state: GameState, owner: Side, from: RegionId, to: RegionId, sel: MoveSelection, rearguard: PendingCombat['rearguard'] | null, opts: { capture: boolean; verb: string }): void {
+  const bad = armySelectionReason(state, advanceRules(state, owner, from, to, rearguard), sel);
+  if (bad) throw new Error(bad);
+  let moved = 0;
+  for (const u of Object.values(sel.units ?? {})) moved += (u?.regular ?? 0) + (u?.elite ?? 0);
+  log(state, null, 'combat', `${sideDoes(owner, opts.verb)} ${moved} unit${moved === 1 ? '' : 's'} into ${REGIONS[to]!.name ?? to}`);
+  const goers: MoveSelection = { ...sel, units: Object.fromEntries(Object.entries(sel.units ?? {}).map(([n, u]) => [n, { regular: u?.regular ?? 0, elite: u?.elite ?? 0 }])) };
+  moveSelectedBack(state, from, to, owner, goers);
+  if (opts.capture) captureIfEnemySettlement(state, to, owner);
+  activateOnCompanionLand(state, owner, (sel.characters ?? []).filter((c) => c !== 'saruman'), to);
+  liftSiegeIfAbandoned(state, from);
+}
+
 export function resolveAdvanceChoice(state: GameState, sel: { advance: boolean; move?: MoveSelection }): RegionId | null {
   const d = state.pendingChoice!.data as { from: RegionId; to: RegionId; rearguard: PendingCombat['rearguard'] | null };
   const owner = state.pendingChoice!.owner;
@@ -1283,33 +1340,11 @@ export function resolveAdvanceChoice(state: GameState, sel: { advance: boolean; 
   if (!sel.advance) {
     log(state, null, 'combat', `${sideDoes(owner, 'hold')} at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
   } else if (sel.move) {
-    // Subset advance: sanitized like every split mover; a selection that clamps to
-    // nothing degrades to the whole-army advance rather than silently doing nothing.
-    const src = state.regions[d.from]!;
-    const clamped: MoveSelection = { units: {}, leaders: 0, nazgul: 0, characters: sel.move.characters ?? [] };
-    let moved = 0;
-    for (const [n, u] of Object.entries(sel.move.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
-      if (sideOfNation(n) !== owner) continue;
-      const have = src.units[n]; if (!have) continue;
-      const mr = Math.max(0, Math.min(u.regular ?? 0, have.regular));
-      const me = Math.max(0, Math.min(u.elite ?? 0, have.elite));
-      if (mr + me > 0) { clamped.units![n] = { regular: mr, elite: me }; moved += mr + me; }
-    }
-    if (moved === 0) { advanceInto(state, owner, d.from, d.to); advancedTo = d.to; }
-    else {
-      if (owner === 'fp') clamped.leaders = Math.max(0, Math.min(sel.move.leaders ?? 0, src.leaders));
-      else clamped.nazgul = Math.max(0, Math.min(sel.move.nazgul ?? 0, src.nazgul));
-      // The advance is logged BEFORE it lands: the capture and any Political Track
-      // step it causes log as it happens, and read backwards otherwise (player report
-      // 2i2n4m2k1x1b293x).
-      log(state, null, 'combat', `${sideDoes(owner, 'advance')} ${moved} unit${moved === 1 ? '' : 's'} into ${REGIONS[d.to]!.name ?? d.to}`);
-      moveSelectedBack(state, d.from, d.to, owner, clamped);       // subset mover (shared with hold-back)
-      captureIfEnemySettlement(state, d.to, owner);                // units ENTERED, so the capture fires
-      // p.26: FP Leaders can never stand without FP units — a full vacate drags them.
-      const ownLeft = (Object.keys(src.units) as Nation[]).some((n) => sideOfNation(n) === owner && (src.units[n]!.regular + src.units[n]!.elite) > 0);
-      if (owner === 'fp' && !ownLeft && src.leaders > 0) { state.regions[d.to]!.leaders += src.leaders; src.leaders = 0; }
-      advancedTo = d.to;
-    }
+    // A partial advance is an Army move (see advanceRules): an illegal selection is
+    // refused with the rule's reason. It used to be trimmed silently, an empty one
+    // became the whole Army, and a Leader left alone was dragged along unasked.
+    advanceSelected(state, owner, d.from, d.to, sel.move, d.rearguard, { capture: true, verb: 'advance' });
+    advancedTo = d.to;
   } else {
     log(state, null, 'combat', `${sideDoes(owner, 'advance')} into ${REGIONS[d.to]!.name ?? d.to}`); // before the capture it causes
     advanceInto(state, owner, d.from, d.to);                       // whole force; advanceInto captures
@@ -1397,17 +1432,17 @@ function moveSelectedBack(state: GameState, from: RegionId, to: RegionId, side: 
  *  Army is destroyed or retreats). Returns the region advanced into, so the caller can
  *  run the over-stack check — the freed garrison is back on the field, so the combined
  *  stack can exceed 10 (p.26). Returns null when the Army holds its ground.
- *  DEVIATION (documented in docs/rules-spec.md): RAW advances "all or part" of the Army;
- *  this moves all of it, matching the field battle's advance. Splitting is available
- *  before the battle via the rearguard (p.28). */
-export function resolveRelieveAdvance(state: GameState, advance: boolean): RegionId | null {
+ *  "All or part" of the Army (p.31): `move` selects who goes, judged by the shared
+ *  advance rules (advanceRules); omitted, everyone advances. */
+export function resolveRelieveAdvance(state: GameState, advance: boolean, move?: MoveSelection): RegionId | null {
   const d = state.pendingChoice!.data as { from: RegionId; to: RegionId; rearguard: PendingCombat['rearguard'] | null };
   const owner = state.pendingChoice!.owner;
   state.pendingChoice = null;
   log(state, null, 'combat', advance
     ? `${sideDoes(owner, 'advance')} into ${REGIONS[d.to]!.name ?? d.to}, relieving the siege`
     : `${sideDoes(owner, 'hold')} at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
-  if (advance) advanceInto(state, owner, d.from, d.to); // after its log line, like the field advance
+  if (advance && move) advanceSelected(state, owner, d.from, d.to, move, d.rearguard, { capture: true, verb: 'advance' });
+  else if (advance) advanceInto(state, owner, d.from, d.to); // after its log line, like the field advance
   // Only now — the rearguard must not be swept along by the advance (p.28).
   if (d.rearguard) restoreRearguard(state, d.from, d.rearguard);
   return advance ? d.to : null;
@@ -1988,7 +2023,7 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
  *  battle; declining leaves nobody besieging, so per p.32 ("if no Army units are left
  *  behind, the Stronghold is no longer under siege") the garrison simply comes back out
  *  and the battle ends with the ground unchanged. */
-export function resolveBesiegerAdvance(state: GameState, advance: boolean): void {
+export function resolveBesiegerAdvance(state: GameState, advance: boolean, move?: MoveSelection): void {
   const pc = state.pendingCombat!;
   const r = state.regions[pc.to]!;
   state.pendingChoice = null;
@@ -2011,7 +2046,10 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean): void
   }
   {
     capSiegeBox(state, pc.to); // NOW it comes under siege — garrison capped at 5 (p.31)
-    moveStack(state, pc.from, pc.to, pc.attacker, false); // besieger occupies the open field (NO capture — the boxed garrison holds the Settlement)
+    // The besieger occupies the open field (NO capture — the boxed garrison holds the
+    // Settlement). "All or part" of the Army, like every advance (report 405e1k232p3h3j4m).
+    if (move) advanceSelected(state, pc.attacker, pc.from, pc.to, move, pc.rearguard ?? null, { capture: false, verb: 'advance' });
+    else moveStack(state, pc.from, pc.to, pc.attacker, false);
     r.besieged = true;
     log(state, null, 'combat', `${sideDoes(pc.defender, 'withdraw')} into the siege at ${pc.to}; ${sideDoes(pc.attacker, 'besiege')}`);
     // The rearguard rejoins `from`; record the siege as established; resume the turn.

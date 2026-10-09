@@ -20,7 +20,7 @@ import { StatusBar } from './StatusBar';
 import { HandStrip, TabledStrip } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal, modalDecisions } from './DecisionModal';
-import { MovePicker } from './MovePicker';
+import { MovePicker, type MovePickerKind } from './MovePicker';
 import { sortieForce } from '../engine/combat';
 import { DiceTray } from './DiceTray';
 import { HuntPopup, huntResultPending } from './HuntPopup';
@@ -97,7 +97,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // each click takes one step, and the route decides what is captured on the way
   // (p.27 — player report 384n5a5y63480b3g). `route` holds the regions entered so far.
   const [route, setRoute] = useState<RegionId[]>([]);
-  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: 'moveArmy' | 'attack' | 'armyMove2' | 'eventMove' | 'holdBack' | 'advance'; base?: WotrAction } | null>(null);
+  const [moveDraft, setMoveDraft] = useState<{ from: string; to: string; kind: MovePickerKind; base?: WotrAction } | null>(null);
   // Board-driven independent-character (Nazgûl / Minion / Companion) move in progress.
   // `group` (Companions only): move several together — range = highest Level (p.24).
   const [charPick, setCharPick] = useState<{ from: RegionId; char: string; group?: string[] } | null>(null);
@@ -768,11 +768,21 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       const d = g.view.pendingChoice.data as { from: RegionId; to: RegionId };
       setMoveDraft({ from: d.from, to: d.to, kind: 'advance' }); return;
     }
+    // Every advance is a move whose destination is already decided, so every advance
+    // gets the same picker — laying siege and relieving one used to march everyone in
+    // with no choice (player reports 4f0z2o2y1t2d3y6v, 405e1k232p3h3j4m).
+    if (a.kind === 'relieveAdvance' && a.advance && !a.move && g.view?.pendingChoice?.kind === 'relieveAdvance') {
+      const d = g.view.pendingChoice.data as { from: RegionId; to: RegionId };
+      setMoveDraft({ from: d.from, to: d.to, kind: 'relieveAdvance' }); return;
+    }
+    if (a.kind === 'besiegerAdvance' && a.advance && !a.move && g.view?.pendingChoice?.kind === 'besiegerAdvance' && g.view.pendingCombat) {
+      setMoveDraft({ from: g.view.pendingCombat.from, to: g.view.pendingCombat.to, kind: 'besiegerAdvance' }); return;
+    }
     void submit(a);
   };
   const onPanelAction = (a: WotrAction) => {
     if (a.kind === 'advanceHoldBack' && g.view?.pendingChoice?.kind === 'advanceHoldBack') { onDecisionAction(a); return; }
-    if (a.kind === 'advanceChoice' && g.view?.pendingChoice?.kind === 'advanceChoice') { onDecisionAction(a); return; }
+    if ((a.kind === 'advanceChoice' || a.kind === 'relieveAdvance' || a.kind === 'besiegerAdvance') && g.view?.pendingChoice?.kind === a.kind) { onDecisionAction(a); return; }
     if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2', base: a }); return; }
     // A card-granted Army MOVE (Shadows Gather, The Shadow Lengthens, Corsairs…)
     // routes through the split picker — p.28 allows splitting the Army before a
@@ -973,6 +983,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       {moveDraft && (
         <div style={{ display: peekBoard ? 'none' : 'contents' }}>
           <MovePicker from={moveDraft.from} to={moveDraft.to} kind={moveDraft.kind} view={g.view} you={me} base={moveDraft.base}
+            charOnly={(() => {
+              // Only a Character die can pay — the one the player picked, or the only kind
+              // left that the whole Army qualifies for. The goers must then include a
+              // Leader or Character, and the picker says so before the click (player
+              // report 5w5l396p391y5t30).
+              if (moveDraft.kind !== 'moveArmy' && moveDraft.kind !== 'attack') return false;
+              const faces = activeDie ? [activeDie] : dieOptions({ kind: moveDraft.kind, from: moveDraft.from as RegionId, to: moveDraft.to as RegionId }, g.view, me);
+              return faces.length > 0 && faces.every((f) => f === 'character');
+            })()}
             onConfirm={(a) => { setMoveDraft(null); void submit(a); }} onCancel={() => setMoveDraft(null)} />
         </div>
       )}

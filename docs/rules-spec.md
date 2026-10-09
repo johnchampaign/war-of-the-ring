@@ -940,9 +940,14 @@ is friendly, so there's nothing to capture, and joining the freed garrison can b
 the 10-unit limit (the advance chains into the normal `removeExcess` prompt). The
 rearguard is restored to the origin region **after** the advance resolves, so it never
 gets swept along (p.28). Covered by `scripts/probe-relief-advance.mjs`.
-**Deviation:** RAW advances "all or part" of the Army; this advances all of it, matching
-the field battle's advance — partial commitment is available before the battle via the
-rearguard split (p.28).
+**No longer a deviation (2026-10-09):** the relief advance takes "all or part" of the
+Army, like every advance — the field battle's, and the advance that lays siege after the
+defender falls back into its Stronghold. All three are Army moves whose destination is
+already decided, so they share one engine step (`combat.ts` `advanceSelected`, judged by
+`advanceRules` through the shared Army-movement rules in `armies.ts`) and one picker; an
+illegal selection is refused with the rule's reason rather than trimmed (player reports
+4f0z2o2y1t2d3y6v, 405e1k232p3h3j4m, 382m030i1j5w3d57). The rearguard still never
+advances; a Leader staying behind with the rearguard's units is not stranded.
 
 **Sortie (p.32) — modelled.** The besieged garrison spends an Action die for battle and
 attacks the besiegers in its own region. Like an assault this is `from === to`, but with
