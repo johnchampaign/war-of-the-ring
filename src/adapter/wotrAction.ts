@@ -112,7 +112,7 @@ export type WotrAction =
    *  the Army walk, so the board's route tracer knows its budget instead of guessing
    *  it from the nearest destination on offer. The engine re-states the range itself
    *  when it validates `path`, so a client that inflates this field gains nothing. */
-  | { kind: 'eventTarget'; card: string; /** Only these figures may move: the rest already moved under this card (stage 3). */ movable?: MoveSel; path?: RegionId[]; range?: number; direct?: boolean; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; face?: DieFace; done?: boolean; count?: number; move?: MoveSel }
+  | { kind: 'eventTarget'; card: string; /** Only these figures may move: the rest already moved under this card. */ movable?: MoveSel; /** A card attack's rearguard (who stays out of the battle). */ rearguard?: MoveSel; path?: RegionId[]; range?: number; direct?: boolean; from?: RegionId; to?: RegionId; region?: RegionId; nation?: Nation; companion?: string; mode?: 'move' | 'attack' | 'hide' | 'none' | 'recruit'; figure?: 'regular' | 'elite'; slot?: number; eye?: boolean; face?: DieFace; done?: boolean; count?: number; move?: MoveSel }
   // Stormcrow (FP responds): choose which unit of the targeted Nation to eliminate.
   | { kind: 'stormcrowLoss'; region: RegionId; nation: Nation; figure: 'regular' | 'elite' | 'leader' }
   // The Breaking of the Fellowship (FP responds): choose which Companion to separate.

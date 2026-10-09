@@ -347,7 +347,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const acts = g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'attack' }> => a.kind === 'attack' && a.from === a.to);
     return activeDie && g.view && g.you ? acts.filter((a) => dieAllowsAction(a, g.view!, g.you as Side, activeDie)) : acts;
   }, [g.legalActions, activeDie, g.view, g.you]);
-  const assaultSources = useMemo(() => assaultActs.map((a) => a.from), [assaultActs]);
+  // A card's ASSAULT (Grond, The Fighting Uruk-hai, a Nazgûl-led or Witch-king's Army
+  // storming the Stronghold it besieges) is the same board click — the besieged region
+  // and "⚔ Assault" — not a panel button (player report 1w2k3i631m5c5a4z).
+  const cardAssaultActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> =>
+    a.kind === 'eventTarget' && a.mode === 'attack' && !!a.from && a.from === a.to && !a.done), [g.legalActions]);
+  const assaultSources = useMemo(() => [...assaultActs.map((a) => a.from), ...cardAssaultActs.map((a) => a.from!)], [assaultActs, cardAssaultActs]);
   // Board-click MUSTERING (player report: paging the panel's recruit buttons was
   // tedious): eligible Settlements highlight; clicking one opens its bundle menu.
   const recruitActs = useMemo(() => {
@@ -508,7 +513,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (opt.kind === 'cardchar') { clearMove(); void submit(opt.act); return; }
     if (opt.kind === 'cardgroup') { clearMove(); void (async () => { for (const a of opt.acts) if (await submit(a) === false) break; })(); return; }
     if (opt.kind === 'army') { setCharPick(null); setSelected(region); }
-    else if (opt.kind === 'assault') { setCharPick(null); setSelected(null); setMoveDraft({ from: region, to: region, kind: 'attack' }); } // storm the besieged Stronghold
+    else if (opt.kind === 'assault') { // storm the besieged Stronghold — by die, or by the card being played
+      setCharPick(null); setSelected(null);
+      const card = cardAssaultActs.find((a) => a.from === region);
+      setMoveDraft(card ? { from: region, to: region, kind: 'eventAttack', base: card } : { from: region, to: region, kind: 'attack' });
+    }
     else if (opt.kind === 'muster') { setCharPick(null); setSelected(null); setMusterMenu(region); } // pick the bundle for this Settlement
     else if (opt.kind === 'chargroup') {
       // Group move: destination range keys off the highest-Level member (p.24).
@@ -516,7 +525,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       setSelected(null); setCharPick({ from: region, char: leader, group: opt.chars });
     }
     else { setSelected(null); setCharPick({ from: region, char: opt.char }); }
-  }, []);
+  }, [cardAssaultActs]); // the card assault on offer changes once the card is played
 
   const onRegionClick = useCallback((id: RegionId) => {
     setBlockMsg(null); setMoveMenu(null);
@@ -560,7 +569,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (trace) {
       if (id === trace.head && trace.finish) { const act = trace.finish; const path = [...route];
         clearMove();
-        if (act.mode === 'attack') void submit({ ...act, path });
+        if (act.mode === 'attack' && !isSplitCardAttack(act)) setMoveDraft({ from: act.from!, to: act.to!, kind: 'eventAttack', base: { ...act, path } });
         else setMoveDraft({ from: act.from!, to: act.to!, kind: 'eventMove', base: { ...act, path } });
         return; }
       if (trace.steps.has(id)) { setRoute((r) => [...r, id]); return; }
@@ -573,7 +582,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         // A card ATTACK stays whole (the rearguard flow is the attack action's); a
         // card MOVE may split (p.28), so it takes the move picker — and so does a card
         // attack that LANDS first, where the player picks who goes (Corsairs of Umbar).
-        if (cardAct.mode === 'attack' && !isSplitCardAttack(cardAct)) void submit(cardAct);
+        if (cardAct.mode === 'attack' && !isSplitCardAttack(cardAct)) setMoveDraft({ from: cardAct.from!, to: cardAct.to!, kind: 'eventAttack', base: cardAct });
         else setMoveDraft({ from: cardAct.from!, to: cardAct.to!, kind: 'eventMove', base: cardAct });
         return;
       }
@@ -592,7 +601,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const armyHere = boardArmyActs.some((a) => a.from === id) || cardMoveActs.some((a) => a.from === id);
     // A siege ASSAULT (attack from===to) is board-clickable too (player report):
     // click the besieged region you occupy and choose "Assault".
-    const assaultHere = assaultActs.some((a) => a.from === id);
+    const assaultHere = assaultActs.some((a) => a.from === id) || cardAssaultActs.some((a) => a.from === id);
     const musterHere = musterTargets.has(id);
     const charsHere = (g.view && canMoveChars && charMoveOk && g.you) ? movableCharsAt(g.view, g.you as Side, id, charMoved) : [];
     // ≥2 movable Companions here: offer moving them TOGETHER (group range = the
@@ -672,7 +681,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const highlights = useMemo(() => ({ sources, selected: activeRegion, destinations, activate: activateTargets }), [sources, activeRegion, destinations, activateTargets]);
   // The Muster die's second figure is a pending choice too, so it must be listed here or
   // its lit Settlements ignore the click (player report 310b003u0c1j3220).
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || isCardRecruit || isCardMove || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2 || secondMusterActs.length > 0) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || isCardRecruit || isCardMove || cardAssaultActs.length > 0 || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2 || secondMusterActs.length > 0) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 
@@ -788,6 +797,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // routes through the split picker — p.28 allows splitting the Army before a
     // card move (player report: "it did not ask if I wanted to move the ENTIRE
     // army"). Card ATTACKS stay whole (the rearguard flow is the attack action's).
+    // A card ATTACK opens the attack picker, like any attack (player report 1o6s51234u6u4m30).
+    if (a.kind === 'eventTarget' && a.from && a.to && !a.done && a.mode === 'attack' && !isSplitCardAttack(a)) {
+      setMoveDraft({ from: a.from, to: a.to, kind: 'eventAttack', base: a }); return;
+    }
     if (a.kind === 'eventTarget' && a.from && a.to && !a.done && (a.mode !== 'attack' || isSplitCardAttack(a))) {
       setMoveDraft({ from: a.from, to: a.to, kind: 'eventMove', base: a }); return;
     }
@@ -845,7 +858,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   </span>
                   {trace.finish && (
                     <button onClick={() => { const act = trace.finish!; const path = [...route]; clearMove();
-                      if (act.mode === 'attack' && !isSplitCardAttack(act)) void submit({ ...act, path });
+                      if (act.mode === 'attack' && !isSplitCardAttack(act)) setMoveDraft({ from: act.from!, to: act.to!, kind: 'eventAttack', base: { ...act, path } });
                       else setMoveDraft({ from: act.from!, to: act.to!, kind: 'eventMove', base: { ...act, path } }); }}
                       style={{ padding: '3px 10px', fontSize: 12, lineHeight: '16px', fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: '#2c6a3a', color: '#f0f7ee', border: '1px solid #6ea84f' }}>
                       {/* Fixed line height: the ✓ glyph is taller than the letters (report 35634l1x431r4a4a). */}

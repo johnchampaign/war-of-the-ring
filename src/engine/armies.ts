@@ -627,6 +627,19 @@ export interface ArmyMoveRules {
   maxUnits?: number;
   /** …and the goers must include a Companion (Through a Day and a Night). */
   escortCompanion?: string;
+  /** A card attack that names who attacks and keeps them in the fight — The Black
+   *  Captain Commands' Witch-king (see cardAttackFighters). */
+  mustFight?: { nazgulOrWitchKing?: boolean; character?: string };
+}
+
+/** The card attack rule that names who fights (ArmyMoveRules.mustFight). */
+export function cardAttackFighters(card: string | undefined): ArmyMoveRules['mustFight'] {
+  // Only The Black Captain Commands keeps its figure in the fight — the Almanac: "the
+  // Witch-king himself must be with the attacking force (i.e. cannot be held in a
+  // rearguard)". Grond's Witch-king "may be kept in a rearguard … and not participate",
+  // and The Ringwraiths Are Abroad's attack follows "all normal attack rules".
+  if (card === 'sh-char-24') return { character: 'witch-king' };
+  return undefined;
 }
 
 /** Per-figure answer: how many may go, and if none may, why. */
@@ -727,6 +740,12 @@ export function armySelectionReason(state: GameState, r: ArmyMoveRules, goers: M
     return attack ? 'A Character-die attack must include a Leader or Character'
       : side === 'fp' ? 'A Character-die Army move must take a Leader or Companion along with the moving units.'
         : 'A Character-die Army move must take a Nazgûl or Minion along with the moving units.';
+  }
+  if (r.mustFight?.nazgulOrWitchKing && gn < 1 && !chars.includes('witch-king')) {
+    return 'This card attacks with an Army containing a Nazgûl — at least one Nazgûl (or the Witch-king) must fight.';
+  }
+  if (r.mustFight?.character && f.characters.includes(r.mustFight.character) && !chars.includes(r.mustFight.character)) {
+    return 'This card attacks with the Army containing the Witch-king — he must fight.';
   }
   if (r.escortCompanion && !chars.some((c) => !!COMPANIONS[c] || !!UPGRADES[c])) { // Aragorn and Gandalf the White are Companions too
     return `${r.escortCompanion} moves the Army containing the Companion(s) — at least one Companion must go with it.`;

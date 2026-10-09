@@ -677,7 +677,7 @@ export function sortieForce(state: GameState, id: RegionId, side: Side): Force |
 }
 
 /** Validate an attack's (optional) rearguard split. Returns an error string, or null. */
-export function attackError(state: GameState, from: RegionId, side: Side, explicit?: MoveSelection, viaCharacterDie = false): string | null {
+export function attackError(state: GameState, from: RegionId, side: Side, explicit?: MoveSelection, viaCharacterDie = false, mustFight?: ArmyMoveRules['mustFight']): string | null {
   // A SORTIE attacks out of the siege box, so the attacking "army" is the box, not the
   // region — the region holds the besieger (p.32).
   const sortieBox = sortieForce(state, from, side);
@@ -705,7 +705,7 @@ export function attackError(state: GameState, from: RegionId, side: Side, explic
     // region (p.28), so his "cannot leave Orthanc" is no obstacle.
     characters: r.characters.filter((c) => characterSide(c) === side && !rg.characters.includes(c)),
   };
-  return armySelectionReason(state, { kind: 'attack', side, force: r, viaCharacterDie }, goers);
+  return armySelectionReason(state, { kind: 'attack', side, force: r, viaCharacterDie, mustFight }, goers);
 }
 
 /** Remove the rearguard figures from `from`, returning the stash (held in the
@@ -897,9 +897,14 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   // NB the retreat-into-siege offer is NOT set up here: RAW p.31 puts it before EVERY
   // combat round, so combatStep inserts it ahead of each round's 'attackerCard' step
   // (see strongholdWithdrawAvailable) rather than only at battle start.
-  // Split off the rearguard (explicit + forced not-At-War units) before the battle —
-  // never for an assault (from===to; the besieger assaults with its whole force).
-  if (!assault) {
+  // Split off the rearguard (explicit + forced not-At-War units) before the battle — for
+  // an ASSAULT too. It used to be refused there ("the besieger assaults with its whole
+  // force"), so figures held back still fought (player reports 6f5g141x533t3i4e,
+  // 591e3v2k0l5v4o0y). The Almanac allows it: Grond's Witch-king "may be kept in a
+  // rearguard … and not participate", The Fighting Uruk-hai's Isengard units likewise,
+  // and "if dual elimination in a Stronghold siege/sortie, a rearguard takes/retains
+  // control of that Stronghold". An assault's rearguard waits in the region's open field.
+  {
     // A sortie splits its rearguard out of the siege box and leaves it in the Stronghold.
     const rg = fullRearguard(state, from, attacker, opts.rearguard, sortie ? box : undefined);
     const rgHasFigure = Object.values(rg.units).some((u) => u.regular + u.elite > 0) || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
@@ -1180,6 +1185,15 @@ function finishCombat(state: GameState, advance: boolean): void {
     if (advance && defSurv === 0 && atkSurv > 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
       captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker);
       outcome = `${side(pc.attacker)} storm ${name}`;
+    } else if (atkSurv === 0 && pc.rearguard && Object.values(pc.rearguard.units).some((u) => u.regular + u.elite > 0)) {
+      // The assaulting force is gone but its rearguard still stands in the field: the
+      // siege goes on — and if the garrison died too, the rearguard takes the
+      // Stronghold (Almanac, Battle resolution steps).
+      restoreRearguard(state, pc.from, pc.rearguard); pc.rearguard = undefined;
+      if (defSurv === 0) {
+        captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker);
+        outcome = `Both Armies are destroyed at ${name} — the rearguard takes the Stronghold`;
+      } else outcome = `The assault on ${name} is thrown back — the rearguard keeps up the siege`;
     } else if (atkSurv === 0) {
       liftSiege(state, pc.to); // an empty box on a mutual wipe: the region simply ends up empty, control unchanged
       outcome = mutualWipe ? `Both Armies are destroyed at ${name} — siege lifted` : `The assault on ${name} is thrown back — siege lifted`;

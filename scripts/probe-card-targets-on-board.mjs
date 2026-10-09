@@ -37,7 +37,9 @@ check('...and does not open the modal', !eventChoiceInModal([recruit, done]));
 check('the "done" option of the same card stays a button', panelShowsAction(done, [recruit, done], view));
 check('a card army move is a board move', isCardArmyMoveTarget(move) && !panelShowsAction(move, [move, done], view));
 check('a card attack with a destination is a board move too', isCardArmyMoveTarget(cardAttack) && !panelShowsAction(cardAttack, [cardAttack], view));
-check('a card siege ASSAULT (from === to) is neither — it keeps its button', !isCardArmyMoveTarget(assault) && panelShowsAction(assault, [assault], view));
+// A card's siege ASSAULT (from === to) was a panel button; it is now the board's "⚔ Assault"
+// on the besieged region, like a die assault (player report 1w2k3i631m5c5a4z).
+check('a card siege ASSAULT (from === to) is a board assault, not a button', !isCardArmyMoveTarget(assault) && !panelShowsAction(assault, [assault], view));
 check('a region-only pick (Dreadful Spells) is still a modal pick', !isCardRecruitTarget(strike) && eventChoiceInModal([strike]));
 check('a region-only pick FLAGGED as a recruit is a board muster', isCardRecruitTarget(regionRecruit) && !panelShowsAction(regionRecruit, [regionRecruit], view) && !eventChoiceInModal([regionRecruit]));
 check('a companion placement is neither (it has its own board path)', !isCardRecruitTarget(sep) && !isCardArmyMoveTarget(sep));

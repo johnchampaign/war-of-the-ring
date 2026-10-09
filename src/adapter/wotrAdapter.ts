@@ -270,7 +270,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'eventTarget': {
         const data = state.pendingChoice!.data as { card: string; applied: EventTarget[]; repeat: number };
         const h = getHandler(data.card);
-        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, range: t.range, direct: t.direct, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye, face: t.face, count: t.count }));
+        const opts: Extract<WotrAction, { kind: 'eventTarget' }>[] = (h?.targets?.(state, actor, data.applied) ?? []).map((t) => ({ kind: 'eventTarget' as const, card: data.card, from: t.from, to: t.to, ...(t.movable ? { movable: t.movable } : {}), range: t.range, direct: t.direct, region: t.region, nation: t.nation, companion: t.companion, mode: t.mode, figure: t.figure, slot: t.slot, eye: t.eye, face: t.face, count: t.count }));
         // Multi-target cards (repeat>1) may stop early once ≥1 target is applied.
         if ((h?.repeat ?? 1) > 1 && (data.applied.length > 0 || flagValue(h?.optionalFromStart, state)) && !flagValue(h?.noDone, state)) opts.push({ kind: 'eventTarget' as const, card: data.card, done: true });
         // A card resumed after a raised question whose targets have since run out
@@ -858,7 +858,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const h = getHandler(data.card);
       if (!h?.applyTarget) throw new Error('Not an interactive card');
       if (!action.done) {
-        const target: EventTarget = { path: action.path, from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye, face: action.face, count: action.count, move: action.move };
+        const target: EventTarget = { movable: action.movable, rearguard: action.rearguard, path: action.path, from: action.from, to: action.to, region: action.region, nation: action.nation, companion: action.companion, mode: action.mode, figure: action.figure, slot: action.slot, eye: action.eye, face: action.face, count: action.count, move: action.move };
         h.applyTarget(state, actor, target, data.applied);
         if (state.pendingChoice !== targetChoice) raised = state.pendingChoice;
         data.applied.push(target);

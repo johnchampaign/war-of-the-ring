@@ -6,8 +6,8 @@ import type { GameState, Side, Nation, RegionId, CharacterId, DieFace } from '..
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason } from '../armies';
-import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, sortieForce, canSortie, type CasualtyThen } from '../combat';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason, cardAttackFighters } from '../armies';
+import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, sortieForce, canSortie, attackError, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
@@ -144,7 +144,7 @@ export function cardSplitBlockReason(state: GameState, from: string, side: Side,
  *  region (clamped to available own-side figures) and then checked against the split
  *  rules — an impossible selection is refused, not quietly widened to the whole Army
  *  (cardSplitBlockReason). */
-function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel, path?: readonly RegionId[], maxSteps?: number, direct = false): void {
+function moveAllUnits(state: GameState, from: string, to: string, side: Side = 'shadow', sel?: CardMoveSel, path?: readonly RegionId[], maxSteps?: number, direct = false): CardMoveSel {
   // The figures that leave are the ones THIS side has in `from` — the boxed garrison
   // when it is the one under siege there, the open field otherwise. Paths of the Woses
   // marches out of "a Stronghold under siege" by name, and reading the region instead
@@ -210,7 +210,20 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
       if (settlementController(state, r) === side) log(state, null, 'army', `${REGIONS[r]?.name ?? r} is taken in passing`);
     }
   }
-  if (sel) { moveSelectedUnits(state, from, to, side, sel); liftSiegeIfAbandoned(state, from); return; }
+  if (sel) {
+    const { take, chars } = clampCardSel(state, from, side, sel);
+    const goers: CardMoveSel = { units: Object.fromEntries(take.map(([n, mr, me]) => [n, { regular: mr, elite: me }])),
+      leaders: side === 'fp' ? Math.max(0, Math.min(sel.leaders ?? 0, src.leaders)) : 0,
+      nazgul: side === 'shadow' ? Math.max(0, Math.min(sel.nazgul ?? 0, src.nazgul)) : 0, characters: chars };
+    moveSelectedUnits(state, from, to, side, sel); liftSiegeIfAbandoned(state, from);
+    return goers;
+  }
+  // The whole Army goes: record it before it leaves (see cardMovable).
+  const whole: CardMoveSel = {
+    units: Object.fromEntries((Object.keys(src.units) as Nation[]).filter((n) => sideOfNation(n) === side).map((n) => [n, { regular: src.units[n]!.regular, elite: src.units[n]!.elite }])),
+    leaders: side === 'fp' ? src.leaders : 0, nazgul: side === 'shadow' ? src.nazgul : 0,
+    characters: src.characters.filter((c) => characterSide(c) === side && c !== 'saruman'),
+  };
   // Only `side`'s Nations travel — if enemy units ever share the region (an illegal
   // state a card bug once produced), a card-driven move must not kidnap them (report:
   // "Gondor has stolen my Southron Army").
@@ -233,6 +246,7 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   // Lengthens can now start from a besieging Army). The siege ends the moment the
   // besieger leaves (p.51), exactly as it does after a plain Army move.
   liftSiegeIfAbandoned(state, from);
+  return whole;
 }
 /** The split half of moveAllUnits: apply a sanitized subset selection. Mirrors
  *  moveArmySplit's apply rules minus adjacency (card moves may cross several
@@ -1024,22 +1038,69 @@ register('sh-str-07', {
 // every move ending where another Shadow Army stands (not besieged). `applied`
 // excludes a just-moved army (now sitting at a prior move's destination).
 const SHADOW_LENGTHENS_RANGE = 2;
+// ---- Card multi-moves: the same Army cannot move twice (p.27) ----------------------
+// The Shadow Lengthens, The Shadow is Moving and The Ringwraiths Are Abroad move
+// several Armies under one card. The rule is the Army die's: the figures that ARRIVED
+// in an earlier move under this card may not move again, but what already stood in that
+// region may (player reports 242i0j4s115l5w33, 126p4f6l1i036u68). The first two used to
+// bar the whole destination region; The Ringwraiths Are Abroad barred only origins, so
+// one Army could move twice. Each move records what it took (`arrived`); what may still
+// move from a region is what stands there now minus those arrivals.
+
+/** What may still move out of `from` under this card: null when nothing arrived there
+ *  (everyone may), else the figures standing there minus the arrivals. */
+function cardMovable(state: GameState, from: string, side: Side, applied: EventTarget[]): CardMoveSel | null {
+  const arrivals = applied.filter((a) => a.to === from && a.arrived);
+  if (!arrivals.length) return null;
+  const src = figureForce(state, from as RegionId, side);
+  const units: NonNullable<CardMoveSel['units']> = {};
+  for (const n of Object.keys(src.units) as Nation[]) {
+    if (sideOfNation(n) !== side) continue;
+    let reg = src.units[n]!.regular, eli = src.units[n]!.elite;
+    for (const a of arrivals) { reg -= a.arrived!.units?.[n]?.regular ?? 0; eli -= a.arrived!.units?.[n]?.elite ?? 0; }
+    if (reg > 0 || eli > 0) units[n] = { regular: Math.max(0, reg), elite: Math.max(0, eli) };
+  }
+  const sum = (k: 'leaders' | 'nazgul') => arrivals.reduce((t, a) => t + (a.arrived![k] ?? 0), 0);
+  const gone = new Set(arrivals.flatMap((a) => a.arrived!.characters ?? []));
+  return {
+    units,
+    leaders: side === 'fp' ? Math.max(0, src.leaders - sum('leaders')) : 0,
+    nazgul: side === 'shadow' ? Math.max(0, src.nazgul - sum('nazgul')) : 0,
+    characters: src.characters.filter((c) => characterSide(c) === side && !gone.has(c)),
+  };
+}
+const movableUnits = (m: CardMoveSel): number => Object.values(m.units ?? {}).reduce((t, u) => t + (u?.regular ?? 0) + (u?.elite ?? 0), 0);
+
+/** The selection a card move takes, checked against what may still move: a bare click
+ *  takes exactly the movable figures; a split must fit inside them (the shared rules
+ *  say why not). Returns `t.move` untouched when nothing arrived there. */
+function cardMoveSelection(state: GameState, t: EventTarget, side: Side, applied: EventTarget[]): CardMoveSel | undefined {
+  const movable = cardMovable(state, t.from!, side, applied);
+  if (!movable) return t.move;
+  if (!t.move) return movable;
+  const bad = armySelectionReason(state, { kind: 'move', side, force: figureForce(state, t.from! as RegionId, side), movable }, t.move);
+  if (bad) throw new Error(bad);
+  return t.move;
+}
+
 function shadowLengthensMoves(state: GameState, applied: EventTarget[] = []): EventTarget[] {
-  const movedTo = new Set(applied.map((a) => a.to));
   const out: EventTarget[] = [];
   const shadowRegions = Object.keys(state.regions).filter((id) => armySide(state, id) === 'shadow');
   for (const from of shadowRegions) {
-    if (movedTo.has(from)) continue;
+    // Only figures that have not moved under this card may go (see cardMovable).
+    const movable = cardMovable(state, from, 'shadow', applied);
+    if (movable && movableUnits(movable) < 1) continue;
+    const nations = movable ? Object.keys(movable.units ?? {}) as Nation[] : ownNationsIn(state, from as RegionId, 'shadow');
     // Reach, not distance — same clause and same reason as shadowsGatherMoves, and
     // strict for the same reason (the target is a whole-Army move).
-    const reach = cardMoveReach(state, from as RegionId, 'shadow', ownNationsIn(state, from as RegionId, 'shadow'), SHADOW_LENGTHENS_RANGE, false);
+    const reach = cardMoveReach(state, from as RegionId, 'shadow', nations, SHADOW_LENGTHENS_RANGE, false);
     for (const to of shadowRegions) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       // No `besieged` test on the destination — see shadowsGatherMoves for why an
       // open-field Shadow Army in a besieged region is the besieger, not the besieged.
       if (from === to) continue;
       // No stacking pre-filter either - see shadowsGatherMoves.
-      if (reach.has(to as RegionId)) out.push({ from, to, range: SHADOW_LENGTHENS_RANGE });
+      if (reach.has(to as RegionId)) out.push({ from, to, range: SHADOW_LENGTHENS_RANGE, ...(movable ? { movable } : {}) });
     }
   }
   return out;
@@ -1048,21 +1109,24 @@ register('sh-str-08', {
   repeat: 2,
   canPlay: (state) => shadowLengthensMoves(state).length > 0,
   targets: (state, _side, applied) => shadowLengthensMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, SHADOW_LENGTHENS_RANGE); },
+  applyTarget(state, _side, t, applied = []) { t.arrived = moveAllUnits(state, t.from!, t.to!, 'shadow', cardMoveSelection(state, t, 'shadow', applied), t.path, SHADOW_LENGTHENS_RANGE); },
 });
 // The Shadow is Moving (all Shadow Nations At War): move up to four DIFFERENT Shadow
 // Armies one region each (to an adjacent region free for movement, merges allowed).
 function shadowMovingMoves(state: GameState, applied: EventTarget[] = []): EventTarget[] {
-  const movedTo = new Set(applied.map((a) => a.to));
   const out: EventTarget[] = [];
   for (const from of Object.keys(state.regions)) {
-    if (armySide(state, from) !== 'shadow' || movedTo.has(from)) continue;
+    if (armySide(state, from) !== 'shadow') continue;
+    // "Four DIFFERENT Armies": figures that moved under this card may not move again,
+    // but what already stood in their new region may (see cardMovable).
+    const movable = cardMovable(state, from, 'shadow', applied);
+    if (movable && movableUnits(movable) < 1) continue;
     for (const to of REGIONS[from]!.adjacency) {
       if (out.length >= 120) return out; // high cap: list ALL legal card-moves (never hide a legal move)
       // Adjacent-only, so `range: 1` tells the UI there is no route to walk: this card
       // is a plain one-region Army move (player report 6124175c5o6r2f1r). No stacking
       // pre-filter - see shadowsGatherMoves.
-      if (freeForMovement(state, to, 'shadow')) out.push({ from, to, range: 1 });
+      if (freeForMovement(state, to, 'shadow')) out.push({ from, to, range: 1, ...(movable ? { movable } : {}) });
     }
   }
   return out;
@@ -1071,7 +1135,7 @@ register('sh-str-09', {
   repeat: 4,
   canPlay: (state) => allAtWar(state, SHADOW_NATIONS) && shadowMovingMoves(state).length > 0,
   targets: (state, _side, applied) => shadowMovingMoves(state, applied),
-  applyTarget(state, _side, t) { moveAllUnits(state, t.from!, t.to!, 'shadow', t.move, t.path, 1); },
+  applyTarget(state, _side, t, applied = []) { t.arrived = moveAllUnits(state, t.from!, t.to!, 'shadow', cardMoveSelection(state, t, 'shadow', applied), t.path, 1); },
 });
 
 // Dead Men of Dunharrow: move Strider/Aragorn (+ any number of Companions in the same
@@ -1837,15 +1901,22 @@ function nazgulFlyTargets(state: GameState, companion: string, from: RegionId, a
 /** Legal move/attack EventTargets for Nazgûl-led Armies. `allowAttack` gates the
  *  attack option (Ringwraiths: only as the sole action); `exclude` skips Armies that
  *  have already moved this card. */
-function nazgulArmyActions(state: GameState, allowAttack: boolean, exclude: Set<string> = new Set()): EventTarget[] {
+function nazgulArmyActions(state: GameState, allowAttack: boolean, applied: EventTarget[] = []): EventTarget[] {
   const out: EventTarget[] = [];
+  // "Move two Armies": an Army that moved under this card may not move again, but what
+  // already stood in its new region may (cardMovable) — the card used to bar only the
+  // ORIGINS of earlier moves, so one Army could move twice by moving on from where it
+  // landed. The movers must still include a Nazgûl (or the Witch-king) that has not moved.
+  const exclude = new Set<string>();
   for (const from of nazgulArmies(state)) {
-    if (exclude.has(from)) continue;
+    const movable = cardMovable(state, from, 'shadow', applied);
+    if (movable && (movableUnits(movable) < 1 || ((movable.nazgul ?? 0) < 1 && !(movable.characters ?? []).includes('witch-king')))) { exclude.add(from); continue; }
     // Attacks (field or assault) need a unit of a Nation At War, exactly like a
     // die-driven attack (attackTargets) — Nazgûl alone are not an Army.
     const canAttack = allowAttack && hasAtWarUnit(state, from, 'shadow');
     for (const to of REGIONS[from]!.adjacency) {
-      if (canMoveArmy(state, from, to, 'shadow')) out.push({ from, to, mode: 'move' });
+      const movable = cardMovable(state, from, 'shadow', applied);
+      if (canMoveArmy(state, from, to, 'shadow')) out.push({ from, to, mode: 'move', ...(movable ? { movable } : {}) });
       else if (canAttack && armySide(state, to) === 'fp' && !shadowBarredFromRegion(state, to)) out.push({ from, to, mode: 'attack' });
     }
     // ASSAULT: this Nazgûl-led Army occupies a besieged Stronghold's open field and
@@ -1863,8 +1934,26 @@ function nazgulArmyActions(state: GameState, allowAttack: boolean, exclude: Set<
   }
   return out;
 }
-function applyNazgulArmyAction(state: GameState, t: EventTarget): void {
-  if (t.mode === 'attack') { startBattle(state, 'shadow', t.from!, t.to!); log(state, null, 'event', `Nazgûl-led attack ${t.from} → ${t.to}`); }
+/** A card attack's rearguard, checked like any attack's (p.28) — the attack picker asks
+ *  the same shared rules before the click (player reports 1o6s51234u6u4m30,
+ *  1w2k3i631m5c5a4z: card attacks had no picker and always sent the whole Army).
+ *  `mustFight` names what the card says the attacking Army contains, which therefore
+ *  may not be left behind. */
+function cardAttackRearguard(state: GameState, t: EventTarget, side: Side, mustFight?: { nazgulOrWitchKing?: boolean; character?: string }): MoveSelection | undefined {
+  const rg = t.rearguard as MoveSelection | undefined;
+  if (!rg) return undefined;
+  // The same shared attack rules the picker asks, with the card's own "who fights".
+  const bad = attackError(state, t.from! as RegionId, side, rg, false, mustFight);
+  if (bad) throw new Error(bad);
+  return rg;
+}
+
+function applyNazgulArmyAction(state: GameState, t: EventTarget, applied: EventTarget[] = [], mustFight = cardAttackFighters('sh-char-23')): void {
+  if (t.mode === 'attack') {
+    const rearguard = cardAttackRearguard(state, t, 'shadow', mustFight);
+    startBattle(state, 'shadow', t.from!, t.to!, { rearguard });
+    log(state, null, 'event', `Nazgûl-led attack ${t.from} → ${t.to}`);
+  }
   else {
     // A split of a Nazgûl-led Army must keep the card's qualifying figure with the
     // movers: a Nazgûl if the region holds one, otherwise the Witch-king, who is
@@ -1872,12 +1961,14 @@ function applyNazgulArmyAction(state: GameState, t: EventTarget): void {
     // Nazgûl unconditionally asked for a figure that was not there, so a Witch-king-led
     // Army could split and march off leaving him behind.
     const src = state.regions[t.from!]!;
-    const sel = !t.move ? undefined
-      : src.nazgul > 0 ? { ...t.move, nazgul: Math.max(1, t.move.nazgul ?? 0) }
-      : src.characters.includes('witch-king') && !(t.move.characters ?? []).includes('witch-king')
-        ? { ...t.move, characters: [...(t.move.characters ?? []), 'witch-king'] }
-        : { ...t.move };
-    moveAllUnits(state, t.from!, t.to!, 'shadow', sel, t.path);
+    // Only figures that have not moved under this card (cardMoveSelection) …
+    const chosen = cardMoveSelection(state, t, 'shadow', applied);
+    const sel = !chosen ? undefined
+      : src.nazgul > 0 ? { ...chosen, nazgul: Math.max(1, chosen.nazgul ?? 0) }
+      : src.characters.includes('witch-king') && !(chosen.characters ?? []).includes('witch-king')
+        ? { ...chosen, characters: [...(chosen.characters ?? []), 'witch-king'] }
+        : { ...chosen };
+    t.arrived = moveAllUnits(state, t.from!, t.to!, 'shadow', sel, t.path);
   }
 }
 
@@ -1903,13 +1994,12 @@ register('sh-char-23', { // The Ringwraiths Are Abroad
       if (wk && !applied.some((a) => a.companion === 'witch-king')) out.push({ companion: 'witch-king', from: wk });
     }
     // Phase 2: move a Nazgûl-led Army (≤2, different armies) or attack with one (first action only).
-    const movedFrom = new Set(armyActs.map((a) => a.from!));
-    out.push(...nazgulArmyActions(state, armyActs.length === 0, movedFrom));
+    out.push(...nazgulArmyActions(state, armyActs.length === 0, applied));
     return out;
   },
-  applyTarget(state, _side, t) {
+  applyTarget(state, _side, t, applied = []) {
     if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region, t.count); return; }
-    applyNazgulArmyAction(state, t);
+    applyNazgulArmyAction(state, t, applied);
   },
 });
 
@@ -1964,7 +2054,7 @@ register('sh-char-24', { // The Black Captain Commands
       return;
     }
     if (isNazgulFigure(t.companion)) { if (t.region && t.from) moveCharacter(state, 'shadow', t.companion!, t.from, t.region, t.count); return; }
-    applyNazgulArmyAction(state, t);
+    applyNazgulArmyAction(state, t, [], cardAttackFighters('sh-char-24')); // "the Army containing the Witch-king"
   },
 });
 // The Breaking of the Fellowship — the FREE PEOPLES player chooses which N Companions
@@ -2030,7 +2120,7 @@ const inPlay = (state: GameState, id: string) => state.characters.entered.includ
 register('sh-char-20', { // Grond, Hammer of the Underworld — Witch-king with the besieging Army
   canPlay: (state) => siegeAssaultTargets(state, (from) => state.regions[from]!.characters.includes('witch-king')).length > 0,
   targets: (state) => siegeAssaultTargets(state, (from) => state.regions[from]!.characters.includes('witch-king')),
-  applyTarget(state, _side, t) { startBattle(state, 'shadow', t.from!, t.to!, { siegeRounds: 3, fpCardLock: true }); log(state, null, 'event', `Grond assaults ${t.to} (3-round siege)`); },
+  applyTarget(state, _side, t) { startBattle(state, 'shadow', t.from!, t.to!, { siegeRounds: 3, fpCardLock: true, rearguard: cardAttackRearguard(state, t, 'shadow', cardAttackFighters('sh-char-20')) }); log(state, null, 'event', `Grond assaults ${t.to} (3-round siege)`); },
 });
 const hasIsengardUnit = (state: GameState, from: string): boolean => {
   const u = state.regions[from]!.units.isengard;
@@ -2039,7 +2129,7 @@ const hasIsengardUnit = (state: GameState, from: string): boolean => {
 register('sh-str-02', { // The Fighting Uruk-hai — Saruman in play + an Isengard unit besieging
   canPlay: (state) => inPlay(state, 'saruman') && siegeAssaultTargets(state, (from) => hasIsengardUnit(state, from)).length > 0,
   targets: (state) => siegeAssaultTargets(state, (from) => hasIsengardUnit(state, from)),
-  applyTarget(state, _side, t) { startBattle(state, 'shadow', t.from!, t.to!, { siegeRounds: 3, fpCardLock: true }); log(state, null, 'event', `The Fighting Uruk-hai assault ${t.to} (3-round siege)`); },
+  applyTarget(state, _side, t) { startBattle(state, 'shadow', t.from!, t.to!, { siegeRounds: 3, fpCardLock: true, rearguard: cardAttackRearguard(state, t, 'shadow') }); log(state, null, 'event', `The Fighting Uruk-hai assault ${t.to} (3-round siege)`); },
 });
 register('sh-str-03', { // Denethor's Folly — eliminate an FP Leader in Minas Tirith; bar FP Combat cards there
   onTable: true,
@@ -2555,7 +2645,7 @@ register('fp-str-10', {
     const garrison = box ? forceUnitCount(box) : 0;
     // No card-level line: the battle's own opening line says the same (player
     // report 3c5w2n493z1y3t4b).
-    startBattle(state, 'fp', t.from!, t.to!, { defenderDicePenalty: garrison });
+    startBattle(state, 'fp', t.from!, t.to!, { defenderDicePenalty: garrison, rearguard: cardAttackRearguard(state, t, 'fp') });
   },
 });
 

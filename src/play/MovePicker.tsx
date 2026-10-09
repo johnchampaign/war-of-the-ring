@@ -14,13 +14,13 @@ import type { GameState, Nation, Side } from '../engine/types';
 import type { MoveSel, WotrAction } from '../adapter/wotrAction';
 import { sideOfNation, nationName } from '../engine/data';
 import { sortieForce, advanceRules } from '../engine/combat';
-import { armyMoveOffer, armySelectionReason, type ArmyMoveRules, type Force } from '../engine/armies';
+import { armyMoveOffer, armySelectionReason, cardAttackFighters, type ArmyMoveRules, type Force } from '../engine/armies';
 import { charName } from './charInfo';
 import mapData from '../../assets/map.json';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 
-export type MovePickerKind = 'moveArmy' | 'armyMove2' | 'attack' | 'eventMove' | 'holdBack' | 'advance' | 'besiegerAdvance' | 'relieveAdvance';
+export type MovePickerKind = 'moveArmy' | 'armyMove2' | 'attack' | 'eventAttack' | 'eventMove' | 'holdBack' | 'advance' | 'besiegerAdvance' | 'relieveAdvance';
 
 // The engine's reasons, said shorter where the picker has less room. Anything not
 // listed is shown as the engine words it.
@@ -42,7 +42,8 @@ export function MovePicker({ from, to, kind, view, you, base, charOnly, onConfir
   charOnly?: boolean;
   onConfirm: (a: WotrAction) => void; onCancel: () => void;
 }) {
-  const attackMode = kind === 'attack';
+  // A card's attack is an attack like any other (player report 1o6s51234u6u4m30).
+  const attackMode = kind === 'attack' || kind === 'eventAttack';
   const holdBackMode = kind === 'holdBack';
   const advanceMode = kind === 'advance' || kind === 'besiegerAdvance' || kind === 'relieveAdvance';
   // A card ATTACK that lands first (Corsairs of Umbar): the picker chooses who lands and
@@ -70,7 +71,8 @@ export function MovePicker({ from, to, kind, view, you, base, charOnly, onConfir
       const rg = kind === 'besiegerAdvance' ? pc?.rearguard ?? null : data.rearguard ?? null;
       return advanceRules(view, you, from, to, rg);
     })()
-    : attackMode ? { kind: 'attack', side: you, force: region, viaCharacterDie: !!charOnly }
+    : attackMode ? { kind: 'attack', side: you, force: region, viaCharacterDie: kind === 'attack' && !!charOnly,
+      mustFight: kind === 'eventAttack' && base?.kind === 'eventTarget' ? cardAttackFighters(base.card) : undefined }
     : kind === 'armyMove2' ? { kind: 'move', side: you, force: region, to, movable: base?.kind === 'armyMove2' ? base.move : undefined }
     : kind === 'eventMove' ? {
       kind: 'move', side: you, force: region, to,
@@ -157,11 +159,12 @@ export function MovePicker({ from, to, kind, view, you, base, charOnly, onConfir
       : kind === 'relieveAdvance' ? { kind: 'relieveAdvance', advance: true, move: split ? buildSel() : undefined }
       : kind === 'holdBack' ? { kind: 'advanceHoldBack', back: split ? buildStayers() : undefined }
       : kind === 'attack' ? { kind: 'attack', from, to, rearguard: split ? buildStayers() : undefined }
+      : kind === 'eventAttack' ? { ...(base as Extract<WotrAction, { kind: 'eventTarget' }>), rearguard: split ? buildStayers() : undefined }
       : kind === 'eventMove' ? { ...(base as Extract<WotrAction, { kind: 'eventTarget' }>), move: split ? buildSel() : undefined }
         : kind === 'armyMove2' ? { kind: 'armyMove2', from, to, move: split ? buildSel() : undefined }
           : { kind: 'moveArmy', from, to, move: split ? buildSel() : undefined };
 
-  const verb = sortieBox ? 'Sortie' : attackMode ? 'Attack' : landingAttack ? 'Land and attack' : holdBackMode ? 'Keep forward'
+  const verb = sortieBox ? 'Sortie' : attackMode && from === to ? 'Assault' : attackMode ? 'Attack' : landingAttack ? 'Land and attack' : holdBackMode ? 'Keep forward'
     : kind === 'besiegerAdvance' ? 'Advance and lay siege' : advanceMode ? 'Advance' : 'Move';
   const intro = landingAttack ? `Choose what lands in ${rName(to)} and attacks; the rest stays in ${rName(from)} and sits out the battle.`
     : attackMode ? 'Choose what attacks; the rest stays behind as the rearguard (not in the battle).'
