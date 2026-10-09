@@ -1263,7 +1263,8 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const owner: Side = state.pendingChoice!.owner;
       if (adv.kind === 'advanceChoice' && adv.advance && garrisonWorthy(state, owner, d.from)) {
         const r = state.regions[d.from]!;
-        const nations = (Object.keys(r.units) as Nation[]).filter((n) => (r.units[n]!.regular + r.units[n]!.elite) > 0);
+        // Own side only: the advance moves the winner's figures, never anyone else's.
+        const nations = (Object.keys(r.units) as Nation[]).filter((n) => sideOfNation(n) === owner && (r.units[n]!.regular + r.units[n]!.elite) > 0);
         const total = nations.reduce((s2, n) => s2 + r.units[n]!.regular + r.units[n]!.elite, 0);
         if (total >= 2) {
           const garN = nations.find((n) => r.units[n]!.regular > 0) ?? nations[0]!;

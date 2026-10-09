@@ -160,7 +160,13 @@ function moveAllUnits(state: GameState, from: string, to: string, side: Side = '
   // and made the UI demand a walkable path to a destination the card reaches by
   // fiat (player report 1u1f45154m472g67). The restrictions that DO still bind such a
   // move are the ones at its two ends, and each card's own enumerator states them.
-  const movingNations = (Object.keys(sel?.units ?? src.units) as Nation[]).filter((n) => sideOfNation(n) === side);
+  // Only Nations with units actually travelling: a units map can carry a zero entry
+  // (a Nation whose last unit fell here), and counting it barred routes for a Nation
+  // that is not even moving — the offer (ownNationsIn) skips it, so the move was
+  // offered and then refused (soak: Through a Day and a Night, Dale → Southern
+  // Mirkwood, with an empty North entry in Dale).
+  const travelling = (sel?.units ?? src.units) as Partial<Record<Nation, { regular?: number; elite?: number }>>;
+  const movingNations = (Object.keys(travelling) as Nation[]).filter((n) => sideOfNation(n) === side && ((travelling[n]?.regular ?? 0) + (travelling[n]?.elite ?? 0)) > 0);
   const route = direct ? [to as RegionId]
     : path?.length ? [...path]
     : quietCardPath(state, from as RegionId, to as RegionId, side, movingNations, regionDist(from, to) + 2);

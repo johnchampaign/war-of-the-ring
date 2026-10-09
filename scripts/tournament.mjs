@@ -113,7 +113,7 @@ for (let game = 0; game < GAMES; game++) {
     const checkConserve = MOVE_KINDS.has(action.kind) && !state.pendingCombat;
     const before = checkConserve ? armyUnitTotal(state) : 0;
     const res = wotrAdapter.tryApplyAction(state, action, actor);
-    if (!res.ok) { illegals++; console.error(`  illegal: ${JSON.stringify(action)} -> ${res.reason}`); break; }
+    if (!res.ok) { illegals++; console.error(`  illegal: ${JSON.stringify(action)} -> ${res.reason} [game ${game} seed ${seed}]`); break; }
     state = res.state;
     if (checkConserve && !state.pendingCombat) {
       const after = armyUnitTotal(state);

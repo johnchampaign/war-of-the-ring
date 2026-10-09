@@ -1089,7 +1089,7 @@ export function resolvePreCombatRetreat(state: GameState, region: RegionId): voi
 }
 
 /** Move the whole army at `from` into `to` (defender gone), capturing. */
-function advanceInto(state: GameState, attacker: Side, from: RegionId, to: RegionId): void {
+function advanceInto(state: GameState, attacker: Side, from: RegionId, to: RegionId, lift = true): void {
   const src = state.regions[from]!, dst = state.regions[to]!;
   // Only the attacker's Nations advance (defensive side filter — see moveStack).
   for (const n of Object.keys(src.units) as Nation[]) {
@@ -1108,7 +1108,8 @@ function advanceInto(state: GameState, attacker: Side, from: RegionId, to: Regio
   // If the advancing army was besieging `from`, vacating its field lifts that siege
   // (the boxed garrison returns to the field) — e.g. a besieger that wins a field
   // battle in an adjacent region and advances out (player report).
-  liftSiegeIfAbandoned(state, from);
+  // `lift: false` when a rearguard has yet to rejoin `from` — the caller checks after.
+  if (lift) liftSiegeIfAbandoned(state, from);
 }
 
 /** Move the boxed garrison back into the region's open field (siege lifted). */
@@ -1333,7 +1334,7 @@ export function advanceRules(state: GameState, owner: Side, from: RegionId, to: 
  *  trimmed), logged before what they cause, then the usual consequences of entering —
  *  a capture (unless the garrison still holds the Settlement), a Companion rousing a
  *  Nation, and lifting a siege the Army leaves behind. */
-function advanceSelected(state: GameState, owner: Side, from: RegionId, to: RegionId, sel: MoveSelection, rearguard: PendingCombat['rearguard'] | null, opts: { capture: boolean; verb: string }): void {
+function advanceSelected(state: GameState, owner: Side, from: RegionId, to: RegionId, sel: MoveSelection, rearguard: PendingCombat['rearguard'] | null, opts: { capture: boolean; verb: string; lift?: boolean }): void {
   const bad = armySelectionReason(state, advanceRules(state, owner, from, to, rearguard), sel);
   if (bad) throw new Error(bad);
   let moved = 0;
@@ -1343,6 +1344,17 @@ function advanceSelected(state: GameState, owner: Side, from: RegionId, to: Regi
   moveSelectedBack(state, from, to, owner, goers);
   if (opts.capture) captureIfEnemySettlement(state, to, owner);
   activateOnCompanionLand(state, owner, (sel.characters ?? []).filter((c) => c !== 'saruman'), to);
+  if (opts.lift !== false) liftSiegeIfAbandoned(state, from);
+}
+
+/** After an advance AND its rearguard's return: is the siege `from` held still manned?
+ *  The check has to wait for the rearguard. A besieging Army that attacked out and
+ *  advanced with its fighters still holds the siege with the figures it left behind;
+ *  asked before they rejoined, the field looked empty, the siege was lifted, and the
+ *  rearguard then landed beside the freed garrison (soak: Dwarves beside a Sauron
+ *  Elite in Erebor). */
+function settleAdvanceOrigin(state: GameState, from: RegionId, rearguard: PendingCombat['rearguard'] | null | undefined): void {
+  if (rearguard) restoreRearguard(state, from, rearguard);
   liftSiegeIfAbandoned(state, from);
 }
 
@@ -1357,15 +1369,15 @@ export function resolveAdvanceChoice(state: GameState, sel: { advance: boolean; 
     // A partial advance is an Army move (see advanceRules): an illegal selection is
     // refused with the rule's reason. It used to be trimmed silently, an empty one
     // became the whole Army, and a Leader left alone was dragged along unasked.
-    advanceSelected(state, owner, d.from, d.to, sel.move, d.rearguard, { capture: true, verb: 'advance' });
+    advanceSelected(state, owner, d.from, d.to, sel.move, d.rearguard, { capture: true, verb: 'advance', lift: false });
     advancedTo = d.to;
   } else {
     log(state, null, 'combat', `${sideDoes(owner, 'advance')} into ${REGIONS[d.to]!.name ?? d.to}`); // before the capture it causes
-    advanceInto(state, owner, d.from, d.to);                       // whole force; advanceInto captures
+    advanceInto(state, owner, d.from, d.to, false);                // whole force; advanceInto captures
     advancedTo = d.to;
   }
   // Only now — restoring earlier would let the advance sweep the rearguard along (p.28).
-  if (d.rearguard) restoreRearguard(state, d.from, d.rearguard);
+  settleAdvanceOrigin(state, d.from, d.rearguard);
   return advancedTo;
 }
 
@@ -1455,10 +1467,10 @@ export function resolveRelieveAdvance(state: GameState, advance: boolean, move?:
   log(state, null, 'combat', advance
     ? `${sideDoes(owner, 'advance')} into ${REGIONS[d.to]!.name ?? d.to}, relieving the siege`
     : `${sideDoes(owner, 'hold')} at ${REGIONS[d.from]!.name ?? d.from} rather than advancing into ${REGIONS[d.to]!.name ?? d.to}`);
-  if (advance && move) advanceSelected(state, owner, d.from, d.to, move, d.rearguard, { capture: true, verb: 'advance' });
-  else if (advance) advanceInto(state, owner, d.from, d.to); // after its log line, like the field advance
+  if (advance && move) advanceSelected(state, owner, d.from, d.to, move, d.rearguard, { capture: true, verb: 'advance', lift: false });
+  else if (advance) advanceInto(state, owner, d.from, d.to, false); // after its log line, like the field advance
   // Only now — the rearguard must not be swept along by the advance (p.28).
-  if (d.rearguard) restoreRearguard(state, d.from, d.rearguard);
+  settleAdvanceOrigin(state, d.from, d.rearguard);
   return advance ? d.to : null;
 }
 
@@ -2062,12 +2074,12 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean, move?
     capSiegeBox(state, pc.to); // NOW it comes under siege — garrison capped at 5 (p.31)
     // The besieger occupies the open field (NO capture — the boxed garrison holds the
     // Settlement). "All or part" of the Army, like every advance (report 405e1k232p3h3j4m).
-    if (move) advanceSelected(state, pc.attacker, pc.from, pc.to, move, pc.rearguard ?? null, { capture: false, verb: 'advance' });
+    if (move) advanceSelected(state, pc.attacker, pc.from, pc.to, move, pc.rearguard ?? null, { capture: false, verb: 'advance', lift: false });
     else moveStack(state, pc.from, pc.to, pc.attacker, false);
     r.besieged = true;
     log(state, null, 'combat', `${sideDoes(pc.defender, 'withdraw')} into the siege at ${pc.to}; ${sideDoes(pc.attacker, 'besiege')}`);
     // The rearguard rejoins `from`; record the siege as established; resume the turn.
-    if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
+    settleAdvanceOrigin(state, pc.from, pc.rearguard);
     // `pc.round` is 0-based and counts the rounds ALREADY fought, so it is exactly the
     // round count for a mid-battle withdrawal (0 when they fall back before fighting).
     // Both sides can have real losses by then, so neither total is hard-coded any more.
