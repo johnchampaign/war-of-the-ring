@@ -146,5 +146,24 @@ console.log('\n=== the map\'s ★ and the activation are one rule ===');
   check('a captured Stronghold gets no star', !companionLandingActivates(cap, group, 'helms-deep'));
 }
 
+console.log('\n=== separating inside a besieged Free Peoples Stronghold joins the garrison ===');
+{
+  // Player report 533j340006342o6p: the Fellowship in a besieged Moria — the
+  // Companions who separate there join the defenders; they may not walk out (p.24).
+  let s = startGame(createGame({ seed: 12 }));
+  s.phase = 'actionResolution'; s.currentPlayer = 'fp'; s.pendingChoice = null;
+  s.dice.fp = ['character']; s.dice.shadow = ['army'];
+  const m = s.regions['moria'];
+  m.control = 'fp'; m.units = { sauron: { regular: 4, elite: 0 } }; m.besieged = true;
+  m.siegeBox = { units: { dwarves: { regular: 2, elite: 0 } }, leaders: 0, nazgul: 0, characters: [] };
+  s.fellowship.location = 'moria'; s.fellowship.progress = 2;
+  const sep = wotrAdapter.legalActions(s, 'fp').find((a) => a.kind === 'separateCompanion' && a.companion === 'strider');
+  s = wotrAdapter.applyAction(s, sep, 'fp');
+  const dests = wotrAdapter.legalActions(s, 'fp').filter((a) => a.kind === 'separateMove' && a.target).map((a) => a.target);
+  check('Moria is the only destination', dests.length === 1 && dests[0] === 'moria', dests.join(','));
+  s = wotrAdapter.applyAction(s, { kind: 'separateMove', target: 'moria' }, 'fp');
+  check('Strider stands with the garrison in the siege box', s.regions.moria.siegeBox?.characters.includes('strider') && !s.regions.moria.characters.includes('strider'));
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');
 process.exit(failures ? 1 : 0);

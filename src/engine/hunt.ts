@@ -24,6 +24,12 @@ import { log, shedCorruption, sufferCorruption } from './log';
 export function beginReveal(state: GameState): void {
   const fs = state.fellowship;
   if (fs.hidden && fs.progress > 0 && fs.mordor === null) {
+    // A Hobbit taken alive by this Hunt is placed FIRST, while the Fellowship figure
+    // still stands where he left it — his walk is measured from there, and moving the
+    // figure before placing him showed his origin somewhere the Fellowship no longer
+    // was (player reports 112a3s6j4e4t0k09, 1c514m61131f663v). `advance` raises the
+    // placement, then this owed reveal move.
+    if (state.flags.takenAlive) { state.flags.revealMoveOwed = true; return; }
     state.pendingChoice = { owner: 'fp', kind: 'revealMove' };
     return;
   }

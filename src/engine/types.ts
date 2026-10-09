@@ -389,6 +389,9 @@ export interface GameState {
      *  and a single slot let the second overwrite the first, who then vanished from
      *  the game (player report 1huuhkxza7mpp4r5). Drained one at a time by `advance`. */
     takenAliveMore?: Array<{ companion: CharacterId; from: RegionId; range: number }>;
+    /** A Reveal's move waiting for the Hobbit(s) taken alive in the same Hunt to be
+     *  placed first (beginReveal); `advance` raises the `revealMove` choice next. */
+    revealMoveOwed?: boolean;
     /** Worn with Sorrow and Toil discards still owed for this Hunt's Companion
      *  casualties. The card lets the SHADOW choose "from his hand (choosing it randomly)
      *  or from the table" (report 3r2z092k3w6c475c), so whenever a tabled Character

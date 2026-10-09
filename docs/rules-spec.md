@@ -1232,8 +1232,12 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   casualty. Where he lands is the FP's choice, so it is the ordinary `separateMove`
   prompt — origin and range (**Progress + Level**) are frozen at the instant of the
   casualty, because a Reveal later in the same Hunt resets Progress to 0, and the
-  prompt is raised by `advance()` once the Hunt (and any Reveal move) has finished
-  resolving. The prompt carries `solo`, so no other Companion may leave with him.
+  prompt is raised by `advance()` once the tile's damage is taken — **before** the
+  Reveal moves the Fellowship figure (`flags.revealMoveOwed` holds the reveal move
+  back), so the Hobbit visibly leaves from where the Fellowship stands (player reports
+  112a3s6j4e4t0k09, 1c514m61131f663v). The card says "immediately"; the remaining
+  damage choices of the same tile still come first, so the prompts never interleave.
+  The prompt carries `solo`, so no other Companion may leave with him.
   On the Mordor Track the ability is off and he is eliminated as normal.
   *(Player report 506t, 2026-08-25: "I sacrificed a random and got Pippin (-1)…
   he should have been placed on the board as tho separated… Instead he was

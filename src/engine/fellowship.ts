@@ -400,6 +400,15 @@ export function separationDestinations(state: GameState, from: RegionId, maxMove
   // reachable in itself, never a corridor.
   const blocksFurther = (r: RegionId): boolean =>
     REGIONS[r]!.settlement === 'Stronghold' && settlementController(state, r) === 'shadow' && !state.regions[r]!.besieged;
+  // …and the LEAVE half binds too: with the Fellowship in a region holding a Free
+  // Peoples Stronghold the Shadow is besieging, the Companions who separate there join
+  // the besieged defenders — they may not walk out past the besiegers (player report
+  // 533j340006342o6p: "the Ring-bearers are 'in the Stronghold' with the other
+  // figures"). The search used to expand out of `from` all the same, so this comment's
+  // promise was only half kept. They land in the siege box (placeSeparatedGroup reads
+  // figureForce).
+  const sealed = REGIONS[from]!.settlement === 'Stronghold' && !!state.regions[from]!.besieged && settlementController(state, from) === 'fp';
+  if (sealed) return [from];
   const out: RegionId[] = landable(from) ? [from] : [];
   const seen = new Set<RegionId>([from]);
   let layer: RegionId[] = [from], d = 0;

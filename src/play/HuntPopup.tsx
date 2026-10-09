@@ -37,7 +37,8 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
   // A drawn tile revealed the Fellowship — call it out loudly. The reveal is shown
   // either once it's flipped, or while the reveal-and-move prompt is still pending
   // (a catch with Progress defers the flip until the figure is placed).
-  const revealed = fresh.some((d) => d.reveal) && (!view.fellowship.hidden || view.pendingChoice?.kind === 'revealMove');
+  // …or while it waits for a Hobbit taken alive in the same Hunt to be placed first.
+  const revealed = fresh.some((d) => d.reveal) && (!view.fellowship.hidden || view.pendingChoice?.kind === 'revealMove' || !!view.flags?.revealMoveOwed);
   // An Event card that draws tiles without a Hunt (Challenge of the King, The Breaking
   // of the Fellowship) gets the same tiles-on-the-table popup, with the card's own
   // result in place of the Corruption track.

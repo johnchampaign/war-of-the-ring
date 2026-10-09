@@ -150,9 +150,10 @@ export function advance(state: GameState): void {
     }
     // Meriadoc / Peregrin, "Take Them Alive!": the Hobbit taken as a Hunt casualty
     // goes back on the board "as if he was just separated". Raised HERE, once the
-    // Hunt (and any Reveal move it triggered) has finished resolving, so the
-    // placement never interleaves with the Hunt's own prompts. Origin and range were
-    // frozen at the moment of the casualty — a Reveal in the same Hunt resets
+    // tile's damage has been taken, so the placement never interleaves with the
+    // Hunt's damage prompts — but BEFORE a Reveal moves the Fellowship figure (see
+    // beginReveal / revealMoveOwed below), so he visibly leaves from where it stands.
+    // Origin and range were frozen at the moment of the casualty — the Reveal resets
     // Progress, and the Hobbit's walk is measured from where he actually left.
     if (state.flags.takenAlive) {
       const ta = state.flags.takenAlive;
@@ -164,6 +165,12 @@ export function advance(state: GameState): void {
       state.pendingChoice = { owner: 'fp', kind: 'separateMove',
         data: { companions: [ta.companion], from: ta.from, range: ta.range, solo: true } };
       return;
+    }
+    // The Reveal's move, held back until the Hobbits above were placed.
+    if (state.flags.revealMoveOwed) {
+      delete state.flags.revealMoveOwed;
+      const fs = state.fellowship;
+      if (fs.hidden && fs.progress > 0 && fs.mordor === null) { state.pendingChoice = { owner: 'fp', kind: 'revealMove' }; return; }
     }
     if (state.pendingCombat) {                    // drive the battle sub-machine
       combatStep(state);
