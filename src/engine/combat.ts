@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
@@ -684,27 +684,28 @@ export function attackError(state: GameState, from: RegionId, side: Side, explic
   if (!sortieBox && armySide(state, from) !== side) return 'No attacking army';
   const r = sortieBox ?? state.regions[from]!;
   const rg = fullRearguard(state, from, side, explicit, sortieBox ?? undefined);
-  let armyUnits = 0, rgUnits = 0;
-  for (const n of Object.keys(r.units) as Nation[]) armyUnits += r.units[n]!.regular + r.units[n]!.elite;
+  // The rearguard is what STAYS; the shared rules judge what GOES — the rest.
+  const units: NonNullable<MoveSelection['units']> = {};
+  for (const n of Object.keys(r.units) as Nation[]) {
+    if (sideOfNation(n) !== side) continue;
+    const have = r.units[n]!, stay = rg.units[n] ?? { regular: 0, elite: 0 };
+    units[n] = { regular: have.regular - stay.regular, elite: have.elite - stay.elite };
+  }
   for (const [n, u] of Object.entries(rg.units)) {
     const have = r.units[n as Nation] ?? { regular: 0, elite: 0 };
     if (u.regular < 0 || u.elite < 0 || u.regular > have.regular || u.elite > have.elite) return 'Rearguard exceeds the army';
-    rgUnits += u.regular + u.elite;
   }
   if (rg.leaders > r.leaders || rg.nazgul > r.nazgul) return 'Rearguard exceeds the army';
   for (const c of rg.characters) if (!r.characters.includes(c)) return 'Rearguard figure not present';
-  if (armyUnits - rgUnits < 1) return 'The attacking army must keep at least one unit';
-  const rgHasFigure = rgUnits > 0 || rg.leaders > 0 || rg.nazgul > 0 || rg.characters.length > 0;
-  if (rgHasFigure && rgUnits < 1) return 'A rearguard must contain at least one unit';
-  // Only the attacker's OWN Leaders/Characters satisfy a Character-die attack — never
-  // an enemy Character sharing the region. Saruman DOES count here (unlike a move):
-  // the attacking units never leave their region (p.28), so his "cannot leave Orthanc"
-  // is no obstacle — and while he is in play each Isengard Elite is a Leader in its
-  // own right ("Servants of the White Hand").
-  if (viaCharacterDie && charDieLeaders(state, r, side, true) - charDieLeaders(state, rg, side, true) < 1) {
-    return 'A Character-die attack must include a Leader or Character';
-  }
-  return null;
+  const goers: MoveSelection = {
+    units,
+    leaders: side === 'fp' ? r.leaders - rg.leaders : 0,
+    nazgul: side === 'shadow' ? r.nazgul - rg.nazgul : 0,
+    // Saruman DOES count here (unlike a move): the attacking units never leave their
+    // region (p.28), so his "cannot leave Orthanc" is no obstacle.
+    characters: r.characters.filter((c) => characterSide(c) === side && !rg.characters.includes(c)),
+  };
+  return armySelectionReason(state, { kind: 'attack', side, force: r, viaCharacterDie }, goers);
 }
 
 /** Remove the rearguard figures from `from`, returning the stash (held in the

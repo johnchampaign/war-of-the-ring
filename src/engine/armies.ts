@@ -2,7 +2,7 @@
 // capture (rules-spec §1, §6). Combat is in combat.ts.
 import type { GameState, Nation, RegionId, Side, ArmyUnits } from './types';
 import { FP_NATIONS } from './types';
-import { REGIONS, sideOfNation, characterDef, characterSide, nationName, nationSubject, nationList, nationsArePlural, theNation, COMPANIONS } from './data';
+import { REGIONS, sideOfNation, characterDef, characterSide, nationName, nationSubject, nationList, nationsArePlural, theNation, COMPANIONS, UPGRADES } from './data';
 import { isAtWar, onSettlementCaptured, activateNation } from './politics';
 import { shadowBarredFromRegion, shadowBarringCard } from './persistent';
 import { log, sideDoes, sideName } from './log';
@@ -591,48 +591,161 @@ export function activateOnCompanionLand(state: GameState, side: Side, chars: str
   }
 }
 
+// ===== THE Army-movement composition rules — one implementation =====================
+//
+// Who may go, and whether a given selection of figures may go, is the same question
+// for every kind of Army move: an Action-die move and its second move, an Event card's
+// move, an attack and a card's attack, and the advance after a battle. Each of those
+// used to restate the rules in its own words, and every fix to one left the others
+// behind (player report 4f0z2o2y1t2d3y6v: "they need to be kept perfectly in sync, or
+// more appropriately, there needs to only be one common implementation"). The engine
+// validators and the unit picker both read THESE two functions now:
+//   armyMoveOffer       — what each figure may do (the picker greys out the rest);
+//   armySelectionReason — whether this selection of goers is legal, and why not.
+// What differs by kind is stated here, next to the rule, rather than in each caller.
+
+/** What a move is allowed to take. */
+export interface ArmyMoveRules {
+  /** 'move' covers die moves, second moves, card moves and advances; 'attack' covers
+   *  every attack (die, card, sortie). They differ in two rules: who is left behind
+   *  (p.27 vs p.28) and whether a Nation not At War may take part at all. */
+  kind: 'move' | 'attack';
+  side: Side;
+  /** The figures the movers come from: a region, or a siege box. */
+  force: Force;
+  /** The destination region, for the border rule (p.27): a Nation not At War may not
+   *  enter another Nation's region. Omitted when the caller checks the route itself. */
+  to?: RegionId;
+  /** The Action is a Character die's: the goers must include a Leader or Character. */
+  viaCharacterDie?: boolean;
+  /** Only these figures may go — the rest already moved this Action (an Army die's
+   *  second move, or a card that moves several Armies). Omitted = everyone may. */
+  movable?: MoveSelection;
+  /** Card limits: only this Nation's units move (Rage of the Dunlendings)… */
+  onlyNation?: Nation;
+  /** …at most this many units… */
+  maxUnits?: number;
+  /** …and the goers must include a Companion (Through a Day and a Night). */
+  escortCompanion?: string;
+}
+
+/** Per-figure answer: how many may go, and if none may, why. */
+export interface ArmyMoveOffer {
+  nations: Array<{ nation: Nation; regular: number; elite: number; reason: string | null }>;
+  leaders: number;
+  nazgul: number;
+  characters: Array<{ id: string; reason: string | null }>;
+}
+
+const notAtWarBorder = (n: Nation): string => {
+  const pl = nationsArePlural([n]);
+  return `${nationSubject(n)} ${pl ? 'are not At War — their' : 'is not At War — its'} units cannot enter another Nation's borders. Advance ${theNation(n)} to War first (or leave ${pl ? 'their' : 'its'} units behind).`;
+};
+const notAtWarAttack = (n: Nation): string => {
+  const pl = nationsArePlural([n]);
+  return `${nationSubject(n)} ${pl ? 'are' : 'is'} not At War, and a Nation not At War never attacks (p.28) — ${pl ? 'their' : 'its'} units stay behind.`;
+};
+const ALREADY_MOVED = 'These figures already moved this Action — the same Army cannot move twice (p.27).';
+
+/** What each figure of `r.force` may do on this move. */
+export function armyMoveOffer(state: GameState, r: ArmyMoveRules): ArmyMoveOffer {
+  const f = r.force, side = r.side, mv = r.movable;
+  const dn = r.to ? REGIONS[r.to]?.nation : undefined;
+  const nations: ArmyMoveOffer['nations'] = [];
+  for (const n of Object.keys(f.units) as Nation[]) {
+    const u = f.units[n]!;
+    if (sideOfNation(n) !== side || u.regular + u.elite === 0) continue;
+    let reason: string | null = null;
+    if (r.onlyNation && n !== r.onlyNation) reason = `This card moves ${nationName(r.onlyNation)} units only.`;
+    else if (r.kind === 'attack' && !isAtWar(state, n)) reason = notAtWarAttack(n);
+    else if (r.kind === 'move' && dn && dn !== n && !isAtWar(state, n)) reason = notAtWarBorder(n);
+    let regular = u.regular, elite = u.elite;
+    if (mv) {
+      regular = Math.min(regular, mv.units?.[n]?.regular ?? 0);
+      elite = Math.min(elite, mv.units?.[n]?.elite ?? 0);
+      if (!reason && regular + elite === 0) reason = ALREADY_MOVED;
+    }
+    if (reason) { regular = 0; elite = 0; }
+    nations.push({ nation: n, regular, elite, reason });
+  }
+  const leaders = side === 'fp' ? Math.min(f.leaders, mv ? (mv.leaders ?? 0) : Infinity) : 0;
+  const nazgul = side === 'shadow' ? Math.min(f.nazgul, mv ? (mv.nazgul ?? 0) : Infinity) : 0;
+  const characters = f.characters.filter((c) => characterSide(c) === side).map((id) => ({
+    id,
+    // Saruman never leaves Orthanc (character card) — but he may fight from it, since
+    // attacking units do not move (p.28).
+    reason: r.kind === 'move' && id === 'saruman' ? 'Saruman never leaves Orthanc.'
+      : mv && !(mv.characters ?? []).includes(id) ? ALREADY_MOVED : null,
+  }));
+  return { nations, leaders, nazgul, characters };
+}
+
+/** Why this selection of GOERS may not make the move, or null when it may. `goers` is
+ *  what leaves (or attacks); everything else of `side` in `r.force` stays. Messages are
+ *  phrased per kind, the rules are one set. */
+export function armySelectionReason(state: GameState, r: ArmyMoveRules, goers: MoveSelection): string | null {
+  const f = r.force, side = r.side, attack = r.kind === 'attack';
+  const offer = armyMoveOffer(state, r);
+  let units = 0;
+  for (const [n, u] of Object.entries(goers.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
+    const mr = u.regular ?? 0, me = u.elite ?? 0;
+    const have = f.units[n] ?? { regular: 0, elite: 0 };
+    if (mr < 0 || me < 0 || mr > have.regular || me > have.elite) return attack ? 'Rearguard exceeds the army' : 'Those figures are not in that Army.';
+    if (mr + me === 0) continue;
+    const o = offer.nations.find((x) => x.nation === n);
+    if (o?.reason) return o.reason;
+    if (o && (mr > o.regular || me > o.elite)) return ALREADY_MOVED;
+    units += mr + me;
+  }
+  if (units < 1) return attack ? 'The attacking army must keep at least one unit' : 'At least one Army unit must move.';
+  if (r.maxUnits !== undefined && units > r.maxUnits) return `This card moves at most ${r.maxUnits} unit${r.maxUnits === 1 ? '' : 's'}.`;
+  const gl = goers.leaders ?? 0, gn = goers.nazgul ?? 0;
+  if (gl < 0 || gl > f.leaders || gn < 0 || gn > f.nazgul) return attack ? 'Rearguard exceeds the army' : 'Those figures are not in that Army.';
+  if (side === 'fp' ? gn > 0 : gl > 0) return 'You can only move your own Leaders.';
+  if (gl > offer.leaders || gn > offer.nazgul) return ALREADY_MOVED;
+  const chars = goers.characters ?? [];
+  for (const c of chars) {
+    if (!f.characters.includes(c) || characterSide(c) !== side) return attack ? 'Rearguard figure not present' : 'Those figures are not in that Army.';
+    const o = offer.characters.find((x) => x.id === c);
+    if (o?.reason && !(r.kind === 'move' && c === 'saruman')) return o.reason; // Saruman is simply dropped from a move
+  }
+  // Who is left behind. A move (p.27): Free Peoples Leaders are never left in a region
+  // without combat units. An attack (p.28): the rearguard, if it holds any figure at
+  // all, must hold an Army unit.
+  let ownUnits = 0;
+  for (const n of Object.keys(f.units) as Nation[]) if (sideOfNation(n) === side) ownUnits += f.units[n]!.regular + f.units[n]!.elite;
+  const unitsLeft = ownUnits - units;
+  if (attack) {
+    const ownChars = f.characters.filter((c) => characterSide(c) === side);
+    const left = (side === 'fp' ? f.leaders - gl : f.nazgul - gn) + ownChars.filter((c) => !chars.includes(c)).length;
+    if (unitsLeft < 1 && left > 0) return 'A rearguard must contain at least one unit';
+  } else if (side === 'fp' && unitsLeft === 0 && f.leaders - gl > 0) {
+    return 'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.';
+  }
+  const moving = { units: goers.units ?? {}, leaders: gl, nazgul: gn, characters: attack ? chars : chars.filter((c) => c !== 'saruman') };
+  if (r.viaCharacterDie && charDieLeaders(state, moving, side, attack) < 1) {
+    return attack ? 'A Character-die attack must include a Leader or Character'
+      : side === 'fp' ? 'A Character-die Army move must take a Leader or Companion along with the moving units.'
+        : 'A Character-die Army move must take a Nazgûl or Minion along with the moving units.';
+  }
+  if (r.escortCompanion && !chars.some((c) => !!COMPANIONS[c] || !!UPGRADES[c])) { // Aragorn and Gandalf the White are Companions too
+    return `${r.escortCompanion} moves the Army containing the Companion(s) — at least one Companion must go with it.`;
+  }
+  return null;
+}
+
 /** Why moveArmySplit refused a selection — the same checks, in the same order, each
  *  with its own sentence. The adapter used to name the Character-die rule for EVERY
  *  failed split, so a Will-of-the-West move that left an FP Leader behind with no
  *  combat units was blamed on "a Character-die army move" (player report
  *  5j5j6p09554n1q5s). Null when the selection is legal. */
 export function splitBlockReason(state: GameState, from: RegionId, to: RegionId, side: Side, sel: MoveSelection, viaCharacterDie = false): string | null {
-  const src = state.regions[from]!;
   if (!REGIONS[from]!.adjacency.includes(to)) return 'Those regions are not adjacent.';
   if (armySide(state, from) !== side) return 'You have no Army to move there.';
   if (side === 'shadow' && shadowBarredFromRegion(state, to)) return `${shadowBarringCard(state, to)} wards ${REGIONS[to]?.name ?? to} against the Shadow.`;
   if (!freeForMovement(state, to, side)) return moveBlockReason(state, from, to, side) ?? 'That region is not free for your Army to enter.';
-  let movingUnits = 0;
-  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
-    const have = src.units[n] ?? { regular: 0, elite: 0 };
-    const mr = u.regular ?? 0, me = u.elite ?? 0;
-    if (mr < 0 || me < 0 || mr > have.regular || me > have.elite) return 'Those figures are not in that Army.';
-    movingUnits += mr + me;
-  }
-  if (movingUnits < 1) return 'At least one Army unit must move.';
-  const movingLeaders = sel.leaders ?? 0, movingNazgul = sel.nazgul ?? 0;
-  const chars = (sel.characters ?? []).filter((c) => c !== 'saruman');
-  if (movingLeaders < 0 || movingLeaders > src.leaders || movingNazgul < 0 || movingNazgul > src.nazgul) return 'Those figures are not in that Army.';
-  if (side === 'fp' ? movingNazgul > 0 : movingLeaders > 0) return 'You can only move your own Leaders.';
-  for (const c of chars) if (!src.characters.includes(c) || characterSide(c) !== side) return 'Those figures are not in that Army.';
-  const dn = REGIONS[to]!.nation;
-  for (const n of Object.keys(sel.units ?? {}) as Nation[]) {
-    if (!isAtWar(state, n) && dn && dn !== n) {
-      const pl = nationsArePlural([n]);
-      return `${nationSubject(n)} ${pl ? 'are not At War — their' : 'is not At War — its'} units cannot enter another Nation's borders. Advance ${theNation(n)} to War first (or leave ${pl ? 'their' : 'its'} units behind).`;
-    }
-  }
-  const remainingUnits = unitCount(state, from) - movingUnits;
-  if (side === 'fp' && remainingUnits === 0 && src.leaders - movingLeaders > 0) {
-    return 'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.';
-  }
-  const movingSel = { units: sel.units ?? {}, leaders: movingLeaders, nazgul: movingNazgul, characters: chars };
-  if (viaCharacterDie && charDieLeaders(state, movingSel, side, false) < 1) {
-    return side === 'fp'
-      ? 'A Character-die Army move must take a Leader or Companion along with the moving units.'
-      : 'A Character-die Army move must take a Nazgûl or Minion along with the moving units.';
-  }
-  return null;
+  // Who may go is the shared rule set's question (see armySelectionReason).
+  return armySelectionReason(state, { kind: 'move', side, force: state.regions[from]!, to, viaCharacterDie }, sel);
 }
 
 /** Validate + apply a SPLIT move: only the selected figures move; the rest stay as
@@ -641,43 +754,15 @@ export function splitBlockReason(state: GameState, from: RegionId, to: RegionId,
  *  combat units, and (Character-die moves) ≥1 Leader/Character must join the movers. */
 export function moveArmySplit(state: GameState, from: RegionId, to: RegionId, side: Side, sel: MoveSelection, viaCharacterDie = false): boolean {
   const src = state.regions[from]!, dst = state.regions[to]!;
-  if (!REGIONS[from]!.adjacency.includes(to)) return false;
-  if (armySide(state, from) !== side) return false;
-  if (side === 'shadow' && shadowBarredFromRegion(state, to)) return false;
-  if (!freeForMovement(state, to, side)) return false;
-  // The selection must be available, and move at least one combat unit.
+  // One validator for the check and the move (it used to restate every rule inline).
+  if (splitBlockReason(state, from, to, side, sel, viaCharacterDie) !== null) return false;
   let movingUnits = 0;
-  for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
-    const have = src.units[n] ?? { regular: 0, elite: 0 };
-    const mr = u.regular ?? 0, me = u.elite ?? 0;
-    if (mr < 0 || me < 0 || mr > have.regular || me > have.elite) return false;
-    movingUnits += mr + me;
-  }
-  if (movingUnits < 1) return false;
+  for (const u of Object.values(sel.units ?? {})) movingUnits += (u?.regular ?? 0) + (u?.elite ?? 0);
   const movingLeaders = sel.leaders ?? 0, movingNazgul = sel.nazgul ?? 0;
-  // Saruman cannot leave Orthanc (character card) — silently drop him from the movers
-  // rather than rejecting the whole move, so he simply holds.
+  // Saruman cannot leave Orthanc (character card): he is dropped from the movers, so
+  // he simply holds.
   const chars = (sel.characters ?? []).filter((c) => c !== 'saruman');
-  if (movingLeaders < 0 || movingLeaders > src.leaders || movingNazgul < 0 || movingNazgul > src.nazgul) return false;
-  // A split may only take the mover's OWN Leader figures: FP Leaders for the Free
-  // Peoples, Nazgûl for the Shadow. Without this an FP split could name the Nazgûl
-  // sharing its region and march off with them (see moveOwnLeaders).
-  if (side === 'fp' ? movingNazgul > 0 : movingLeaders > 0) return false;
-  for (const c of chars) if (!src.characters.includes(c) || characterSide(c) !== side) return false;
-  // Only the moving Nations matter for the not-At-War border rule.
   const dn = REGIONS[to]!.nation;
-  for (const n of Object.keys(sel.units ?? {}) as Nation[]) if (!isAtWar(state, n) && dn && dn !== n) return false;
-  // (RAW siege model: a besieged region's open field is the besieger under the
-  // normal 10-unit limit; the boxed garrison can't be reinforced by movement.)
-  // FP Leaders can never be in a region with no combat units: if the origin keeps
-  // Leaders it must keep ≥1 unit (so a full vacate forces all FP Leaders to follow).
-  const remainingUnits = unitCount(state, from) - movingUnits;
-  if (side === 'fp' && remainingUnits === 0 && src.leaders - movingLeaders > 0) return false;
-  // A Character-die move that splits must take ≥1 Leader/Nazgûl/Character with the
-  // movers (a Nazgûl is the Shadow's Leader — same rule as the whole-army move; a
-  // moving Isengard Elite is a Leader too while Saruman is in play).
-  const movingSel = { units: sel.units ?? {}, leaders: movingLeaders, nazgul: movingNazgul, characters: chars };
-  if (viaCharacterDie && charDieLeaders(state, movingSel, side, false) < 1) return false;
   // Apply.
   for (const [n, u] of Object.entries(sel.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
     const have = src.units[n]!; const d = dst.units[n] ?? { regular: 0, elite: 0 };

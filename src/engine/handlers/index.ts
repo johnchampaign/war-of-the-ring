@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId, DieFace } from '..
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection, type Force } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, sortieForce, canSortie, type CasualtyThen } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -124,22 +124,18 @@ export function cardMoveEscortReason(card: string | undefined, sel: CardMoveSel)
  *  die-driven move (splitBlockReason). */
 export function cardSplitBlockReason(state: GameState, from: string, side: Side, sel: CardMoveSel): string | null {
   const src = figureForce(state, from as RegionId, side);
-  const { take, moved } = clampCardSel(state, from, side, sel);
-  if (moved < 1) return 'At least one Army unit must move.';
-  if (side === 'fp') {
-    const left = new Map<Nation, number>();
-    for (const n of Object.keys(src.units) as Nation[]) {
-      if (sideOfNation(n) !== side) continue;
-      left.set(n, src.units[n]!.regular + src.units[n]!.elite);
-    }
-    for (const [n, mr, me] of take) left.set(n, (left.get(n) ?? 0) - mr - me);
-    const ownUnitsLeft = [...left.values()].some((v) => v > 0);
-    const leadersLeft = src.leaders - Math.max(0, Math.min(sel.leaders ?? 0, src.leaders));
-    if (!ownUnitsLeft && leadersLeft > 0) {
-      return 'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.';
-    }
-  }
-  return null;
+  // A card move clamps an over-generous selection to what is there (the picker may
+  // carry a stale count), then the shared rules judge the goers. No `to`: the route is
+  // checked step by step (cardPathBlockReason), destination included.
+  const { take, chars } = clampCardSel(state, from, side, sel);
+  const units: NonNullable<MoveSelection['units']> = {};
+  for (const [n, mr, me] of take) units[n] = { regular: mr, elite: me };
+  return armySelectionReason(state, { kind: 'move', side, force: src }, {
+    units,
+    leaders: side === 'fp' ? Math.max(0, Math.min(sel.leaders ?? 0, src.leaders)) : 0,
+    nazgul: side === 'shadow' ? Math.max(0, Math.min(sel.nazgul ?? 0, src.nazgul)) : 0,
+    characters: chars,
+  });
 }
 /** Move an Army (units + Leaders + Nazgûl + characters) from→to, capturing for
  *  `side` (default Shadow). With `sel`, only the selected figures move — p.28,
