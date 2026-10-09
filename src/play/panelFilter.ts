@@ -101,3 +101,11 @@ export function panelShowsAction(a: WotrAction, legal: WotrAction[], _view: Game
     // board path at all, so it stays a button.
     && a.kind !== 'bringMinion';
 }
+
+/** An Event card's move of a Companion already on the map (not a separation, not a
+ *  Nazgûl flight): a one-step target naming who, from where, to where. The board drives
+ *  it through the same Companion picker as a Character die. */
+const COMPANION_IDS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
+export function isCardCompanionMove(a: WotrAction): a is Extract<WotrAction, { kind: 'eventTarget' }> {
+  return a.kind === 'eventTarget' && !a.done && !!a.from && !!a.region && !!a.companion && COMPANION_IDS.has(a.companion);
+}

@@ -40,30 +40,28 @@ function emptyFellowship(seed = 5) {
   const h = getHandler('fp-char-15');
   check('canPlay with no Companions in the Fellowship', h.canPlay(state) === true);
 
+  // One step per group (the shared Companion-group rules): each offered target is one
+  // Companion's own move, tagged with his region; the action names the whole group.
   const picks = h.targets(state, 'fp');
-  const gimli = picks.find((t) => t.companion === 'gimli' && t.from === 'lorien');
-  check('Gimli is offered as an on-map pick', !!gimli, JSON.stringify(gimli));
+  const gimli = picks.find((t) => t.companion === 'gimli' && t.from === 'lorien' && t.region);
+  check('Gimli is offered as an on-map move', !!gimli, JSON.stringify(gimli));
+  const offMap = picks.find((t) => t.companion && t.region && !t.from && state.characters.inPlay[t.companion] === 'lorien');
+  check('no Fellowship-separation destination is offered for a Companion on the map', !offMap, JSON.stringify(offMap));
 
-  // Pick Gimli, then Legolas (same region — a legal travelling group), then a
-  // destination. Gwaihir moves them "as if their Level were 4".
-  const step2 = h.targets(state, 'fp', [gimli]);
-  const legolas = step2.find((t) => t.companion === 'legolas' && t.from === 'lorien' && !t.region);
-  check('Legolas (same region) may join the group', !!legolas);
-  const offMap = step2.find((t) => t.companion && t.region && !t.from);
-  check('no Fellowship-separation destination leaks into the map branch', !offMap, JSON.stringify(offMap));
-
-  const dests = h.targets(state, 'fp', [gimli, legolas]).filter((t) => t.region);
-  check('destinations are offered for the group', dests.length > 0, `${dests.length} regions`);
+  const dests = picks.filter((t) => t.companion === 'gimli' && t.region);
+  check('destinations are offered', dests.length > 0, `${dests.length} regions`);
   // "As if their Level were 4" must beat what the pair could walk unaided (Gimli 2,
   // Legolas 3 → a group range of 3 on a plain Character die).
   const unaided = characterDestinations(state, 'fp', 'legolas', 'lorien');
-  check('the card widens the group\'s reach beyond its own Level',
+  check('the card widens the reach beyond the group\'s own Level',
     dests.length > unaided.length, `${dests.length} with the card vs ${unaided.length} without`);
   const far = dests.find((t) => t.region === 'minas-tirith');   // 4 regions from Lórien
   check('range 4 is honoured (Minas Tirith reachable)', !!far);
   check('every destination carries the source region', dests.every((t) => t.from === 'lorien'));
 
-  h.finalize(state, 'fp', [gimli, legolas, { ...far, companion: 'gimli' }]);
+  const move = { ...far, group: ['gimli', 'legolas'] };
+  h.applyTarget(state, 'fp', move, []);                 // judged at the click
+  h.finalize(state, 'fp', [move]);
   check('Gimli arrived', state.characters.inPlay['gimli'] === 'minas-tirith');
   check('Legolas travelled with him', state.characters.inPlay['legolas'] === 'minas-tirith');
   check('Lórien no longer holds them', !state.regions['lorien'].characters.includes('gimli'));
@@ -76,10 +74,9 @@ function emptyFellowship(seed = 5) {
   const state = emptyFellowship(9);
   const h = getHandler('fp-char-16');
   check('canPlay with an empty Fellowship', h.canPlay(state) === true);
-  const pip = h.targets(state, 'fp').find((t) => t.companion === 'peregrin' && t.from === 'lorien');
-  check('Pippin is offered on the map', !!pip);
   // Pippin is Level 1; the card grants +2, so exactly 3 regions of reach.
-  const dests = new Set(h.targets(state, 'fp', [pip]).filter((t) => t.region).map((t) => t.region));
+  const dests = new Set(h.targets(state, 'fp').filter((t) => t.companion === 'peregrin' && t.from === 'lorien' && t.region).map((t) => t.region));
+  check('Pippin is offered on the map', dests.size > 0);
   check('3 regions away is in range (Fangorn)', dests.has('fangorn'));
   check('4 regions away is out of range (North Dunland)', !dests.has('north-dunland'));
 }

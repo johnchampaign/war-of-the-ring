@@ -14,8 +14,8 @@ const check = (label, ok, detail = '') => {
   console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${label}${detail ? ` — ${detail}` : ''}`);
   if (!ok) failures++;
 };
-/** The predicate PlayPage uses to put a card's Companion pick on the board. */
-const isCardCharPick = (a) => a.kind === 'eventTarget' && !!a.from && !!a.companion && !a.region && !a.done;
+// The predicate PlayPage uses to put a card's Companion move on the board.
+import { isCardCompanionMove } from '../src/play/panelFilter.ts';
 
 const setup = () => {
   const s = startGame(createGame({ seed: 121 }));
@@ -30,41 +30,37 @@ const setup = () => {
   return wotrAdapter.applyAction(s, { ...play, die: 'event' }, 'fp');
 };
 
-console.log('\n=== the pick is a board click, not a button ===');
+console.log('\n=== the move is a board click, not a button ===');
 {
   const s = setup();
   const legal = wotrAdapter.legalActions(s, 'fp');
-  const picks = legal.filter(isCardCharPick);
-  check('the card asks which Companions travel', picks.length === 3, `${picks.length} picks`);
-  check('none of them is a panel button', picks.every((a) => !panelShowsAction(a, legal, s)));
+  const moves = legal.filter(isCardCompanionMove);
+  check('the card offers the three Companions\' moves', new Set(moves.map((a) => a.companion)).size === 3, `${moves.length} moves`);
+  check('none of them is a panel button', moves.every((a) => !panelShowsAction(a, legal, s)));
   check('...and the board path is documented for them', !!BOARD_PATH.eventTarget);
-  check('each names the region to click', picks.every((a) => !!a.from), JSON.stringify(picks.map((a) => a.from)));
+  check('each names the region to click', moves.every((a) => !!a.from), JSON.stringify([...new Set(moves.map((a) => a.from))]));
 }
 
-console.log('\n=== one Companion: pick, then click a destination ===');
+console.log('\n=== one Companion: click his region, then a destination ===');
 {
   let s = setup();
-  const pick = wotrAdapter.legalActions(s, 'fp').filter(isCardCharPick).find((a) => a.companion === 'legolas');
-  s = wotrAdapter.applyAction(s, pick, 'fp');
-  const dests = wotrAdapter.legalActions(s, 'fp').filter((a) => a.kind === 'eventTarget' && a.region && a.companion === 'legolas');
+  const dests = wotrAdapter.legalActions(s, 'fp').filter(isCardCompanionMove).filter((a) => a.companion === 'legolas');
   check('destinations are offered for him', dests.length > 0, `${dests.length} regions`);
   const to = dests.find((a) => a.region === 'carrock') ?? dests[0];
   s = wotrAdapter.applyAction(s, to, 'fp');
   check(`Legolas stands in ${to.region}`, s.regions[to.region].characters.includes('legolas'), s.characters.inPlay['legolas']);
   check('...and left Lórien', !s.regions['lorien'].characters.includes('legolas'));
+  check('Gimli stayed', s.characters.inPlay['gimli'] === 'lorien');
   check('the card finished (no choice left hanging)', s.pendingChoice === null, s.pendingChoice?.kind ?? 'none');
 }
 
-console.log('\n=== both together: the group option submits each pick, then one destination ===');
+console.log('\n=== both together: one action names the group ===');
 {
   let s = setup();
-  const group = wotrAdapter.legalActions(s, 'fp').filter(isCardCharPick).filter((a) => a.from === 'lorien');
-  check('two Companions share Lórien', group.length === 2, group.map((a) => a.companion).join(','));
-  for (const a of group) s = wotrAdapter.applyAction(s, a, 'fp');   // what the group menu entry does
-  const dests = wotrAdapter.legalActions(s, 'fp').filter((a) => a.kind === 'eventTarget' && a.region);
-  check('a shared destination is offered', dests.length > 0, `${dests.length}`);
-  const to = dests[0];
-  s = wotrAdapter.applyAction(s, to, 'fp');
+  const lor = wotrAdapter.legalActions(s, 'fp').filter(isCardCompanionMove).filter((a) => a.from === 'lorien');
+  check('two Companions share Lórien', new Set(lor.map((a) => a.companion)).size === 2, [...new Set(lor.map((a) => a.companion))].join(','));
+  const to = lor.find((a) => a.companion === 'legolas');
+  s = wotrAdapter.applyAction(s, { ...to, group: ['legolas', 'gimli'] }, 'fp');   // what the picker submits
   const there = s.regions[to.region].characters;
   check(`both travelled to ${to.region}`, there.includes('legolas') && there.includes('gimli'), there.join(','));
 }

@@ -15,7 +15,7 @@ import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
 import { getHandler } from '../src/engine/handlers/registry.ts';
 import { liftSiegeIfAbandoned } from '../src/engine/armies.ts';
-import { characterDestinations } from '../src/engine/charMove.ts';
+import { characterDestinations, companionGroupDestinations } from '../src/engine/charMove.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -37,22 +37,17 @@ for (const card of ['fp-str-04', 'fp-str-07']) {
     s.characters.inPlay[c] = from; s.regions[from].characters.push(c);
   }
   const h = getHandler(card);
-  let applied = [];
-  const pick = (t) => { h.applyTarget(s, 'fp', t, applied); applied = [...applied, t]; };
-  pick({ companion: 'strider' });
-  pick({ companion: 'meriadoc' });
-  pick({ companion: 'peregrin' });
-  // A destination at the group's range (Strider's 3) that the Hobbits could not reach alone.
-  const dests = h.targets(s, 'fp', applied).filter((t) => t.region);
-  // What Merry could reach on his own (Level 1): the group must be offered, and move to,
-  // somewhere outside that.
+  // One step per group (the shared Companion-group rules): the move names its whole
+  // group, and the destination is judged at the group's range (Strider's 3).
+  const group = ['strider', 'meriadoc', 'peregrin'];
   const hobbitReach = new Set(characterDestinations(s, 'fp', 'meriadoc', from));
-  const far = dests.find((t) => !hobbitReach.has(t.region));
-  check(`${card}: a destination beyond the Hobbits' own reach is offered`, !!far, far?.region ?? 'none');
+  const far = companionGroupDestinations(s, 'fp', from, group).find((r) => !hobbitReach.has(r));
+  const offered = h.targets(s, 'fp', []).some((t) => t.companion === 'strider' && t.from === from && t.region === far);
+  check(`${card}: a destination beyond the Hobbits' own reach is offered`, !!far && offered, far ?? 'none');
   if (far) {
-    pick(far);
-    const where = ['strider', 'meriadoc', 'peregrin'].map((c) => `${c}@${at(s, c)}`).join(' ');
-    check(`${card}: all three arrive together`, ['strider', 'meriadoc', 'peregrin'].every((c) => at(s, c) === far.region && s.characters.inPlay[c] === far.region), where);
+    h.applyTarget(s, 'fp', { companion: 'strider', from, region: far, group }, []);
+    const where = group.map((c) => `${c}@${at(s, c)}`).join(' ');
+    check(`${card}: all three arrive together`, group.every((c) => at(s, c) === far && s.characters.inPlay[c] === far), where);
   }
 }
 

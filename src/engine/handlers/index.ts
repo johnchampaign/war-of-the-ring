@@ -13,7 +13,7 @@ import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '
 import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef } from '../data';
 import { moveFellowship, findCharacterRegion, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
-import { moveCharacter, moveCompanionGroup, characterDestinations } from '../charMove';
+import { moveCharacter, moveCompanionGroup, characterDestinations, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS, type RangeOpts } from '../charMove';
 import { log, logCardDraw, notify, sideDoes, sideName, sufferCorruption, shedCorruption } from '../log';
 
 const FACE_LABEL: Record<string, string> = { character: 'a Character', army: 'an Army', muster: 'a Muster', armyMuster: 'an Army/Muster', event: 'an Event', will: 'a Will of the West' };
@@ -558,10 +558,10 @@ const fpRecruits: Array<[string, Nation]> = [];
 
 // "Book of Mazarbul" — move any/all separated Companions; if one is then in Erebor or
 // Ered Luin, rouse the Dwarves to War.
-register('fp-str-04', moveCompanionsCard(['erebor', 'ered-luin'], 'dwarves'));
+register('fp-str-04', moveCompanionsCard('fp-str-04', ['erebor', 'ered-luin'], 'dwarves'));
 // "Fear! Fire! Foes!" — move any/all separated Companions; if one is then in The Shire
 // or Bree, rouse the North to War.
-register('fp-str-07', moveCompanionsCard(['the-shire', 'bree'], 'north'));
+register('fp-str-07', moveCompanionsCard('fp-str-07', ['the-shire', 'bree'], 'north'));
 for (const [id, nation] of fpRecruits) {
   register(id, {
     canPlay: (state) => canEventRecruit(state, nation),
@@ -2174,12 +2174,51 @@ const canSeparate = (state: GameState): boolean =>
 const canSeparateOnMordorTrack = (state: GameState): boolean =>
   state.fellowship.mordor !== null && state.fellowship.companions.some((c) => COMPANION_SET.has(c));
 
+// ---- Card moves of Companions already on the map: the shared group rules --------
+// Fear! Fire! Foes!, Book of Mazarbul, and the "or move" branch of We Prove the
+// Swifter and Gwaihir the Windlord. Each is one step per group: the offered target is
+// a single Companion's move (`companion`, `from`, `region`), and the action may name
+// the whole group travelling with him (`group`). Judged by charMove's companionGroup*
+// rules — the same ones the Character die and the picker use.
+const companionGroupOf = (t: EventTarget): string[] => [...new Set(t.group?.length ? t.group : t.companion ? [t.companion] : [])];
+/** Companions already moved by this card (each moves once). */
+const cardMovedCompanions = (applied: EventTarget[]): Set<string> =>
+  new Set(applied.filter((t) => t.from && t.region).flatMap(companionGroupOf));
+/** Every Companion on the map that may still move, each alone, to each place he may go. */
+function companionMoveTemplates(state: GameState, moved: Set<string>, opts: RangeOpts): EventTarget[] {
+  const out: EventTarget[] = [];
+  for (const [c, from] of Object.entries(state.characters.inPlay) as Array<[string, RegionId]>) {
+    if (!COMPANION_SET.has(c) || moved.has(c)) continue;
+    for (const region of companionGroupDestinations(state, 'fp', from, [c], opts)) out.push({ companion: c, from, region });
+  }
+  return out;
+}
+/** Why this card move may not happen, or null. */
+function companionGroupTargetError(state: GameState, t: EventTarget, moved: Set<string>, opts: RangeOpts): string | null {
+  if (!t.from || !t.region || !t.companion) return 'Choose the Companions to move and their destination.';
+  const group = companionGroupOf(t);
+  if (!group.includes(t.companion)) return 'The group must include the Companion it is moving.';
+  const where = REGIONS[t.from]?.name ?? t.from;
+  for (const c of group) {
+    const nm = characterDef(c)?.name ?? c;
+    if (!COMPANION_SET.has(c) || state.characters.inPlay[c] !== t.from) return `${nm} is not on the map in ${where}.`;
+    if (moved.has(c)) return `${nm} has already moved with this card.`;
+  }
+  if (companionGroupDestinations(state, 'fp', t.from, group, opts).includes(t.region)) return null;
+  return companionGroupBlockReason(state, 'fp', t.from, t.region, group, opts) ?? `That group cannot move to ${REGIONS[t.region]?.name ?? t.region}.`;
+}
+function applyCompanionGroupTarget(state: GameState, t: EventTarget, moved: Set<string>, opts: RangeOpts): void {
+  const bad = companionGroupTargetError(state, t, moved, opts);
+  if (bad) throw new Error(bad);
+  if (!moveCompanionGroup(state, 'fp', t.from!, t.region!, companionGroupOf(t), opts)) throw new Error('That group cannot move there.');
+}
+
 /** A card that may MOVE any or all already-separated Companions, then (if a Companion
  *  ends in a `trigger` region) rouses `nation` to war. Interactive: repeatedly pick a
  *  Companion (button) then its destination (board-click), or stop. The rouse is
  *  checked both before (already-positioned) and after the moves (idempotent via the
  *  not-At-War guard). */
-function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
+function moveCompanionsCard(card: string, trigger: RegionId[], nation: Nation): EventHandler {
   // Only an UNCAPTURED trigger region rouses the Nation: the Almanac, on both cards —
   // "Does not permit advancing the Political Track or activating the … Nation if the
   // Companion ends movement at a captured (i.e., Shadow controlled) region" (player
@@ -2187,7 +2226,7 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
   const rousing = (state: GameState): boolean => trigger.some((r) => settlementController(state, r) !== 'shadow'
     && (state.regions[r]?.characters ?? []).some((c) => COMPANION_SET.has(c)));
   const seps = (state: GameState): [string, RegionId][] => Object.entries(state.characters.inPlay).filter(([c]) => COMPANION_SET.has(c)) as [string, RegionId][];
-  const canMove = (state: GameState, c: string, from: RegionId): boolean => characterDestinations(state, 'fp', c, from).length > 0;
+  const canMove = (state: GameState, c: string, from: RegionId): boolean => companionGroupDestinations(state, 'fp', from, [c], CARD_COMPANION_MOVE_OPTS[card] ?? {}).length > 0;
   const checkRouse = (state: GameState): void => {
     if (isAtWar(state, nation)) return;
     if (rousing(state)) {
@@ -2197,66 +2236,23 @@ function moveCompanionsCard(trigger: RegionId[], nation: Nation): EventHandler {
       notify(state, `A Companion in ${trigger.map((r) => REGIONS[r]?.name ?? r).join(' / ')} rouses the ${nm} to war!`, 'A Nation is Roused');
     }
   };
-  // The trailing GROUP being assembled: consecutive picks (companion, no region, not a
-  // deselect) since the last completed move / deselect. RAW p.36: separated Companions
-  // moving together form a group that moves with the HIGHEST Level among them — so
-  // Pippin (1) travels with Gandalf (4) at range 4 (player report).
-  const trailingGroup = (applied: EventTarget[]): string[] => {
-    const g: string[] = [];
-    for (let i = applied.length - 1; i >= 0; i--) {
-      const t = applied[i]!;
-      if (t.region || t.mode === 'none' || !t.companion) break;
-      g.unshift(t.companion);
-    }
-    return g;
-  };
-  // Companions already moved this card: replay the picks, crediting the whole trailing
-  // group when its destination lands (only the leader appears on the region entry).
-  const movedSet = (applied: EventTarget[]): Set<string> => {
-    const done = new Set<string>();
-    let cur: string[] = [];
-    for (const t of applied) {
-      if (t.mode === 'none') { cur = []; continue; }              // deselect wipes the pending group
-      if (t.companion && !t.region) { cur.push(t.companion); continue; }
-      if (t.region) { for (const c of cur) done.add(c); cur = []; }
-    }
-    return done;
-  };
+  // ONE step per group: the target names a Companion, where he stands and where he
+  // goes; the action may widen it to everyone travelling with him (`group`, p.24 — the
+  // group moves at its highest Level). The picker and the engine share the group rules
+  // (companionGroup*), so this card moves Companions exactly as a Character die does.
+  // It used to be a button per Companion worded as a "separation", then a destination
+  // (player reports 674b1i0u5719635k, 4v3a6q5i3f0y2b69, 186w6s0a051h4534, 231u2i4l5p19426w).
+  const opts = CARD_COMPANION_MOVE_OPTS[card] ?? {};
   return {
     canPlay: (state) => seps(state).some(([c, from]) => canMove(state, c, from)) || (!isAtWar(state, nation) && rousing(state)),
     apply: (state) => checkRouse(state),     // rouse from an already-positioned Companion
     repeat: 24,
     optionalFromStart: true,                  // "any or ALL" — moving zero is allowed
     targets(state, _side, applied = []) {
-      const group = trailingGroup(applied);
-      const done = movedSet(applied);
-      if (group.length) {
-        // Destination step for the group: range = the highest Level in it. Also offer
-        // (a) other Companions in the SAME region to join the group, and (b) a deselect.
-        const from = state.characters.inPlay[group[0]!]!;
-        const leader = group.reduce((best, c) => (levelOf(c) > levelOf(best) ? c : best), group[0]!);
-        const out: EventTarget[] = characterDestinations(state, 'fp', leader, from, { group }).map((region) => ({ companion: leader, region }));
-        for (const [c, r] of seps(state)) if (r === from && !group.includes(c) && !done.has(c)) out.push({ companion: c });
-        out.push({ companion: group[0], mode: 'none' });          // deselect (player report)
-        return out;
-      }
-      // pick step: separated Companions that haven't moved yet and can still move
-      return seps(state).filter(([c, from]) => !done.has(c) && canMove(state, c, from)).map(([c]) => ({ companion: c }));
+      return companionMoveTemplates(state, cardMovedCompanions(applied), opts);
     },
     applyTarget(state, _side, t, applied = []) {
-      if (t.mode === 'none') return;                              // deselect: no mutation
-      if (t.region) {
-        // Move the whole trailing group as ONE group: it travels at the highest Level
-        // among them (p.24), which is the range the destination was offered at. Moving
-        // each member alone checked every Companion's own Level, so the slower ones
-        // silently stayed behind — "only Gandalf the White and Strider moved" (player
-        // reports t605mrj7yuywqjij, 1wfqbieamocul425).
-        const members = [...new Set([...trailingGroup(applied), t.companion!])];
-        const from = state.characters.inPlay[members[0]!]!;
-        if (members.length === 1) moveCharacter(state, 'fp', members[0]!, from, t.region);
-        else moveCompanionGroup(state, 'fp', from, t.region, members);
-      }
-      // pick step (no region): records the Companion; no mutation
+      applyCompanionGroupTarget(state, t, cardMovedCompanions(applied), opts);
     },
     finalize: (state) => checkRouse(state),  // rouse from a Companion moved into the trigger region
   };
@@ -2337,17 +2333,22 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
   const chosenOf = (applied: EventTarget[]) => [...new Set(applied.filter((a) => a.companion).map((a) => a.companion!))];
   const onMap = (state: GameState): Array<[string, RegionId]> =>
     Object.entries(state.characters.inPlay).filter(([c]) => COMPANION_SET.has(c)) as Array<[string, RegionId]>;
-  const mapDests = (state: GameState, group: string[], from: RegionId): RegionId[] => {
-    // A group travels at the highest Level among its members (p.24) — with a
-    // levelOverride they are all equal, so the leader only matters for the +N cards.
-    const leader = group.reduce((best, c) => (levelOf(c) > levelOf(best) ? c : best), group[0]!);
-    return characterDestinations(state, 'fp', leader, from, { ...opts, group });
-  };
+  // The "or move" branch is one step per group under the shared group rules — the
+  // same as Fear! Fire! Foes! and a Character die (companionMoveTemplates): a target
+  // per Companion's own move, which the action may widen to his whole group.
+  const mapDests = (state: GameState, group: string[], from: RegionId): RegionId[] =>
+    companionGroupDestinations(state, 'fp', from, group, opts);
   const canMapMove = (state: GameState): boolean =>
     !!opts.mapMove && onMap(state).some(([c, from]) => mapDests(state, [c], from).length > 0);
   /** The separation itself (the card's first clause). May legitimately do nothing. */
   const resolve = (state: GameState, applied: EventTarget[]): void => {
     const dest = applied.find((a) => a.region);
+    if (dest?.from && dest.region) { // "or move" branch: Companions already on the map travel together
+      const group = companionGroupOf(dest);
+      moveCompanionGroup(state, 'fp', dest.from, dest.region, group, opts);
+      opts.after?.(state, group, dest.region);
+      return;
+    }
     const companions = chosenOf(applied);
     if (state.fellowship.mordor !== null && !dest?.region) {
       // Mordor Track: the Companions are removed from play; the card's own effect
@@ -2358,11 +2359,6 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
       return;
     }
     if (!dest?.region || companions.length === 0) return; // fizzle (no destination reachable)
-    if (dest.from) { // "or move" branch: Companions already on the map travel together
-      moveCompanionGroup(state, 'fp', dest.from, dest.region, companions, opts);
-      opts.after?.(state, companions, dest.region);
-      return;
-    }
     for (const c of companions) beginSeparation(state, c);
     placeSeparatedGroup(state, companions, dest.region);
     opts.after?.(state, companions, dest.region);
@@ -2380,25 +2376,13 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
       if (applied.some((a) => a.region)) return []; // destination chosen → done
       const chosen = chosenOf(applied);
       const inGroup = new Set(chosen);
-      // The map branch is locked in as soon as a Companion is picked off the board.
-      const mapFrom = applied.find((a) => a.from)?.from;
       // Mordor Track: pick which Companion(s) leave the Fellowship (and are removed
       // from play). There is nowhere to place them, so the picks alone resolve the
       // card. The "or move" branch (Gwaihir / We Prove the Swifter) still works on
       // already-separated Companions, so it is offered alongside until one is picked.
-      if (state.fellowship.mordor !== null && !mapFrom) {
+      if (state.fellowship.mordor !== null) {
         const out: EventTarget[] = fellowCompanions(state).filter((t) => !inGroup.has(t.companion!));
-        if (chosen.length === 0 && opts.mapMove) {
-          for (const [c, from] of onMap(state)) if (mapDests(state, [c], from).length > 0) out.push({ companion: c, from });
-        }
-        return out;
-      }
-      if (mapFrom) {
-        // Only Companions in the SAME region may join the travelling group (p.24).
-        const out: EventTarget[] = onMap(state)
-          .filter(([c, r]) => r === mapFrom && !inGroup.has(c))
-          .map(([c]) => ({ companion: c, from: mapFrom }));
-        for (const region of mapDests(state, chosen, mapFrom)) out.push({ companion: chosen[0], from: mapFrom, region });
+        if (chosen.length === 0 && opts.mapMove) out.push(...companionMoveTemplates(state, new Set(), opts));
         return out;
       }
       // Add more Companions to the travelling group (panel buttons).
@@ -2410,11 +2394,15 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
         for (const region of separationDestinations(state, state.fellowship.location, range, opts)) out.push({ companion: chosen[0], region });
       } else if (opts.mapMove) {
         // Nothing picked yet: the "or move" branch is offered alongside the separation.
-        for (const [c, from] of onMap(state)) if (mapDests(state, [c], from).length > 0) out.push({ companion: c, from });
+        out.push(...companionMoveTemplates(state, new Set(), opts));
       }
       return out;
     },
-    applyTarget() { /* no mutation per step; the group is placed in finalize from `applied` */ },
+    // No mutation per step; the group is placed in finalize from `applied`. An "or
+    // move" step is judged here, though, so an illegal group is refused at the click.
+    applyTarget(state, _side, t) {
+      if (t.from && t.region) { const bad = companionGroupTargetError(state, t, new Set(), opts); if (bad) throw new Error(bad); }
+    },
     finalize(state, _side, applied) {
       resolve(state, applied);
       // The independent "Then, …" clause fires once, whichever way the separation went
@@ -2427,9 +2415,9 @@ function separateViaCard(opts: { extraMove?: number; levelOverride?: number; sie
 // Separate-only: the card's own text has no "or move" clause.
 register('fp-char-11', separateViaCard({ extraMove: 1, after: (s) => heal(s, 1) }));
 // Gwaihir the Windlord — separate OR move a Companion/group as if their Level were 4.
-register('fp-char-15', separateViaCard({ levelOverride: 4, mapMove: true, siegeOk: true }));
+register('fp-char-15', separateViaCard({ ...CARD_COMPANION_MOVE_OPTS['fp-char-15'], mapMove: true }));
 // We Prove the Swifter — separate OR move a Companion/group, +2 regions.
-register('fp-char-16', separateViaCard({ extraMove: 2, mapMove: true, siegeOk: true }));
+register('fp-char-16', separateViaCard({ ...CARD_COMPANION_MOVE_OPTS['fp-char-16'], mapMove: true }));
 // There and Back Again — separate a Companion (+1, you choose where); if Gimli/Legolas
 // is then in Dale/Erebor/Woodland Realm, rouse the Dwarves, Elves & North.
 // …and only while that region is uncaptured (Almanac: "this card does not permit

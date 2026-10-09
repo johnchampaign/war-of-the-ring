@@ -204,11 +204,11 @@ function rangeOf(_state: GameState, char: string, _from: RegionId, opts: RangeOp
  *  an enemy Army in Helm's Deep", true but not the reason: Characters can never enter
  *  their own besieged Stronghold (p.24/p.25; player report 5q0l1z724w6u2742). Mirrors
  *  `canLand` and the reach check in `moveCharacter`/`moveCompanionGroup`. */
-export function characterMoveBlockReason(state: GameState, side: Side, char: string, from: RegionId, to: RegionId, group?: readonly string[]): string | null {
+export function characterMoveBlockReason(state: GameState, side: Side, char: string, from: RegionId, to: RegionId, group?: readonly string[], opts: RangeOpts = {}): string | null {
   const def = REGIONS[to];
   if (!def || from === to) return null;
   const name = def.name ?? to;
-  if (!NAZGUL_FIGURE.has(char) && friendlyStrongholdBesieged(state, to, side)) {
+  if (!NAZGUL_FIGURE.has(char) && !opts.siegeOk && friendlyStrongholdBesieged(state, to, side)) {
     // "Friendly" by CONTROL, not by owner: a captured Stronghold is the captor's, so the
     // wording names the moving figure type instead (player report 1w684p4r400p0653).
     return `${name} is under siege — ${side === 'fp' ? 'Companions' : 'Minions'} cannot enter Strongholds besieged by an enemy Army (p.24).`;
@@ -217,8 +217,8 @@ export function characterMoveBlockReason(state: GameState, side: Side, char: str
     // Names the figure: plain Nazgûl obey this rule too (player report 686s5h4z562i1c1d).
     return `The Free Peoples control ${name} — ${NAZGUL_FIGURE.has(char) ? 'Nazgûl' : 'Minions'} cannot enter unbesieged enemy Strongholds (p.24).`;
   }
-  const range = rangeOf(state, char, from, group && group.length > 1 ? { group } : {});
-  if (range > 0 && range < FLY && regionDistance(from, to, side === 'fp' ? companionStop(state) : null, walkBlocks(state, side, char)) > range) {
+  const range = rangeOf(state, char, from, group && group.length > 1 ? { ...opts, group } : opts);
+  if (range > 0 && range < FLY && regionDistance(from, to, side === 'fp' ? companionStop(state) : null, walkBlocks(state, side, char, opts)) > range) {
     if (regionDistance(from, to, side === 'fp' ? companionStop(state) : null) <= range) {
       return `${name} can only be reached through a Stronghold this figure may not enter (p.24-25).`;
     }
@@ -353,6 +353,46 @@ export function characterDestinations(state: GameState, side: Side, char: string
     if (within.has(to) && canLand(state, to, side, char, opts)) out.push(to);
   }
   return out;
+}
+
+// ---- Companion groups: ONE rule for every Companion move -------------------------
+// A Character die, Fear! Fire! Foes!, Book of Mazarbul, We Prove the Swifter and
+// Gwaihir the Windlord all move "a group of Companions in the same region … to a
+// common destination at a distance equal to or less than the highest Level in the
+// group" (p.24); a lone Companion is a group of one. These three answer the group's
+// questions for all of them — who sets its range, where it may go, why not there — so
+// the picker, the map and the engine cannot disagree (player reports 3a1z26454w0x6c38,
+// 186w6s0a051h4534, 231u2i4l5p19426w). `opts` carries a card's range terms.
+
+/** The range terms of the cards that move Companions already on the map. One table,
+ *  read by the card handlers and by the picker, so both light the same regions. */
+export const CARD_COMPANION_MOVE_OPTS: Record<string, RangeOpts> = {
+  'fp-char-15': { levelOverride: 4, siegeOk: true }, // Gwaihir the Windlord: "as if their Level were 4"
+  'fp-char-16': { extraMove: 2, siegeOk: true },     // We Prove the Swifter: "+2 regions"
+  'fp-str-04': {},                                    // Book of Mazarbul
+  'fp-str-07': {},                                    // Fear! Fire! Foes!
+};
+
+/** The member whose range, travelling in THIS group, is the greatest — the group moves
+ *  at that range. Usually the highest Level; Gandalf the White's Shadowfax depends on
+ *  the company he keeps, which is why the group is passed in. */
+export function companionGroupLeader(state: GameState, from: RegionId, group: readonly string[], opts: RangeOpts = {}): string {
+  const r = (c: string) => rangeOf(state, c, from, { ...opts, group });
+  return group.reduce((best, c) => (r(c) > r(best) ? c : best), group[0]!);
+}
+/** How far the group travels (0 for an empty group). */
+export function companionGroupRange(state: GameState, from: RegionId, group: readonly string[], opts: RangeOpts = {}): number {
+  return group.length ? rangeOf(state, companionGroupLeader(state, from, group, opts), from, { ...opts, group }) : 0;
+}
+/** Every region the group may move to together. */
+export function companionGroupDestinations(state: GameState, side: Side, from: RegionId, group: readonly string[], opts: RangeOpts = {}): RegionId[] {
+  if (!group.length) return [];
+  return characterDestinations(state, side, companionGroupLeader(state, from, group, opts), from, { ...opts, group });
+}
+/** Why the group may not end its move in `to`, or null. */
+export function companionGroupBlockReason(state: GameState, side: Side, from: RegionId, to: RegionId, group: readonly string[], opts: RangeOpts = {}): string | null {
+  if (!group.length) return 'Choose at least one Companion to move.';
+  return characterMoveBlockReason(state, side, companionGroupLeader(state, from, group, opts), from, to, group, opts);
 }
 
 /** Bounded target set for FAR-RANGING pieces (Nazgûl fly the whole map; the Witch-king
