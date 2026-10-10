@@ -69,6 +69,11 @@ export function makeGameClient(
 ): GameClientApi {
   const base = `/api/games/${encodeURIComponent(gameId)}`;
   const q = `?as=${encodeURIComponent(token)}`;
+  // The identity rides on a move only until a move carrying it has gone through: the
+  // server claims the seat for it, which is a lookup and a write before the move is
+  // even applied, and repeating that on every click only added to each one's wait
+  // (player report 6ytzcs3z6hcoznm0). A new identity (signing in mid-game) is sent again.
+  let claimedFor: string | undefined;
   const post = (path: string, body: unknown) =>
     fetch(`${base}${path}${q}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -81,7 +86,12 @@ export function makeGameClient(
   return {
     mode: 'online', // an online seat may face a server-driven AI; the log's `you` + winner still say who played
     fetch: () => fetch(`${base}${q}`).then((r) => r.json()),
-    submit: (action) => post('/submit', { action, identityToken: getIdentityToken?.() }),
+    submit: async (action) => {
+      const id = getIdentityToken?.();
+      const r = await post('/submit', { action, identityToken: id && id !== claimedFor ? id : undefined });
+      if (id && r && !(r as { error?: unknown }).error) claimedFor = id;
+      return r;
+    },
     legalActions: () => fetch(`${base}/legal${q}`).then((r) => r.json()).then((r) => r.legalActions ?? r),
     // Never-silent: resolves only on a server-confirmed reportId; rejects on network
     // error / non-OK status / unparseable body / missing id (framework helper).

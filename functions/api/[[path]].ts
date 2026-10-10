@@ -17,7 +17,7 @@ const randomId = (): string => {
   return Array.from(a, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 16);
 };
 
-interface Ctx { request: Request; env: Env; params: { path?: string[] }; }
+interface Ctx { request: Request; env: Env; params: { path?: string[] }; waitUntil?: (p: Promise<unknown>) => void; }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const onRequest = async (context: Ctx): Promise<Response> => {
@@ -199,7 +199,13 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         // (server-driven AI replies run inside submit, so this stamp covers their
         // entries too). Best-effort — a clock must never block a move.
         const lg = (result.view as { log?: { seq: number }[] } | null)?.log;
-        if (lg?.length) await stampLogTime(env, gameId, lg[lg.length - 1]!.seq, String(result.you ?? ''));
+        // The stamp is bookkeeping: answer the move first and finish it in the
+        // background, one fewer database round trip in every click's wait (player
+        // report 6ytzcs3z6hcoznm0: "each click takes over three seconds").
+        if (lg?.length) {
+          const stamp = stampLogTime(env, gameId, lg[lg.length - 1]!.seq, String(result.you ?? '')).catch(() => {});
+          if (context.waitUntil) context.waitUntil(stamp); else await stamp;
+        }
         return json(result);
       }
       // GET /api/games/:id/log-times — PUBLIC: wall-clock receipt time per move
