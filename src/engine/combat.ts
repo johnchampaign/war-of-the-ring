@@ -766,7 +766,7 @@ export function attackError(state: GameState, from: RegionId, side: Side, explic
   // A SORTIE attacks out of the siege box, so the attacking "army" is the box, not the
   // region — the region holds the besieger (p.32).
   const sortieBox = sortieForce(state, from, side);
-  if (!sortieBox && armySide(state, from) !== side) return 'No attacking army';
+  if (!sortieBox && armySide(state, from) !== side) return 'No attacking Army';
   const r = sortieBox ?? state.regions[from]!;
   const rg = fullRearguard(state, from, side, explicit, sortieBox ?? undefined);
   // The rearguard is what STAYS; the shared rules judge what GOES — the rest.
@@ -778,9 +778,9 @@ export function attackError(state: GameState, from: RegionId, side: Side, explic
   }
   for (const [n, u] of Object.entries(rg.units)) {
     const have = r.units[n as Nation] ?? { regular: 0, elite: 0 };
-    if (u.regular < 0 || u.elite < 0 || u.regular > have.regular || u.elite > have.elite) return 'Rearguard exceeds the army';
+    if (u.regular < 0 || u.elite < 0 || u.regular > have.regular || u.elite > have.elite) return 'Rearguard exceeds the Army';
   }
-  if (rg.leaders > r.leaders || rg.nazgul > r.nazgul) return 'Rearguard exceeds the army';
+  if (rg.leaders > r.leaders || rg.nazgul > r.nazgul) return 'Rearguard exceeds the Army';
   for (const c of rg.characters) if (!r.characters.includes(c)) return 'Rearguard figure not present';
   const goers: MoveSelection = {
     units,

@@ -21,8 +21,8 @@ export const isSpatial = (a: WotrAction): a is SpatialAction => a.kind === 'move
  *  taken at all. Keep the descriptions accurate — they are the only written record of
  *  why each button was allowed to disappear. */
 export const BOARD_PATH: Record<string, string> = {
-  moveArmy: 'click the green army, then a highlighted destination',
-  attack: 'click the green army then the enemy region — or, for an assault/sortie (from === to), the besieged region itself and "⚔ Assault"',
+  moveArmy: 'click the green Army, then a highlighted destination',
+  attack: 'click the green Army then the enemy region — or, for an assault/sortie (from === to), the besieged region itself and "⚔ Assault"',
   armyMove2: 'as moveArmy, for the optional second move with the same Army die',
   moveCharacter: 'click the figure’s region, choose the figure, then a highlighted destination',
   recruitUnit: 'click a highlighted Settlement, then the bundle in the muster menu',
@@ -36,7 +36,7 @@ export const BOARD_PATH: Record<string, string> = {
   cardRetreat: 'click a highlighted region to retreat there (Dead Men of Dunharrow)',
   revealMove: 'click a highlighted region to place the revealed Ring-bearers',
   separateMove: 'click a highlighted region to place the separated Companion(s)',
-  eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves and attacks via click-army-then-destination (both open the Army-move picker), a card assault via the besieged region and "⚔ Assault", companion placements via the highlighted region, a card move of Companions already on the map via their region\'s menu; a card\'s bare region pick (the Army it strikes, Cruel Weather\'s region) by clicking the highlighted region; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
+  eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, Army moves and attacks via click-Army-then-destination (both open the Army-move picker), a card assault via the besieged region and "⚔ Assault", companion placements via the highlighted region, a card move of Companions already on the map via their region\'s menu; a card\'s bare region pick (the Army it strikes, Cruel Weather\'s region) by clicking the highlighted region; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
   useElvenRing: 'the Elven Rings pill in the status bar',
   playEvent: 'click the card in your hand (the Ents Awake\'s free Character card too — the big button declines it)',
 };

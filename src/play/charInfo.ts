@@ -5,6 +5,8 @@ import characters from '../../assets/characters.json';
 interface CharDef {
   name: string; title?: string; level: number | string; leadership?: number; nation?: string | null;
   guide?: string; becomesGuide?: string; abilities?: { name: string; text: string }[];
+  /** How an Aragorn / Gandalf the White / Minion comes into play. */
+  enterCondition?: string;
 }
 const c = characters as any;
 const ALL: Record<string, CharDef> = { ...c.companions, ...c.upgrades, ...c.minions, gollum: c.gollum };
@@ -27,20 +29,23 @@ export const charDef = (id: string): CharDef | undefined => ALL[id];
  *  and weights across platforms and these discs are ~16px across — the one Eye is
  *  established and legible, a whole alphabet of them would not be. The Gandalfs and
  *  the Aragorn line are told apart by INK as well as letters: the White is white, the
- *  Grey is grey, the crowned Aragorn gold against Strider's plain steel. */
+ *  Grey is grey, the crowned Aragorn gold against Strider's plain steel. The figures
+ *  that bring their own Action die — Aragorn, Gandalf the White, Saruman, the Mouth of
+ *  Sauron — take a single capital, so the big hitters stand out (player report
+ *  436g6i2h5e1d4n2a); Gandalf the Grey reads "Ga" beside the White's "G". */
 const CHAR_MARK: Record<string, { label: string; ink?: string }> = {
-  'gandalf-grey': { label: 'Gg', ink: '#c9c9c9' },
-  'gandalf-white': { label: 'Gw', ink: '#ffffff' },
+  'gandalf-grey': { label: 'Ga', ink: '#c9c9c9' },
+  'gandalf-white': { label: 'G', ink: '#ffffff' },
   gimli: { label: 'Gi' },
   legolas: { label: 'Le' },
   boromir: { label: 'Bo' },
   strider: { label: 'St', ink: '#cfd6e0' },
-  aragorn: { label: 'Ar', ink: '#ffd86a' },
+  aragorn: { label: 'A', ink: '#ffd86a' },
   meriadoc: { label: 'Me' },
   peregrin: { label: 'Pe' },
   gollum: { label: 'Go', ink: '#b6e3a8' },
-  saruman: { label: 'Sa' },
-  'mouth-of-sauron': { label: 'Mo' },
+  saruman: { label: 'S' },
+  'mouth-of-sauron': { label: 'M' },
   'witch-king': { label: '👁' },
   nazgul: { label: 'N' },
 };

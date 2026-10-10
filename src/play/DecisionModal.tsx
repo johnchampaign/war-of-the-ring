@@ -20,6 +20,7 @@ import { forceLeadership } from '../engine/armies';
 import { charName } from './charInfo';
 import { cardSideLine, inNationOrder } from './names';
 import eventCards from '../../assets/event-cards.json';
+import { RevealedDot } from './RingIcon';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
@@ -405,7 +406,7 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
       </div>
       {data.reveal && (
         <div style={{ margin: '6px 0 0', padding: '7px 9px', background: '#5a1f1f', border: '1px solid #a83232', borderRadius: 8, fontSize: 12.5, lineHeight: 1.45 }}>
-          🔴 This tile <b>reveals</b> the Fellowship.
+          <RevealedDot /> This tile <b>reveals</b> the Fellowship.
         </div>
       )}
       <CorruptionLine current={view.fellowship.corruption} add={data.damage} />

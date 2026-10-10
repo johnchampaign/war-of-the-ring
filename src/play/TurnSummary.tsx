@@ -43,26 +43,45 @@ export function TurnSummary({ view, yourTurn, you, onOpenLog, hold }: { view: Ga
   if (!yourTurn || oppActions.length === 0 || start === dismissed || view.pendingChoice || view.pendingCombat || hold) return null;
   const dismiss = () => setDismissed(start!);
   const oppName = you === 'fp' ? 'Shadow' : you === 'shadow' ? 'Free Peoples' : 'the opponent';
+  // A battle you started can finish without needing you again — the opponent picks
+  // their card, the dice fall, casualties are forced — and you next get control after
+  // the opponent's own following Action. All of that arrives in one block, and putting
+  // it under "what Free Peoples did" credited them with the end of YOUR battle (player
+  // report 3p375d3z0c1p3l57). The opponent's Action starts at their first entry that
+  // spends a die; a lead-in before it that is combat or yours is your Action, finishing.
+  // (Their answers inside your battle carry YOUR Action's die — the engine tags the
+  // choices an Action raises with its die — so combat lines never start their Action.)
+  const k = opp ? items.findIndex((e) => e.actor === opp && e.die && e.kind !== 'combat') : -1;
+  const lead = k === -1 ? items : items.slice(0, k);
+  // (The Hunt that a Fellowship move triggers is the Free Peoples' Action too.)
+  const ownTail = lead.some((e) => e.kind === 'combat' || (you && e.actor === you) || (you === 'fp' && e.kind === 'hunt')) ? lead : [];
+  const theirs = items.slice(ownTail.length);
+  const row = (e: (typeof items)[number], i: number) => (
+    <li key={i} style={{ fontSize: 13, padding: '3px 0', borderBottom: '1px solid #2a2418', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+      <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 58, marginTop: 1 }}>{e.kind}</span>
+      {e.die && <DieChip face={e.die} />}
+      <span style={{ flex: 1 }}>{prettify(e.msg, e.actor)}</span>
+      {/* If this entry was a card play, let the player enlarge that card to read
+          its effect and "Play if…" legality (card plays are open information). */}
+      {e.card && <button style={viewCardBtn} onClick={() => setZoom(e.card!)} title="View this card">🔍 card</button>}
+    </li>
+  );
 
   return (
     <>
       <div style={backdrop} onClick={dismiss}>
         <div style={card} onClick={(e) => e.stopPropagation()}>
           <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>
-            While you waited — what {oppName} did
+            {ownTail.length ? 'While you waited' : `While you waited — what ${oppName} did`}
           </div>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, textAlign: 'left', maxHeight: '55vh', overflowY: 'auto' }}>
-            {items.map((e, i) => (
-              <li key={i} style={{ fontSize: 13, padding: '3px 0', borderBottom: '1px solid #2a2418', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 58, marginTop: 1 }}>{e.kind}</span>
-                {e.die && <DieChip face={e.die} />}
-                <span style={{ flex: 1 }}>{prettify(e.msg, e.actor)}</span>
-                {/* If this entry was a card play, let the player enlarge that card to read
-                    its effect and "Play if…" legality (card plays are open information). */}
-                {e.card && <button style={viewCardBtn} onClick={() => setZoom(e.card!)} title="View this card">🔍 card</button>}
-              </li>
-            ))}
-          </ul>
+          <div style={{ maxHeight: '55vh', overflowY: 'auto', textAlign: 'left' }}>
+            {ownTail.length > 0 && <>
+              <div style={subhead}>The rest of your Action</div>
+              <ul style={list}>{ownTail.map(row)}</ul>
+              {theirs.length > 0 && <div style={{ ...subhead, marginTop: 10 }}>Then {oppName}</div>}
+            </>}
+            <ul style={list}>{theirs.map((e, i) => row(e, ownTail.length + i))}</ul>
+          </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             {/* "Skip the middleman and just bring up the log" (player report) — jump
                 straight to the full game log from the recap. */}
@@ -78,6 +97,8 @@ export function TurnSummary({ view, yourTurn, you, onOpenLog, hold }: { view: Ga
   );
 }
 
+const subhead: React.CSSProperties = { fontSize: 11, color: '#b9b29c', textTransform: 'uppercase', letterSpacing: 0.5, margin: '2px 0 2px' };
+const list: React.CSSProperties = { listStyle: 'none', margin: 0, padding: 0 };
 const viewCardBtn: React.CSSProperties = { flexShrink: 0, alignSelf: 'flex-start', marginTop: 1, fontSize: 10, padding: '1px 6px', background: '#2e2a1f', color: '#d8cfa8', border: '1px solid #5a4a2a', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' };
 // Dimmed like every other click-outside-to-dismiss dialog: the layer swallows the
 // click that closes it, and the dimming is what tells the player so. (An undimmed

@@ -10,6 +10,24 @@ import type { GameState } from '../engine/types';
 import type { LogTime } from '../online/gameClient';
 import { FACE } from './DiceTray';
 import { prettify } from './names';
+import eventCards from '../../assets/event-cards.json';
+
+const CARD_NAME = new Map<string, string>((eventCards as { cards: { id: string; name: string }[] }).cards.map((c) => [c.id, c.name]));
+
+/** A card-play line with only the card's NAME marked as hoverable — the rest of the
+ *  line is ordinary text (player report 0g2h4249521o684f). A line that doesn't spell
+ *  the name out keeps the whole line as the hover target, so it stays reachable. */
+function CardLine({ text, card, onHoverCard }: { text: string; card: string; onHoverCard: (id: string | null) => void }) {
+  const name = CARD_NAME.get(card);
+  const at = name ? text.indexOf(name) : -1;
+  const hover = (label: string) => (
+    <span style={{ color: '#cfe0ff', textDecoration: 'underline dotted', textUnderlineOffset: 2, cursor: 'help' }}
+      title="Hover to read this card"
+      onMouseEnter={() => onHoverCard(card)} onMouseLeave={() => onHoverCard(null)}>{label}</span>
+  );
+  if (at < 0) return hover(text);
+  return <span style={{ color: '#ddd' }}>{text.slice(0, at)}{hover(name!)}{text.slice(at + name!.length)}</span>;
+}
 
 const KIND_COLOR: Record<string, string> = {
   combat: '#e6857f', army: '#d8cfa8', muster: '#9cc77a', hunt: '#e6a3d0',
@@ -79,7 +97,7 @@ export function LogPanel({ view, times, onHoverCard }: {
           : newestFirst.map((e, i) => {
             const at = stamps ? stamps[log.length - 1 - i] : null;
             return (
-            <div key={i} style={{ fontSize: 12, lineHeight: 1.35, padding: '1px 0', display: 'flex', gap: 6 }}>
+            <div key={i} style={{ fontSize: 12, lineHeight: 1.35, padding: '1px 0', display: 'flex', flexWrap: 'wrap', columnGap: 6 }}>
               {/* When this happened (feature F, player-clock/server-clock via the
                   transport — the engine has no clock). Only rendered when stamps
                   exist, so older games keep their exact old layout. */}
@@ -106,11 +124,14 @@ export function LogPanel({ view, times, onHoverCard }: {
               )}
               {e.die && <span title="action die spent" style={{ flexShrink: 0, background: (FACE[e.die] ?? { bg: '#555' }).bg, color: '#fff', borderRadius: 3, padding: '0 4px', fontSize: 8, fontWeight: 700, alignSelf: 'center' }}>{(FACE[e.die] ?? { label: e.die }).label}</span>}
               {/* A card-play entry: hover to read the card's text (report: "tell me what the AI's card does"). */}
-              {e.card && onHoverCard
-                ? <span style={{ color: '#cfe0ff', textDecoration: 'underline dotted', textUnderlineOffset: 2, cursor: 'help' }}
-                    title="Hover to read this card"
-                    onMouseEnter={() => onHoverCard(e.card!)} onMouseLeave={() => onHoverCard(null)}>{prettify(e.msg, e.actor)}</span>
-                : <span style={{ color: '#ddd' }}>{prettify(e.msg, e.actor)}</span>}
+              {/* The text takes the rest of the row, or — when the log is too narrow
+                  for that (the inspector area on a 1440px screen left it ~50px, one
+                  word a line) — drops to its own full-width line under the tags. */}
+              <span style={{ flex: '1 1 140px', minWidth: 0 }}>
+                {e.card && onHoverCard
+                  ? <CardLine text={prettify(e.msg, e.actor)} card={e.card} onHoverCard={onHoverCard} />
+                  : <span style={{ color: '#ddd' }}>{prettify(e.msg, e.actor)}</span>}
+              </span>
             </div>
             );
           })}

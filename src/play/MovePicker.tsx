@@ -26,7 +26,7 @@ export type MovePickerKind = 'moveArmy' | 'armyMove2' | 'attack' | 'eventAttack'
 // listed is shown as the engine words it.
 const HINTS: Record<string, string> = {
   'A rearguard must contain at least one unit': 'Leaders or Characters left behind need at least one unit to stay with them — keep a unit back, or send them into the attack',
-  'The attacking army must keep at least one unit': 'The attacking Army needs at least one unit',
+  'The attacking Army must keep at least one unit': 'The attacking Army needs at least one unit',
   'At least one Army unit must move.': 'At least one unit must move',
   'Free Peoples Leaders can never be left in a region without combat units (p.27) — this move empties the region, so its Leaders must go with the Army.':
     'Free Peoples Leaders can never be left without a unit — keep a unit back with them, or take them along',

@@ -1213,7 +1213,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // that fits inside what was there before the arrivals.
         if (action.from === data.dest) {
           const st = data.stayed;
-          if (!st || st.units <= 0) throw new Error('Cannot move the same army twice');
+          if (!st || st.units <= 0) throw new Error('Cannot move the same Army twice');
           if (!action.move || !selectionWithin(action.move, st)) throw new Error(`Only the figures that were already in ${REGIONS[data.dest]?.name ?? data.dest} before this die's first move may move again — the ones that just arrived cannot.`);
         }
         const ok2 = action.move
@@ -1245,7 +1245,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // A SORTIE (p.32) attacks out of the siege box, so the actor's Army is the box
       // rather than the region — the region holds the besieger being attacked.
       const sortieBox = sortieForce(state, action.from, actor);
-      if (!sortieBox && armySide(state, action.from) !== actor) throw new Error('No attacking army');
+      if (!sortieBox && armySide(state, action.from) !== actor) throw new Error('No attacking Army');
       if (actor === 'shadow' && shadowBarredFromRegion(state, action.to)) throw new Error('Region protected from Shadow');
       // An Army die attacks any army; a Character die may attack with ONE army that
       // contains a Leader/Nazgûl/Character (rulebook p.28).
@@ -1388,8 +1388,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       }
       const moveCount = action.char === 'nazgul' ? Math.min(action.count ?? avail, avail) : undefined;
       if (group) {
-        if (!group.includes(action.char) || !moveCompanionGroup(state, actor, action.from, action.to, group)) throw new Error('Illegal character move');
-      } else if (!moveCharacter(state, actor, action.char, action.from, action.to, moveCount)) throw new Error('Illegal character move');
+        if (!group.includes(action.char) || !moveCompanionGroup(state, actor, action.from, action.to, group)) throw new Error('Illegal Character move');
+      } else if (!moveCharacter(state, actor, action.char, action.from, action.to, moveCount)) throw new Error('Illegal Character move');
       const moved: CharMoveState = action.char === 'nazgul'
         ? { chars: prev.chars, movedNazgul: { ...prev.movedNazgul, [action.to]: (prev.movedNazgul[action.to] ?? 0) + (moveCount ?? avail) } }
         : { chars: [...prev.chars, ...(group ?? [action.char])], movedNazgul: prev.movedNazgul };

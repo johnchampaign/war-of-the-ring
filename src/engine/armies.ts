@@ -717,17 +717,17 @@ export function armySelectionReason(state: GameState, r: ArmyMoveRules, goers: M
   for (const [n, u] of Object.entries(goers.units ?? {}) as [Nation, { regular?: number; elite?: number }][]) {
     const mr = u.regular ?? 0, me = u.elite ?? 0;
     const have = f.units[n] ?? { regular: 0, elite: 0 };
-    if (mr < 0 || me < 0 || mr > have.regular || me > have.elite) return attack ? 'Rearguard exceeds the army' : 'Those figures are not in that Army.';
+    if (mr < 0 || me < 0 || mr > have.regular || me > have.elite) return attack ? 'Rearguard exceeds the Army' : 'Those figures are not in that Army.';
     if (mr + me === 0) continue;
     const o = offer.nations.find((x) => x.nation === n);
     if (o?.reason) return o.reason;
     if (o && (mr > o.regular || me > o.elite)) return ALREADY_MOVED;
     units += mr + me;
   }
-  if (units < 1) return attack ? 'The attacking army must keep at least one unit' : 'At least one Army unit must move.';
+  if (units < 1) return attack ? 'The attacking Army must keep at least one unit' : 'At least one Army unit must move.';
   if (r.maxUnits !== undefined && units > r.maxUnits) return `This card moves at most ${r.maxUnits} unit${r.maxUnits === 1 ? '' : 's'}.`;
   const gl = goers.leaders ?? 0, gn = goers.nazgul ?? 0;
-  if (gl < 0 || gl > f.leaders || gn < 0 || gn > f.nazgul) return attack ? 'Rearguard exceeds the army' : 'Those figures are not in that Army.';
+  if (gl < 0 || gl > f.leaders || gn < 0 || gn > f.nazgul) return attack ? 'Rearguard exceeds the Army' : 'Those figures are not in that Army.';
   if (side === 'fp' ? gn > 0 : gl > 0) return 'You can only move your own Leaders.';
   if (gl > offer.leaders || gn > offer.nazgul) return ALREADY_MOVED;
   const chars = goers.characters ?? [];

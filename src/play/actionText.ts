@@ -117,11 +117,11 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     // made every button unwieldy (player report 2l4d2f146v333i3b).
     case 'eventTarget': return cap(eventTargetText(a));
     case 'moveCharacter': return `Move ${a.chars && a.chars.length > 1 ? `${a.chars.map(charName).join(' + ')} (together)` : a.char === 'nazgul' ? `${a.count ?? ''} Nazgûl`.trim() : charName(a.char)} ${rName(a.from)} → ${rName(a.to)}`;
-    case 'charMove2': return 'Done moving characters';
+    case 'charMove2': return 'Done moving Characters';
     case 'separateMove':
       return a.companion ? `Also separate ${charName(a.companion)} (travel with the group)` : `Place the group in ${rName(a.target!)}`;
-    case 'moveArmy': return `Move army ${rName(a.from)} → ${rName(a.to)}`;
-    case 'armyMove2': return a.done ? 'No second army move' : `Also move army ${rName(a.from!)} → ${rName(a.to!)}`;
+    case 'moveArmy': return `Move Army ${rName(a.from)} → ${rName(a.to)}`;
+    case 'armyMove2': return a.done ? 'No second Army move' : `Also move Army ${rName(a.from!)} → ${rName(a.to!)}`;
     case 'removeExcess': return `Remove a ${nationName(a.nation)} ${a.figure === 'elite' ? 'Elite' : 'Regular'}`;
     case 'attack': return a.from === a.to ? `⚔ Assault the siege at ${rName(a.to)}` : `Attack ${rName(a.to)} (from ${rName(a.from)})`;
     case 'skipDie': return `Discard ${aFace(a.face)} die`;

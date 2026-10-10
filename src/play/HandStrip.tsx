@@ -39,7 +39,7 @@ export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
       {/* The cards get the full width. The "Hand (N)" label used to sit to their left
           and eat horizontal space the cards wanted; it has moved into the line
           underneath (player report 572i6e714m1d2j3t). */}
-      <div style={wrap}>
+      <div style={handWrap}>
         {hand.map((id, i) => {
           const act = playable?.get(id) ?? null;
           const playNow = act && onPlay && !busy ? () => onPlay(act) : null;
@@ -159,6 +159,11 @@ export function CardZoom({ id, onClose, onPlay }: { id: string; onClose: () => v
 }
 
 const wrap: React.CSSProperties = { display: 'flex', gap: 6, overflowX: 'auto', padding: '5px 8px', background: '#14110b', borderTop: '1px solid #2a2418', alignItems: 'center' };
+// The hand's scrollbar track is ALWAYS there (thin, in the panel's colours): with
+// `auto` it came and went as the hand gained or lost a card — playing one could tip it
+// either way — and its height moved the hand, the hints and everything under them
+// (player report 6p3u624f0c6e0s2w).
+const handWrap: React.CSSProperties = { ...wrap, overflowX: 'scroll', scrollbarWidth: 'thin', scrollbarColor: '#5a4a2a #14110b' };
 const label: React.CSSProperties = { fontSize: 11, color: '#998', alignSelf: 'center', marginRight: 2, whiteSpace: 'nowrap', flexShrink: 0 };
 // A hand card is clicked to PLAY it, so nothing on it should offer a text cursor or
 // swallow the click — the type badge over its corner did both (player report

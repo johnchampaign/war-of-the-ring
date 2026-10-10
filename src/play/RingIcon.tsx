@@ -25,3 +25,27 @@ export function RingIcon({ size = 16, title }: { size?: number; title?: string }
     </svg>
   );
 }
+
+/** The Fellowship's Hidden / Revealed state, drawn to match the ring: a gold ring while
+ *  hidden, a filled red disc once revealed. The 🙈 / 🔴 emoji pair looked out of place
+ *  beside the drawn tokens (player report 57204z590g1n4y0w). */
+export function FellowshipStateMark({ hidden, size = 12 }: { hidden: boolean; size?: number }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}>
+      {hidden ? <RingIcon size={size} /> : <RevealedDot size={size} />}
+      {hidden ? 'Hidden' : 'Revealed'}
+    </span>
+  );
+}
+
+/** The "revealed" mark: a filled red disc, used wherever the Fellowship is or becomes
+ *  revealed (the Hunt panel, a reveal tile, the reveal notice). */
+export function RevealedDot({ size = 12, title }: { size?: number; title?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" style={{ display: 'inline-block', verticalAlign: 'middle' }} aria-hidden={title ? undefined : true}>
+      {title && <title>{title}</title>}
+      <circle cx={10} cy={10} r={7.5} fill="#d23a2e" stroke="#5c1610" strokeWidth={2} />
+      <circle cx={7.5} cy={7.5} r={2} fill="#ff9a8a" opacity={0.7} />
+    </svg>
+  );
+}

@@ -67,7 +67,7 @@ function HuntTilesBrowser({ view }: { view: GameState }) {
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
         title="The Hunt tiles still in the bag, the ones drawn so far (the standard ones return when the bag empties; special tiles never do), and special tiles in play">
-        Hunt tiles {bagLabels.length} left {open ? "▴" : "▾"}
+        <Reserve sample="Hunt tiles 99 left ▾">Hunt tiles {bagLabels.length} left {open ? "▴" : "▾"}</Reserve>
       </button>
       {open && (
         <div ref={ref} style={{ ...roster, ...flipStyle, ...wide }}>
@@ -111,13 +111,13 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
         title="Browse the Fellowship — hover a name to see the card">
-        Fellowship {companions.length} {open ? '▴' : '▾'}
+        <Reserve sample="Fellowship 9 ▾">Fellowship {companions.length} {open ? '▴' : '▾'}</Reserve>
       </button>
       {open && (
         // One line per row, like the On the map and Fallen rosters (player report
         // 2v0i4t423i723x3z: "★ Strider Level 3 · Leadership 1" wrapped).
         <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
-          {ids.length === 0 && <div style={{ color: '#998', fontSize: 12 }}>No companions remain.</div>}
+          {ids.length === 0 && <div style={{ color: '#998', fontSize: 12 }}>No Companions remain.</div>}
           {ids.map((id) => {
             const d = charDef(id);
             const isGuide = id === guide;
@@ -139,16 +139,24 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
 // Characters on the map (both sides' separated Companions + Minions — public info).
 // Hover a name to read that character's card (player report: "is there a way to
 // display Minion cards when you're the FP?").
+/** Characters that enter play during the game (not at setup). */
+const OFF_MAP_CHARS = ['aragorn', 'gandalf-white', 'saruman', 'witch-king', 'mouth-of-sauron'];
 function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id: string | null) => void }) {
   const [open, setOpen] = useState(false);
   const { ref, flipStyle } = useEdgeFlip(open);
   const entries = Object.entries(view.characters?.inPlay ?? {});
-  if (entries.length === 0) return null;
+  // The Characters still to come — Aragorn, Gandalf the White and the Minions — each
+  // with what it takes to bring them in, so nobody has to look it up in the rules
+  // (player report v0uv08bixzih45ey).
+  const gone = new Set([...(view.characters?.entered ?? []), ...(view.characters?.eliminated ?? [])]);
+  const waiting = OFF_MAP_CHARS.filter((id) => !gone.has(id) && !(id in (view.characters?.inPlay ?? {})));
+  // Always shown, at 0 when empty: a chip appearing mid-game shoved its neighbours along
+  // (player report 6k120d701i4b1e52).
   return (
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
-        title="Characters on the map (Companions and Minions) — hover a name for its card">
-        On the map {entries.length} {open ? '▴' : '▾'}
+        title="Characters on the map (Companions and Minions), and those not yet in play with what brings them in — hover a name for its card">
+        <Reserve sample="On the map 99 ▾">On the map {entries.length} {open ? '▴' : '▾'}</Reserve>
       </button>
       {open && (
         <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
@@ -171,7 +179,20 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
               </div>
             );
           })}
-          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Hover a name for its character card</div>
+          {waiting.length > 0 && <>
+            <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: entries.length ? 6 : 0, padding: '0 6px' }}>Off the map — not yet in play</div>
+            {waiting.map((id) => (
+              <div key={id} onMouseEnter={() => onHoverChar?.(id)}
+                style={{ padding: '3px 6px', borderRadius: 5, cursor: 'help', maxWidth: 380, whiteSpace: 'normal' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                  <span style={{ ...sideTagCell, color: isMinion(id) ? '#e6857f' : '#7fa8e6' }}>{isMinion(id) ? 'SH' : 'FP'}</span>
+                  <span style={charNameCell}>{charName(id)}</span>
+                </div>
+                <div style={{ color: '#b9b29c', fontSize: 11, paddingLeft: 24 }}>{charDef(id)?.enterCondition}</div>
+              </div>
+            ))}
+          </>}
+          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Hover a name for its Character card</div>
         </div>
       )}
     </span>
@@ -186,12 +207,11 @@ function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (i
   const [open, setOpen] = useState(false);
   const { ref, flipStyle } = useEdgeFlip(open);
   const ids = view.characters?.eliminated ?? [];
-  if (ids.length === 0) return null;
   return (
     <span style={{ position: 'relative' }}>
-      <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9b0a8' }}
+      <button onClick={() => ids.length && setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: ids.length ? 'pointer' : 'default', font: 'inherit', color: '#e9b0a8' }}
         title="Companions and Minions eliminated so far (out of the game) — hover a name for its card">
-        ☠ Fallen {ids.length} {open ? '▴' : '▾'}
+        <Reserve sample="☠ Fallen 99 ▾">☠ Fallen {ids.length} {ids.length ? (open ? '▴' : '▾') : ''}</Reserve>
       </button>
       {open && (
         <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
@@ -252,7 +272,7 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
         title="Browse discarded and played Event cards (open information)">
-        Discards {total} {open ? '▴' : '▾'}
+        <Reserve sample="Discards 99 ▾">Discards {total} {open ? '▴' : '▾'}</Reserve>
       </button>
       {open && (
         <div ref={ref} style={{ ...roster, ...flipStyle, ...wide }} onMouseLeave={() => onHoverCard?.(null)}>
@@ -274,32 +294,62 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
   );
 }
 
+// A chip's text over an invisible sample of its widest value, stacked in one grid cell,
+// so the chip is always as wide as that sample. A count going 9 → 10, a Guide changing
+// or a phase name lengthening then changes nothing around it (player report
+// 6k120d701i4b1e52: "the chits at the top move around").
+function Reserve({ sample, children }: { sample: string; children: React.ReactNode }) {
+  return (
+    <span style={{ display: 'inline-grid' }}>
+      <span aria-hidden style={{ gridArea: '1 / 1', visibility: 'hidden' }}>{sample}</span>
+      <span style={{ gridArea: '1 / 1' }}>{children}</span>
+    </span>
+  );
+}
+
 export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elvenActions = [], onAction }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void; onHoverCard?: (id: string | null) => void; elvenActions?: WotrAction[]; onAction?: (a: WotrAction) => void; trailing?: React.ReactNode }) {
   const fs = view.fellowship;
+  // Fixed rows, each holding the same chips for the whole game, so nothing reflows from
+  // one row into the next as the game goes on (player reports 6k120d701i4b1e52,
+  // 311n5k0z624a275e): the game; the score and the Hunt bag; the Guide with the
+  // Fellowship, then the Characters on the map and fallen; the cards; the Elven Rings on
+  // their own; then the controls. Each row fits the side column's width.
   return (
     <div style={bar}>
-      <span style={pill}>Turn {view.turn}</span>
-      <span style={pill}>Phase: {phaseLabel(view.phase)}</span>
-      <span style={pill}>You: {you === 'fp' ? 'Free Peoples' : you === 'shadow' ? 'Shadow' : '—'}</span>
-      <span style={{ ...pill, background: '#2f4f9e' }}>Free Peoples VP {view.victoryPoints.fp}</span>
-      <span style={{ ...pill, background: '#a83232' }}>Shadow VP {view.victoryPoints.shadow}</span>
+      <div style={barRow}>
+        <span style={pill}><Reserve sample="Turn 99">Turn {view.turn}</Reserve></span>
+        <span style={pill}>You: {you === 'fp' ? 'Free Peoples' : you === 'shadow' ? 'Shadow' : '—'}</span>
+        <span style={pill}><Reserve sample="Phase: Recover Dice & Draw Cards">Phase: {phaseLabel(view.phase)}</Reserve></span>
+      </div>
+      <div style={barRow}>
+        <span style={{ ...pill, background: '#2f4f9e' }}><Reserve sample="Free Peoples VP 99">Free Peoples VP {view.victoryPoints.fp}</Reserve></span>
+        <span style={{ ...pill, background: '#a83232' }}><Reserve sample="Shadow VP 99">Shadow VP {view.victoryPoints.shadow}</Reserve></span>
+        <HuntTilesBrowser view={view} />
+      </div>
       {/* The Hunt Box, Corruption, Progress / Mordor step and Hidden / Revealed live in
           the Hunt overlay on the board, grouped with the Hunt they belong to, not here
           (player report 205g5s252m4n2f5t). */}
-      <span style={pill}>Guide: <span
-        onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
-        style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span></span>
-      <FellowshipRoster guide={fs.guide} companions={fs.companions} onHoverChar={onHoverChar} />
-      <OnMapRoster view={view} onHoverChar={onHoverChar} />
-      <FallenRoster view={view} onHoverChar={onHoverChar} />
-      <span style={pill} title="Event cards in hand, split Character/Strategy. The opponent's cards are hidden, but their card BACKS (deck type) are open information on the tabletop.">
-        🂠 Free Peoples {handSplit(view.cards?.fp?.hand)} · Shadow {handSplit(view.cards?.shadow?.hand)}
-      </span>
-      <DiscardBrowser view={view} onHoverCard={onHoverCard} />
-      <HuntTilesBrowser view={view} />
-      <ElvenRingsPill view={view} actions={elvenActions} onAction={onAction} />
+      <div style={barRow}>
+        <span style={pill}><Reserve sample="Guide: Meriadoc Brandybuck">Guide: <span
+          onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
+          style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span></Reserve></span>
+        <FellowshipRoster guide={fs.guide} companions={fs.companions} onHoverChar={onHoverChar} />
+      </div>
+      <div style={barRow}>
+        <OnMapRoster view={view} onHoverChar={onHoverChar} />
+        <FallenRoster view={view} onHoverChar={onHoverChar} />
+      </div>
+      <div style={barRow}>
+        <span style={pill} title="Event cards in hand, split Character/Strategy. The opponent's cards are hidden, but their card BACKS (deck type) are open information on the tabletop.">
+          <Reserve sample="🂠 Free Peoples 9C+9S · Shadow 9C+9S">🂠 Free Peoples {handSplit(view.cards?.fp?.hand)} · Shadow {handSplit(view.cards?.shadow?.hand)}</Reserve>
+        </span>
+        <DiscardBrowser view={view} onHoverCard={onHoverCard} />
+      </div>
+      <div style={barRow}>
+        <ElvenRingsPill view={view} actions={elvenActions} onAction={onAction} />
+      </div>
       {/* Dice are shown in the DiceTray (right column) — not duplicated here. */}
-      {trailing}
+      {trailing && <div style={barRow}>{trailing}</div>}
     </div>
   );
 }
@@ -346,7 +396,8 @@ function ElvenRingsPill({ view, actions, onAction }: { view: GameState; actions:
   );
 }
 
-const bar: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 6, padding: 8, background: '#15110b', color: '#eee', fontFamily: 'system-ui', fontSize: 12, alignItems: 'center' };
+const bar: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 5, padding: 8, background: '#15110b', color: '#eee', fontFamily: 'system-ui', fontSize: 12, fontVariantNumeric: 'tabular-nums' };
+const barRow: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' };
 const pill: React.CSSProperties = { background: '#33302a', padding: '3px 8px', borderRadius: 10, whiteSpace: 'nowrap' };
 // A Character's NAME column in the roster panels. `overflowWrap: 'anywhere'` on the
 // panel (which a long card title needs) was breaking names mid-word — "Saruma / n" —

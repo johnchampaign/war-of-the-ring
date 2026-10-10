@@ -7,6 +7,7 @@
 import type { GameState } from '../engine/types';
 import { huntRerollSources } from '../engine/hunt';
 import { CorruptionLine } from './huntView';
+import { FellowshipStateMark } from './RingIcon';
 import mapData from '../../assets/map.json';
 
 export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () => void }) {
@@ -32,7 +33,7 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
           {/* No roll on the Mordor Track, so no bonus to add (player report 4g032640016e4q4g). */}
           {bonus > 0 && !onMordor && <Row k="Box bonus" v={`+${bonus}`} note="Free Peoples dice in the box — added to every Hunt die" />}
           <Row k="Progress" v={onMordor ? `Mordor ${fs.mordor}/5` : `${fs.progress} step${fs.progress === 1 ? '' : 's'}`} />
-          <Row k="Fellowship" v={fs.hidden ? '🙈 Hidden' : '🔴 Revealed'} note={fs.hidden ? 'free to move' : 'must hide (Character die) before moving again'} />
+          <Row k="Fellowship" v={<FellowshipStateMark hidden={fs.hidden} size={13} />} note={fs.hidden ? 'free to move' : 'must hide (Character die) before moving again'} />
         </div>
         <CorruptionLine current={fs.corruption} />
 
@@ -65,7 +66,7 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
   );
 }
 
-function Row({ k, v, note }: { k: string; v: string; note?: string }) {
+function Row({ k, v, note }: { k: string; v: React.ReactNode; note?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '2px 0', fontSize: 13 }}>
       <span style={{ color: '#998', minWidth: 86 }}>{k}</span>

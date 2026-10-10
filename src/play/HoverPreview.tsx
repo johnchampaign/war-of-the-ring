@@ -105,9 +105,13 @@ function RegionPreview({ id, view, bottom }: { id: string; view: GameState; bott
     r?.control && r.control !== homeSide ? `held by ${sideName(r.control)}` : null,
   ].filter(Boolean).join(' · ') || null;
 
+  // In the side panel the crop is a FIXED box: sized to each region's own outline, a
+  // tall region (Osgiliath, Trollshaws, High Pass, Folde) came out narrower than the
+  // rest (player reports 6n0y461t5m1a0a5i, 1o4c3p2v504b1j2j). The region is centred
+  // in the box ("meet") and the map around it fills the spare width.
   const crop = (
     <svg viewBox={vb} style={bottom
-      ? { height: '100%', width: 'auto', maxWidth: '45%', display: 'block', borderRadius: 6, background: '#9fb8cf', flexShrink: 0 }
+      ? { height: '100%', width: '45%', display: 'block', borderRadius: 6, background: '#9fb8cf', flexShrink: 0 }
       : { width: '100%', height: 'auto', display: 'block', borderRadius: 6, background: '#9fb8cf' }}>
       {boardArt
         ? <image href={boardArt} x={0} y={0} width={mapImage.width} height={mapImage.height} preserveAspectRatio="none" />

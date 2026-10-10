@@ -10,6 +10,7 @@
 import type { GameState } from '../engine/types';
 import { huntResolutionPending } from '../engine/hunt';
 import { RollLine, CorruptionLine, HuntTileFace, strongholdRevealLine } from './huntView';
+import { RevealedDot } from './RingIcon';
 
 /** Is there a Hunt result the player hasn't clicked through yet? Suppressed only
  *  while a hunt-RESOLUTION choice is open (the DecisionModal shows that with its own
@@ -114,7 +115,7 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
         </>}
         {revealed && (
           <div style={{ marginTop: 10, padding: '8px 10px', background: '#a83232', color: '#fff', borderRadius: 8, fontSize: 13, lineHeight: 1.4 }}>
-            🔴 <b>The Fellowship has been revealed!</b><br />
+            <RevealedDot /> <b>The Fellowship has been revealed!</b><br />
             It can't move again until you <b>hide it</b> with a Character die. (You'll place it on the board now.)
           </div>
         )}

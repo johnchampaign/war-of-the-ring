@@ -3,6 +3,7 @@
 // (after the fact) and the DecisionModal's HuntDetail (while you're deciding how to
 // absorb the damage), so the decision shows the SAME full context the popup does.
 import type { GameState, HuntRoll } from '../engine/types';
+import { RevealedDot } from './RingIcon';
 
 export type Draw = NonNullable<GameState['hunt']['draws']>[number];
 
@@ -52,7 +53,7 @@ export function HuntTileFace({ draw, size = 58 }: { draw: Draw; size?: number })
         boxShadow: '0 2px 7px #000a, inset 0 1px 2px #fff5, inset 0 -2px 4px #0004',
       }}>
         <span style={{ fontSize: num ? 28 : 26, fontWeight: 800, color: ink, fontFamily: 'Georgia, "Times New Roman", serif', textShadow: '0 1px 0 #fff4' }}>{center}</span>
-        {draw.reveal && <span title="Reveals the Fellowship" style={{ position: 'absolute', top: -6, right: -6, fontSize: 15 }}>🔴</span>}
+        {draw.reveal && <span title="Reveals the Fellowship" style={{ position: 'absolute', top: -6, right: -6, lineHeight: 0 }}><RevealedDot size={15} /></span>}
         {draw.stop && <span title="Stops the Fellowship" style={{ position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)', fontSize: 9, fontWeight: 700, background: '#a83232', color: '#fff', borderRadius: 5, padding: '1px 5px', letterSpacing: 0.5 }}>STOP</span>}
       </div>
       {caption && <span style={{ fontSize: 11, color: '#cbbf9a' }}>{caption}</span>}

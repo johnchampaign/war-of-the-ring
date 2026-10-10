@@ -17,7 +17,7 @@ import { Board } from './Board';
 import { ActionPanel, DieTag } from './ActionPanel';
 import { regionName } from './names';
 import { StatusBar } from './StatusBar';
-import { HandStrip, TabledStrip } from './HandStrip';
+import { HandStrip, TabledStrip, CardZoom } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal, modalDecisions } from './DecisionModal';
 import { MovePicker, type MovePickerKind } from './MovePicker';
@@ -65,6 +65,36 @@ const DIE_BEARING = new Set<WotrAction['kind']>([
   'moveArmy', 'attack', 'moveCharacter',
 ]);
 
+/** The Event card being resolved right now, pinned to the map under "Reset view". Once
+ *  played it is neither in the hand nor yet in the discards, so while it asked for its
+ *  targets nobody could read it (player report 585i2m023l6m5c6o). Hover shows it in the
+ *  inspector; a click enlarges it. */
+function ResolvingCard({ view, onHoverCard }: { view: GameState; onHoverCard: (id: string | null) => void }) {
+  const [zoom, setZoom] = useState(false);
+  const card = (view.pendingChoice?.data as { card?: unknown } | undefined)?.card;
+  if (typeof card !== 'string' || !EVENT_BY_ID[card]) return null;
+  return (
+    <>
+      <button data-testid="resolving-card" onClick={() => setZoom(true)} onMouseEnter={() => onHoverCard(card)} onMouseLeave={() => onHoverCard(null)}
+        title="The Event card being resolved — click to enlarge"
+        style={{ position: 'absolute', top: 38, left: 6, zIndex: 6, padding: '4px 9px', fontSize: 12, fontFamily: 'system-ui', background: 'rgba(28,23,16,0.92)', color: '#e9e1cc', border: '1px solid #c9a24a', borderRadius: 6, cursor: 'zoom-in', boxShadow: '0 2px 8px #0008' }}>
+        <span style={{ color: '#b9b29c' }}>Resolving:</span> <b style={{ textDecoration: 'underline dotted', textUnderlineOffset: 2 }}>{EVENT_BY_ID[card]!.name}</b>
+      </button>
+      {zoom && <CardZoom id={card} onClose={() => setZoom(false)} />}
+    </>
+  );
+}
+
+/** Where each Character that enters during the game may come in (the board hint shown
+ *  while its entry is legal). */
+const ENTER_HINT: Record<string, string> = {
+  aragorn: 'Aragorn can enter play: Strider becomes Aragorn where he stands.',
+  'gandalf-white': 'Gandalf the White can enter play: in place of Gandalf the Grey if he is on the map, otherwise in Fangorn or any unconquered Elven Stronghold.',
+  saruman: 'Saruman can enter play in Orthanc.',
+  'witch-king': 'The Witch-king can enter play in any region with a Shadow Army that includes at least one Sauron unit.',
+  'mouth-of-sauron': 'The Mouth of Sauron can enter play in any unconquered Sauron Stronghold.',
+};
+
 export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: () => void }) {
   // Realtime move push when available (online); polling fallback otherwise.
   const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
@@ -83,6 +113,22 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [client, logLen]);
   // Drop a stale selection (die spent / new round) so we never filter to a die you no longer have.
   const activeDie = die && (g.view?.dice[me] ?? []).includes(die) ? die : null;
+  // The die your Action spent, held while that Action is still being resolved — a
+  // pending second Army move, a battle, a card asking for its targets — so the tray
+  // keeps showing what is paying (player report 6b0u2t1l4w535d1d). Dice are only ever
+  // spent by their owner, so a new entry in your used dice is your own Action's die.
+  const [inActionDie, setInActionDie] = useState<DieFace | null>(null);
+  const usedMine = g.view?.usedDice?.[me];
+  const usedLen = useRef({ side: me, n: usedMine?.length ?? 0 });
+  const actionOpen = !!(g.view?.pendingChoice || g.view?.pendingCombat);
+  useEffect(() => {
+    const n = usedMine?.length ?? 0;
+    // Hotseat hands the screen to the other side: start that side's count afresh.
+    if (usedLen.current.side !== me) setInActionDie(null);
+    else if (n > usedLen.current.n && actionOpen) setInActionDie(usedMine![n - 1]!);
+    else if (!actionOpen || n < usedLen.current.n) setInActionDie(null);
+    usedLen.current = { side: me, n };
+  }, [usedMine, actionOpen, me]);
   // A map/modal action that more than one die could pay for, clicked with no die
   // pre-selected: ask, exactly as the panel's card/diplomacy buttons do. The old
   // auto-pick chose for the player, and a Will of the West is NOT strictly better
@@ -530,6 +576,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // The Ents Awake: one Character card from the hand, free (player report 1q4m361n2s444f4d).
     if (g.view?.pendingChoice?.kind === 'freeCharEvent' && g.yourTurn) out.push('The Ents Awake: you may play a Character Event card from your hand now, without a die — click it in your hand, or "Done" to play none.');
+    // A Character that may come into play now, and where (player report
+    // 504u5o696f1g2x68) — the entry action itself is unchanged.
+    const entering = new Set(g.legalActions.flatMap((a) => a.kind === 'bringMinion' ? [a.minion] : a.kind === 'bringUpgrade' ? [a.which] : []));
+    for (const id of ['aragorn', 'gandalf-white', 'saruman', 'witch-king', 'mouth-of-sauron']) if (entering.has(id as never)) out.push(ENTER_HINT[id]!);
     if (cardRegionActs.length) {
       const card = cardRegionActs[0]!.card;
       const what = ({ 'sh-char-19': 'click the Free Peoples Army to strike', 'fp-str-06': 'click the Shadow Army to strike', 'fp-str-05': 'click the Shadow Army to strike',
@@ -989,6 +1039,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               this column's flow — put it in the overlay stack instead. */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
             <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
+            <ResolvingCard view={g.view} onHoverCard={onHoverCard} />
             {/* The Ents Awake rider: one Character Event playable without a die. Surface
                 it — a player couldn't tell why a card was suddenly playable ("I didn't
                 have an [E] or [C] die left... so I did"). Pinned TOP so it can never
@@ -1069,7 +1120,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                       ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "End the Fellowship phase" on the right.`
                       : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : (charPick.group ?? [charPick.char]).map(charName).join(', ')} — click a highlighted region to move there (or click the piece again to cancel).`
                         : selected ? `Selected ${regionName(selected)} — click a highlighted region to move/attack (or click again to cancel).`
-                          : isArmyMove2 ? 'Second army move — click a green army to move it (a different army), or “No second army move” on the right.'
+                          : isArmyMove2 ? 'Second Army move — click a green Army to move it (a different Army), or “Done — no second Army move” on the right.'
                             : null}
                 </div>
               )}
@@ -1083,22 +1134,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           {/* Dice pool and Politics share one row when there's width; when the column
               is narrow they WRAP (Politics drops below the dice, each full-width) so the
               Politics reinforcement pips can't run off the right edge (report 6q0s). */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', flexShrink: 0, maxHeight: '42%', overflowY: 'auto', borderBottom: '1px solid #2a2418' }}>
+          {/* The die-payment prompt floats just under the dice / Politics block instead of
+              sitting inside it: inline, its appearing pushed the actions, hand and log
+              down a few pixels (player report 24071c590o0o2c6i), and it was easy to miss —
+              a click on the board seemed to do nothing (5g050c2d2f49306y). It glows as it
+              opens. */}
+          <div style={{ position: 'relative', flexShrink: 0, maxHeight: '42%', display: 'flex', flexDirection: 'column', zIndex: 20 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', minHeight: 0, overflowY: 'auto', borderBottom: '1px solid #2a2418' }}>
             <div style={{ flex: '1 1 200px', minWidth: 0, overflow: 'auto' }}>
-              <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn && !g.view.pendingChoice ? setDie : undefined} />
-              {/* `g.yourTurn` as well: online, the turn can pass to the opponent while
-                  the prompt is open (a pendingChoice resolving, a timeout), and a
-                  prompt for an action you can no longer take is worse than none. */}
-              {diePick && g.yourTurn && g.view && g.you && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, margin: '4px 0', padding: '6px 9px', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, fontSize: 12, color: '#f0d090' }}>
-                  <span>Which die pays for “{describeAction(diePick, g.view)}”?</span>
-                  {dieOptions(diePick, g.view, g.you as Side).map((f) => (
-                    <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
-                      style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
-                  ))}
-                  <button onClick={() => setDiePick(null)} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #6a531f', color: '#cb8', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: 11 }}>cancel</button>
-                </div>
-              )}
+              <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn && !g.view.pendingChoice && !inActionDie ? setDie : undefined} inActionDie={inActionDie} />
             </div>
             <div style={{ flex: '1 1 270px', minWidth: 0, overflow: 'auto', borderLeft: '1px solid #2a2418' }}>
               <PoliticsPanel view={g.view} />
@@ -1107,6 +1151,20 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   the cards that are (player report 572i6e714m1d2j3t). */}
               <TabledStrip view={g.view} onHoverCard={onHoverCard} />
             </div>
+          </div>
+              {/* `g.yourTurn` as well: online, the turn can pass to the opponent while
+                  the prompt is open (a pendingChoice resolving, a timeout), and a
+                  prompt for an action you can no longer take is worse than none. */}
+              {diePick && g.yourTurn && g.view && g.you && (
+                <div data-testid="die-pick-prompt" style={{ position: 'absolute', top: '100%', left: 6, right: 6, marginTop: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '7px 10px', background: '#3a2a12', border: '1px solid #c9a24a', borderRadius: 6, fontSize: 13, color: '#f0d090', boxShadow: '0 6px 20px #000c', animation: 'wotr-attn 0.45s ease-out 3' }}>
+                  <span>Which die pays for “{describeAction(diePick, g.view)}”?</span>
+                  {dieOptions(diePick, g.view, g.you as Side).map((f) => (
+                    <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
+                      style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
+                  ))}
+                  <button onClick={() => setDiePick(null)} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #6a531f', color: '#cb8', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: 11 }}>cancel</button>
+                </div>
+              )}
           </div>
           {/* Lower area: action buttons + hand on the LEFT, the big enlarge/inspect
               area filling the RIGHT (it takes all the room that's left there). */}
@@ -1379,7 +1437,7 @@ function NazgulCountPicker({ pick, onConfirm, onCancel }: {
 function BusyOverlay() {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, cursor: 'progress', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'transparent' }}>
-      <style>{'@keyframes wotr-spin{to{transform:rotate(360deg)}}'}</style>
+      <style>{'@keyframes wotr-spin{to{transform:rotate(360deg)}}@keyframes wotr-attn{0%{box-shadow:0 0 0 0 #ffd36a,0 6px 20px #000c}100%{box-shadow:0 0 0 10px #ffd36a00,0 6px 20px #000c}}'}</style>
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, background: '#1c1710e6', color: '#e9e1cc', fontFamily: 'system-ui', fontSize: 13, padding: '8px 14px', borderRadius: 20, border: '1px solid #5a4a2a', boxShadow: '0 4px 18px #000a' }}>
         <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid #5a4a2a', borderTopColor: '#e6b85a', animation: 'wotr-spin 0.8s linear infinite', display: 'inline-block' }} />
         Resolving your move…

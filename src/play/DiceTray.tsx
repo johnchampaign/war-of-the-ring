@@ -27,8 +27,12 @@ function Chip({ face, dim, selected, dimmed, onClick }: { face: string; dim?: bo
   return <span style={style}>{f.label}</span>;
 }
 
-function Pool({ title, dice, used, mine, selectedDie, onSelectDie, toRoll }: { title: string; dice: DieFace[]; used: DieFace[]; mine: boolean; selectedDie?: DieFace | null; onSelectDie?: (f: DieFace | null) => void; toRoll?: string }) {
-  const clickable = mine && !!onSelectDie && dice.length > 0;
+function Pool({ title, dice, used, mine, selectedDie, onSelectDie, toRoll, inAction }: { title: string; dice: DieFace[]; used: DieFace[]; mine: boolean; selectedDie?: DieFace | null; onSelectDie?: (f: DieFace | null) => void; toRoll?: string; inAction?: DieFace | null }) {
+  // The die paying for an Action still under way (a second Army move pending, a battle
+  // running) stays selected until the Action ends, whether the player picked it or the
+  // page did; nothing else can be picked meanwhile (player report 6b0u2t1l4w535d1d).
+  const spentAt = inAction ? used.lastIndexOf(inAction) : -1;
+  const clickable = mine && !!onSelectDie && dice.length > 0 && spentAt < 0;
   return (
     <div style={{ marginBottom: mine ? 6 : 0 }}>
       <div style={{ fontSize: 11, color: '#998', marginBottom: 3 }}>
@@ -37,19 +41,22 @@ function Pool({ title, dice, used, mine, selectedDie, onSelectDie, toRoll }: { t
             figures on the board to work it out — it is public information, p.19). */}
         {title} — {toRoll ?? `${dice.length} ${dice.length === 1 ? 'die' : 'dice'} left`}
         {clickable && <span style={{ color: '#cb8', marginLeft: 6 }}>{selectedDie ? '· click again to show all' : '· click a die to see its actions'}</span>}
+        {spentAt >= 0 && <span style={{ color: '#cb8', marginLeft: 6 }}>· finishing this Action</span>}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
         {dice.length === 0 && used.length === 0 && <span style={{ color: '#776', fontSize: 12, fontStyle: 'italic' }}>none yet</span>}
         {dice.map((d, i) => clickable
           ? <Chip key={`u${i}`} face={d} selected={selectedDie === d} dimmed={!!selectedDie && selectedDie !== d} onClick={() => onSelectDie!(selectedDie === d ? null : d)} />
-          : <Chip key={`u${i}`} face={d} />)}
-        {used.map((d, i) => <Chip key={`s${i}`} face={d} dim />)}
+          : <Chip key={`u${i}`} face={d} dimmed={spentAt >= 0} />)}
+        {used.map((d, i) => i === spentAt ? <Chip key={`s${i}`} face={d} selected /> : <Chip key={`s${i}`} face={d} dim />)}
       </div>
     </div>
   );
 }
 
-export function DiceTray({ view, you, selectedDie, onSelectDie }: { view: GameState; you: Side | null; selectedDie?: DieFace | null; onSelectDie?: (f: DieFace | null) => void }) {
+export function DiceTray({ view, you, selectedDie, onSelectDie, inActionDie }: { view: GameState; you: Side | null; selectedDie?: DieFace | null; onSelectDie?: (f: DieFace | null) => void;
+  /** The die spent on your Action that is still being resolved. */
+  inActionDie?: DieFace | null }) {
   const me: Side = you === 'shadow' ? 'shadow' : 'fp';
   const opp: Side = me === 'fp' ? 'shadow' : 'fp';
   const name = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
@@ -69,7 +76,7 @@ export function DiceTray({ view, you, selectedDie, onSelectDie }: { view: GameSt
   };
   return (
     <div style={panel}>
-      <Pool title={`Your dice (${name(me)})`} dice={view.dice[me]} used={used[me]} mine selectedDie={selectedDie} onSelectDie={onSelectDie} toRoll={toRoll(me)} />
+      <Pool title={`Your dice (${name(me)})`} dice={view.dice[me]} used={used[me]} mine selectedDie={selectedDie} onSelectDie={onSelectDie} toRoll={toRoll(me)} inAction={inActionDie} />
       <Pool title={`${name(opp)} dice`} dice={view.dice[opp]} used={used[opp]} mine={false} toRoll={toRoll(opp)} />
     </div>
   );
