@@ -1213,7 +1213,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                       Hover a card, a region, or the Guide to inspect it here.
                     </div>
                     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                      <LogPanel view={g.view} times={logTimes} />
+                      <LogPanel view={g.view} times={logTimes} recentTurns={2} />
                     </div>
                   </div>
                 )}

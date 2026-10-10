@@ -67,13 +67,17 @@ export function CopyLogButton({ view, style }: { view: GameState; style?: React.
   </button>;
 }
 
-export function LogPanel({ view, times, onHoverCard }: {
+export function LogPanel({ view, times, onHoverCard, recentTurns }: {
   view: GameState;
   /** Move-receipt times, ascending by seq (feature F). An entry's time is the
    *  FIRST stamp with seq >= entry.seq — the move whose submission produced it.
    *  Absent (older client / endpoint down) -> the log renders undated, as before. */
   times?: LogTime[];
   onHoverCard?: (id: string | null) => void;
+  /** Show only this many most recent turns (the always-visible side log — player
+   *  report f9lbogv5wwdn2x5k: the whole game there is clutter; the Log button in the
+   *  status bar still opens all of it). Absent = the whole log. */
+  recentTurns?: number;
 }) {
   const log = view.log ?? [];
   // Two-pointer walk (both lists ascend in seq): stamp[i] = display time of log[i].
@@ -85,11 +89,15 @@ export function LogPanel({ view, times, onHoverCard }: {
       return ti < times.length ? times[ti]!.at : null; // newer than the last stamp = still in flight
     });
   }
-  const newestFirst = [...log].reverse(); // newest at the top — no auto-scroll needed
+  const fromTurn = recentTurns ? view.turn - recentTurns + 1 : -Infinity;
+  const hidden = log.filter((e) => e.turn < fromTurn).length;
+  // newest at the top — no auto-scroll needed. Older turns are dropped from the END,
+  // so the index arithmetic for the stamps below stays log.length - 1 - i.
+  const newestFirst = [...log].reverse().slice(0, log.length - hidden);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, borderTop: '1px solid #2a2418' }}>
       <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, padding: '4px 8px 2px', flexShrink: 0 }}>
-        Game log <span style={{ textTransform: 'none', letterSpacing: 0 }}>(newest first)</span>
+        Game log <span style={{ textTransform: 'none', letterSpacing: 0 }}>({recentTurns ? 'recent turns, ' : ''}newest first)</span>
       </div>
       <div style={{ overflowY: 'auto', padding: '0 8px 6px', fontFamily: 'system-ui' }}>
         {newestFirst.length === 0
@@ -135,6 +143,11 @@ export function LogPanel({ view, times, onHoverCard }: {
             </div>
             );
           })}
+        {hidden > 0 && (
+          <div style={{ fontSize: 11, color: '#776', fontStyle: 'italic', paddingTop: 4 }}>
+            Earlier turns: open Log in the status bar.
+          </div>
+        )}
       </div>
     </div>
   );
