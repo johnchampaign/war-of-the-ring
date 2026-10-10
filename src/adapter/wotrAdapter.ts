@@ -24,7 +24,7 @@ import { REGIONS, sideOfNation, EVENT_BY_ID, playFacesFor, nationName } from '..
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, flagValue, type EventTarget } from '../engine/handlers/registry';
 import { characterDef } from '../engine/data';
-import { resolveNazgulStrike, mirrorPayFaces } from '../engine/handlers/index';
+import { resolveNazgulStrike, mirrorPayFaces, eaglesFlee, deadMenRetreat } from '../engine/handlers/index';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
 import { redactStateForViewer } from './redact';
 
@@ -210,6 +210,14 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // in-flight game can still be finished.
         const opts = pendingCasualtyOptions(state).map((o) => ({ kind: 'casualtyStep' as const, step: o.step, nation: o.nation }));
         return opts.length ? opts : [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
+      }
+      case 'cardRetreat': {
+        const d = state.pendingChoice!.data as { dests: RegionId[] };
+        return d.dests.map((region) => ({ kind: 'cardRetreat' as const, region }));
+      }
+      case 'eaglesRefuge': {
+        const d = state.pendingChoice!.data as { refuges: RegionId[] };
+        return d.refuges.map((region) => ({ kind: 'eaglesRefuge' as const, region }));
       }
       case 'valinorCasualties': // Return to Valinor spreads one plan over several regions
         return [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
@@ -897,6 +905,22 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         if (state.pendingChoice) (raised.data as { thenChoice?: unknown }).thenChoice = state.pendingChoice;
         state.pendingChoice = raised;
       }
+      break;
+    }
+    case 'cardRetreat': {
+      requireChoice(state, 'cardRetreat', actor);
+      const d = state.pendingChoice!.data as { from: RegionId; dests: RegionId[]; thenChoice?: GameState['pendingChoice'] };
+      if (!d.dests.includes(action.region)) throw new Error('The Army must retreat into a free region next to it — no enemy Army, and no Settlement the enemy controls.');
+      state.pendingChoice = d.thenChoice ?? null;
+      deadMenRetreat(state, d.from, action.region);
+      break;
+    }
+    case 'eaglesRefuge': {
+      requireChoice(state, 'eaglesRefuge', actor);
+      const d = state.pendingChoice!.data as { from: RegionId; refuges: RegionId[]; thenChoice?: GameState['pendingChoice'] };
+      if (!d.refuges.includes(action.region)) throw new Error('The surviving Nazgûl must fly to an uncaptured Sauron Stronghold.');
+      state.pendingChoice = d.thenChoice ?? null;
+      eaglesFlee(state, d.from, action.region);
       break;
     }
     case 'lureChoice':

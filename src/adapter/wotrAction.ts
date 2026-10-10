@@ -18,6 +18,10 @@ export type WotrAction =
   // Where the Ring-bearers figure moves when the Hunt reveals the Fellowship (FP's
   // choice, up to Progress; never an FP City/Stronghold). Resolves a 'revealMove' choice.
   | { kind: 'revealMove'; target: RegionId }
+  /** The Eagles are Coming!: the Shadow flies the surviving Nazgûl to this uncaptured Sauron Stronghold. */
+  | { kind: 'eaglesRefuge'; region: RegionId }
+  /** A card's forced retreat (Dead Men of Dunharrow): the retreating side picks the free region. */
+  | { kind: 'cardRetreat'; region: RegionId }
   | { kind: 'enterMordor' }
   // Hunt Allocation phase (Shadow).
   | { kind: 'allocateHunt'; dice: number }

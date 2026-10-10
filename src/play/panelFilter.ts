@@ -32,6 +32,8 @@ export const BOARD_PATH: Record<string, string> = {
   placeGandalf: 'click a highlighted region to place Gandalf the White there',
   retreatTo: 'click a highlighted region to retreat there (after choosing Retreat in the battle modal)'
     + '; preCombatRetreat is the same, before the battle',
+  eaglesRefuge: 'click a highlighted Sauron Stronghold to fly the Nazgûl the Eagles spared there',
+  cardRetreat: 'click a highlighted region to retreat there (Dead Men of Dunharrow)',
   revealMove: 'click a highlighted region to place the revealed Ring-bearers',
   separateMove: 'click a highlighted region to place the separated Companion(s)',
   eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves and attacks via click-army-then-destination (both open the Army-move picker), a card assault via the besieged region and "⚔ Assault", companion placements via the highlighted region, a card move of Companions already on the map via their region\'s menu; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',

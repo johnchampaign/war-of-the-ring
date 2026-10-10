@@ -132,14 +132,18 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     case 'advanceChoice': return !a.advance ? 'Hold position (no capture)' : a.move ? 'Advance the chosen forces' : 'Advance… (choose forces)';
     case 'chooseCasualties': return a.plan === 'regularsFirst' ? 'Lose Regulars first' : 'Reduce Elites first';
     case 'casualtyStep': {
-      const n = a.nation.charAt(0).toUpperCase() + a.nation.slice(1);
-      if (a.step === 'removeRegular') return `Lose a ${n} Regular`;
-      if (a.step === 'reduceElite') return `Reduce a ${n} Elite to a Regular`;
-      return `Remove a ${n} Elite (costs 2 hits)`;
+      // "an Elven Regular", not "a Elves Regular" (the unit adjective and its article).
+      const adj = ({ elves: 'Elven', dwarves: 'Dwarven', southrons: 'Southron' } as Record<string, string>)[a.nation] ?? a.nation.charAt(0).toUpperCase() + a.nation.slice(1);
+      const n = `${/^[AEIOU]/.test(adj) ? 'an' : 'a'} ${adj}`;
+      if (a.step === 'removeRegular') return `Lose ${n} Regular`;
+      if (a.step === 'reduceElite') return `Reduce ${n} Elite to a Regular`;
+      return `Remove ${n} Elite (costs 2 hits)`;
     }
     case 'combatContinue': return a.cont ? 'Continue the attack' : 'Cease the attack';
     case 'combatRetreat': return a.retreat ? 'Retreat' : 'Stand and fight';
     case 'retreatTo': return `Retreat to ${rName(a.region)}`;
+    case 'eaglesRefuge': return `Fly the Nazgûl to ${rName(a.region)}`;
+    case 'cardRetreat': return `Retreat to ${rName(a.region)}`;
     case 'preCombatRetreat': return `Retreat to ${rName(a.region)} (before combat)`;
     case 'siegeWithdraw': return a.withdraw ? 'Withdraw into the siege' : 'Fight in the open';
     case 'siegeExtend': return a.extend ? 'Press the assault (reduce an Elite)' : 'Cease the assault (siege holds)';
@@ -296,7 +300,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['freeCharEvent', 'playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'heroicDeath', 'wordsOfPower', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard', 'wornDiscard']);
+const DECISION_KINDS = new Set(['freeCharEvent', 'playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'eaglesRefuge', 'cardRetreat', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'heroicDeath', 'wordsOfPower', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard', 'wornDiscard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);
 
 /** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)

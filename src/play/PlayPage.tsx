@@ -243,6 +243,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     setBattleSeen(g.view.lastBattle?.seq ?? 0);
     setNoticeSeen(maxSeq(g.view.notices));
   }, [g.view]);
+  // A card's roll popup waits for open choices to clear (noticePending), but the cards
+  // that roll at an Army ask their question straight after the roll — which units fall,
+  // where the Nazgûl fly, where the Army retreats. The roll is shown WITH that question
+  // instead, so the player sees the dice before answering (player reports
+  // 070f5x2t003i394j, 3d5q0g6q6r460b5z); answering marks it seen.
+  const ROLL_QUESTIONS = new Set(['eventCasualties', 'eaglesRefuge', 'cardRetreat']);
+  const rollContext = g.view?.pendingChoice && ROLL_QUESTIONS.has(g.view.pendingChoice.kind)
+    ? (g.view.notices ?? []).filter((n) => n.seq > noticeSeen) : [];
+  const markRollSeen = () => { if (rollContext.length) setNoticeSeen(Math.max(...rollContext.map((n) => n.seq))); };
   const [logsUploaded, setLogsUploaded] = useState(false); // shared by the Upload button + end-game prompt
   // "Peek the board": temporarily hide a blocking choice modal (combat/hunt decision,
   // move picker) so you can study the board, then click again to return to the choice.
@@ -301,8 +310,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [g.legalActions, g.yourTurn, activeDie, g.view, g.you]);
   // Retreat destinations are board clicks (player report 0f3003342g666741): the
   // battle modal asks Retreat-or-stand, the MAP answers "to where".
-  const retreatActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'retreatTo' | 'preCombatRetreat' }> => a.kind === 'retreatTo' || a.kind === 'preCombatRetreat'), [g.legalActions]);
+  // The Eagles are Coming!'s refuge for the surviving Nazgûl is the same kind of pick —
+  // a region on the map, the modal stepping aside (player report 3e624i0y1v4p2o2c).
+  const retreatActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'retreatTo' | 'preCombatRetreat' | 'eaglesRefuge' | 'cardRetreat' }> => a.kind === 'retreatTo' || a.kind === 'preCombatRetreat' || a.kind === 'eaglesRefuge' || a.kind === 'cardRetreat'), [g.legalActions]);
   const isRetreatPick = retreatActs.length > 0;
+  const isEaglesPick = retreatActs.some((a) => a.kind === 'eaglesRefuge');
   // Gandalf the White's entry: a board click on one of the card's candidate regions.
   const gandalfActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'placeGandalf' }> => a.kind === 'placeGandalf'), [g.legalActions]);
   const isPlaceGandalf = gandalfActs.length > 0;
@@ -587,7 +599,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // Placing the Fellowship figure (declare, or move-on-reveal): click a highlighted region.
     if (declareTargets.has(id)) {
       const a = placeActs.find((x) => x.target === id) ?? gandalfActs.find((x) => x.region === id) ?? retreatActs.find((x) => x.region === id);
-      if (a) { clearMove(); void submit(a); }
+      if (a) { clearMove(); if (retreatActs.includes(a as never)) markRollSeen(); void submit(a); }
       return;
     }
     // Picking a retreat destination: a region that is not highlighted says why not
@@ -973,6 +985,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                     // the highlight set with the Fellowship placement — so this banner
                     // told a retreating player to "Declare the Fellowship" (player report
                     // 0u36044v452i6p60). Each board-driven placement now names itself.
+                    : isEaglesPick
+                    ? 'The Eagles are Coming! — click a highlighted Sauron Stronghold to fly the surviving Nazgûl there.'
                     : isRetreatPick
                     ? `Retreating — click a highlighted region to fall back there. Only regions free of enemy troops and enemy Settlements can be retreated into.`
                     : isPlaceGandalf
@@ -1169,7 +1183,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             button was "Keep the whole Army forward" — the split picker was unreachable
             (player report: "the only option presented was keep the whole army forward").
             Every other decision falls through to submit unchanged. */}
-        <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={onDecisionAction} yourTurn={g.yourTurn}
+        <DecisionModal view={g.view} you={g.you as Side} actions={g.legalActions} onAction={(a) => { markRollSeen(); return onDecisionAction(a); }} yourTurn={g.yourTurn}
+          context={rollContext}
           undo={undoCap?.canUndo ? { foreknowledge: !!undoCap.foreknowledge, onUndo: onUndoClick } : undefined} />
       </div>
       {/* Floating "Peek board" toggle (top-left) — shown whenever a blocking choice
@@ -1189,7 +1204,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       {isRetreatPick && (
         <div style={{ position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 92, padding: '8px 16px', fontSize: 14, fontWeight: 600,
           borderRadius: 8, background: '#3a2a12', color: '#f0d090', border: '1px solid #6a531f', boxShadow: '0 4px 20px #000' }}>
-          ⚑ Retreat — click a highlighted region to fall back there.
+          {isEaglesPick ? '⚑ The Eagles are Coming! — click a highlighted Sauron Stronghold to fly the surviving Nazgûl there.' : '⚑ Retreat — click a highlighted region to fall back there.'}
+          {rollContext.map((n) => <div key={n.seq} style={{ fontSize: 12, fontWeight: 400, marginTop: 4, color: '#e8dcc0' }}>{n.title ? `${n.title}: ` : ''}{n.msg}</div>)}
         </div>
       )}
       <HuntPopup view={g.view} seen={huntSeen} onSeen={setHuntSeen} />

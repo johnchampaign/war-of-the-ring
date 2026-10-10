@@ -7,7 +7,7 @@ import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
 import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason, cardAttackFighters } from '../armies';
-import { applyCasualties, startBattle, queueOrApplyEventCasualties, hasAtWarUnit, sortieForce, canSortie, attackError, type CasualtyThen } from '../combat';
+import { applyCasualties, startBattle, queueOrApplyEventCasualties, runEventStrikes, hasAtWarUnit, sortieForce, canSortie, attackError, type CasualtyThen, type EventStrike } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
@@ -26,6 +26,12 @@ const rollDiceFaces = (state: GameState, count: number, target: number): { hits:
  *  1v3t0v4f3i0q484r). */
 const rollLine = (subject: string, r: { hits: number; dice: number[] }, target: string): string =>
   `${subject} ${r.hits} hit${r.hits === 1 ? '' : 's'} on ${target} [${r.dice.join(' ')}]`;
+/** The roll's popup, as Athelas and Candles of Corpses have always shown — every card
+ *  that rolls dice at an Army shows both players the faces and what they did (player
+ *  reports 070f5x2t003i394j, 3d5q0g6q6r460b5z). */
+const rollNotice = (state: GameState, card: string, r: { hits: number; dice: number[] }, need: number, target: string): void =>
+  notify(state, `Rolled [${r.dice.join(' ')}], hitting on ${need}+: ${r.hits === 0 ? 'no hits' : `${r.hits} hit${r.hits === 1 ? '' : 's'}`} on ${target}.`, card);
+const rName = (id: string): string => REGIONS[id]?.name ?? id;
 /** [FP-army region, Shadow-Nazgûl region] pairs that are the same or adjacent.
  *  A BESIEGED Army — either side's — is still in its region (p.31), so both ends
  *  read the region's Force for that side rather than the open field: a Gondor
@@ -1174,6 +1180,11 @@ function retreatShadowStack(state: GameState, from: RegionId, to: RegionId): voi
   for (const c of minions) if (state.characters.inPlay[c]) state.characters.inPlay[c] = to;
   captureIfEnemySettlement(state, to, 'shadow'); // a retreat that ENTERS an undefended enemy Settlement captures it (p.32)
 }
+/** The Dead Men's forced retreat, once its destination is known. */
+export function deadMenRetreat(state: GameState, from: string, to: string): void {
+  retreatShadowStack(state, from, to);
+  log(state, null, 'event', `Dead Men: the Shadow Army retreats ${from} → ${to}`);
+}
 /** Destroy the Shadow army at `region` — units recycle to reinforcements, Nazgûl
  *  return to the Sauron pool, Minions are eliminated (Dead Men's "if it cannot
  *  retreat, it is destroyed, along with any Nazgûl and Minions"). */
@@ -1200,6 +1211,22 @@ function destroyShadowStack(state: GameState, region: RegionId): void {
 //     (Almanac: control comes with the recruit).
 const deadMenDest = (applied: EventTarget[]) => applied.find((a) => a.region)?.region;
 register('fp-char-22', {
+  // After the Shadow has taken the Dead Men's hits: the Army "must then retreat. If the
+  // Army cannot retreat, it is destroyed", with its Nazgûl and Minions.
+  afterEventCasualties(state, data) {
+    const region = data.region as RegionId;
+    if (armySide(state, region) !== 'shadow' && !state.regions[region]!.nazgul && !state.regions[region]!.characters.some((c) => !COMPANION_SET.has(c))) return;
+    // "As per normal rules, an Army may not retreat into Settlement regions that are
+    // enemy controlled (even if empty)" (Almanac) — a FREE region, not merely one free
+    // for movement. WHERE is the Shadow's choice when there is more than one.
+    const dests = REGIONS[region]!.adjacency.filter((a) => freeRegion(state, a as RegionId, 'shadow')) as RegionId[];
+    if (unitCount(state, region) > 0 && dests.length > 1) {
+      state.pendingChoice = { owner: 'shadow', kind: 'cardRetreat', data: { from: region, dests, card: 'fp-char-22' } };
+      return;
+    }
+    if (unitCount(state, region) > 0 && dests.length === 1) deadMenRetreat(state, region, dests[0]!);
+    else { destroyShadowStack(state, region); log(state, null, 'event', `Dead Men: the Shadow Army at ${region} is destroyed`); }
+  },
   canPlay: (state) => aragornRohanOrigin(state) !== null,
   repeat: 12,
   noDone: true,
@@ -1245,12 +1272,15 @@ register('fp-char-22', {
     //    destroyed (with its Nazgûl/Minions) if it cannot.
     if (armySide(state, region) === 'shadow') {
       for (const n of SHADOW_NATIONS) { const u = dst.units[n]; if (u && u.regular + u.elite > 0) onArmyAttacked(state, n, region); }
-      const hits = withRng(state, (rng) => rng.rollDie(6));
-      applyCasualties(state, region, 'shadow', hits, 'regularsFirst');
-      log(state, null, 'event', `Dead Men: the Shadow Army at ${region} takes ${hits} hit${hits === 1 ? '' : 's'}`);
-      const dest = REGIONS[region]!.adjacency.find((a) => freeForMovement(state, a, 'shadow'));
-      if (unitCount(state, region) > 0 && dest) { retreatShadowStack(state, region, dest); log(state, null, 'event', `Dead Men: the Shadow Army retreats ${region} → ${dest}`); }
-      else { destroyShadowStack(state, region); log(state, null, 'event', `Dead Men: the Shadow Army at ${region} is destroyed`); }
+      const die = withRng(state, (rng) => rng.rollDie(6));
+      // The hits are logged BEFORE the casualties they cause (player report
+      // 5a2d6z5y7037406d), and the Shadow chooses which units take them, like every
+      // other card that rolls at an Army; the retreat follows once they are taken.
+      log(state, null, 'event', `The Dead Men score ${die} hit${die === 1 ? '' : 's'} on the Shadow Army at ${region} [${die}]`);
+      notify(state, `Rolled [${die}]: ${die} hit${die === 1 ? '' : 's'} on the Shadow Army in ${rName(region)}, which must then retreat — or is destroyed, with its Nazgûl and Minions, if it cannot.`, 'Dead Men of Dunharrow');
+      activateOnCompanionLand(state, 'fp', moving, region);
+      queueOrApplyEventCasualties(state, 'shadow', region, die, { kind: 'card', card: 'fp-char-22', data: { region } });
+      return;
     }
     // A Companion ending his move in a friendly City wakes its Nation, as on any move.
     activateOnCompanionLand(state, 'fp', moving, region);
@@ -1600,6 +1630,7 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       const roll = rollDiceFaces(state, 3, 4);
       const hits = roll.hits;
       log(state, null, 'event', rollLine('The Ents score', roll, 'the Shadow Army in Orthanc'));
+      rollNotice(state, EVENT_BY_ID[id]?.name ?? 'The Ents Awake', roll, 4, 'the Shadow Army in Orthanc');
       freeChar();
       // Shadow chooses how the Orthanc Army absorbs the hits (Regulars vs Elites);
       // if the Army is wiped, its Nazgûl recycle and its Minions are eliminated.
@@ -1655,9 +1686,11 @@ register('fp-str-06', {
     const roll = rollDiceFaces(state, 3, 5);
     // The roll is logged before the casualties it causes.
     log(state, null, 'event', rollLine("Faramir's Rangers score", roll, `the Shadow Army in ${t.region}`));
+    rollNotice(state, "Faramir's Rangers", roll, 5, `the Shadow Army in ${rName(t.region!)}`);
     // The Shadow chooses which units absorb the hits, as with Dreadful Spells (report
-    // 29395e6o1y6r4y5e). No siege case: Osgiliath and Ithilien hold no Stronghold.
-    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits);
+    // 29395e6o1y6r4y5e). Not an "attack": the Nazgûl and Minions with the Army are
+    // untouched even if every unit falls (Almanac). No siege case here.
+    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits, undefined, { spare: true });
   },
   // Leader-only case: nothing to strike and no Gondor unit placeable leaves no target to
   // choose. That used to skip `finalize` entirely (it only ran off the eventTarget path)
@@ -1666,25 +1699,44 @@ register('fp-str-06', {
   finalize(state) { faramirLeader(state); },
 });
 // The Eagles are Coming!: eliminate Nazgûl near an FP Army containing a Companion.
+// Two choices, each its owner's (player reports 0q032a5d3o2s0l49, 3e624i0y1v4p2o2c):
+// WHICH Nazgûl the Eagles strike is the Free Peoples' (the card names no target — it
+// used to take the first qualifying pair), and WHERE the survivors fly is the
+// Shadow's: they "must all be moved together (by the Shadow player) to another
+// uncaptured Sauron Stronghold" (Almanac) — it used to be the first one in the list.
+const eaglesTargets = (state: GameState): RegionId[] =>
+  [...new Set(fpArmyNearNazgul(state).filter(([fp]) => eaglesArmy(state, fp)).map(([, sh]) => sh as RegionId))];
+/** Where the survivors may go: an uncaptured Sauron Stronghold — besieged by the Free
+ *  Peoples or not — other than the region struck (Almanac). */
+const eaglesRefuges = (state: GameState, struck: string): RegionId[] =>
+  SAURON_STRONGHOLDS.filter((r) => r !== struck && settlementController(state, r) === 'shadow') as RegionId[];
+/** Fly the surviving Nazgûl from `from` to `dest` (a besieged refuge's garrison box). */
+export function eaglesFlee(state: GameState, from: string, dest: string): void {
+  const f = armyForceOf(state, from as RegionId, 'shadow') ?? state.regions[from]!;
+  const n = f.nazgul;
+  if (n <= 0) return;
+  figureForce(state, dest as RegionId, 'shadow').nazgul += n; f.nazgul = 0;
+  log(state, null, 'event', `The Eagles drive ${n} Nazgûl ${from} → ${dest}`);
+}
 register('fp-char-18', {
-  canPlay: (state) => fpArmyNearNazgul(state).some(([fp]) => eaglesArmy(state, fp)),
-  apply(state) {
-    const pair = fpArmyNearNazgul(state).find(([fp]) => eaglesArmy(state, fp));
-    if (!pair) return;
-    const sh = pair[1];
+  canPlay: (state) => eaglesTargets(state).length > 0,
+  targets: (state, _side, applied = []) => (applied.length ? [] : eaglesTargets(state).map((region) => ({ region }))),
+  applyTarget(state, _side, t) {
+    const sh = t.region!;
+    if (!eaglesTargets(state).includes(sh as RegionId)) throw new Error('The Eagles can strike only Nazgûl with a Shadow Army next to, or with, a Free Peoples Army that has a Companion.');
     const shf = armyForceOf(state, sh, 'shadow') ?? state.regions[sh]!; // may be a boxed garrison
+    // The Witch-king is not a Nazgûl for this card: no die for him, and he stays put.
     const eagleRoll = rollDiceFaces(state, shf.nazgul, 5);
     const kills = eagleRoll.hits;
     eliminateNazgul(state, sh, kills);
-    // Surviving Nazgûl must move to any one unconquered Sauron Stronghold (card text).
     const survivors = shf.nazgul;
-    const dest = SAURON_STRONGHOLDS.find((r) => r !== sh && settlementController(state, r) === 'shadow');
-    // A Sauron Stronghold the Free Peoples besiege is still unconquered, and the
-    // Nazgûl join its garrison in the siege box, not the besiegers in the field
-    // (player report 485p4m2z27363p1o) — `figureForce` is the one seam for that.
-    if (survivors > 0 && dest) { figureForce(state, dest, 'shadow').nazgul += survivors; shf.nazgul = 0; }
+    const refuges = eaglesRefuges(state, sh);
     // Active voice, like the other ranged-attack cards (player report 6b495o0r1x585s35).
-    log(state, null, 'event', `The Eagles strike down ${kills} Nazgûl in ${sh} [${eagleRoll.dice.join(' ')}]${survivors > 0 && dest ? `, driving ${survivors} to ${dest}` : ''}`);
+    log(state, null, 'event', `The Eagles strike down ${kills} Nazgûl in ${sh} [${eagleRoll.dice.join(' ')}]`);
+    notify(state, `Rolled [${eagleRoll.dice.join(' ')}], hitting on 5+: ${kills === 0 ? 'no Nazgûl' : `${kills} Nazgûl`} struck down in ${rName(sh)}${survivors > 0 && refuges.length ? `; the ${survivors} left must fly to a Sauron Stronghold` : ''}.`, 'The Eagles are Coming!');
+    if (survivors <= 0 || !refuges.length) return;
+    if (refuges.length === 1) { eaglesFlee(state, sh, refuges[0]!); return; }
+    state.pendingChoice = { owner: 'shadow', kind: 'eaglesRefuge', data: { from: sh, count: survivors, refuges } };
   },
 });
 // Dreadful Spells (Shadow): hit an FP Army adjacent to/with a Nazgûl force.
@@ -1717,19 +1769,13 @@ register('sh-char-19', {
     const roll = rollDiceFaces(state, Math.min(5, caster.nazgul), 5);
     const hits = roll.hits;
     log(state, null, 'event', rollLine('Dreadful Spells scores', roll, `the Free Peoples Army in ${fp}`));
+    rollNotice(state, 'Dreadful Spells', roll, 5, `the Free Peoples Army in ${rName(fp)}`);
     // A besieged garrison is a legal target (Almanac, "Dreadful Spells" C 19), but the
-    // card is NOT an "attack": Companions inside the Stronghold are unaffected even if
-    // the Army around them is wiped out, so lift them out of the box before the hits
-    // land and let the follow-up put them back (in the box, or in the fallen region).
-    const garrison = armyForceOf(state, fp, 'fp');
-    const boxed = !!garrison && garrison !== state.regions[fp];
-    let then: CasualtyThen | undefined;
-    if (boxed) {
-      then = { kind: 'siegeFall', region: fp, besieger: 'shadow', spare: [...garrison!.characters] };
-      garrison!.characters = [];
-    }
-    // The Free Peoples choose how their Army absorbs the hits (Regulars vs Elites).
-    queueOrApplyEventCasualties(state, 'fp', fp, hits, then);
+    // card is NOT an "attack": Companions are unaffected even if the Army around them
+    // is wiped out — in the open field or inside the Stronghold, which then falls to
+    // the besiegers with the Companions stepping out (the shared `spare` strike).
+    // The Free Peoples choose which units absorb the hits.
+    queueOrApplyEventCasualties(state, 'fp', fp, hits, undefined, { spare: true });
   },
 });
 
@@ -2539,26 +2585,26 @@ const shadowControlsElvenStronghold = (state: GameState): boolean =>
 register('sh-str-01', {
   canPlay: (state) => shadowControlsElvenStronghold(state) && elvenStrongholds(state).length > 0,
   apply(state) {
-    const results: { region: string; hits: number }[] = [];
-    let anyChoice = false;
+    // One strike per Elven Stronghold not under siege, through the same casualty prompt
+    // as every other card that rolls at an Army (player reports 6f4a631y3j0w2x2n,
+    // 29395e6o1y6r4y5e): "the Free People player may only select Elven units in those
+    // regions to resolve any damage", and it is not an "attack", so Companions are
+    // unaffected while Leaders fall with a destroyed Army (Almanac, "Return to Valinor").
+    // It used to ask one "Regulars first or Elites first" question for every region at
+    // once, and could take Gondor or Dwarf units standing with the Elves.
+    const strikes: EventStrike[] = [];
+    const lines: string[] = [];
     for (const id of elvenStrongholds(state)) {
       const u = state.regions[id]!.units.elves!;
       const roll = rollDiceFaces(state, Math.min(u.regular + u.elite, 5), 6); // card: max 5 dice
       const hits = roll.hits;
-      if (hits > 0) {
-        results.push({ region: id, hits });
-        // A choice exists only when the region holds BOTH Regulars and Elites and not
-        // every unit is lost (otherwise the absorption order is forced).
-        if (u.regular > 0 && u.elite > 0 && hits < u.regular + u.elite) anyChoice = true;
-      }
+      if (hits > 0) strikes.push({ side: 'fp', region: id, hits, nation: 'elves', spare: true });
       // No card prefix (report 2d5o6e2472160r5w): the losses may be anywhere in the Stronghold's Army.
       log(state, null, 'event', `${hits === 0 ? 'No' : hits} Elven unit${hits === 1 ? '' : 's'} ${hits === 1 ? 'departs' : 'depart'} from ${id} and ${hits === 1 ? 'sails' : 'sail'} for Valinor [${roll.dice.join(' ')}]`);
+      lines.push(`${rName(id)}: rolled [${roll.dice.join(' ')}], ${hits === 0 ? 'no hits' : `${hits} hit${hits === 1 ? '' : 's'}`}`);
     }
-    if (results.length === 0) return;
-    // Let the FP choose how the Elves absorb the losses (Regulars first vs Elites first),
-    // like combat casualties — instead of always auto-removing Regulars first.
-    if (anyChoice) state.pendingChoice = { owner: 'fp', kind: 'valinorCasualties', data: { results } };
-    else for (const r of results) applyCasualties(state, r.region, 'fp', r.hits, 'regularsFirst');
+    notify(state, `Hitting on 6 — ${lines.join('; ')}.`, 'Return to Valinor');
+    runEventStrikes(state, strikes);
   },
 });
 
@@ -2677,12 +2723,12 @@ register('fp-str-05', {
   applyTarget(state, _side, t) {
     const roll = rollDiceFaces(state, 5, 5);
     log(state, null, 'event', rollLine('The Spirit of Mordor scores', roll, `the Shadow Army in ${t.region}`));
+    rollNotice(state, 'The Spirit of Mordor', roll, 5, `the Shadow Army in ${rName(t.region!)}`);
     // The Shadow chooses which units absorb the hits, as with Dreadful Spells (report
-    // 29395e6o1y6r4y5e). A besieged garrison wiped out leaves its Stronghold to the
-    // besieger, as before.
-    const boxed = armyForceOf(state, t.region!, 'shadow') !== state.regions[t.region!];
-    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits,
-      boxed ? { kind: 'siegeFall', region: t.region!, besieger: 'fp', spare: [] } : undefined);
+    // 29395e6o1y6r4y5e). Not an "attack": it "cannot affect or eliminate any Nazgûl or
+    // Minions in the targeted region" (Almanac). A besieged garrison wiped out leaves
+    // its Stronghold to the besieger (the shared `spare` strike handles both).
+    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits, undefined, { spare: true });
   },
 });
 

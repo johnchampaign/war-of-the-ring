@@ -1330,6 +1330,14 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'guideDraw' && a.draw) ?? legal[0]!;
     case 'sorcererDraw': // Witch-king: take the free card
       return legal.find((a) => a.kind === 'sorcererDraw' && a.draw) ?? legal[0]!;
+    case 'eaglesRefuge': { // The Eagles are Coming!: fly the survivors where they can hunt — nearest the Fellowship
+      const refuges = legal.filter((a): a is Extract<WotrAction, { kind: 'eaglesRefuge' }> => a.kind === 'eaglesRefuge');
+      return refuges.reduce((b, a) => (dist(a.region, state.fellowship.location) < dist(b.region, state.fellowship.location) ? a : b), refuges[0]!) ?? legal[0]!;
+    }
+    case 'cardRetreat': { // a card's forced retreat: toward a friendly Settlement if possible
+      const me: Side = state.pendingChoice!.owner;
+      return legal.find((a) => a.kind === 'cardRetreat' && settlementCtrl(state, a.region) === me) ?? legal[0]!;
+    }
     case 'retreatTo': { // retreat toward a friendly Settlement if possible
       const me: Side = state.pendingChoice!.owner;
       const friendly = legal.find((a) => a.kind === 'retreatTo' && settlementCtrl(state, a.region) === me);

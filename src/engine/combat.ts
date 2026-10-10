@@ -14,6 +14,7 @@ import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
 import { log, sideDoes, andList } from './log';
+import { getHandler } from './handlers/registry';
 
 // Safety backstop only — a real field battle terminates when the attacker ceases
 // or one side is wiped (always, since every round removes units). Set well above
@@ -279,10 +280,13 @@ export interface CasualtyOption { step: CasualtyStepKind; nation: Nation; cost: 
 /** Every legal way to absorb the next hit(s) from this Force. The nation is part of
  *  the choice: which Nation loses a figure is the owner's call (p.30), and it matters
  *  (a Nation's pool, and whether its Elites survive to press a siege). */
-export function casualtyOptions(f: Force, hits: number, owner?: { state: GameState; side: Side }): CasualtyOption[] {
+export function casualtyOptions(f: Force, hits: number, owner?: { state: GameState; side: Side; nation?: Nation }): CasualtyOption[] {
   const out: CasualtyOption[] = [];
   if (hits <= 0) return out;
   for (const n of Object.keys(f.units) as Nation[]) {
+    // A card that may only take ONE Nation's units (Return to Valinor: "the Free
+    // People player may only select Elven units", Almanac).
+    if (owner?.nation && n !== owner.nation) continue;
     const u = f.units[n]; if (!u) continue;
     if (u.regular > 0) out.push({ step: 'removeRegular', nation: n, cost: 1 });
     // NB this hides "Reduce" ONLY in the no-replacement case — whenever a Regular is
@@ -370,11 +374,11 @@ function applyCasualtyOption(state: GameState, f: Force, side: Side, opt: Casual
 
 /** Absorb every hit whose allocation is FORCED (exactly one legal option), so the
  *  player is never asked to "choose" a non-choice. Returns the hits still open. */
-function absorbForced(state: GameState, f: Force, side: Side, hits: number): number {
+function absorbForced(state: GameState, f: Force, side: Side, hits: number, nation?: Nation): number {
   let left = hits;
   const taken: string[] = [];
   for (;;) {
-    const opts = casualtyOptions(f, left, { state, side });
+    const opts = casualtyOptions(f, left, { state, side, nation });
     if (left <= 0 || opts.length !== 1) break;
     const o = opts[0]!;
     const what = casualtyPhrase(state, side, o); // before the Regular is taken
@@ -403,8 +407,8 @@ function casualtyPhrase(state: GameState, side: Side, o: CasualtyOption): string
 const casualtyLogKind = (state: GameState): string => (state.pendingCombat ? 'combat' : 'event');
 
 /** True when the owner still has a real decision to make about these hits. */
-function meaningfulForceCasualty(state: GameState, f: Force, side: Side, hits: number): boolean {
-  return casualtyOptions(f, hits, { state, side }).length > 1;
+function meaningfulForceCasualty(state: GameState, f: Force, side: Side, hits: number, nation?: Nation): boolean {
+  return casualtyOptions(f, hits, { state, side, nation }).length > 1;
 }
 
 /** Apply `hits` steps to a region's army. regularsFirst removes Regulars before
@@ -452,8 +456,19 @@ function applyForceCasualties(state: GameState, f: Force, side: Side, hits: numb
  *  on-map roster; without it a besieged Saruman survived the fall of Orthanc and kept
  *  his die (player report). Idempotent — the event-casualty follow-up (The Ents
  *  Awake) re-checks `eliminated` — so the per-hit path may call it after each step. */
-function finishForceCasualties(state: GameState, f: Force, side: Side): void {
+function finishForceCasualties(state: GameState, f: Force, side: Side, spare = false): void {
   if (forceUnitCount(f) !== 0) return;
+  // A card that is not an "attack" (Dreadful Spells, Faramir's Rangers, The Spirit of
+  // Mordor, Return to Valinor) destroys units only: Companions, Minions and Nazgûl are
+  // unaffected "even if all units they accompany are eliminated" (Almanac). Free
+  // Peoples Leaders still fall — "Leaders cannot be outside of an Army".
+  if (spare) {
+    if (side === 'fp' && f.leaders > 0) {
+      log(state, null, casualtyLogKind(state), `${f.leaders === 1 ? 'a Free Peoples Leader falls' : `${f.leaders} Free Peoples Leaders fall`} with the destroyed Army`);
+      f.leaders = 0;
+    }
+    return;
+  }
   // Only the DESTROYED side's figures fall with the Army. Nazgûl are not Army
   // units, so a Shadow Nazgûl legally shares a region with a Free Peoples Army —
   // and this function used to wipe the region's nazgul/leaders/characters
@@ -501,8 +516,8 @@ function pendingCasualtyForce(state: GameState): Force | null {
 export function pendingCasualtyOptions(state: GameState): CasualtyOption[] {
   const f = pendingCasualtyForce(state);
   if (!f) return [];
-  const d = state.pendingChoice!.data as { hits: number; side: Side };
-  return casualtyOptions(f, d.hits, { state, side: d.side });
+  const d = state.pendingChoice!.data as { hits: number; side: Side; nation?: Nation };
+  return casualtyOptions(f, d.hits, { state, side: d.side, nation: d.nation });
 }
 
 /** Apply ONE chosen allocation, then either re-prompt for the next hit or finish
@@ -511,9 +526,9 @@ export function pendingCasualtyOptions(state: GameState): CasualtyOption[] {
 export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, nation: Nation): void {
   const ch = state.pendingChoice!;
   const isEvent = ch.kind === 'eventCasualties';
-  const d = ch.data as { region: RegionId; side: Side; hits: number; next?: PendingCombat['step']; boxed?: boolean; then?: CasualtyThen | null };
+  const d = ch.data as { region: RegionId; side: Side; hits: number; next?: PendingCombat['step']; boxed?: boolean; then?: CasualtyThen | null; nation?: Nation; spare?: boolean };
   const f = pendingCasualtyForce(state)!;
-  const opts = casualtyOptions(f, d.hits, { state, side: d.side });
+  const opts = casualtyOptions(f, d.hits, { state, side: d.side, nation: d.nation });
   const chosen = opts.find((o) => o.step === step && o.nation === nation) ?? opts[0];
   let left = d.hits;
   if (chosen) {
@@ -523,14 +538,14 @@ export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, na
     const spent = applyCasualtyOption(state, f, d.side, chosen);
     if (spent > 0) { left -= spent; log(state, null, casualtyLogKind(state), `${sideLabel(d.side)} casualties: ${what}`); }
   }
-  left = absorbForced(state, f, d.side, left);
-  if (meaningfulForceCasualty(state, f, d.side, left)) {
+  left = absorbForced(state, f, d.side, left, d.nation);
+  if (meaningfulForceCasualty(state, f, d.side, left, d.nation)) {
     state.pendingChoice = { ...ch, data: { ...d, hits: left } };
     return;
   }
-  finishForceCasualties(state, f, d.side);
+  finishForceCasualties(state, f, d.side, !!d.spare);
   state.pendingChoice = null;
-  if (isEvent) { runCasualtyThen(state, d.then ?? null); resumeQueuedChoice(state, d as { thenChoice?: GameState['pendingChoice'] }); }
+  if (isEvent) { finishEventStrike(state, d.region, d.side, !!d.boxed, !!d.spare, d.then ?? null); resumeQueuedChoice(state, d as { thenChoice?: GameState['pendingChoice'] }); }
   else state.pendingCombat!.step = d.next!;
 }
 
@@ -550,10 +565,31 @@ export type CasualtyThen =
   // the Stronghold Box before the hits landed: a card that is not an "attack" cannot
   // eliminate them with the Army (Almanac, "Dreadful Spells" C 19), so they go back
   // into the box if the garrison held, or out into the region if the Stronghold fell.
-  | { kind: 'siegeFall'; region: RegionId; besieger: Side; spare: string[] };
+  | { kind: 'siegeFall'; region: RegionId; besieger: Side; spare: string[]; spareNazgul?: number }
+  // Several strikes from ONE card, taken in turn — Return to Valinor rolls for every
+  // Elven Stronghold, and each region's losses are their own question.
+  | { kind: 'strikes'; list: EventStrike[] }
+  // The card picks up again once its hits are taken (Dead Men of Dunharrow's retreat).
+  | { kind: 'card'; card: string; data?: Record<string, unknown> };
+
+/** One Event card's hits on one Army — the shared shape of every card that rolls dice
+ *  at an Army (Dreadful Spells, Faramir's Rangers, The Spirit of Mordor, Return to
+ *  Valinor, The Ents Awake, Dead Men of Dunharrow). `spare`: the card is not an
+ *  "attack", so the Army's Characters and Nazgûl survive it (Almanac). `nation`: only
+ *  that Nation's units may be lost. */
+export interface EventStrike { side: Side; region: RegionId; hits: number; nation?: Nation; spare?: boolean }
+
+/** Take several strikes in turn (each may stop to ask the owner which units fall). */
+export function runEventStrikes(state: GameState, list: EventStrike[]): void {
+  const [first, ...rest] = list;
+  if (!first) return;
+  queueOrApplyEventCasualties(state, first.side, first.region, first.hits, rest.length ? { kind: 'strikes', list: rest } : undefined, first);
+}
 
 function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
   if (!then) return;
+  if (then.kind === 'strikes') { runEventStrikes(state, then.list); return; }
+  if (then.kind === 'card') { getHandler(then.card)?.afterEventCasualties?.(state, then.data ?? {}); return; }
   if (then.kind === 'siegeFall') {
     const r = state.regions[then.region]!;
     const box = r.siegeBox;
@@ -566,6 +602,7 @@ function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
       if (!r.characters.includes(c)) r.characters.push(c);
       state.characters.inPlay[c] = then.region;
     }
+    if (then.spareNazgul) r.nazgul += then.spareNazgul;
     if (armySide(state, then.region) === then.besieger) {
       captureIfEnemySettlement(state, then.region, then.besieger); // not an "attack": no attack-activation
       log(state, null, 'army', `the garrison of ${then.region} is destroyed — the besieging Army takes the Stronghold`);
@@ -612,19 +649,33 @@ export function garrisonFalls(state: GameState, region: RegionId, besieger: Side
 /** Apply event-inflicted `hits` to a region's Army, prompting the owner for the
  *  absorption plan when the choice is meaningful; otherwise auto-resolve and run
  *  the follow-up immediately. */
-export function queueOrApplyEventCasualties(state: GameState, side: Side, region: RegionId, hits: number, then?: CasualtyThen): void {
+export function queueOrApplyEventCasualties(state: GameState, side: Side, region: RegionId, hits: number, then?: CasualtyThen, opts: { nation?: Nation; spare?: boolean } = {}): void {
   if (hits <= 0) { runCasualtyThen(state, then); return; }
   // The target Army may be a garrison in the Stronghold Box, not the open field —
   // the besieger holds the field there, and hitting it would have wounded the WRONG
   // side (and leaked Shadow units past the reinforcement pool).
   const f = armyForceOf(state, region, side) ?? state.regions[region]!;
   const boxed = f !== state.regions[region];
-  const left = absorbForced(state, f, side, hits); // forced losses need no prompt
-  if (meaningfulForceCasualty(state, f, side, left)) {
-    state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits: left, boxed, then: then ?? null } };
+  const left = absorbForced(state, f, side, hits, opts.nation); // forced losses need no prompt
+  if (meaningfulForceCasualty(state, f, side, left, opts.nation)) {
+    state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits: left, boxed, then: then ?? null,
+      ...(opts.nation ? { nation: opts.nation } : {}), ...(opts.spare ? { spare: true } : {}) } };
     return;
   }
-  finishForceCasualties(state, f, side);
+  finishForceCasualties(state, f, side, !!opts.spare);
+  finishEventStrike(state, region, side, boxed, !!opts.spare, then ?? null);
+}
+
+/** After a card's hits are all taken: a not-an-attack card that emptied a BESIEGED
+ *  garrison leaves its Stronghold to the besieger (p.32), and the figures it spared
+ *  step out into the region (Almanac, "Dreadful Spells"). Then the card's follow-up. */
+function finishEventStrike(state: GameState, region: RegionId, side: Side, boxed: boolean, spare: boolean, then: CasualtyThen | null): void {
+  const box = state.regions[region]?.siegeBox;
+  if (spare && boxed && box && forceUnitCount(box) === 0) {
+    const chars = [...box.characters], naz = box.nazgul;
+    box.characters = []; box.nazgul = 0;
+    runCasualtyThen(state, { kind: 'siegeFall', region, besieger: side === 'fp' ? 'shadow' : 'fp', spare: chars, spareNazgul: naz });
+  }
   runCasualtyThen(state, then);
 }
 
@@ -639,7 +690,12 @@ export function resolveEventCasualties(state: GameState, plan: 'regularsFirst' |
 /** A choice queued behind an event's casualty question (see the adapter's eventTarget
  *  case) comes up once the casualties are taken. */
 function resumeQueuedChoice(state: GameState, d: { thenChoice?: GameState['pendingChoice'] }): void {
-  if (d.thenChoice && !state.pendingChoice) state.pendingChoice = d.thenChoice;
+  if (!d.thenChoice) return;
+  if (!state.pendingChoice) { state.pendingChoice = d.thenChoice; return; }
+  // The follow-up itself asked something (Dead Men's retreat destination): the queued
+  // choice waits behind THAT one instead of being dropped.
+  const nd = state.pendingChoice.data as { thenChoice?: unknown } | undefined;
+  if (nd && !nd.thenChoice) nd.thenChoice = d.thenChoice;
 }
 
 // --- Attack split: the rearguard (rulebook p.28) -----------------------------

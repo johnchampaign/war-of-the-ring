@@ -33,6 +33,8 @@ const CHOICE_TITLE: Record<string, string> = {
   combatContinue: 'Continue the attack?',
   combatRetreat: 'Retreat or stand?',
   retreatTo: 'Retreat — click a highlighted region on the map',
+  eaglesRefuge: 'The Eagles are Coming! — fly the surviving Nazgûl to a Sauron Stronghold (click it on the map)',
+  cardRetreat: 'Dead Men of Dunharrow — retreat the Army (click a highlighted region on the map)',
   preCombatRetreat: 'Retreat before combat — choose a destination',
   huntDamage: 'The Hunt strikes!',
   huntPreventDraw: 'Prevent the Hunt tile draw? (you won’t see it)',
@@ -94,11 +96,13 @@ export function modalDecisions(view: GameState | null | undefined, actions: Wotr
   const evModal = eventChoiceInModal(actions);
   const freeCard = view?.pendingChoice?.kind === 'freeCharEvent';
   return inNationOrder(actions).filter((a) => (isDecisionAction(a) || (evModal && a.kind === 'eventTarget') || (freeCard && a.kind === 'playEvent'))
-    && a.kind !== 'retreatTo' && a.kind !== 'preCombatRetreat');
+    && a.kind !== 'retreatTo' && a.kind !== 'preCombatRetreat' && a.kind !== 'eaglesRefuge' && a.kind !== 'cardRetreat');
 }
 
-export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: {
+export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, context }: {
   view: GameState; you: Side; actions: WotrAction[]; onAction: (a: WotrAction) => void; yourTurn: boolean;
+  /** What just happened that this question follows from — a card's roll (title + text). */
+  context?: Array<{ seq: number; title?: string; msg: string }>;
   // When set, an Undo control is shown INSIDE the modal — the modal's backdrop
   // otherwise covers the status-bar Undo button, so a decision (e.g. Gandalf's
   // "draw a card?") would trap the player with no way to back out.
@@ -129,6 +133,12 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo }: 
     <div style={backdrop}>
       <div style={modal}>
         {pc && <CombatHeader pc={pc} view={view} />}
+        {/* The card roll this question follows from (Dreadful Spells, Return to Valinor…). */}
+        {context && context.length > 0 && (
+          <div data-testid="decision-context" style={{ background: '#2a2418', border: '1px solid #5a4a2a', borderRadius: 6, padding: '6px 9px', margin: '8px 0 0', fontSize: 13, color: '#e8dcc0' }}>
+            {context.map((n) => <div key={n.seq}>{n.title ? <b>{n.title}: </b> : null}{n.msg}</div>)}
+          </div>
+        )}
         {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>
           {choice.kind === 'eventTarget'
             ? `${cardName((choice.data as { card?: string } | undefined)?.card ?? '')} — choose how it resolves`

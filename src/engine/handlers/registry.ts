@@ -29,6 +29,9 @@ export interface EventHandler {
   /** Apply the player's pick. `applied` lists the PRIOR picks this card (before this
    *  one) — used by group-move cards whose destination moves the trailing group. */
   applyTarget?(state: GameState, side: Side, target: EventTarget, applied?: EventTarget[]): void;
+  /** Picks the card up again once the hits it dealt have been taken (the owner may have
+   *  been asked which units fall) — Dead Men of Dunharrow's retreat. */
+  afterEventCasualties?(state: GameState, data: Record<string, unknown>): void;
   /** Multi-target cards: the max number of targets to apply (the player may stop
    *  early with a "done" option). Default 1 (single target). */
   repeat?: number;

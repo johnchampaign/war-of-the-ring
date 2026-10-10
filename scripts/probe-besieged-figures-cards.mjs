@@ -97,7 +97,7 @@ for (const [id, name] of [['sh-char-08b', 'The Nazgûl Strike!'], ['sh-char-09',
   const s = fresh(5);
   clearNazgul(s);
   // Minas Morgul is the only unconquered Sauron Stronghold left for the survivors.
-  for (const id of ['barad-dur', 'dol-guldur', 'morannon', 'mount-gundabad']) if (s.regions[id]) s.regions[id].control = 'fp';
+  for (const id of ['barad-dur', 'dol-guldur', 'morannon', 'mount-gundabad', 'moria']) if (s.regions[id]) s.regions[id].control = 'fp';
   besiege(s, 'minas-morgul', { units: { gondor: { regular: 2, elite: 0 } } }, { units: { sauron: { regular: 2, elite: 0 } } });
   // A Shadow Army with 5 Nazgûl next to a Free Peoples Army with a Companion.
   const sh = 'north-ithilien', fp = 'osgiliath';
@@ -105,7 +105,10 @@ for (const [id, name] of [['sh-char-08b', 'The Nazgûl Strike!'], ['sh-char-09',
   Object.assign(s.regions[fp], { units: { gondor: { regular: 2, elite: 0 } }, leaders: 0, nazgul: 0, characters: ['boromir'] });
   s.characters.inPlay['boromir'] = fp;
   check('the card is playable', canPlayCard(s, 'fp-char-18', 'fp'));
-  getHandler('fp-char-18').apply(s, 'fp');
+  // The card is a target now (the Free Peoples pick which Nazgûl the Eagles strike);
+  // with ONE refuge left the survivors fly there without a Shadow question.
+  getHandler('fp-char-18').applyTarget(s, 'fp', { region: sh }, []);
+  check('no refuge question with only one refuge', s.pendingChoice === null || s.pendingChoice.kind !== 'eaglesRefuge', s.pendingChoice?.kind);
   const box = s.regions['minas-morgul'].siegeBox;
   const kills = 5 - (box?.nazgul ?? 0);
   check('the survivors joined the garrison in the box', (box?.nazgul ?? 0) > 0 || kills === 5, `box=${box?.nazgul}`);
