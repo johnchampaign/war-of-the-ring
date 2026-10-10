@@ -38,7 +38,10 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
   // either once it's flipped, or while the reveal-and-move prompt is still pending
   // (a catch with Progress defers the flip until the figure is placed).
   // …or while it waits for a Hobbit taken alive in the same Hunt to be placed first.
-  const revealed = fresh.some((d) => d.reveal) && (!view.fellowship.hidden || view.pendingChoice?.kind === 'revealMove' || !!view.flags?.revealMoveOwed);
+  const revealed = fresh.some((d) => d.reveal && !d.alreadyRevealed) && (!view.fellowship.hidden || view.pendingChoice?.kind === 'revealMove' || !!view.flags?.revealMoveOwed);
+  // A reveal on a Fellowship already revealed: say it changes nothing (player report
+  // 3d282f2767040w5y — it raised the full "has been revealed!" banner).
+  const alreadyRevealed = !revealed && fresh.some((d) => d.reveal && d.alreadyRevealed);
   // An Event card that draws tiles without a Hunt (Challenge of the King, The Breaking
   // of the Fellowship) gets the same tiles-on-the-table popup, with the card's own
   // result in place of the Corruption track.
@@ -113,6 +116,11 @@ export function HuntPopup({ view, seen, onSeen }: { view: GameState; seen: numbe
           <div style={{ marginTop: 10, padding: '8px 10px', background: '#a83232', color: '#fff', borderRadius: 8, fontSize: 13, lineHeight: 1.4 }}>
             🔴 <b>The Fellowship has been revealed!</b><br />
             It can't move again until you <b>hide it</b> with a Character die. (You'll place it on the board now.)
+          </div>
+        )}
+        {alreadyRevealed && (
+          <div style={{ marginTop: 10, padding: '8px 10px', background: '#3a2f1c', color: '#f0d090', borderRadius: 8, fontSize: 13, lineHeight: 1.4 }}>
+            The tile's reveal has no further effect — the Fellowship was <b>already revealed</b>.
           </div>
         )}
         <button style={btn} onClick={dismiss}>OK</button>

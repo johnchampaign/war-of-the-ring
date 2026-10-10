@@ -41,7 +41,11 @@ export function HuntIndicator({ view }: { view: GameState }) {
           {!onMordor && box > 5 && <span style={{ fontSize: 10, color: '#887' }}>+{box - 5}</span>}
         </div>
         {/* The to-hit number on its own line, not trailing the dice (player report 326g4536416k3q0g). */}
-        {!onMordor && box > 0 && <div style={{ fontSize: 11, color: '#cbbf9a' }}>Hits on {hitOn}+</div>}
+        {/* Set apart from the Corruption line below — they read as one run of text
+            (player report 5r6u6q4c1h0m6v56): the Hunt's to-hit is about the dice, so it
+            sits with them in their colour, and a hairline separates the Fellowship's state. */}
+        {!onMordor && box > 0 && <div style={{ fontSize: 11, color: '#e6b85a' }}>Hunt hits on {hitOn}+</div>}
+        <div style={{ borderTop: '1px solid #3a3326', margin: '3px 0 2px' }} />
         {/* Corruption track. */}
         <div style={{ fontSize: 11, color: danger ? '#ff8a8a' : '#cbbf9a', fontWeight: danger ? 700 : 400 }}>
           Corruption {corr}/12

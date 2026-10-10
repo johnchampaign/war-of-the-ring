@@ -191,7 +191,11 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // capped; seq marks a new draw. Public — drawn tiles are open info.
   const prev = state.hunt.draws ?? [];
   const seq = (prev.length ? prev[prev.length - 1]!.seq : 0) + 1;
-  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, stop: !!tile.stop, onMordor: fs.mordor !== null, ...(extra ? { source: opts.source ?? 'Extra Hunt' } : { roll: state.hunt.lastRoll }), ...specialOf(tile) }].slice(-16);
+  state.hunt.draws = [...prev, { seq, value: tile.value, damage, reveal, stop: !!tile.stop, onMordor: fs.mordor !== null,
+    // A reveal on a Fellowship that is ALREADY revealed changes nothing (an Event card's
+    // extra draw can do it) — the popup says so instead of announcing a reveal.
+    ...(reveal && !fs.hidden ? { alreadyRevealed: true } : {}),
+    ...(extra ? { source: opts.source ?? 'Extra Hunt' } : { roll: state.hunt.lastRoll }), ...specialOf(tile) }].slice(-16);
 
   // A 0 or a healing tile still ends in a "Hunt resolved" line, like every other
   // Hunt (player report 614c1h504g655n0z).

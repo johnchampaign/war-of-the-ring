@@ -1,8 +1,8 @@
 // "How the Hunt works" — an informational dialog (opened from the on-board Hunt
 // indicator) that lays out the current Hunt state and EVERY modifier: the dice the
 // Shadow rolls, the box bonus, the re-roll sources (Shadow Stronghold / Army /
-// Nazgûl in the Ring-bearers' region — shown concretely only while revealed, since
-// the location is hidden otherwise), the Mordor-track auto-draw, and the Guide /
+// Nazgûl in the region of the Ring-bearers' figure, which is public), the
+// Mordor-track auto-draw, and the Guide /
 // card effects. Pure reference; reads only public state.
 import type { GameState } from '../engine/types';
 import { huntRerollSources } from '../engine/hunt';
@@ -15,9 +15,11 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
   const dice = Math.min(5, box);
   const bonus = view.hunt.fpDiceInBox ?? 0;
   const onMordor = fs.mordor !== null;
-  // Concrete re-roll sources only when revealed (location is public then); otherwise
-  // describe them generically so we never leak the hidden position.
-  const src = !fs.hidden ? huntRerollSources(view) : null;
+  // The re-rolls are judged where the Ring-bearers FIGURE stands — its last known
+  // position, which is public whether the Fellowship is hidden or revealed (its true
+  // whereabouts live on the Progress track, not the map). So the concrete sources are
+  // always shown (player report 040c4x704k3o2m18 — they were hidden while "hidden").
+  const src = huntRerollSources(view);
   const srcList = src ? [src.stronghold && 'an enemy Stronghold', src.army && 'a Shadow Army', src.nazgul && 'a Nazgûl'].filter(Boolean) as string[] : [];
 
   return (
@@ -44,11 +46,9 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
           The Shadow re-rolls one failed Hunt die for <b>each</b> of these in the Ring-bearers' region: a <b>Shadow-controlled Stronghold</b>, a <b>Shadow Army</b>, and a <b>Nazgûl</b>.
           {onMordor
             ? <div style={{ marginTop: 4, color: '#998', fontStyle: 'italic' }}>On the Mordor Track no Hunt is rolled, so no re-rolls apply — the Ring-bearers are off the map.</div>
-            : src
-            ? (srcList.length
-                ? <div style={{ marginTop: 4, color: '#e88' }}>Right now at {regionName(view, fs.location)}: {srcList.join(', ')} → <b>{srcList.length} re-roll{srcList.length === 1 ? '' : 's'}</b>.</div>
-                : <div style={{ marginTop: 4, color: '#9c9' }}>None apply at {regionName(view, fs.location)} right now.</div>)
-            : <div style={{ marginTop: 4, color: '#998', fontStyle: 'italic' }}>(The exact sources are shown only while the Fellowship is revealed — its location is hidden otherwise.)</div>}
+            : srcList.length
+                ? <div style={{ marginTop: 4, color: '#e88' }}>Right now at {regionName(view, fs.location)} (the Ring-bearers' figure): {srcList.join(', ')} → <b>{srcList.length} re-roll{srcList.length === 1 ? '' : 's'}</b>.</div>
+                : <div style={{ marginTop: 4, color: '#9c9' }}>None apply at {regionName(view, fs.location)} (the Ring-bearers' figure) right now.</div>}
         </Section>
 
         <Section title="Tiles & damage">

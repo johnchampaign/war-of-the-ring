@@ -255,6 +255,20 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const rollContext = g.view?.pendingChoice && ROLL_QUESTIONS.has(g.view.pendingChoice.kind)
     ? (g.view.notices ?? []).filter((n) => n.seq > noticeSeen) : [];
   const markRollSeen = () => { if (rollContext.length) setNoticeSeen(Math.max(...rollContext.map((n) => n.seq))); };
+  // After an UNDO the game's event numbers rewind, but these "seen" markers did not: the
+  // next Hunt draw, battle or notice reused a number already marked seen, and its popup
+  // never appeared (player reports 6z0a4u2v0d5z5e05 — an Orc Patrol Eye with no popup —
+  // and 6r582a470b1r6l6n). Re-prime them to the restored game once it arrives.
+  const [undoTick, setUndoTick] = useState(0);
+  const primedUndo = useRef(0);
+  useEffect(() => {
+    if (!g.view || undoTick === primedUndo.current) return;
+    primedUndo.current = undoTick;
+    const maxSeq = (xs: Array<{ seq: number }> | undefined) => (xs ?? []).reduce((m, x) => Math.max(m, x.seq), 0);
+    setHuntSeen(maxSeq(g.view.hunt?.draws));
+    setBattleSeen(g.view.lastBattle?.seq ?? 0);
+    setNoticeSeen(maxSeq(g.view.notices));
+  }, [g.view, undoTick]);
   const [logsUploaded, setLogsUploaded] = useState(false); // shared by the Upload button + end-game prompt
   // "Peek the board": temporarily hide a blocking choice modal (combat/hunt decision,
   // move picker) so you can study the board, then click again to return to the choice.
@@ -269,7 +283,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     inFlight.current = true;
     setBusy(true);
     await paint();
-    try { await client.undo?.(); await g.refresh(); setSelected(null); setCharPick(null); setMoveMenu(null); setMoveDraft(null); setBlockMsg(null); setDie(null); }
+    try { await client.undo?.(); await g.refresh(); setSelected(null); setCharPick(null); setMoveMenu(null); setMoveDraft(null); setBlockMsg(null); setDie(null); setUndoTick((t) => t + 1); }
     finally { inFlight.current = false; setBusy(false); }
   }, [client, g]);
 
@@ -877,6 +891,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (dieOptions(action, g.view, 'fp').length === 0) continue;
       if (activeDie && !dieAllowsAction(action, g.view, 'fp', activeDie)) continue;
       blockedPanel.push({ action, reason: 'Threats and Promises is in play — the Free Peoples cannot advance a passive Nation' });
+    }
+  }
+  // A revealed Fellowship cannot move until it hides (p.39): say so on a greyed "Move
+  // the Fellowship", like the other movement hints, rather than leaving the button
+  // simply missing (player report 252k2f1x2f2o3t2z). Only with a die that could move it.
+  if (g.yourTurn && g.you === 'fp' && g.view.phase === 'actionResolution' && !g.view.pendingChoice
+    && !g.view.fellowship.hidden && g.view.fellowship.mordor === null && !g.legalActions.some((a) => a.kind === 'moveFellowship')) {
+    const action: WotrAction = { kind: 'moveFellowship' };
+    if (dieOptions(action, g.view, 'fp').length > 0 && (!activeDie || dieAllowsAction(action, g.view, 'fp', activeDie))) {
+      blockedPanel.push({ action, reason: 'The Fellowship is revealed — it must hide (a Character die) before it can move again' });
     }
   }
   // The optional SECOND army move (Army die) is offered as panel buttons; route it

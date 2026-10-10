@@ -6,7 +6,7 @@
 // owns the choice; the opponent sees a passive "resolving battle…" note.
 import { useState } from 'react';
 import { describeAction, isDecisionAction, eventChoiceInModal } from './actionText';
-import { RollLine, CorruptionLine, describeDraw, HuntTileFace, strongholdRevealLine } from './huntView';
+import { RollLine, CorruptionLine, describeDraw, HuntTileFace, strongholdRevealLine, type Draw } from './huntView';
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt } from './artCache';
 import { RollRow } from './combatDice';
@@ -307,9 +307,15 @@ function TileDetail({ tile }: { tile?: { value: number | string; reveal?: boolea
   if (!tile) return null;
   const dmg = typeof tile.value === 'number' ? `${tile.value} Hunt damage`
     : tile.value === 'eye' ? 'an Eye (Shadow draws Hunt dice for damage)' : 'a die — rolled for damage';
+  // The tile itself, drawn like the Hunt popup draws it — not just words (player report
+  // 2k4q64023j4j611u: "it should use the Hunt one with the tile displayed graphically").
+  const draw = { seq: 0, damage: typeof tile.value === 'number' ? tile.value : 0, onMordor: false, ...tile, reveal: !!tile.reveal, stop: !!tile.stop } as Draw;
   return (
-    <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 2px' }}>
-      You drew: <b>{dmg}</b>{tile.reveal ? ' · Reveal' : ''}{tile.stop ? ' · Stop' : ''}. Redraw it, or keep it?
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '6px 0 2px' }}>
+      <HuntTileFace draw={draw} />
+      <div style={{ fontSize: 13, color: '#e9b' }}>
+        You drew: <b>{dmg}</b>{tile.reveal ? ' · Reveal' : ''}{tile.stop ? ' · Stop' : ''}.<br />Redraw it (Mithril Coat), or keep it?
+      </div>
     </div>
   );
 }

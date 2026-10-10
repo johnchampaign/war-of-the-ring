@@ -115,6 +115,8 @@ export interface HuntState {
    *  `seq` increments per draw so the UI can show every not-yet-seen tile (even 0/
    *  blank ones). Public info — drawn tiles are open in WotR. */
   draws?: { seq: number; value: number | string; damage: number; reveal: boolean; stop?: boolean; onMordor: boolean;
+    /** The tile's reveal fell on a Fellowship that was already revealed: no effect. */
+    alreadyRevealed?: boolean;
     /** A Hunt that rolled but scored no successes — recorded so the popup still shows
      *  the roll (dice + box bonus) on a miss, not just on a hit. No tile is drawn. */
     miss?: boolean;
