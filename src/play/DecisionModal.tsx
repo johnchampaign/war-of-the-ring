@@ -10,6 +10,7 @@ import { RollLine, CorruptionLine, describeDraw, HuntTileFace, strongholdRevealL
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt } from './artCache';
 import { RollRow } from './combatDice';
+import { CardZoom } from './HandStrip';
 import type { GameState, Side, Nation } from '../engine/types';
 import { eliteHasReplacement } from '../engine/combat';
 import type { WotrAction } from '../adapter/wotrAction';
@@ -116,7 +117,13 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
   const pc = view.pendingCombat;
   const choice = view.pendingChoice;
   // The card shown when nothing is hovered (see the CardBlurb below).
-  const eventCard = choice?.kind === 'eventTarget' ? (choice.data as { card?: string } | undefined)?.card : undefined;
+  // …and for the questions a card raises on its own (the Palantír's draw, Mithril Coat's
+  // redraw, the Balrog, …), that card — they used to show "Hover a card to read its
+  // effect" (player report 0o085z6c5s484q6r).
+  const CHOICE_CARD: Record<string, string> = { bonusDraw: 'sh-char-21', balrog: 'sh-char-17', crebain: 'sh-char-16', huntPreventDraw: 'fp-char-08',
+    huntRedraw: 'fp-char-05', wornDiscard: 'sh-char-15', lureChoice: 'sh-char-13', nazgulStrike: 'sh-char-08b' };
+  const eventCard = choice?.kind === 'eventTarget' ? (choice.data as { card?: string } | undefined)?.card
+    : choice ? ((choice.data as { card?: string } | undefined)?.card ?? CHOICE_CARD[choice.kind]) : undefined;
   const combatCard = pc ? revealedCard(pc.attacker === you ? pc.attackerCard ?? pc.defenderCard : pc.defenderCard ?? pc.attackerCard) : null;
   // A retreat DESTINATION is picked on the map (the highlighted regions), not from a
   // list of buttons — the binary Retreat-or-stand choice above it stays here (player
@@ -432,7 +439,8 @@ function eliteLabel(a: WotrAction, view: GameState): string | undefined {
 function DecisionButton({ action, disabled, onClick, onHover, guide, label }: { action: WotrAction; disabled: boolean; onClick: () => void; onHover?: (id: string | null) => void; guide?: string; label?: string }) {
   // Card-referencing choices (play a Combat card, or pick a card to discard) get the
   // card thumbnail + hover preview so you can read what you're choosing.
-  const cardId = action.kind === 'playCombatCard' ? action.cardId : action.kind === 'discardCard' ? action.card : action.kind === 'wornDiscard' ? action.card ?? null : null;
+  const cardId = action.kind === 'playCombatCard' ? action.cardId : action.kind === 'discardCard' ? action.card : action.kind === 'wornDiscard' ? action.card ?? null
+    : action.kind === 'nazgulStrike' ? action.discard ?? null : null; // The Nazgûl Strike!'s table card too (report 272c3x476h0y3h2t)
   const art = useCardArt(cardId);
   const hov = cardId && onHover ? { onMouseEnter: () => onHover(cardId), onMouseLeave: () => onHover(null) } : {};
   return (
@@ -452,9 +460,12 @@ function DecisionButton({ action, disabled, onClick, onHover, guide, label }: { 
 function CardBlurb({ id }: { id: string | null }) {
   const def = id ? CARD.get(id) : null;
   const art = useCardArt(id);
+  // Click the card to see it full size, as in the hand (player report 0o085z6c5s484q6r).
+  const [zoom, setZoom] = useState(false);
   return (
     <div style={{ ...blurb, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      {def && art && <img src={art} alt="" style={{ height: 120, borderRadius: 4, flexShrink: 0 }} />}
+      {def && art && <img src={art} alt="" title="Click to enlarge" onClick={() => setZoom(true)} style={{ height: 120, borderRadius: 4, flexShrink: 0, cursor: 'zoom-in' }} />}
+      {zoom && id && <CardZoom id={id} onClose={() => setZoom(false)} />}
       {def ? (
         <div>
           <div style={{ fontWeight: 700, fontSize: 13 }}>{def.name} <span style={{ color: '#aa9', fontWeight: 400 }}>· {cardSideLine(def.side, def.initiative)}</span></div>

@@ -8,9 +8,11 @@ import { reporterMarker } from './reporterId';
 
 type Sev = 'bug' | 'rules-question' | 'feedback';
 
-export function ReportButton({ report, clientBuild }: {
+export function ReportButton({ report, clientBuild, style }: {
   report: (b: { message: string; severity?: 'bug' | 'rules-question' | 'feedback'; category?: string; clientBuild?: string }) => Promise<{ reportId: string }>;
   clientBuild?: string;
+  /** Overrides for the closed button (the play page puts it in the status bar). */
+  style?: React.CSSProperties;
 }) {
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState('');
@@ -44,7 +46,7 @@ export function ReportButton({ report, clientBuild }: {
   const close = () => { setOpen(false); setSentId(null); setErr(null); };
 
   if (!open) {
-    return <button onClick={() => setOpen(true)} style={fab} title="Report a problem or share feedback">⚑ Report</button>;
+    return <button onClick={() => setOpen(true)} style={{ ...fab, ...style }} title="Report a problem or share feedback">⚑ Report</button>;
   }
 
   return (

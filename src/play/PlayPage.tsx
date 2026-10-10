@@ -848,9 +848,18 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   ) : null;
   // Status-bar trailing controls: Undo + Lobby. Kept in the bar's flow (not a fixed
   // overlay) so they never sit on top of / block the status pills.
+  // Log / Report / Upload log sit here too, in the bar's flow: as floating buttons in the
+  // bottom-right corner they covered the end of the game log (player report
+  // 42341i4k121w0n3s).
+  const barBtn: React.CSSProperties = { position: 'static', padding: '3px 10px', fontSize: 12, borderRadius: 10, whiteSpace: 'nowrap', boxShadow: 'none' };
   const statusTrailing = (
     <>
       {undoButton}
+      <button onClick={() => setLogOpen(true)} title="Open the game log"
+        style={{ ...barBtn, cursor: 'pointer', background: '#33302a', color: '#e9e1cc', border: '1px solid #5a4a2a' }}>📜 Log</button>
+      <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} style={barBtn} />
+      {g.view && <UploadLogButton view={g.view} you={g.you as Side | null} mode={{ mode: client.mode, aiSide: client.aiSide }} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
+        uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} style={barBtn} />}
       {onExit && (
         <button onClick={onExit} title="Leave to the lobby"
           style={{ padding: '3px 10px', fontSize: 12, borderRadius: 10, whiteSpace: 'nowrap', cursor: 'pointer', background: '#33302a', color: '#e9e1cc', border: '1px solid #5a4a2a' }}>
@@ -1298,18 +1307,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       )}
       <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} mode={{ mode: client.mode, aiSide: client.aiSide }} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
         uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} />
-      <UploadLogButton view={g.view} you={g.you as Side | null} mode={{ mode: client.mode, aiSide: client.aiSide }} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
-        uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} />
-      <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} />
       {responseQueue.length > 0 && (
         <ReportResponseModal notice={responseQueue[0]!}
           onDismiss={() => { markResponseSeen(responseQueue[0]!.reportId); setResponseQueue((q) => q.slice(1)); }} />
       )}
-      {/* Floating Log button (beside Report) — opens the game log as a pop-up. */}
-      <button onClick={() => setLogOpen(true)} title="Open the game log"
-        style={{ position: 'fixed', bottom: 10, right: 110, zIndex: 40, padding: '6px 12px', fontSize: 13, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 18, cursor: 'pointer', boxShadow: '0 2px 8px #0008' }}>
-        📜 Log
-      </button>
       {logOpen && (
         <div onClick={() => { setLogOpen(false); setLogHover(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.7)', display: 'grid', placeItems: 'center', zIndex: 71 }}>
           {/* Hovered card renders in a bright side box INSIDE the overlay — it used to
