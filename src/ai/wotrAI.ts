@@ -214,7 +214,7 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     const s = score(state, actor, a, target) + rng.next() * 0.5; // tiny noise for tie-breaks
     if (s > bestScore) { bestScore = s; best = a; }
   }
-  return maybeAttackRearguard(state, actor, maybeSplitGarrison(state, actor, best)); // hold a threatened origin
+  return maybeAttackRearguard(state, actor, maybeFitStack(state, actor, maybeSplitGarrison(state, actor, best))); // hold a threatened origin; don't overstack
 }
 
 /** Is `from` a VP Settlement of ours that a departing Army must not simply abandon?
@@ -224,6 +224,12 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
  *  is deliberately wider than one region's march: the Shadow closes fast, and a
  *  Stronghold left open two moves away is a free capture (player report: "they
  *  abandoned Minas Tirith to hold….nothing"). */
+/** The Shadow recruit cards whose regions are printed on the card: [region, units]. */
+const FIXED_RECRUITS: Record<string, [RegionId, number][]> = {
+  'sh-str-23': [['gorgoroth', 5], ['nurn', 5]],                                   // Musterings of Long-planned War
+  'sh-str-16': [['north-dunland', 2], ['south-dunland', 2], ['orthanc', 2]],      // A New Power is Rising
+};
+const ISENGARD_SETTLEMENTS = (Object.keys(REGIONS) as RegionId[]).filter((r) => REGIONS[r]!.nation === 'isengard' && !!REGIONS[r]!.settlement);
 function garrisonWorthy(state: GameState, actor: Side, from: RegionId): boolean {
   const def = REGIONS[from];
   if (!def?.settlement || def.vp <= 0 || settlementCtrl(state, from) !== actor) return false;
@@ -237,6 +243,43 @@ function garrisonWorthy(state: GameState, actor: Side, from: RegionId): boolean 
  *  is always legal where the whole move was (it moves a strict subset to the same
  *  region). Leaders/Nazgûl/Characters advance with the army; a Regular (else an
  *  Elite) holds. */
+/** A Shadow whole-Army move that would overstack the destination moves only what fits
+ *  (Elites first; the Nazgûl and Minions go along) — anything past the limit is removed
+ *  on arrival, and the AI was throwing away whole Armies' worth of Regulars marching
+ *  into a full Helm's Deep or Minas Tirith (report 3t5w710l563l4s4t). Shadow only. */
+function maybeFitStack(state: GameState, actor: Side, action: WotrAction): WotrAction {
+  if (actor !== 'shadow' || (action.kind !== 'moveArmy' && action.kind !== 'armyMove2') || action.move) return action;
+  const from = action.from, to = action.to;
+  if (!from || !to) return action;
+  const r = state.regions[from]!;
+  const mineN = (Object.keys(r.units) as Nation[]).filter((n) => sideOfNation(n) === 'shadow' && (r.units[n]!.regular + r.units[n]!.elite) > 0);
+  const moving = mineN.reduce((t, n) => t + r.units[n]!.regular + r.units[n]!.elite, 0);
+  const there = unitCount(state, to);
+  if (moving + there <= STACKING_LIMIT) return action;
+  let room = STACKING_LIMIT - there;
+  if (room <= 0) return action; // nothing fits: the score already priced the loss
+  const units: NonNullable<MoveSel['units']> = {};
+  for (const kind of ['elite', 'regular'] as const) {
+    for (const n of mineN) {
+      const take = Math.min(room, r.units[n]![kind]);
+      if (take <= 0) continue;
+      units[n] = { ...units[n], [kind]: take };
+      room -= take;
+    }
+  }
+  const move: MoveSel = { units };
+  if (r.nazgul) move.nazgul = r.nazgul;
+  const chars = r.characters.filter((c) => SHADOW_CHARS.has(c) && c !== 'saruman');
+  if (chars.length) move.characters = chars;
+  // A Character die pays when no Army-type die is left (the second move rides the
+  // first move's die); the engine's own validator decides, At-War borders included.
+  const viaChar = action.kind === 'armyMove2' ? state.pendingChoice?.die === 'character'
+    : action.die ? action.die === 'character' : !state.dice.shadow.some((f) => f === 'army' || f === 'armyMuster');
+  const sel = { units: move.units ?? {}, leaders: 0, nazgul: move.nazgul ?? 0, characters: move.characters ?? [] };
+  if (splitBlockReason(state, from, to, 'shadow', sel, viaChar) !== null) return action;
+  return { ...action, move };
+}
+
 function maybeSplitGarrison(state: GameState, actor: Side, action: WotrAction): WotrAction {
   // Both army-move kinds: the Army die's FIRST move and its optional SECOND
   // (armyMove2, p.27). The second move used to skip this entirely, and
@@ -801,7 +844,12 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'diplomaticAction': return diplomaticScore(state, actor, a.nation); // mobilize toward At War
     case 'companionMuster': // a Companion advances its Nation toward War (any die) — mobilization
       return state.nations[a.nation].step > 0 ? 28 : 6;                // worth it only while the Nation isn't yet At War
-    case 'sarumanMuster': return a.mode === 'recruit' ? 45 : 30;       // Voice of Saruman: a big Isengard build / Elite upgrade
+    case 'sarumanMuster': {                                              // Voice of Saruman: a big Isengard build / Elite upgrade
+      if (a.mode !== 'recruit') return 30;
+      // A Regular in EVERY Isengard Settlement — one landing on a full stack is lost (report 3t5w710l563l4s4t).
+      const full = ISENGARD_SETTLEMENTS.filter((r) => settlementCtrl(state, r) === 'shadow' && unitCount(state, r) >= STACKING_LIMIT).length;
+      return 45 - full * 12;
+    }
     case 'useElvenRing': return elvenRingScore(state, actor, a);       // change a die's face (conservatively)
     case 'playEvent': {
       // A heal card at ZERO Corruption heals nothing — playing it burns a card and a
@@ -844,7 +892,12 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // A card with a strong COMBAT box (Deadly Strife etc.) is usually worth more
       // held for battle than played as its event — burning it is weak play (player
       // report: "Return to Valinor for the top half is VERY weak").
-      return 35 - combatCardValue(combatModsFor(a.cardId)) * 3;
+      // A recruit card with FIXED regions must recruit to the full extent (p.21), so a
+      // region already at the stacking limit throws the surplus straight away — the
+      // Shadow played Musterings of Long-planned War into a full Gorgoroth and removed
+      // the five Southrons it had just recruited (player report 3t5w710l563l4s4t).
+      const waste = actor === 'shadow' ? (FIXED_RECRUITS[a.cardId] ?? []).reduce((w, [r, n]) => w + Math.max(0, unitCount(state, r) + n - STACKING_LIMIT), 0) : 0;
+      return 35 - combatCardValue(combatModsFor(a.cardId)) * 3 - waste * 8;
     }
     case 'forceDiscardCard':
       // Shadow: burning a die + two hand cards to lift A Power too Great / Tom
@@ -928,7 +981,15 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // numbers here suggest. If a later measurement shows it doing nothing against human
   // play either, delete it — an unearned multiplier is a liability.
   const pressing = actor === 'shadow' && fellowshipStalled(state);
-  if (settlementCtrl(state, to) === enemy && !armyHere(state, to, enemy)) {
+  // A Stronghold we already besiege reads as an empty Settlement — its garrison is in
+  // the siege box, out of `armyHere`'s sight — so joining the siege scored as a capture.
+  // That is a fair pull while the reinforcement fits; once the stack is at the limit it
+  // drew Army after Army in to be removed on arrival (report 3t5w710l563l4s4t). Shadow
+  // only: no capture credit for a siege the newcomers would overflow.
+  const overflowsSiege = (id: RegionId) => actor === 'shadow' && besiegedGarrison(state, id, actor) > 0
+    && unitCount(state, id) + unitCount(state, from) > STACKING_LIMIT;
+  const held = (id: RegionId) => armyHere(state, id, enemy) || overflowsSiege(id);
+  if (settlementCtrl(state, to) === enemy && !held(to)) {
     s += (REGIONS[to]!.vp * 30 + 25) * (pressing ? 1.4 : 1);                                // capture
     s -= wakePrice(state, actor, to) * WAKE_W_ACTION;                                       // ...at the political price of it
   }
@@ -957,7 +1018,7 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // OPEN, so closing on a free capture outweighs the odds and ends the AI's habit of
   // parking next to an undefended Stronghold (player reports of both sides going quiet).
   if (target) {
-    const open = settlementCtrl(state, target) === enemy && !armyHere(state, target, enemy);
+    const open = settlementCtrl(state, target) === enemy && !held(target);
     s += -(dist(to, target) - dist(from, target)) * (open ? 20 : 12) * (pressing ? 1.5 : 1);
     if (to === target) s += 30;
   }
@@ -1519,7 +1580,7 @@ function chooseArmyMove2(state: GameState, legal: WotrAction[]): WotrAction {
   for (const m of moves) { const s = armyMoveScore(state, owner, m.from!, m.to!, target); if (s > bestS) { bestS = s; best = m; } }
   // Same garrison split the first move gets — armyMoveScore's vacate penalty is
   // written on the assumption that it runs.
-  return best ? maybeSplitGarrison(state, owner, best) : done;
+  return best ? maybeFitStack(state, owner, maybeSplitGarrison(state, owner, best)) : done;
 }
 
 /** Resolve the Character-die move chain (RAW: one die moves all eligible
@@ -1630,7 +1691,14 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     // Recruit placements: same region, Regular-or-Elite — take the Elite (two
     // player reports: Riders of Rohan / Dain's Ironfoot Guard mustered Regulars).
     // A half-point tiebreak, so WHERE to recruit still outranks WHAT to recruit.
-    if (a.region) return 20 - (target ? dist(a.region, target) : 0) + (a.figure === 'elite' ? 0.5 : 0);
+    if (a.region) {
+      // Recruit where the units FIT: every unit past the stacking limit is removed at
+      // once (Many Kings to the Service of Mordor into a full Far Harad, Pits of Mordor
+      // into a full Morannon — report 3t5w710l563l4s4t). Shadow only.
+      const room = owner === 'shadow' ? STACKING_LIMIT - unitCount(state, a.region as RegionId) : 99;
+      const spill = room <= 0 ? 40 : room < 2 ? 6 : 0;
+      return 20 - (target ? dist(a.region, target) : 0) + (a.figure === 'elite' ? 0.5 : 0) - spill;
+    }
     return 10;
   };
   const best = ets.reduce((b, a) => (score(a) > score(b) ? a : b), ets[0]!);
