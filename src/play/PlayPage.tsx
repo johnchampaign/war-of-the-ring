@@ -40,7 +40,7 @@ import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial, isCardCompanionMove } from './panelFilter';
 import { movableCharsAt, characterDestinations, characterMoveBlockReason, companionGroupLeader, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS } from '../engine/charMove';
 import { CompanionPicker } from './CompanionPicker';
-import { separationActivates } from '../engine/fellowship';
+import { separationActivates, separationBlockReason, revealMoveBlockReason } from '../engine/fellowship';
 import { REGIONS, levelOf, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import { threatsAndPromisesActive } from '../engine/persistent';
 import { charName } from './charInfo';
@@ -701,6 +701,20 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (a) { clearMove(); if (retreatActs.includes(a as never)) markRollSeen(); void submit(a); }
       return;
     }
+    // Placing the revealed Ring-bearers, or landing a separating group: a region that is
+    // not highlighted says why not, in the same terms as any other figure move (player
+    // reports 64185k012e1r6d0n, 634k193f614n105n).
+    if ((isReveal || isSeparateMove) && g.view) {
+      const pc = g.view.pendingChoice!;
+      let reason: string | null = null;
+      if (isReveal) reason = revealMoveBlockReason(g.view, id);
+      else {
+        const d = pc.data as { from: RegionId; range: number };
+        reason = separationBlockReason(g.view, d.from, id, d.range);
+      }
+      if (reason) setBlockMsg(reason);
+      return;
+    }
     // Picking a retreat destination: a region that is not highlighted says why not
     // (player report 6z172r5s4x731j62), instead of the click doing nothing.
     if (isRetreatPick) {
@@ -853,7 +867,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets, activeDie, isCharMove2, minionPick, minionPickActs]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets, activeDie, isCharMove2, minionPick, minionPickActs, isReveal, isSeparateMove]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   // Where a Character or a Nazgûl may GO is always lit as a destination — a separation
   // and a card's Companion or Nazgûl move included — never in the green of "click here
@@ -956,16 +970,6 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       if (dieOptions(action, g.view, 'fp').length === 0) continue;
       if (activeDie && !dieAllowsAction(action, g.view, 'fp', activeDie)) continue;
       blockedPanel.push({ action, reason: 'Threats and Promises is in play — the Free Peoples cannot advance a passive Nation' });
-    }
-  }
-  // A revealed Fellowship cannot move until it hides (p.39): say so on a greyed "Move
-  // the Fellowship", like the other movement hints, rather than leaving the button
-  // simply missing (player report 252k2f1x2f2o3t2z). Only with a die that could move it.
-  if (g.yourTurn && g.you === 'fp' && g.view.phase === 'actionResolution' && !g.view.pendingChoice
-    && !g.view.fellowship.hidden && g.view.fellowship.mordor === null && !g.legalActions.some((a) => a.kind === 'moveFellowship')) {
-    const action: WotrAction = { kind: 'moveFellowship' };
-    if (dieOptions(action, g.view, 'fp').length > 0 && (!activeDie || dieAllowsAction(action, g.view, 'fp', activeDie))) {
-      blockedPanel.push({ action, reason: 'The Fellowship is revealed — it must hide (a Character die) before it can move again' });
     }
   }
   // The optional SECOND army move (Army die) is offered as panel buttons; route it

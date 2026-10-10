@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId, DieFace } from '..
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, fellowshipRegion, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason, cardAttackFighters } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, fellowshipRegion, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason, cardAttackFighters, characterInPlay } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, runEventStrikes, hasAtWarUnit, sortieForce, canSortie, attackError, type CasualtyThen, type EventStrike } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -647,7 +647,7 @@ const canPlaceIn = (s: GameState, nation: Nation, region: string, figure: 'regul
 register('sh-str-16', recruitChoiceCard('shadow', [{ nation: 'isengard', region: 'orthanc' }, { nation: 'isengard', region: 'orthanc' }], {
   // Printed precondition: "Play if Saruman is in play" — it was missing, so the card
   // could be played with Saruman still off the board (player report).
-  canPlay: (s) => inPlay(s, 'saruman')
+  canPlay: (s) => characterInPlay(s, 'saruman')
     && (canPlaceIn(s, 'isengard', 'orthanc', 'regular') || canPlaceIn(s, 'isengard', 'orthanc', 'elite')
       || canPlaceIn(s, 'isengard', 'north-dunland', 'regular') || canPlaceIn(s, 'isengard', 'south-dunland', 'regular')),
   apply: (s) => { placeForce(s, 'isengard', 'north-dunland', { regular: 2 }); placeForce(s, 'isengard', 'south-dunland', { regular: 2 }); },
@@ -1414,13 +1414,6 @@ register('sh-str-23', {
     placeUnits(state, 'sauron', 'nurn', 5, 0);
   },
 });
-/** "…is in play": entered AND not since eliminated. The cards that print this used to
- *  check only that the figure had once entered, so Return of the Witch-king stood a
- *  FALLEN Witch-king back up in Angmar (player report riwixp8f8cyn1ktr: "attacked
- *  Carrock with Army + The Witch-king (WK had fallen before!)"; the soak's
- *  eliminated-on-board gate found it in 7 games of 2000). */
-const characterInPlay = (state: GameState, id: string): boolean =>
-  state.characters.entered.includes(id) && !state.characters.eliminated.includes(id);
 // Return of the Witch-king: move the Witch-king to Angmar + recruit there.
 register('sh-str-12', {
   canPlay: (state) => characterInPlay(state, 'witch-king'),
@@ -1918,13 +1911,13 @@ register('sh-str-05', { onTable: true, apply() { /* Threats and Promises — see
 // Palantír of Orthanc: printed precondition "Play on the table if Saruman is in play"
 // — ungated, a Saruman-less play was legal and the card went straight to the discard
 // (player report: "played it before mustering Saruman; it was discarded").
-register('sh-char-21', { onTable: true, canPlay: (state) => inPlay(state, 'saruman'), apply() { /* The Palantír of Orthanc — bonus draw, see wotrAdapter playEvent */ } });
+register('sh-char-21', { onTable: true, canPlay: (state) => characterInPlay(state, 'saruman'), apply() { /* The Palantír of Orthanc — bonus draw, see wotrAdapter playEvent */ } });
 register('sh-char-15', { onTable: true, apply() { /* Worn with Sorrow and Toil — see hunt.ts (companion casualty) */ } });
 // Wormtongue: printed precondition "Play on the table if Saruman is in play", plus its
 // printed discard clause "as soon as Rohan is activated" — so playing it onto an
 // already-active Rohan buys nothing but an immediate discard, and is not offered
 // (player report 29253u, same reasoning as The Last Battle above).
-register('sh-char-22', { onTable: true, canPlay: (state) => inPlay(state, 'saruman') && !state.nations.rohan.active, apply() { /* Wormtongue — see politics.ts (activateNation) */ } });
+register('sh-char-22', { onTable: true, canPlay: (state) => characterInPlay(state, 'saruman') && !state.nations.rohan.active, apply() { /* Wormtongue — see politics.ts (activateNation) */ } });
 register('sh-char-16', { onTable: true, apply() { /* Flocks of Crebain — +1 Hunt dice, see hunt.ts resolveHunt */ } });
 register('sh-char-17', { onTable: true, apply() { /* Balrog of Moria — extra Hunt tile on a Moria declaration, see wotrAdapter declareFellowship */ } });
 
@@ -2099,7 +2092,7 @@ register('sh-char-24', { // The Black Captain Commands
   // auto-recruited and offered only adjacent moves/attacks — no fly, no assault.
   repeat: 24,
   optionalFromStart: true, // the recruit/fly clause and the army clause are both optional
-  canPlay: (state) => inPlay(state, 'witch-king'),
+  canPlay: (state) => characterInPlay(state, 'witch-king'),
   targets(state, _side, applied = []) {
     const wk = findCharacterRegion(state, 'witch-king');
     const last = applied[applied.length - 1];
@@ -2187,7 +2180,6 @@ function siegeAssaultTargets(state: GameState, qualifies: (from: string) => bool
   }
   return out;
 }
-const inPlay = (state: GameState, id: string) => state.characters.entered.includes(id) && !state.characters.eliminated.includes(id);
 register('sh-char-20', { // Grond, Hammer of the Underworld — Witch-king with the besieging Army
   canPlay: (state) => siegeAssaultTargets(state, (from) => state.regions[from]!.characters.includes('witch-king')).length > 0,
   targets: (state) => siegeAssaultTargets(state, (from) => state.regions[from]!.characters.includes('witch-king')),
@@ -2198,7 +2190,7 @@ const hasIsengardUnit = (state: GameState, from: string): boolean => {
   return !!u && (u.regular > 0 || u.elite > 0);
 };
 register('sh-str-02', { // The Fighting Uruk-hai — Saruman in play + an Isengard unit besieging
-  canPlay: (state) => inPlay(state, 'saruman') && siegeAssaultTargets(state, (from) => hasIsengardUnit(state, from)).length > 0,
+  canPlay: (state) => characterInPlay(state, 'saruman') && siegeAssaultTargets(state, (from) => hasIsengardUnit(state, from)).length > 0,
   targets: (state) => siegeAssaultTargets(state, (from) => hasIsengardUnit(state, from)),
   applyTarget(state, _side, t) { startBattle(state, 'shadow', t.from!, t.to!, { siegeRounds: 3, fpCardLock: true, rearguard: cardAttackRearguard(state, t, 'shadow') }); log(state, null, 'event', `The Fighting Uruk-hai assault ${t.to} (3-round siege)`); },
 });

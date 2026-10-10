@@ -65,7 +65,12 @@ function parseDesc(desc) {
   if (!desc) return out;
   for (const part of desc.split(';').map((s) => s.trim()).filter(Boolean)) {
     if (part === '#' || part === 'Card') continue;
-    if (/^Init:/i.test(part)) { out.init = Number(part.split(':')[1]) || null; continue; }
+    if (/^Init:/i.test(part)) {
+      // `|| null` here once turned the initiative-0 cards (Daring Defiance, Swarm of Bats) into null.
+      const n = Number(part.split(':')[1]);
+      out.init = Number.isFinite(n) ? n : null;
+      continue;
+    }
     if (part === 'FreePeoples' || part === 'Shadow') { out.side = part; continue; }
     if (part === 'Strategy' || part === 'Character') { out.deck = part; continue; }
     if (part === 'Event' || part === 'Combat' || part === 'Hunt') { out.type = part; continue; }

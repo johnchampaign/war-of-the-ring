@@ -12,7 +12,7 @@ import { extraHunt, queueTakenAlive, wornWithSorrowOptions, resolveWornWithSorro
 import { log, logCardDraw, sideDoes } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, heldShadowStronghold, unitCount, STACKING_LIMIT,
-  recruitNazgul, canRecruitNazgul, overStack, overStackBox, forceSide, removeStackUnit, charDieLeaders, figureForce, forceUnitCount,
+  recruitNazgul, canRecruitNazgul, overStack, overStackBox, forceSide, removeStackUnit, charDieLeaders, figureForce, forceUnitCount, characterInPlay,
 } from '../engine/armies';
 import { resolveCombatKill, startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveWordsOfPower, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending, returnSetAsideHuntTiles } from '../engine/hunt';
@@ -34,7 +34,7 @@ const opp = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 // Mouth of Sauron "Messenger of the Dark Tower": once per turn a Muster die may act as
 // an Army die. Available while the Mouth is in play and that hasn't been used yet.
 const mouthMessengerAvailable = (state: GameState): boolean =>
-  state.characters.entered.includes('mouth-of-sauron') && !state.characters.eliminated.includes('mouth-of-sauron') && !state.flags.mouthMusterUsedThisTurn;
+  characterInPlay(state, 'mouth-of-sauron') && !state.flags.mouthMusterUsedThisTurn;
 /** Consume a die for an Army action, honoring the Mouth's Messenger (Muster→Army). */
 function consumeArmyDie(state: GameState, actor: Side): boolean {
   if (consumeOneOf(state, actor, ['army', 'armyMuster', 'will'])) return true;
@@ -104,7 +104,7 @@ const COMPANION_POLITICS: { companion: string; nation: Nation; at: (r: RegionId)
 // replace two Regular Isengard units in Orthanc with two Elites.
 const isengardSettlements = (): RegionId[] => Object.keys(REGIONS).filter((id) => REGIONS[id]!.nation === 'isengard' && !!REGIONS[id]!.settlement);
 const voiceOfSarumanActive = (state: GameState): boolean =>
-  state.characters.entered.includes('saruman') && !state.characters.eliminated.includes('saruman')
+  characterInPlay(state, 'saruman')
   && settlementController(state, 'orthanc') === 'shadow' && !state.regions['orthanc']!.besieged;
 const canSarumanRecruit = (state: GameState): boolean =>
   state.reinforcements.isengard.regular > 0

@@ -7,6 +7,7 @@ import type { GameState } from '../engine/types';
 import { charName, charDef, isMinion } from './charInfo';
 import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, EVENT_BY_ID, type HuntTileDef } from '../engine/data';
 import eventCards from '../../assets/event-cards.json';
+import { HuntTileFace, tileAsDraw } from './huntView';
 
 /** Keeps a status-bar dropdown inside the window. The panels are left-anchored to
  *  their pill by default; for a pill near the right edge that pushed the panel past
@@ -44,41 +45,65 @@ function tileLabel(t: HuntTileDef | undefined): string {
 // Drawn Hunt tiles + special-tile status (player request, twice: "display played
 // Hunt tiles somewhere — relevant info for a FP player deciding to move"). All of
 // this is open information: drawn tiles are public, and the pool contents are
-// deducible from the fixed tile mix minus the drawn ones.
+// deducible from the fixed tile mix minus the drawn ones. The tiles are drawn as the
+// same tokens the Hunt popup shows (HuntTileFace, smaller) so the two stay in sync
+// (player report 3f146d6j6q510u43).
+type TileEntry = { key: string; tile: HuntTileDef; title: string; n?: number };
+const standardEntry = (i: number): TileEntry | null => {
+  const t = STANDARD_TILE_LIST[i];
+  return t ? { key: `s:${tileLabel(t)}`, tile: t, title: tileLabel(t) } : null;
+};
+const specialEntry = (id: string): TileEntry | null => {
+  const t = SPECIAL_TILE_BY_CARD[id];
+  return t ? { key: `c:${id}`, tile: t, title: `${tileLabel(t)} (${EVENT_BY_ID[id]?.name ?? id})` } : null;
+};
+function TileStrip({ tiles }: { tiles: TileEntry[] }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '10px 2px', padding: '4px 2px 6px' }}>
+      {tiles.map((e, i) => (
+        <span key={`${e.key}:${i}`} title={e.title} data-testid="hunt-tile"
+          style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          {/* A special tile keeps its caption (the card that brought it in); the
+              standard faces say it all. */}
+          <HuntTileFace draw={tileAsDraw(e.tile)} size={34} caption={!!e.tile.introducedBy} />
+          {e.n !== undefined && e.n > 1 && <span style={{ fontSize: 11, color: '#cbbf9a', marginTop: e.tile.stop ? 6 : 0 }}>×{e.n}</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
 function HuntTilesBrowser({ view }: { view: GameState }) {
   const [open, setOpen] = useState(false);
   const { ref, flipStyle } = useEdgeFlip(open);
   const h = view.hunt;
-  const drawn = (h.drawn ?? []).map((i) => tileLabel(STANDARD_TILE_LIST[i]));
-  const specialsDrawn = (h.specialsDrawn ?? []).map((id) => `${tileLabel(SPECIAL_TILE_BY_CARD[id])} (${EVENT_BY_ID[id]?.name ?? id})`);
-  const inPlay = (h.specialsInPlay ?? []).map((id) => `${tileLabel(SPECIAL_TILE_BY_CARD[id])} (${EVENT_BY_ID[id]?.name ?? id})`);
-  const inPool = (h.specialsInPool ?? []).map((id) => `${tileLabel(SPECIAL_TILE_BY_CARD[id])} (${EVENT_BY_ID[id]?.name ?? id})`);
-  const total = drawn.length + specialsDrawn.length;
+  const present = (e: TileEntry | null): e is TileEntry => !!e;
+  const drawn = [...(h.drawn ?? []).map(standardEntry), ...(h.specialsDrawn ?? []).map(specialEntry)].filter(present);
+  const inPlay = (h.specialsInPlay ?? []).map(specialEntry).filter(present);
   // What is still IN the bag — the fixed tile mix minus everything drawn or set aside,
   // which a player at the table works out by counting (player reports
   // k36qtksthloqpbt3, um4d4stxjz78vv7r: "I still don't remember exactly what the pool
   // is comprised of"). Grouped by face, most common first. Not the order: that is the
   // shuffle, and it stays hidden.
-  const bagLabels = [...(h.pool ?? []).map((i) => tileLabel(STANDARD_TILE_LIST[i])), ...inPool];
-  const bagCounts = new Map<string, number>();
-  for (const l of bagLabels) bagCounts.set(l, (bagCounts.get(l) ?? 0) + 1);
-  const bag = [...bagCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const bagTiles = [...(h.pool ?? []).map(standardEntry), ...(h.specialsInPool ?? []).map(specialEntry)].filter(present);
+  const groups = new Map<string, TileEntry>();
+  for (const e of bagTiles) { const g = groups.get(e.key); if (g) g.n! += 1; else groups.set(e.key, { ...e, n: 1 }); }
+  const bag = [...groups.values()].sort((a, b) => b.n! - a.n! || a.title.localeCompare(b.title));
+  const head: React.CSSProperties = { fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5 };
   return (
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
         title="The Hunt tiles still in the bag, the ones drawn so far (the standard ones return when the bag empties; special tiles never do), and special tiles in play">
-        <Reserve sample="Hunt tiles 99 left ▾">Hunt tiles {bagLabels.length} left {open ? "▴" : "▾"}</Reserve>
+        <Reserve sample="Hunt tiles 99 left ▾">Hunt tiles {bagTiles.length} left {open ? "▴" : "▾"}</Reserve>
       </button>
       {open && (
-        <div ref={ref} style={{ ...roster, ...flipStyle, ...wide }}>
-          <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5 }}>In the bag ({bagLabels.length})</div>
-          {bag.map(([l, n]) => <div key={l} style={{ fontSize: 12, padding: '1px 6px' }} data-testid="hunt-bag-row">{l}{n > 1 ? ` ×${n}` : ''}</div>)}
-          <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 6 }}>Drawn ({total})</div>
-          {total === 0 && <div style={{ color: '#998', fontSize: 12, padding: '2px 6px' }}>No tiles drawn yet.</div>}
-          {[...drawn, ...specialsDrawn].map((s, i) => <div key={i} style={{ fontSize: 12, padding: '1px 6px' }}>{s}</div>)}
+        <div ref={ref} style={{ ...roster, ...flipStyle, ...wide, maxHeight: 420 }}>
+          <div style={head}>In the bag ({bagTiles.length})</div>
+          <TileStrip tiles={bag} />
+          <div style={{ ...head, marginTop: 6 }}>Drawn ({drawn.length})</div>
+          {drawn.length === 0 ? <div style={{ color: '#998', fontSize: 12, padding: '2px 6px' }}>No tiles drawn yet.</div> : <TileStrip tiles={drawn} />}
           {inPlay.length > 0 && <>
-            <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 6 }}>Special tiles in play (enter the bag on Mordor)</div>
-            {inPlay.map((s, i) => <div key={i} style={{ fontSize: 12, padding: '1px 6px' }}>{s}</div>)}
+            <div style={{ ...head, marginTop: 6 }}>Special tiles in play (enter the bag on Mordor)</div>
+            <TileStrip tiles={inPlay} />
           </>}
           <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Drawn standard tiles reshuffle back in when the bag empties.</div>
         </div>

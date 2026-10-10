@@ -3687,7 +3687,7 @@
       "type": "Event",
       "deck": "Character",
       "side": "FreePeoples",
-      "init": null,
+      "init": 0,
       "tags": [
         "#15"
       ],
@@ -3707,7 +3707,7 @@
       "type": "Event",
       "deck": "Character",
       "side": "FreePeoples",
-      "init": null,
+      "init": 0,
       "tags": [
         "#15",
         "Alternate"
@@ -3728,7 +3728,7 @@
       "type": "Event",
       "deck": "Character",
       "side": "FreePeoples",
-      "init": null,
+      "init": 0,
       "tags": [
         "CoME"
       ],
@@ -3933,7 +3933,7 @@
       "type": "Event",
       "deck": "Character",
       "side": "FreePeoples",
-      "init": null,
+      "init": 0,
       "tags": [
         "#11"
       ],
@@ -3953,7 +3953,7 @@
       "type": "Event",
       "deck": "Character",
       "side": "FreePeoples",
-      "init": null,
+      "init": 0,
       "tags": [
         "#11",
         "Alternate"
@@ -4616,7 +4616,7 @@
       "type": "Event",
       "deck": "Character",
       "side": "FreePeoples",
-      "init": null,
+      "init": 0,
       "tags": [
         "#15",
         "WoME"
@@ -4805,7 +4805,7 @@
       "type": "Event",
       "deck": "Character",
       "side": "FreePeoples",
-      "init": null,
+      "init": 0,
       "tags": [
         "#16"
       ],
@@ -4825,7 +4825,7 @@
       "type": "Event",
       "deck": "Character",
       "side": "FreePeoples",
-      "init": null,
+      "init": 0,
       "tags": [
         "#16",
         "Alternate"
@@ -9500,7 +9500,7 @@
       "type": "Event",
       "deck": "Strategy",
       "side": "Shadow",
-      "init": null,
+      "init": 0,
       "tags": [
         "#26",
         "LoME"
@@ -9850,7 +9850,7 @@
       "type": "Event",
       "deck": "Strategy",
       "side": "Shadow",
-      "init": null,
+      "init": 0,
       "tags": [
         "#12"
       ],
@@ -9870,7 +9870,7 @@
       "type": "Event",
       "deck": "Strategy",
       "side": "Shadow",
-      "init": null,
+      "init": 0,
       "tags": [
         "#12",
         "Alternate"
@@ -10324,7 +10324,7 @@
       "type": "Event",
       "deck": "Strategy",
       "side": "Shadow",
-      "init": null,
+      "init": 0,
       "tags": [
         "#9"
       ],
@@ -10344,7 +10344,7 @@
       "type": "Event",
       "deck": "Strategy",
       "side": "Shadow",
-      "init": null,
+      "init": 0,
       "tags": [
         "#9",
         "Alternate"

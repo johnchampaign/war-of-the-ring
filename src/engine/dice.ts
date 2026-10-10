@@ -13,16 +13,16 @@ export const SHADOW_DIE_FACES: DieFace[] = ['character', 'army', 'muster', 'army
 export function poolSize(state: GameState, side: Side): number {
   // A character grants its bonus die only while in play: entered AND not eliminated
   // (the bonus is lost the moment that character dies — rules p.19).
-  const inPlay = (id: string): boolean =>
+  const characterInPlay = (id: string): boolean =>
     state.characters.entered.includes(id) && !state.characters.eliminated.includes(id);
   if (side === 'fp') {
     let n = BASE_DICE.fp;
-    if (inPlay('aragorn')) n++;
-    if (inPlay('gandalf-white')) n++;
+    if (characterInPlay('aragorn')) n++;
+    if (characterInPlay('gandalf-white')) n++;
     return n;
   }
   let n = BASE_DICE.shadow;
-  for (const m of ['saruman', 'witch-king', 'mouth-of-sauron']) if (inPlay(m)) n++;
+  for (const m of ['saruman', 'witch-king', 'mouth-of-sauron']) if (characterInPlay(m)) n++;
   return Math.min(n, 10);
 }
 

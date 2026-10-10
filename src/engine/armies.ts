@@ -27,12 +27,19 @@ export function forceUnitCount(f: Force): number {
   return n;
 }
 
+/** "…is in play": entered AND not since eliminated. The cards that print this used to
+ *  check only that the figure had once entered, so Return of the Witch-king stood a
+ *  FALLEN Witch-king back up in Angmar (player report riwixp8f8cyn1ktr). Every
+ *  in-play check uses this one helper so the identical conditions read as one. */
+export const characterInPlay = (state: Pick<GameState, 'characters'>, id: string): boolean =>
+  state.characters.entered.includes(id) && !state.characters.eliminated.includes(id);
+
 /** Saruman's "Servants of the White Hand": while he is in play, "each Isengard Elite
  *  unit is considered to be a Leader as well as an Army unit for ALL movement and
  *  combat purposes" (card text). So an Isengard Elite is a Leader for the
  *  Character-die army action too, not just for the Leader re-roll. */
 export const whiteHandActive = (state: Pick<GameState, 'characters'>): boolean =>
-  state.characters.entered.includes('saruman') && !state.characters.eliminated.includes('saruman');
+  characterInPlay(state, 'saruman');
 
 /** Loose Force shape — a region, a siege box, or a rearguard/move selection. */
 type FigureSet = { units: Partial<Record<string, { regular?: number; elite?: number }>>; leaders: number; nazgul: number; characters: string[] };
@@ -99,7 +106,7 @@ export function forceLeadership(state: GameState, f: Force, side: Side): number 
     }
   }
   // Saruman's "Servants of the White Hand": each Isengard Elite is also a Leader.
-  if (side === 'shadow' && state.characters.entered.includes('saruman') && !state.characters.eliminated.includes('saruman')) {
+  if (side === 'shadow' && whiteHandActive(state)) {
     l += f.units.isengard?.elite ?? 0;
   }
   return l;

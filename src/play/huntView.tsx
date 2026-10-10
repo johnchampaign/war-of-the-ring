@@ -3,6 +3,7 @@
 // (after the fact) and the DecisionModal's HuntDetail (while you're deciding how to
 // absorb the damage), so the decision shows the SAME full context the popup does.
 import type { GameState, HuntRoll } from '../engine/types';
+import type { HuntTileDef } from '../engine/data';
 import { RevealedDot } from './RingIcon';
 
 export type Draw = NonNullable<GameState['hunt']['draws']>[number];
@@ -22,7 +23,7 @@ export function describeDraw(d: Draw): string {
 // them. The caption names the TILE ("the ‘3’ tile", "an Eye tile"), NOT the damage —
 // the damage/Corruption is the separate outcome shown by CorruptionLine, so a "3"
 // tile can never be mistaken for "3 damage".
-export function HuntTileFace({ draw, size = 58 }: { draw: Draw; size?: number }) {
+export function HuntTileFace({ draw, size = 58, caption: showCaption = true }: { draw: Draw; size?: number; caption?: boolean }) {
   const v = draw.value;
   const num = typeof v === 'number';
   const heal = num && (v as number) < 0;
@@ -46,19 +47,29 @@ export function HuntTileFace({ draw, size = 58 }: { draw: Draw; size?: number })
     : blank ? 'blank tile' : heal ? `“heal ${-(v as number)}” tile`
     : v === 'eye' ? 'Eye of Sauron tile' : v === 'die' ? 'die tile' : null; // a number says it all (report 264i5v3q6l065747)
   return (
-    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: '0 6px' }}>
+    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: `0 ${Math.round(size / 10)}px` }}>
       <div style={{
         position: 'relative', width: size, height: size, borderRadius: Math.round(size / 9), background: face,
         border: `2px solid ${rim}`, display: 'grid', placeItems: 'center',
         boxShadow: '0 2px 7px #000a, inset 0 1px 2px #fff5, inset 0 -2px 4px #0004',
       }}>
-        <span style={{ fontSize: num ? 28 : 26, fontWeight: 800, color: ink, fontFamily: 'Georgia, "Times New Roman", serif', textShadow: '0 1px 0 #fff4' }}>{center}</span>
-        {draw.reveal && <span title="Reveals the Fellowship" style={{ position: 'absolute', top: -6, right: -6, lineHeight: 0 }}><RevealedDot size={15} /></span>}
+        <span style={{ fontSize: Math.round(size * (num ? 0.48 : 0.45)), fontWeight: 800, color: ink, fontFamily: 'Georgia, "Times New Roman", serif', textShadow: '0 1px 0 #fff4' }}>{center}</span>
+        {draw.reveal && <span title="Reveals the Fellowship" style={{ position: 'absolute', top: -6, right: -6, lineHeight: 0 }}><RevealedDot size={Math.max(10, Math.round(size / 4))} /></span>}
         {draw.stop && <span title="Stops the Fellowship" style={{ position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)', fontSize: 9, fontWeight: 700, background: '#a83232', color: '#fff', borderRadius: 5, padding: '1px 5px', letterSpacing: 0.5 }}>STOP</span>}
       </div>
-      {caption && <span style={{ fontSize: 11, color: '#cbbf9a' }}>{caption}</span>}
+      {showCaption && caption && <span style={{ fontSize: 11, color: '#cbbf9a' }}>{caption}</span>}
     </div>
   );
+}
+
+/** A tile from the bag (not yet drawn) in the shape HuntTileFace draws, so the Hunt
+ *  tiles dropdown shows the very same tokens as the Hunt popup (player report
+ *  3f146d6j6q510u43). A special tile is coloured and named as a drawn one is. */
+export function tileAsDraw(t: HuntTileDef): Draw {
+  return {
+    seq: 0, value: t.value, damage: 0, reveal: t.reveal, stop: t.stop, onMordor: false,
+    ...(t.introducedBy ? { special: t.introducedBy.startsWith('fp-') ? 'fp' as const : 'shadow' as const, ...(t.card ? { specialCard: t.card } : {}) } : {}),
+  };
 }
 
 // A die face as a small pip box; a hit (≥6 after the box bonus, never a 1) is gold.

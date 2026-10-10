@@ -3,11 +3,11 @@
 // caller (the AI pushes toward Mordor).
 import type { GameState, RegionId, CharacterId, Nation } from './types';
 import { FP_NATIONS } from './types';
-import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, characterDef, EVENT_BY_ID } from './data';
+import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, characterDef, EVENT_BY_ID, sideOfNation } from './data';
 import { resolveHunt, resolveMordorStep, pruneFellowshipOnTableCards, queueTakenAlive } from './hunt';
 export { pruneFellowshipOnTableCards };
 import { activateNation } from './politics';
-import { settlementController, figureForce, heldShadowStronghold, companionLandingActivates } from './armies';
+import { settlementController, figureForce, heldShadowStronghold, companionLandingActivates, regionHops } from './armies';
 import { activateOnCompanionLand } from './charMove';
 import { MINION_IDS } from './minions';
 import { log, notify, sufferCorruption, shedCorruption } from './log';
@@ -429,6 +429,47 @@ export function separationDestinations(state: GameState, from: RegionId, maxMove
     layer = next;
   }
   return out;
+}
+
+/** Why a separating group may NOT land in `to`, or null when it may (or nothing here
+ *  explains it). The landing is an ordinary Companion move (p.39 → p.24), so a refused
+ *  click says why in the same terms as a Character-die move (player report
+ *  634k193f614n105n). Mirrors `separationDestinations`. */
+export function separationBlockReason(state: GameState, from: RegionId, to: RegionId, maxMove: number,
+  opts: { siegeOk?: boolean } = {}): string | null {
+  const def = REGIONS[to];
+  if (!def || separationDestinations(state, from, maxMove, opts).includes(to)) return null;
+  const name = def.name ?? to;
+  const besiegedFp = (r: RegionId): boolean =>
+    REGIONS[r]!.settlement === 'Stronghold' && !!state.regions[r]!.besieged && settlementController(state, r) === 'fp';
+  if (besiegedFp(from)) {
+    return `The Fellowship is inside besieged ${REGIONS[from]!.name ?? from} — Companions who separate there join its defenders and cannot leave (p.24).`;
+  }
+  if (!opts.siegeOk && besiegedFp(to)) {
+    return `${name} is under siege — Companions cannot enter Strongholds besieged by an enemy Army (p.24).`;
+  }
+  if (regionHops(from, to) <= maxMove) {
+    return `${name} can only be reached through a Stronghold the Companions may not pass (p.24).`;
+  }
+  return `${name} is out of reach — separating Companions move at most ${maxMove} region${maxMove === 1 ? '' : 's'} (Progress + Level, p.39).`;
+}
+
+/** Why the revealed Ring-bearers may NOT be moved to `to`, or null when they may. Mirrors
+ *  the `revealMove` options: within the Progress, and never into an unconquered Free
+ *  Peoples City or Stronghold (p.39; player report 64185k012e1r6d0n). */
+export function revealMoveBlockReason(state: GameState, to: RegionId): string | null {
+  const def = REGIONS[to];
+  if (!def) return null;
+  const name = def.name ?? to;
+  const fs = state.fellowship;
+  if (regionHops(fs.location, to) > fs.progress) {
+    return `${name} is out of reach — the revealed Fellowship moves at most ${fs.progress} region${fs.progress === 1 ? '' : 's'} (its Progress, p.39).`;
+  }
+  if ((def.settlement === 'City' || def.settlement === 'Stronghold') && !!def.nation
+    && sideOfNation(def.nation as Nation) === 'fp' && settlementController(state, to) === 'fp') {
+    return `The revealed Fellowship cannot end its move in ${name} — not in a Free Peoples ${def.settlement} the Free Peoples still control (p.39).`;
+  }
+  return null;
 }
 
 /** Remove `id` from the Fellowship (reassigning the Guide). The caller then places
