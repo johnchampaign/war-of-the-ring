@@ -228,8 +228,11 @@ function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']
           <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
             Round {(pc.rollRound ?? pc.round) + 1} roll{(pc.rollRound ?? pc.round) < pc.round ? ' (previous round)' : ''}
           </div>
-          <RollRow label="Attacker" roll={pc.atkRoll} color="#e6857f" />
-          <RollRow label="Defender" roll={pc.defRoll} color="#7fb6e6" />
+          {/* Each side in its own colour — blue Free Peoples, red Shadow — whichever
+              attacks (player report 5v2k4i3f045o731f: an attacking Free Peoples roll
+              was shown in red). */}
+          <RollRow label="Attacker" roll={pc.atkRoll} color={pc.attacker === 'fp' ? '#7fb6e6' : '#e6857f'} />
+          <RollRow label="Defender" roll={pc.defRoll} color={pc.defender === 'fp' ? '#7fb6e6' : '#e6857f'} />
           <div style={{ display: 'flex', gap: 16, marginTop: 2 }}>
             <Hits label="Attacker hits" n={pc.atkHits} />
             <Hits label="Defender hits" n={pc.defHits} />
@@ -470,13 +473,14 @@ function CardBlurb({ id }: { id: string | null }) {
 // It used to be anchored near the top for a reason: the card blurb grew on hover, and
 // a centred modal would re-centre under the cursor and slide its buttons away. That
 // reason is gone — the blurb now has a FIXED height and the modal a FIXED width (see
-// below), so hovering a card cannot change this modal's size at all. `margin: auto` on
-// the modal does the centring, which means a modal taller than the window still starts
-// at the top and scrolls, instead of having its head cut off above the viewport.
+// below), so hovering a card cannot change this modal's size at all. But its HEIGHT
+// still changes — the battle modal grows and shrinks round by round (dice, card
+// prompts, casualties) — and a vertically centred box then jumps up and down, so it is
+// top-aligned again, a little lower than before (player report 2u344y584b216d3n).
 const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.72)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '3vh 8px', overflowY: 'auto', boxSizing: 'border-box', zIndex: 50 };
 // Fixed width — a content-driven width made the modal reshape when the hover blurb
 // filled in, sliding the card buttons out from under the cursor (player report).
-const modal: React.CSSProperties = { margin: 'auto', background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #5a4a2a', width: 560, maxWidth: '92vw', boxSizing: 'border-box', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 8px 40px #000' };
+const modal: React.CSSProperties = { margin: '4vh auto auto', background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 12, border: '1px solid #5a4a2a', width: 560, maxWidth: '92vw', boxSizing: 'border-box', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 8px 40px #000' };
 const dbtn: React.CSSProperties = { background: '#7a1f1f', color: '#fff', border: '1px solid #944', borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontSize: 13, minWidth: 110 };
 // FIXED height (scrolls internally) so hovering a card never changes the modal's
 // size at all — a growing blurb moved the buttons under the cursor (player report).

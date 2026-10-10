@@ -437,6 +437,8 @@ export interface GameState {
   lastBattle?: {
     seq: number; from: RegionId; to: RegionId; attacker: Side; rounds: number;
     atkLosses: number; defLosses: number; captured: boolean; siege: boolean; outcome: string;
+    /** Who came out ahead (null: nobody — a mutual wipe, a withdrawal into a siege). */
+    victor?: Side | null;
     atkRoll?: { dice: number[]; rerolls: number[]; target: number };
     defRoll?: { dice: number[]; rerolls: number[]; target: number };
   };

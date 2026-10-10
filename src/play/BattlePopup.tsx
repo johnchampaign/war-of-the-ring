@@ -3,6 +3,7 @@
 // showing the final round's dice for each side (hits in gold), each side's losses,
 // and the result. Combat is public info, so it shows for both players.
 import type { GameState, Side } from '../engine/types';
+import { RollRow } from './combatDice';
 import mapData from '../../assets/map.json';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
@@ -13,7 +14,9 @@ const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
 export const battleResultPending = (view: GameState, seen: number): boolean =>
   !!view.lastBattle && view.lastBattle.seq > seen && !view.pendingChoice && !view.pendingCombat;
 
-export function BattlePopup({ view, seen, onSeen }: { view: GameState; seen: number; onSeen: (seq: number) => void }) {
+export function BattlePopup({ view, seen, onSeen, you }: { view: GameState; seen: number; onSeen: (seq: number) => void;
+  /** The viewer's side, to colour the result as a win or a loss for THEM. */
+  you?: Side | null }) {
   const b = view.lastBattle;
   // Wait until the battle is fully resolved and no other prompt is up.
   if (!b || !battleResultPending(view, seen)) return null;
@@ -28,9 +31,16 @@ export function BattlePopup({ view, seen, onSeen }: { view: GameState; seen: num
           <b style={{ color: b.attacker === 'fp' ? '#7fb6e6' : '#e6857f' }}>{sideName(b.attacker)}</b> attacked{' '}
           <b>{rName(b.to)}</b> <span style={{ color: '#998' }}>(from {rName(b.from)})</span>
         </div>
-        {/* The rounds themselves are shown LIVE in the battle modal now, dice and all,
-            so repeating the last one here was just noise (same report). What belongs
-            here is the outcome: what it cost and who holds the ground. */}
+        {/* The final round's dice. Earlier rounds show in the battle modal while a
+            decision is open, but a round that needed no decision went by unseen — the
+            battle simply ended (player reports 4m615j1m2h4p3r6b, 120y1m0p3h6f5h01). */}
+        {(b.atkRoll || b.defRoll) && (
+          <div style={{ margin: '6px 0' }} data-testid="battle-final-roll">
+            <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Round {b.rounds} roll</div>
+            <RollRow label="Attacker" roll={b.atkRoll} color={b.attacker === 'fp' ? '#7fb6e6' : '#e6857f'} />
+            <RollRow label="Defender" roll={b.defRoll} color={b.attacker === 'fp' ? '#e6857f' : '#7fb6e6'} />
+          </div>
+        )}
         <div style={{ fontSize: 13, margin: '8px 0', color: '#cbbf9a' }}>
           {/* UNITS REMOVED, which is not the same as hits scored: an Elite absorbs a
               hit by being reduced to a Regular and stays on the board (p.30). A player
@@ -41,10 +51,14 @@ export function BattlePopup({ view, seen, onSeen }: { view: GameState; seen: num
             <span style={{ color: '#776', fontSize: 11 }}> (an Elite reduced to a Regular is not a loss)</span>
           </span>
         </div>
-        <div style={{ fontSize: 14, fontWeight: 700, padding: '6px 8px', borderRadius: 8, textAlign: 'center',
-          background: b.captured ? '#5a1f1f' : '#1d3320', color: b.captured ? '#ffb3b3' : '#bfe6bf' }}>
-          {b.outcome}
-        </div>
+        {/* Coloured from the VIEWER's side: green when you came out ahead, red when your
+            opponent did, neutral when nobody did (player reports 036q6t2x10101p28,
+            5j0r5a4k5b2t4q1l: a Free Peoples player storming Moria saw it in red). */}
+        {(() => {
+          const good = b.victor == null || !you ? null : b.victor === you;
+          const tone = good === null ? { background: '#2e2a20', color: '#e6dcc0' } : good ? { background: '#1d3320', color: '#bfe6bf' } : { background: '#5a1f1f', color: '#ffb3b3' };
+          return <div style={{ fontSize: 14, fontWeight: 700, padding: '6px 8px', borderRadius: 8, textAlign: 'center', ...tone }} data-testid="battle-outcome">{b.outcome}</div>;
+        })()}
         <button style={btn} onClick={() => onSeen(b.seq)}>OK</button>
       </div>
     </div>

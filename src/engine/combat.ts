@@ -1233,6 +1233,10 @@ function finishCombat(state: GameState, advance: boolean): void {
   // means "marched off", not "destroyed", and must not be announced as a mutual kill.
   const mutualWipe = atkSurv === 0 && defSurv === 0 && !retreated;
   let captured = false, outcome: string;
+  // Who came out ahead — for colouring the result from each player's side (player
+  // reports 036q6t2x10101p28, 5j0r5a4k5b2t4q1l: "I stormed Moria as Free Peoples and got
+  // the text in red"). null: nobody (a mutual wipe, a sortie that withdrew).
+  let victor: Side | null = null;
   // Set when a relieving Army has earned the right to march into the freed region
   // (asked once the battle is fully wrapped up — see the end of this function).
   let reliefAdvance: { from: RegionId; to: RegionId; owner: Side } | null = null;
@@ -1248,20 +1252,20 @@ function finishCombat(state: GameState, advance: boolean): void {
       // the open field. p.32: a winning sortie "cannot advance outside of the region" —
       // it is already in its own region, so there is simply nothing further to move.
       liftSiege(state, pc.to);
-      outcome = `The sortie from ${name} breaks the siege`;
+      outcome = `The sortie from ${name} breaks the siege`; victor = pc.attacker;
     } else if (garrison === 0 && defSurv > 0) {
       // Every unit defending the Stronghold is gone and the besieger still holds the
       // region — p.32's second capture trigger, from the DEFENDER's side of this battle.
       delete r.siegeBox; r.besieged = false;
       captured = true; captureIfEnemySettlement(state, pc.to, pc.defender);
-      outcome = `The sortie from ${name} is destroyed — ${sideDoes(pc.defender, 'take')} the Stronghold`;
+      outcome = `The sortie from ${name} is destroyed — ${sideDoes(pc.defender, 'take')} the Stronghold`; victor = pc.defender;
     } else if (garrison === 0 && defSurv === 0) {
       delete r.siegeBox; r.besieged = false;
       outcome = `Both Armies are destroyed at ${name}`;
     } else if (atkSurv === 0) {
       // The sortieing force died but a rearguard still holds the Stronghold, so the
       // Settlement does not fall — p.32 needs ALL its defenders eliminated.
-      outcome = `The sortie from ${name} is destroyed — the Stronghold holds`;
+      outcome = `The sortie from ${name} is destroyed — the Stronghold holds`; victor = pc.defender;
     } else {
       // The attacker ceased: RAW moves the sortie back into the Stronghold. It never
       // left the box in this model, so the siege simply carries on.
@@ -1270,7 +1274,7 @@ function finishCombat(state: GameState, advance: boolean): void {
   } else if (assault) {
     if (advance && defSurv === 0 && atkSurv > 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
       captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker);
-      outcome = `${sideDoes(pc.attacker, 'storm')} ${name}`;
+      outcome = `${sideDoes(pc.attacker, 'storm')} ${name}`; victor = pc.attacker;
     } else if (atkSurv === 0 && pc.rearguard && Object.values(pc.rearguard.units).some((u) => u.regular + u.elite > 0)) {
       // The assaulting force is gone but its rearguard still stands in the field: the
       // siege goes on — and if the garrison died too, the rearguard takes the
@@ -1278,15 +1282,16 @@ function finishCombat(state: GameState, advance: boolean): void {
       restoreRearguard(state, pc.from, pc.rearguard); pc.rearguard = undefined;
       if (defSurv === 0) {
         captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker);
-        outcome = `Both Armies are destroyed at ${name} — the rearguard takes the Stronghold`;
-      } else outcome = `The assault on ${name} is thrown back — the rearguard keeps up the siege`;
+        outcome = `Both Armies are destroyed at ${name} — the rearguard takes the Stronghold`; victor = pc.attacker;
+      } else { outcome = `The assault on ${name} is thrown back — the rearguard keeps up the siege`; victor = pc.defender; }
     } else if (atkSurv === 0) {
       liftSiege(state, pc.to); // an empty box on a mutual wipe: the region simply ends up empty, control unchanged
       outcome = mutualWipe ? `Both Armies are destroyed at ${name} — siege lifted` : `The assault on ${name} is thrown back — siege lifted`;
+      victor = mutualWipe ? null : pc.defender;
     }
-    else outcome = `The siege of ${name} holds`;
+    else { outcome = `The siege of ${name} holds`; victor = pc.defender; }
   } else if (box && advance && defSurv === 0) { // RELIEF: the besieger (defender here) is wiped → garrison reoccupies
-    liftSiege(state, pc.to); outcome = `The siege of ${name} is lifted`;
+    liftSiege(state, pc.to); outcome = `The siege of ${name} is lifted`; victor = pc.attacker;
     // p.32: a relieving Army "cannot advance into the region containing the Stronghold
     // unless the besieging Army is destroyed or retreats" — it just was, so the advance
     // is open, and p.31 makes it optional ("may immediately move"). It's a real choice:
@@ -1306,6 +1311,7 @@ function finishCombat(state: GameState, advance: boolean): void {
       : mutualWipe ? `Both Armies are destroyed at ${name}`
       : (pc.atkWithdrew ?? 0) > 0 ? `${sideDoes(pc.attacker, 'withdraw')} from ${name}`
       : pc.siege ? `The siege of ${name} holds` : `The attack on ${name} is repulsed`;
+    victor = won ? pc.attacker : mutualWipe ? null : pc.defender;
     if (won) { advanceOffer = { from: pc.from, to: pc.to, owner: pc.attacker }; r.besieged = false; }
     if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
   }
@@ -1323,7 +1329,7 @@ function finishCombat(state: GameState, advance: boolean): void {
   state.lastBattle = {
     seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
     atkLosses: Math.max(0, (pc.atkUnits0 ?? atkAlive) - atkAlive), defLosses: Math.max(0, (pc.defUnits0 ?? defAlive) - defAlive),
-    captured, siege: !!pc.siege, outcome, atkRoll: pc.atkRoll, defRoll: pc.defRoll,
+    captured, siege: !!pc.siege, outcome, victor, atkRoll: pc.atkRoll, defRoll: pc.defRoll,
   };
   const opp = other(pc.attacker);
   state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;

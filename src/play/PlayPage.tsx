@@ -1256,7 +1256,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         </div>
       )}
       <HuntPopup view={g.view} seen={huntSeen} onSeen={setHuntSeen} />
-      <BattlePopup view={g.view} seen={battleSeen} onSeen={setBattleSeen} />
+      {/* In hotseat the seat changes hands every turn, so "you" names nobody in
+          particular — the result is shown neutral there. */}
+      <BattlePopup view={g.view} seen={battleSeen} onSeen={setBattleSeen} you={(client as { mode?: string }).mode === 'hotseat' ? null : (g.you as Side | null)} />
       <NoticePopup view={g.view} seen={noticeSeen} onSeen={setNoticeSeen} />
       <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} onOpenLog={() => setLogOpen(true)} hold={resultPending} />
       {g.gameOver && g.ranked && (
