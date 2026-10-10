@@ -87,18 +87,6 @@ function HuntTilesBrowser({ view }: { view: GameState }) {
   );
 }
 
-// Deck type per card id (for the hand pill's Character/Strategy split).
-const CARD_DECK = new Map<string, string>((eventCards as { cards: { id: string; deck: string }[] }).cards.map((c) => [c.id, c.deck]));
-/** "3C+2S" — Character/Strategy counts for a hand of real ids or 'hidden-*' placeholders. */
-function handSplit(hand: string[] | undefined): string {
-  let ch = 0, st = 0;
-  for (const id of hand ?? []) {
-    const deck = id === 'hidden-character' ? 'Character' : id === 'hidden-strategy' ? 'Strategy' : CARD_DECK.get(id);
-    if (deck === 'Character') ch++; else st++;
-  }
-  return `${ch}C+${st}S`;
-}
-
 // A browsable roster of everyone currently in the Fellowship (Ira #4): click the
 // companion pill to open it; hover a name to show that character's card in the
 // inspector. The Guide is marked. Gollum (when Guide) is included even if not in the
@@ -312,8 +300,8 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elven
   // Fixed rows, each holding the same chips for the whole game, so nothing reflows from
   // one row into the next as the game goes on (player reports 6k120d701i4b1e52,
   // 311n5k0z624a275e): the game; the score and the Hunt bag; the Guide with the
-  // Fellowship, then the Characters on the map and fallen; the cards; the Elven Rings on
-  // their own; then the controls. Each row fits the side column's width.
+  // Fellowship; the Characters on the map and fallen, and the discards; the Elven Rings
+  // on their own; then the controls. Each row fits the side column's width.
   return (
     <div style={bar}>
       <div style={barRow}>
@@ -335,14 +323,11 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elven
           style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span></Reserve></span>
         <FellowshipRoster guide={fs.guide} companions={fs.companions} onHoverChar={onHoverChar} />
       </div>
+      {/* The 🂠 hand-count chip is gone: the opponent's hand is shown as card backs
+          above the actions (player report 0e4z5e1m4z4p3t32). */}
       <div style={barRow}>
         <OnMapRoster view={view} onHoverChar={onHoverChar} />
         <FallenRoster view={view} onHoverChar={onHoverChar} />
-      </div>
-      <div style={barRow}>
-        <span style={pill} title="Event cards in hand, split Character/Strategy. The opponent's cards are hidden, but their card BACKS (deck type) are open information on the tabletop.">
-          <Reserve sample="🂠 Free Peoples 9C+9S · Shadow 9C+9S">🂠 Free Peoples {handSplit(view.cards?.fp?.hand)} · Shadow {handSplit(view.cards?.shadow?.hand)}</Reserve>
-        </span>
         <DiscardBrowser view={view} onHoverCard={onHoverCard} />
       </div>
       <div style={barRow}>

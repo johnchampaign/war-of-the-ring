@@ -2,12 +2,13 @@
 // downloaded (artCache), each card renders as its real image; otherwise a compact
 // text card (name + initiative) stands in — fully legible without any art. Hidden
 // opponent cards never reach here (redact.ts replaces them with 'hidden').
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useCardArt } from './artCache';
 import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import eventCards from '../../assets/event-cards.json';
 import { CardTypeBadge } from './cardTypeBadge';
+import { FACE } from './DiceTray';
 import { cardSideLine } from './names';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
@@ -47,15 +48,50 @@ export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
             play={playNow && touch ? () => { setZoomPlay(() => playNow); setZoom(id); } : playNow} />;
         })}
       </div>
-      <div style={{ fontSize: 10, color: '#776', padding: '2px 8px 4px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        <b style={{ color: '#998' }}>Hand ({hand.length})</b> ·{' '}
-        {/* One colour with the other hints, the action last (player report 3047593x5i1q1y6r). */}
-        {playable && playable.size > 0
-          ? (touch ? <>tap a card to read it · tap a lit card to read and play it</> : <>hover to preview · 🔍 to enlarge · click a lit card to play it</>)
-          : <>{touch ? 'tap' : 'hover'} to preview · {touch ? 'tap' : 'click'} to enlarge</>}
-      </div>
+      {/* The "Hand (N) · hover to preview · click to enlarge" line under the cards is
+          gone — space the cards want more (player report 0e4z5e1m4z4p3t32). */}
       {zoom && <CardZoom id={zoom} onClose={() => { setZoom(null); setZoomPlay(null); }}
         onPlay={zoomPlay ? () => { const p = zoomPlay; setZoom(null); setZoomPlay(null); p(); } : undefined} />}
+    </div>
+  );
+}
+
+/** The opponent's hand as card BACKS, in the order they hold them — which deck each
+ *  came from is open information at the table, and so is how long a card has been
+ *  held (player reports 0e4z5e1m4z4p3t32, 5e1p004j3c2w1j4s). Sits above the actions,
+ *  with their dice, mirroring your own hand and dice below. */
+export function OpponentHand({ view, you }: { view: GameState; you: Side }) {
+  const opp: Side = you === 'fp' ? 'shadow' : 'fp';
+  const hand = view.cards?.[opp]?.hand ?? [];
+  const deckOf = (id: string): string => id === 'hidden-character' ? 'Character' : id === 'hidden-strategy' ? 'Strategy' : CARD.get(id)?.deck ?? 'Strategy';
+  const sideBg = opp === 'shadow' ? '#4a1c1c' : '#1b3350';
+  const counts = hand.reduce((m, id) => { const d = deckOf(id); m[d] = (m[d] ?? 0) + 1; return m; }, {} as Record<string, number>);
+  const label = `${opp === 'fp' ? 'Free Peoples' : 'Shadow'} hand: ${hand.length} card${hand.length === 1 ? '' : 's'}${hand.length ? ` (${counts.Character ?? 0} Character, ${counts.Strategy ?? 0} Strategy)` : ''}`;
+  // Full-size beside Politics; half-height when the side column is too narrow for the
+  // two to sit side by side and everything stacks (a 1440px screen), where every
+  // pixel up here is one the action list loses.
+  const ref = useRef<HTMLDivElement>(null);
+  const [stacked, setStacked] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current, row = el?.parentElement?.parentElement;
+    if (!el || !row || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setStacked(el.parentElement!.offsetWidth >= row.clientWidth - 2);
+    measure();
+    const ro = new ResizeObserver(measure); ro.observe(row);
+    return () => ro.disconnect();
+  }, []);
+  const h = stacked ? 52 : 104;
+  return (
+    <div ref={ref} style={{ ...handWrap, borderTop: 'none', minHeight: h + 10 }} title={label} data-testid="opponent-hand">
+      {hand.length === 0 && <span style={{ fontSize: 11, color: '#776', fontStyle: 'italic' }}>{label}</span>}
+      {hand.map((id, i) => {
+        const deck = deckOf(id);
+        return (
+          <div key={i} style={{ ...textCard, height: h, width: Math.round(h * 76 / 104), padding: 2, background: `repeating-linear-gradient(45deg, ${sideBg}, ${sideBg} 6px, #00000033 6px, #00000033 12px)`, justifyContent: 'center', alignItems: 'center', gap: 6, cursor: 'default', border: '2px solid #c9a24a88' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: deck === 'Character' ? FACE.character.bg : FACE.armyMuster.bg, borderRadius: 4, padding: '1px 4px', boxShadow: '0 1px 3px #000' }}>{stacked ? (deck === 'Character' ? 'Char' : 'Strat') : deck}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

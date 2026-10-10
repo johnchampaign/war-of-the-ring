@@ -17,7 +17,7 @@ import { Board } from './Board';
 import { ActionPanel, DieTag } from './ActionPanel';
 import { regionName } from './names';
 import { StatusBar } from './StatusBar';
-import { HandStrip, TabledStrip, CardZoom } from './HandStrip';
+import { HandStrip, TabledStrip, CardZoom, OpponentHand } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
 import { DecisionModal, modalDecisions } from './DecisionModal';
 import { MovePicker, type MovePickerKind } from './MovePicker';
@@ -1134,15 +1134,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           {/* Dice pool and Politics share one row when there's width; when the column
               is narrow they WRAP (Politics drops below the dice, each full-width) so the
               Politics reinforcement pips can't run off the right edge (report 6q0s). */}
-          {/* The die-payment prompt floats just under the dice / Politics block instead of
-              sitting inside it: inline, its appearing pushed the actions, hand and log
-              down a few pixels (player report 24071c590o0o2c6i), and it was easy to miss —
-              a click on the board seemed to do nothing (5g050c2d2f49306y). It glows as it
-              opens. */}
-          <div style={{ position: 'relative', flexShrink: 0, maxHeight: '42%', display: 'flex', flexDirection: 'column', zIndex: 20 }}>
+          <div style={{ flexShrink: 0, maxHeight: '42%', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', minHeight: 0, overflowY: 'auto', borderBottom: '1px solid #2a2418' }}>
-            <div style={{ flex: '1 1 200px', minWidth: 0, overflow: 'auto' }}>
-              <DiceTray view={g.view} you={g.you as Side} selectedDie={activeDie} onSelectDie={g.yourTurn && !g.view.pendingChoice && !inActionDie ? setDie : undefined} inActionDie={inActionDie} />
+            {/* The OPPONENT's hand (card backs) and dice sit up here, above the actions;
+                yours sit below them, over your hand — so the two pools are no longer
+                lumped together (player report 0e4z5e1m4z4p3t32). */}
+            <div style={{ flex: '1 1 200px', minWidth: 0, overflow: 'auto', background: '#1a160f' }}>
+              <OpponentHand view={g.view} you={g.you as Side} />
+              <DiceTray view={g.view} you={g.you as Side} only="opp" />
             </div>
             <div style={{ flex: '1 1 270px', minWidth: 0, overflow: 'auto', borderLeft: '1px solid #2a2418' }}>
               <PoliticsPanel view={g.view} />
@@ -1152,19 +1151,6 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               <TabledStrip view={g.view} onHoverCard={onHoverCard} />
             </div>
           </div>
-              {/* `g.yourTurn` as well: online, the turn can pass to the opponent while
-                  the prompt is open (a pendingChoice resolving, a timeout), and a
-                  prompt for an action you can no longer take is worse than none. */}
-              {diePick && g.yourTurn && g.view && g.you && (
-                <div data-testid="die-pick-prompt" style={{ position: 'absolute', top: '100%', left: 6, right: 6, marginTop: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '7px 10px', background: '#3a2a12', border: '1px solid #c9a24a', borderRadius: 6, fontSize: 13, color: '#f0d090', boxShadow: '0 6px 20px #000c', animation: 'wotr-attn 0.45s ease-out 3' }}>
-                  <span>Which die pays for “{describeAction(diePick, g.view)}”?</span>
-                  {dieOptions(diePick, g.view, g.you as Side).map((f) => (
-                    <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
-                      style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
-                  ))}
-                  <button onClick={() => setDiePick(null)} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #6a531f', color: '#cb8', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: 11 }}>cancel</button>
-                </div>
-              )}
           </div>
           {/* Lower area: action buttons + hand on the LEFT, the big enlarge/inspect
               area filling the RIGHT (it takes all the room that's left there). */}
@@ -1178,8 +1164,26 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
                   subscribe={client.subscribeMessages} style={{ borderTop: '1px solid #2a2418', maxHeight: '28vh' }} />
               )}
-              {/* Hand (top) + in-play (played) cards (below) — sizes to its content. */}
-              <div style={{ flexShrink: 0, borderTop: '1px solid #2a2418' }}>
+              {/* Your dice over your hand — sizes to its content. The die-payment prompt
+                  floats just above your dice rather than sitting in the flow: inline, its
+                  appearing pushed everything a few pixels (player report
+                  24071c590o0o2c6i), and it was easy to miss — a click on the board
+                  seemed to do nothing (5g050c2d2f49306y). It glows as it opens. */}
+              <div style={{ position: 'relative', flexShrink: 0, borderTop: '1px solid #2a2418' }}>
+              {/* `g.yourTurn` as well: online, the turn can pass to the opponent while
+                  the prompt is open (a pendingChoice resolving, a timeout), and a
+                  prompt for an action you can no longer take is worse than none. */}
+              {diePick && g.yourTurn && g.view && g.you && (
+                <div data-testid="die-pick-prompt" style={{ position: 'absolute', bottom: '100%', left: 6, right: 6, marginBottom: 4, zIndex: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '7px 10px', background: '#3a2a12', border: '1px solid #c9a24a', borderRadius: 6, fontSize: 13, color: '#f0d090', boxShadow: '0 6px 20px #000c', animation: 'wotr-attn 0.45s ease-out 3' }}>
+                  <span>Which die pays for “{describeAction(diePick, g.view)}”?</span>
+                  {dieOptions(diePick, g.view, g.you as Side).map((f) => (
+                    <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
+                      style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
+                  ))}
+                  <button onClick={() => setDiePick(null)} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #6a531f', color: '#cb8', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: 11 }}>cancel</button>
+                </div>
+              )}
+                <DiceTray view={g.view} you={g.you as Side} only="mine" selectedDie={activeDie} onSelectDie={g.yourTurn && !g.view.pendingChoice && !inActionDie ? setDie : undefined} inActionDie={inActionDie} />
                 <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} playable={playableCards} onPlay={(a) => void submit(a)} busy={busy} />
               </div>
             </div>

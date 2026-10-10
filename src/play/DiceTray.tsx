@@ -54,9 +54,12 @@ function Pool({ title, dice, used, mine, selectedDie, onSelectDie, toRoll, inAct
   );
 }
 
-export function DiceTray({ view, you, selectedDie, onSelectDie, inActionDie }: { view: GameState; you: Side | null; selectedDie?: DieFace | null; onSelectDie?: (f: DieFace | null) => void;
+export function DiceTray({ view, you, selectedDie, onSelectDie, inActionDie, only }: { view: GameState; you: Side | null; selectedDie?: DieFace | null; onSelectDie?: (f: DieFace | null) => void;
   /** The die spent on your Action that is still being resolved. */
-  inActionDie?: DieFace | null }) {
+  inActionDie?: DieFace | null;
+  /** One pool alone: the opponent's sits with their hand above the actions, yours with
+   *  your hand below them (player report 0e4z5e1m4z4p3t32). */
+  only?: 'mine' | 'opp' }) {
   const me: Side = you === 'shadow' ? 'shadow' : 'fp';
   const opp: Side = me === 'fp' ? 'shadow' : 'fp';
   const name = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
@@ -75,9 +78,9 @@ export function DiceTray({ view, you, selectedDie, onSelectDie, inActionDie }: {
     return `${pool} dice to roll`;
   };
   return (
-    <div style={panel}>
-      <Pool title={`Your dice (${name(me)})`} dice={view.dice[me]} used={used[me]} mine selectedDie={selectedDie} onSelectDie={onSelectDie} toRoll={toRoll(me)} inAction={inActionDie} />
-      <Pool title={`${name(opp)} dice`} dice={view.dice[opp]} used={used[opp]} mine={false} toRoll={toRoll(opp)} />
+    <div style={only ? { ...panel, borderBottom: 'none' } : panel}>
+      {only !== 'opp' && <Pool title={`Your dice (${name(me)})`} dice={view.dice[me]} used={used[me]} mine selectedDie={selectedDie} onSelectDie={onSelectDie} toRoll={toRoll(me)} inAction={inActionDie} />}
+      {only !== 'mine' && <Pool title={`${name(opp)} dice`} dice={view.dice[opp]} used={used[opp]} mine={false} toRoll={toRoll(opp)} />}
     </div>
   );
 }
