@@ -167,9 +167,10 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     case 'huntDamage':
       switch (a.mode) {
         case 'corruption': return 'Use the Ring'; // the rulebook's term (p.42; player report 5540322n1d113g2o)
-        case 'guide': return 'Sacrifice the Guide';
+        // Named (player report 133p4m401g6h4r3w): "Separate {character name}".
+        case 'guide': return view ? `Sacrifice ${charName(view.fellowship.guide)}, the Guide` : 'Sacrifice the Guide';
         case 'random': return 'Sacrifice a random Companion';
-        case 'reduceSeparate': return 'Separate the Hobbit Guide (−1 damage)';
+        case 'reduceSeparate': return view ? `Separate ${charName(view.fellowship.guide)} (−1 damage)` : 'Separate the Hobbit Guide (−1 damage)';
         case 'reduceReveal': return 'Reveal the Fellowship (−1 damage)';
         case 'reduceCard': return a.card ? `Discard ${cardName(a.card)} (−1 damage)` : 'Discard a table card (−1 damage)';
       }
@@ -310,7 +311,10 @@ export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a
 /** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)
  *  with no board aspect — no move/attack, no board-clickable destination. */
 const simpleEventTarget = (a: WotrAction): boolean =>
-  a.kind === 'eventTarget' && !a.from && !a.to && !(a.region && a.companion) && a.mode !== 'move' && a.mode !== 'attack';
+  a.kind === 'eventTarget' && !a.from && !a.to && !(a.region && a.companion) && a.mode !== 'attack'
+  // A card move goes to the board — except the Fellowship's own move (There Is Another
+  // Way: no region, no route), which is a yes/no for the decision modal (report 3q2t3v090r6f6k0v).
+  && (a.mode !== 'move' || !a.region);
 /** A card RECRUIT target ("recruit one Gondor unit in Osgiliath", Riders of Rohan,
  *  Imrahil, ...): a region plus a nation/figure, no movement, nobody named. These
  *  take the board's muster flow — click the highlighted Settlement, pick the bundle
@@ -370,7 +374,10 @@ function eventTargetText(a: Extract<WotrAction, { kind: 'eventTarget' }>): strin
   if (a.done) return 'done';
   // Fellowship hide/move/decline choice (There Is Another Way).
   if (!a.region && !a.to && !a.companion && a.mode) {
-    return a.mode === 'hide' ? 'hide the Fellowship' : a.mode === 'move' ? 'move the Fellowship (triggers a Hunt)' : 'do neither';
+    // There Is Another Way offers ONE of hide/move (whichever the Fellowship can do) —
+    // a yes/no, under a "Hide the Fellowship?" / "Move the Fellowship?" heading (player
+    // report 3q2t3v090r6f6k0v: "Do neither" read as a third choice).
+    return a.mode === 'hide' ? 'Yes — hide the Fellowship' : a.mode === 'move' ? 'Yes — move the Fellowship (triggers a Hunt)' : 'No';
   }
   if (a.eye) return a.face ? `turn ${aFace(a.face)} die into an Eye (→ Hunt Box)` : `turn a die into an Eye (→ Hunt Box)`;
   // Dreadful Spells names its victim army and nothing else — say so, or the bare

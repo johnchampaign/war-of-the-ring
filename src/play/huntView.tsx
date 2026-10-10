@@ -15,7 +15,8 @@ export function describeDraw(d: Draw): string {
 }
 
 // The drawn Hunt tile, rendered to look like the physical cardboard token pulled
-// from the bag — a round parchment disc with its PRINTED face (a number, the 👁 Eye
+// from the bag — a square parchment token (rulebook p.6 shows them; they used to be
+// drawn as round discs — player report 130t4n2t2g4i091g) with its PRINTED face (a number, the 👁 Eye
 // of Sauron, or 🎲 a die), an Eye/Reveal pip and a STOP banner when the tile carries
 // them. The caption names the TILE ("the ‘3’ tile", "an Eye tile"), NOT the damage —
 // the damage/Corruption is the separate outcome shown by CorruptionLine, so a "3"
@@ -46,7 +47,7 @@ export function HuntTileFace({ draw, size = 58 }: { draw: Draw; size?: number })
   return (
     <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: '0 6px' }}>
       <div style={{
-        position: 'relative', width: size, height: size, borderRadius: '50%', background: face,
+        position: 'relative', width: size, height: size, borderRadius: Math.round(size / 9), background: face,
         border: `2px solid ${rim}`, display: 'grid', placeItems: 'center',
         boxShadow: '0 2px 7px #000a, inset 0 1px 2px #fff5, inset 0 -2px 4px #0004',
       }}>

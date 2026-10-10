@@ -143,7 +143,9 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
         )}
         {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>
           {choice.kind === 'eventTarget'
-            ? `${cardName((choice.data as { card?: string } | undefined)?.card ?? '')} — choose how it resolves`
+            ? ((choice.data as { card?: string } | undefined)?.card === 'fp-char-10' && actions.some((a) => a.kind === 'eventTarget' && (a.mode === 'hide' || a.mode === 'move'))
+              ? `${cardName('fp-char-10')} — ${actions.some((a) => a.kind === 'eventTarget' && a.mode === 'hide') ? 'hide' : 'move'} the Fellowship?`
+              : `${cardName((choice.data as { card?: string } | undefined)?.card ?? '')} — choose how it resolves`)
             : choice.kind === 'combatCardCost'
             ? cardCostTitle(choice.data as { card?: string; kind?: string } | undefined)
             : choice.kind === 'heroicDeath'
