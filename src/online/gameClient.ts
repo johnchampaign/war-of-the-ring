@@ -6,7 +6,8 @@
 import { subscribeSupabaseRealtime } from 'digital-boardgame-framework/client/realtime';
 import { submitReportViaHttp } from 'digital-boardgame-framework/client';
 import type { ChatMessage } from 'digital-boardgame-framework/client';
-import type { GameState } from '../engine/types';
+import type { GameState, Side } from '../engine/types';
+import { wotrAdapter } from '../adapter/wotrAdapter';
 import type { WotrAction } from '../adapter/wotrAction';
 
 export interface ViewResult {
@@ -74,6 +75,18 @@ export function makeGameClient(
   // even applied, and repeating that on every click only added to each one's wait
   // (player report 6ytzcs3z6hcoznm0). A new identity (signing in mid-game) is sent again.
   let claimedFor: string | undefined;
+  // The legal actions are worked out HERE, from the view the server just sent, instead
+  // of a second request after every move and every refresh — the same function the
+  // server runs, on the seat's own view, which gives the same list
+  // (scripts/probe-view-legal-equivalence.mjs). One round trip fewer per click (player
+  // report 6ytzcs3z6hcoznm0); the server still validates every move, and if the local
+  // answer ever fails the request is made as before.
+  let last: { view: GameState; you: Side } | null = null;
+  const remember = <T,>(r: T): T => {
+    const v = r as { view?: GameState; you?: unknown };
+    if (v && v.view && (v.you === 'fp' || v.you === 'shadow')) last = { view: v.view, you: v.you };
+    return r;
+  };
   const post = (path: string, body: unknown) =>
     fetch(`${base}${path}${q}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -85,14 +98,19 @@ export function makeGameClient(
 
   return {
     mode: 'online', // an online seat may face a server-driven AI; the log's `you` + winner still say who played
-    fetch: () => fetch(`${base}${q}`).then((r) => r.json()),
+    fetch: () => fetch(`${base}${q}`).then((r) => r.json()).then(remember),
     submit: async (action) => {
       const id = getIdentityToken?.();
       const r = await post('/submit', { action, identityToken: id && id !== claimedFor ? id : undefined });
       if (id && r && !(r as { error?: unknown }).error) claimedFor = id;
-      return r;
+      return remember(r);
     },
-    legalActions: () => fetch(`${base}/legal${q}`).then((r) => r.json()).then((r) => r.legalActions ?? r),
+    legalActions: () => {
+      if (last) {
+        try { return Promise.resolve(wotrAdapter.legalActions(last.view, last.you)); } catch { /* ask the server */ }
+      }
+      return fetch(`${base}/legal${q}`).then((r) => r.json()).then((r) => r.legalActions ?? r);
+    },
     // Never-silent: resolves only on a server-confirmed reportId; rejects on network
     // error / non-OK status / unparseable body / missing id (framework helper).
     report: (body) => submitReportViaHttp(`${base}/report${q}`, body),

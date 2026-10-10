@@ -764,7 +764,10 @@ const charLabel = (id: string): string => characterDef(id)?.name ?? id;
 export function wornWithSorrowOptions(state: GameState): Array<'hand' | string> {
   const cards = state.cards.fp;
   const isChar = (id: string) => EVENT_BY_ID[id]?.deck === 'Character';
-  return [...(cards.hand.some(isChar) ? ['hand'] : []), ...cards.table.filter(isChar)];
+  // A face-down card in a redacted view still shows its back, which is public: the
+  // Shadow's own view must offer the same "from the hand" option the server does.
+  const inHand = (id: string) => id === 'hidden-character' || isChar(id);
+  return [...(cards.hand.some(inHand) ? ['hand'] : []), ...cards.table.filter(isChar)];
 }
 
 /** A Companion casualty under Worn with Sorrow and Toil: discard now when there is
