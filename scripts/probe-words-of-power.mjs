@@ -101,7 +101,7 @@ const misses = (roll) => roll.dice.filter((d) => d !== 6 && d < roll.target).len
   const s = battle(3, { chars: ['legolas'] });
   check('no wordsOfPower prompt', s.pendingChoice?.kind !== 'wordsOfPower', s.pendingChoice?.kind);
   check('Legolas is named automatically', s.pendingCombat?.wordsOfPowerTarget === 'legolas', String(s.pendingCombat?.wordsOfPowerTarget));
-  const logged = s.log.some((e) => /Words of Power.*cancels Legolas/.test(e.msg ?? ''));
+  const logged = s.log.some((e) => /Words of Power names Legolas/.test(e.msg ?? ''));
   check('the log says whom it cancelled', logged);
 }
 {

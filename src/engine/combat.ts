@@ -12,7 +12,7 @@ import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, fellowshipRegion, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
-import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
+import { combatModsFor, variableCostFor, hasCombatEffect, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
 import { log, sideDoes, andList } from './log';
 import { getHandler } from './handlers/registry';
 
@@ -22,6 +22,8 @@ import { getHandler } from './handlers/registry';
 // ~1.7 hits/round, more with leadership re-rolls) so the cap never cuts a genuine
 // fight short; it exists purely to guarantee the sub-machine can't loop forever.
 const MAX_ROUNDS = 15;
+/** The one card that caps the DEFENDER's dice for a whole battle (its attack). */
+const DEF_DICE_PENALTY_CARD = 'fp-str-10';
 const clamp = (lo: number, hi: number, v: number): number => Math.max(lo, Math.min(hi, v));
 const other = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 // A side's NAME for the log. The side ids ('fp'/'shadow') are engine data and must
@@ -1652,6 +1654,9 @@ export function combatStep(state: GameState): void {
               return;
             }
             pc.wordsOfPowerTarget = options[0] ?? null;
+            // Named by default (one Companion there): say so, as the prompt does — the
+            // card's play line no longer describes its effect (report 311c6j09002y6b2v).
+            if (options[0] && !outrunByPreCombatRetreat(state, pc, wop)) logWordsOfPower(state, options[0]);
           } else pc.wordsOfPowerTarget = null;
         }
         pc.step = 'beginRound'; continue;
@@ -1737,11 +1742,11 @@ export function combatStep(state: GameState): void {
         const fpVoid = cx.defianceVoid || fpSilencedCard;
         pc.atkCardVoid = aCancelled || aOutrun || (pc.attacker === 'fp' && fpVoid);
         pc.defCardVoid = dCancelled || dOutrun || (pc.defender === 'fp' && fpVoid);
-        // Announce each card WITH what it mechanically does this round, so the dice
-        // that follow can be audited against it (player report: a card was played
-        // "for an effect without telling me what it did"). Logged after the cancel
-        // check so a cancelled card reads as cancelled.
-        const played = (card: string | null, mods: CombatMods, cancelled: boolean, outrun = false) => {
+        // Announce each card played (player report: a card was played "for an effect
+        // without telling me what it did" — what it did is now named on the dice line
+        // below, where it happens). Logged after the cancel check so a cancelled card
+        // reads as cancelled.
+        const played = (card: string | null, cancelled: boolean, outrun = false) => {
           if (!card) return cardName(card);
           // A cancelled card is named plainly; the cancel gets its own line below, and
           // the cancelling card doesn't restate it (player report 3m5w464l281a6i5o).
@@ -1749,15 +1754,16 @@ export function combatStep(state: GameState): void {
           if (card === fpCard && cx.defianceVoid) return `${cardName(card)} — NO EFFECT: The White Rider has already forfeited Gandalf's Leadership, so the Companions cannot forfeit all of theirs`;
           if (card === fpCard && fpSilencedCard) return `${cardName(card)} — NO EFFECT: Words of Power has cancelled ${characterDef(silencedNow!)?.name ?? silencedNow}'s Leadership`;
           if (outrun) return `${cardName(card)} — TOO SLOW: the opposing card retreats its Army first, so this one never resolves`;
-          // A conditional bonus hit ("+2 hits if it scored any") is named on the dice
-          // line when it actually fires ("+ 2 automatic hits from 'Nameless Wood'"), so
-          // saying it here too only doubled it up (player report 722j600u2v6q3062).
-          const what = describeCombatMods({ ...mods, bonusHitsIfAny: 0, cancelEnemyCard: false });
-          return `${cardName(card)}${what ? ` — ${what}` : ''}`;
+          // The card is only NAMED here. What it does is said where it does it — the
+          // dice line names it beside the number it changed ("on 4+ (+1 'Desperate
+          // Battle')", "+ 2 automatic hits from 'Nameless Wood'", "2 after 'Shield-wall'
+          // cancels 1"), and its full text is a hover away. Describing it here too said
+          // everything twice (player reports 722j600u2v6q3062, 311c6j09002y6b2v).
+          return cardName(card);
         };
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.attacker)} (attacker) ${pc.attacker === 'fp' ? 'play' : 'plays'} ${played(pc.attackerCard, aMods, aCancelled, aOutrun)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.attacker)} (attacker) ${pc.attacker === 'fp' ? 'play' : 'plays'} ${played(pc.attackerCard, aCancelled, aOutrun)}`);
         if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.defender)} (defender) ${pc.defender === 'fp' ? 'play' : 'plays'} ${played(pc.defenderCard, dMods, dCancelled, dOutrun)}`);
+        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.defender)} (defender) ${pc.defender === 'fp' ? 'play' : 'plays'} ${played(pc.defenderCard, dCancelled, dOutrun)}`);
         if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
         const title = (id: string) => `'${EVENT_BY_ID[id]?.combat?.title ?? EVENT_BY_ID[id]?.name ?? id}'`;
         if (dCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.defenderCard!)} is cancelled by ${title(pc.attackerCard!)}`);
@@ -1849,17 +1855,46 @@ export function combatStep(state: GameState): void {
         // `rolled` is what the dice scored; `hits` is what survives card effects.
         // Show both when they differ, so a cancelled hit doesn't read as a bad
         // dice count (player report: "Shield Wall reduced the hits — did it?").
-        const fmt = (roll: CombatRoll, rolled: number, hits: number, card: string | null) =>
-          `[${roll.dice.join(' ')}] on ${roll.target}+`
-          // The re-roll can have its OWN to-hit (cards bonus the two rolls separately).
-          + (roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]${roll.rerollTarget != null && roll.rerollTarget !== roll.target ? ` on ${roll.rerollTarget}+` : ''}` : '')
-          + (roll.auto ? ` + ${roll.auto} automatic hit${roll.auto === 1 ? '' : 's'} from ${card ? `'${EVENT_BY_ID[card]?.combat?.title ?? EVENT_BY_ID[card]?.name ?? card}'` : 'the card'}` : '')
-          // Confusion's backfire is a hit AGAINST this roller, so it is named on their
-          // own segment rather than silently inflating the opponent's total.
-          + (roll.backfire ? ` + ${roll.backfire} unmodified '1'${roll.backfire === 1 ? '' : 's'} wounding their own Army (Confusion, no re-roll)` : '')
-          + ` → ${rolled} hit${rolled === 1 ? '' : 's'} total`
-          + (hits !== rolled ? ` (${hits} after card effects)` : '');
-        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk, pc.attackerCard)}; defender ${fmt(dRoll, defHits, def, pc.defenderCard)}`,
+        // Each card is named beside the number it changed: the to-hit it moved, the
+        // dice it took away, the re-roll it cancelled, the hits it added or cancelled.
+        const t = (id: string | null) => (id ? `'${EVENT_BY_ID[id]?.combat?.title ?? EVENT_BY_ID[id]?.name ?? id}'` : 'the card');
+        type Seg = { roll: CombatRoll; rolled: number; hits: number; card: string | null; mods: CombatMods; foeCard: string | null; foeMods: CombatMods;
+          extra: number; cancelled: number; foeBackfire: number; diceCap?: string };
+        const fmt = ({ roll, rolled, hits, card, mods, foeCard, foeMods, extra, cancelled, foeBackfire, diceCap }: Seg) => {
+          const toHit: string[] = [];
+          if (mods.rollBonus) toHit.push(`+${mods.rollBonus} ${t(card)}`);
+          if (foeMods.symmetricBonus && foeMods.rollBonus) toHit.push(`+${foeMods.rollBonus} ${t(foeCard)}`);
+          if (foeMods.enemyRollPenalty) toHit.push(`−${foeMods.enemyRollPenalty} ${t(foeCard)}`);
+          const reToHit: string[] = [];
+          if (mods.rerollBonus && !mods.rollBonus) reToHit.push(`+${mods.rerollBonus} ${t(card)}`);
+          const notes: string[] = [];
+          if (foeMods.maxDiceEnemy != null) notes.push(`at most ${foeMods.maxDiceEnemy} ${foeMods.maxDiceEnemy === 1 ? 'die' : 'dice'}: ${t(foeCard)}`);
+          if (foeMods.enemyDiceReduction) notes.push(`${foeMods.enemyDiceReduction} fewer ${foeMods.enemyDiceReduction === 1 ? 'die' : 'dice'}: ${t(foeCard)}`);
+          if (diceCap) notes.push(diceCap);
+          if (roll.rerollCancelled) notes.push(`no Leader re-roll: ${t(foeCard)}`);
+          if (mods.ownLeadershipPenalty) notes.push(`${mods.ownLeadershipPenalty} Leadership forfeited: ${t(card)}`);
+          if (mods.guaranteedHits && !roll.rerollCancelled) notes.push(`${t(card)} turns up to ${mods.guaranteedHits} miss${mods.guaranteedHits === 1 ? '' : 'es'} into ${mods.guaranteedHits === 1 ? 'a hit' : 'hits'}`);
+          const after: string[] = [];
+          if (extra) after.push(`${t(card)} adds ${extra}`);
+          if (cancelled) after.push(`${t(foeCard)} cancels ${cancelled}`);
+          if (foeBackfire) after.push(`${t(card)} adds ${foeBackfire} from their '1's`);
+          return `[${roll.dice.join(' ')}] on ${roll.target}+${toHit.length ? ` (${toHit.join(', ')})` : ''}`
+            // The re-roll can have its OWN to-hit (cards bonus the two rolls separately).
+            + (roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]${roll.rerollTarget != null && roll.rerollTarget !== roll.target ? ` on ${roll.rerollTarget}+${reToHit.length ? ` (${reToHit.join(', ')})` : ''}` : ''}` : '')
+            + (roll.auto ? ` + ${roll.auto} automatic hit${roll.auto === 1 ? '' : 's'} from ${t(card)}` : '')
+            // Confusion's backfire is a hit AGAINST this roller, so it is named on their
+            // own segment rather than silently inflating the opponent's total.
+            + (roll.backfire ? ` + ${roll.backfire} unmodified '1'${roll.backfire === 1 ? '' : 's'} wounding their own Army (${t(foeCard)}, no re-roll)` : '')
+            + (notes.length ? ` · ${notes.join(' · ')}` : '')
+            + ` → ${rolled} hit${rolled === 1 ? '' : 's'} total`
+            + (hits !== rolled ? ` (${hits} after ${after.length ? after.join(', ') : 'card effects'})` : '');
+        };
+        const atkSeg: Seg = { roll: aRoll, rolled: atkHits, hits: atk, card: pc.attackerCard, mods: aMods, foeCard: pc.defenderCard, foeMods: dMods,
+          extra: aMum, cancelled: dCancel, foeBackfire: dRoll.backfire ?? 0 };
+        const defSeg: Seg = { roll: dRoll, rolled: defHits, hits: def, card: pc.defenderCard, mods: dMods, foeCard: pc.attackerCard, foeMods: aMods,
+          extra: dMum, cancelled: aCancel, foeBackfire: aRoll.backfire ?? 0,
+          diceCap: pc.defDicePenalty ? `${pc.defDicePenalty} fewer ${pc.defDicePenalty === 1 ? 'die' : 'dice'}: ${t(DEF_DICE_PENALTY_CARD)}` : undefined };
+        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(atkSeg)}; defender ${fmt(defSeg)}`,
           { round: pc.round + 1, region: pc.to, attackerSide: pc.attacker, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
         for (const k of kills) {
           log(state, null, 'combat', k.line);
@@ -2421,8 +2456,10 @@ export function resolveWordsOfPower(state: GameState, companion: string): void {
   if (!d.companions.includes(companion)) throw new Error(`Words of Power cannot name ${companion}`);
   pc.wordsOfPowerTarget = companion;
   state.pendingChoice = null;
-  log(state, null, 'combat', `Words of Power names ${characterDef(companion)?.name ?? companion}: his Leadership and special abilities are cancelled this Combat round`);
+  logWordsOfPower(state, companion);
 }
+const logWordsOfPower = (state: GameState, companion: string): void =>
+  log(state, null, 'combat', `Words of Power names ${characterDef(companion)?.name ?? companion}: his Leadership and special abilities are cancelled this Combat round`);
 
 /** Resolve the White Rider battle-start choice (combat resumes via advance). */
 export function resolveWhiteRider(state: GameState, forfeit: boolean): void {

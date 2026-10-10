@@ -53,7 +53,8 @@ function survey(label, shadowCard, maxRerolls, logPattern) {
     const s = battle(seed, shadowCard);
     const r = s.pendingCombat?.defRoll;
     if (!r) continue;
-    const line = s.log.find((e) => /\(defender\) play/.test(e.msg ?? ''))?.msg ?? '';
+    // The card line names the card; what it did is named on the dice line.
+    const line = s.log.filter((e) => /\(defender\) play|Round 1 dice/.test(e.msg ?? '')).map((e) => e.msg).join(' | ');
     if (!logPattern.test(line)) bad.push(`${seed}:log "${line}"`);
     if (misses(r) < 3) continue;
     seen++; most = Math.max(most, r.rerolls.length);
@@ -63,7 +64,7 @@ function survey(label, shadowCard, maxRerolls, logPattern) {
 }
 
 console.log('\n=== Daring Defiance ===');
-survey('cancelling Words of Power forfeits Strider + Legolas: 1 re-roll left', WOP, 1, /forfeits 2 Leadership/);
+survey('cancelling Words of Power forfeits Strider + Legolas: 1 re-roll left', WOP, 1, /2 Leadership forfeited: 'Daring Defiance'/);
 {
   // The cancel is its own line; the card lines don't restate it (report 3m5w464l281a6i5o).
   const s = battle(3, WOP);
