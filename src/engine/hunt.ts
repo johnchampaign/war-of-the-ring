@@ -12,7 +12,7 @@ import type { GameState } from './types';
 import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, characterDef, EVENT_BY_ID, type HuntTileDef } from './data';
 import { fellowshipDieSkipsHuntBox, wornWithSorrowActive } from './persistent';
 import { withRng } from './rng';
-import { settlementController, armySide, heldShadowStronghold } from './armies';
+import { settlementController, armySide, heldShadowStronghold, fellowshipRegion } from './armies';
 import { log, shedCorruption, sufferCorruption } from './log';
 
 /** Begin revealing the Fellowship (rulebook p.39): if it has Progress to spend, pause
@@ -126,7 +126,9 @@ export function returnSetAsideHuntTiles(state: GameState): void {
  *  dialog can list them (shown concretely only while the Fellowship is revealed —
  *  its location is hidden otherwise). */
 export function huntRerollSources(state: GameState): { stronghold: boolean; army: boolean; nazgul: boolean } {
-  const loc = state.fellowship.location;
+  // On the Mordor Track the Fellowship stands in no region, so nothing there re-rolls.
+  const loc = fellowshipRegion(state);
+  if (!loc) return { stronghold: false, army: false, nazgul: false };
   const r = state.regions[loc]!;
   return {
     stronghold: REGIONS[loc]!.settlement === 'Stronghold' && settlementController(state, loc) === 'shadow',

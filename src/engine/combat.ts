@@ -9,7 +9,7 @@
 import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
 import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName } from './data';
 import { withRng } from './rng';
-import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
+import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, fellowshipRegion, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
 import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, describeCombatMods, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
@@ -2458,7 +2458,7 @@ function combatPrecondMet(state: GameState, pc: PendingCombat, cardId: string): 
   const has = (s: string) => pre.includes(s);
 
   if (has('Nazgûl is in the battle')) return sh.nazgul > 0 || sh.characters.includes('witch-king');
-  if (has('same region as the Fellowship')) return pc.to === state.fellowship.location;
+  if (has('same region as the Fellowship')) return pc.to === fellowshipRegion(state); // never on the Mordor Track
   if (has('Leader or a Companion')) return fp.leaders > 0 || companionInBattle;
   if (has('a Companion is in the battle')) return companionInBattle;
   if (has('Free Peoples Elite')) return fpElite;

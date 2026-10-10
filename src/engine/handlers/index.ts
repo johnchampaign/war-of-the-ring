@@ -6,7 +6,7 @@ import type { GameState, Side, Nation, RegionId, CharacterId, DieFace } from '..
 import { FP_NATIONS, SHADOW_NATIONS } from '../types';
 import { withRng } from '../rng';
 import { register, type EventTarget, type EventHandler } from './registry';
-import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason, cardAttackFighters } from '../armies';
+import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, fellowshipRegion, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason, cardAttackFighters } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, runEventStrikes, hasAtWarUnit, sortieForce, canSortie, attackError, type CasualtyThen, type EventStrike } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
@@ -896,7 +896,8 @@ function seSettlements(s: GameState): string[] {
 // --- Interactive movement cards (the player picks a target after playing) -----
 // Cruel Weather: the Shadow moves the Fellowship to an adjacent region.
 register('sh-char-10', {
-  canPlay: (state) => state.fellowship.progress >= 1 && (REGIONS[state.fellowship.location]?.adjacency.length ?? 0) > 0,
+  // "Cannot be played on the Mordor Track" (Almanac) — the Fellowship is on no region there.
+  canPlay: (state) => state.fellowship.mordor === null && state.fellowship.progress >= 1 && (REGIONS[state.fellowship.location]?.adjacency.length ?? 0) > 0,
   targets: (state) => (REGIONS[state.fellowship.location]?.adjacency ?? []).map((region) => ({ region })),
   applyTarget(state, _side, t) { state.fellowship.location = t.region!; log(state, null, 'event', `Cruel Weather moves the Fellowship to ${t.region}`); },
 });
@@ -2518,7 +2519,9 @@ const nazgulOnMap = (state: GameState): boolean => nazgulFigureOnMap(state); // 
  *  inside a besieged Shadow Stronghold there counts too, since that is where a Nazgûl
  *  flying into that region lands. */
 const nazgulWithFellowship = (state: GameState): boolean => {
-  const f = figureForce(state, state.fellowship.location, 'shadow');
+  const loc = fellowshipRegion(state);
+  if (!loc) return false; // on the Mordor Track no Nazgûl is "with" the Fellowship
+  const f = figureForce(state, loc, 'shadow');
   return f.nazgul > 0 || f.characters.includes('witch-king');
 };
 // Nazgûl Search — move any/all Nazgûl; if one is then with the Fellowship, reveal it.

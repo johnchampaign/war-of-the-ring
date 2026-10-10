@@ -1173,3 +1173,12 @@ export function mergeForceInto(state: GameState, id: RegionId, f: Force): void {
   r.leaders += f.leaders; r.nazgul += f.nazgul;
   for (const c of f.characters) if (!r.characters.includes(c)) r.characters.push(c);
 }
+
+/** The map region the Fellowship stands in — or null once it is on the Mordor Track,
+ *  where it is in no region at all. Its figure's `location` still names the entrance it
+ *  came through (Morannon / Minas Morgul), so every "the region with the Fellowship"
+ *  rule reads this instead: It Is a Gift / One for the Dark Lord, a Nazgûl "with the
+ *  Fellowship", the Hunt re-rolls (player report 056d20305g6p4u0c). */
+export function fellowshipRegion(state: GameState): RegionId | null {
+  return state.fellowship.mordor === null ? state.fellowship.location : null;
+}
