@@ -33,7 +33,7 @@ import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
-import { dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, isSecondMusterTarget, trivialDie } from './actionText';
+import { dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, isSecondMusterTarget, trivialDie, isCardRegionPick } from './actionText';
 import { moveBlockReason, musterBlockReason, cardPathBlockReason, regionHops, companionLandingActivates } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial, isCardCompanionMove } from './panelFilter';
@@ -352,6 +352,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // 186w6s0a051h4534, 231u2i4l5p19426w).
   const cardCompMoves = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => isCardCompanionMove(a)), [g.legalActions]);
   const cardCompSources = useMemo(() => new Set(cardCompMoves.map((a) => a.from!)), [cardCompMoves]);
+  // A card's bare REGION pick — the Army it strikes, the Nazgûl the Eagles fall on, where
+  // Cruel Weather blows the Fellowship: a highlighted region to click, not a modal button
+  // (player reports 45031a1d013o5x0m, 6z342y5h274r046w).
+  const cardRegionActs = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => isCardRegionPick(a)), [g.legalActions]);
+  const cardRegionTargets = useMemo(() => new Set(cardRegionActs.map((a) => a.region!)), [cardRegionActs]);
   const isCardCharPick = cardCharPicks.length > 0;
   // Independent characters (Nazgûl/Minion/Companion) are board-movable when a
   // Character (or Will) die is available — detected by any moveCharacter being legal.
@@ -502,8 +507,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       const name = EVENT_BY_ID[cardCompMoves[0]!.card]?.name ?? 'The card';
       out.push(`${name}: move Companions — click a highlighted region on the map, then where they go.`);
     }
+    if (cardRegionActs.length) {
+      const card = cardRegionActs[0]!.card;
+      const what = ({ 'sh-char-19': 'click the Free Peoples Army to strike', 'fp-str-06': 'click the Shadow Army to strike', 'fp-str-05': 'click the Shadow Army to strike',
+        'fp-char-18': 'click the Nazgûl the Eagles strike', 'sh-char-10': 'click the region the Fellowship is driven into' } as Record<string, string>)[card] ?? 'click a highlighted region';
+      out.push(`${EVENT_BY_ID[card]?.name ?? 'The card'}: ${what} — the highlighted regions on the map.`);
+    }
     return out;
-  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves]);
+  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves, cardRegionActs]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -593,6 +604,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         return;
       }
       const a = here[0];
+      if (a) { clearMove(); void submit(a); }
+      return;
+    }
+    // A card's bare region pick: the click IS the answer.
+    if (cardRegionTargets.has(id)) {
+      const a = cardRegionActs.find((x) => x.region === id);
       if (a) { clearMove(); void submit(a); }
       return;
     }
@@ -748,24 +765,24 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   // Where a Character or a Nazgûl may GO is always lit as a destination — a separation
   // and a card's Companion or Nazgûl move included — never in the green of "click here
   // to start something" (player report 395d3n1w3f085y56: separation and card moves
   // were green, the die's Character moves orange).
   const highlights = useMemo(() => {
-    const charGoals = new Set<RegionId>([...cardSepTargets, ...(isSeparateMove ? declareTargets : [])]);
+    const charGoals = new Set<RegionId>([...cardSepTargets, ...(isSeparateMove ? declareTargets : []), ...cardRegionTargets]);
     return {
       sources: new Set([...sources].filter((r) => !charGoals.has(r))),
       selected: activeRegion,
       destinations: new Set([...destinations, ...charGoals]),
       activate: activateTargets,
     };
-  }, [sources, activeRegion, destinations, activateTargets, cardSepTargets, isSeparateMove, declareTargets]);
+  }, [sources, activeRegion, destinations, activateTargets, cardSepTargets, isSeparateMove, declareTargets, cardRegionTargets]);
   // The Muster die's second figure is a pending choice too, so it must be listed here or
   // its lit Settlements ignore the click (player report 310b003u0c1j3220).
-  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || cardCompMoves.length > 0 || isCardRecruit || isCardMove || cardAssaultActs.length > 0 || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2 || secondMusterActs.length > 0) ? onRegionClick : undefined;
+  const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || cardCompMoves.length > 0 || cardRegionActs.length > 0 || isCardRecruit || isCardMove || cardAssaultActs.length > 0 || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2 || secondMusterActs.length > 0) ? onRegionClick : undefined;
 
   if (!g.view) return <div style={{ padding: 40, fontFamily: 'system-ui', color: '#ccc' }}>{g.error ? `Error: ${g.error.message}` : 'Loading…'}</div>;
 

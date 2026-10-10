@@ -1447,7 +1447,11 @@ register('sh-str-12', {
 register('fp-char-23', {
   // Printed precondition: "Play if Boromir is in a GONDOR region" — anywhere else
   // (Rohan, Rivendell, …) doesn't qualify.
-  canPlay: (state) => { const r = findCharacterRegion(state, 'boromir'); return !!r && REGIONS[r]!.nation === 'gondor' && state.reinforcements.gondor.regular + state.reinforcements.gondor.elite > 0; },
+  // Nothing else gates it: with no Gondor unit left to recruit (or no room) the card
+  // still plays for its two Strategy cards — effects apply "to the maximum extent
+  // possible" (p.22; player report 2h042a1d0k5z4p23, Boromir in Osgiliath with the
+  // Gondor reinforcements spent). The recruit step simply offers nothing.
+  canPlay: (state) => { const r = findCharacterRegion(state, 'boromir'); return !!r && REGIONS[r]!.nation === 'gondor'; },
   targets(state) {
     const r = findCharacterRegion(state, 'boromir'); if (!r) return [];
     // Room is measured where the unit would actually land: the boxed garrison (5) when

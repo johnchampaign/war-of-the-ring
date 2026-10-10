@@ -344,12 +344,21 @@ export const isCardArmyMoveTarget = (a: WotrAction): boolean =>
  *  DecisionModal instead of the quiet panel list — a player report ("played Riders
  *  of Rohan and nothing happened") showed the Regular-vs-Elite pick going unnoticed
  *  as panel buttons. Board-driven card flows (moves, separations) are unaffected. */
+/** A card target that is a REGION and nothing else — the Army a card strikes (Dreadful
+ *  Spells, Faramir's Rangers, The Spirit of Mordor), the Nazgûl the Eagles fall on, the
+ *  region Cruel Weather blows the Fellowship into. Picked on the map like every other
+ *  region (player reports 45031a1d013o5x0m, 6z342y5h274r046w). */
+export const isCardRegionPick = (a: WotrAction): boolean =>
+  a.kind === 'eventTarget' && !!a.region && !a.companion && !a.from && !a.to && !a.nation && !a.figure
+  && !a.mode && !a.eye && !a.face && !a.done && a.slot === undefined && a.count === undefined;
+
 export function eventChoiceInModal(actions: WotrAction[]): boolean {
   const ets = actions.filter((a) => a.kind === 'eventTarget');
-  // A card whose targets are on the BOARD (recruits, army moves) must not raise the
-  // modal at all — its backdrop would sit over the very map the player has to click.
-  // Its leftover simple options ("done", a deck pick) become list buttons instead.
-  if (ets.some((a) => isCardRecruitTarget(a) || isCardArmyMoveTarget(a))) return false;
+  // A card whose targets are on the BOARD (recruits, army moves, a region to strike)
+  // must not raise the modal at all — its backdrop would sit over the very map the
+  // player has to click. Its leftover simple options ("done", a deck pick) become list
+  // buttons instead.
+  if (ets.some((a) => isCardRecruitTarget(a) || isCardArmyMoveTarget(a) || isCardRegionPick(a))) return false;
   return ets.length > 0 && ets.every(simpleEventTarget);
 }
 

@@ -126,5 +126,22 @@ function board(seed = 5) {
   check('not offered when the free card would have nothing to play', !canPlayCard(s, 'fp-char-19', 'fp'));
 }
 
+{
+  // House of the Stewards: "Play if Boromir is in a Gondor region" — and nothing else.
+  // With the Gondor reinforcements spent it still plays for its two Strategy cards (p.22;
+  // player report 2h042a1d0k5z4p23). Osgiliath is NOT a Gondor region (Almanac, on this
+  // very card), so there it stays unplayable.
+  console.log('\n=== House of the Stewards: Boromir in a Gondor region is the whole condition ===');
+  const at = (region) => {
+    const s = startGame(createGame({ seed: 4 }));
+    s.fellowship.companions = s.fellowship.companions.filter((c) => c !== 'boromir');
+    s.regions[region].characters.push('boromir'); s.characters.inPlay.boromir = region;
+    s.reinforcements.gondor = { regular: 0, elite: 0, leader: 0 };
+    return canPlayCard(s, 'fp-char-23', 'fp');
+  };
+  check('playable from Minas Tirith with no Gondor unit left to recruit', at('minas-tirith'));
+  check('not from Osgiliath, which is no Gondor region', !at('osgiliath'));
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

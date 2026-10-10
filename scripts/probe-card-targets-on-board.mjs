@@ -12,7 +12,7 @@ import { createGame } from '../src/engine/setup.ts';
 import { wotrAdapter, startGame } from '../src/adapter/wotrAdapter.ts';
 import { chooseAction } from '../src/ai/wotrAI.ts';
 import { panelShowsAction, BOARD_PATH } from '../src/play/panelFilter.ts';
-import { isCardRecruitTarget, isCardArmyMoveTarget, eventChoiceInModal, isDecisionAction } from '../src/play/actionText.ts';
+import { isCardRecruitTarget, isCardArmyMoveTarget, eventChoiceInModal, isDecisionAction, isCardRegionPick } from '../src/play/actionText.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -40,7 +40,9 @@ check('a card attack with a destination is a board move too', isCardArmyMoveTarg
 // A card's siege ASSAULT (from === to) was a panel button; it is now the board's "⚔ Assault"
 // on the besieged region, like a die assault (player report 1w2k3i631m5c5a4z).
 check('a card siege ASSAULT (from === to) is a board assault, not a button', !isCardArmyMoveTarget(assault) && !panelShowsAction(assault, [assault], view));
-check('a region-only pick (Dreadful Spells) is still a modal pick', !isCardRecruitTarget(strike) && eventChoiceInModal([strike]));
+// A bare region pick (Dreadful Spells' victim Army) moved from the modal to the map too
+// (player report 45031a1d013o5x0m).
+check('a region-only pick (Dreadful Spells) is a map click, not a modal pick', !isCardRecruitTarget(strike) && isCardRegionPick(strike) && !eventChoiceInModal([strike]) && !panelShowsAction(strike, [strike], view));
 check('a region-only pick FLAGGED as a recruit is a board muster', isCardRecruitTarget(regionRecruit) && !panelShowsAction(regionRecruit, [regionRecruit], view) && !eventChoiceInModal([regionRecruit]));
 check('a companion placement is neither (it has its own board path)', !isCardRecruitTarget(sep) && !isCardArmyMoveTarget(sep));
 
@@ -66,6 +68,34 @@ console.log('\n=== real games: cards do produce these shapes, and nothing is str
   check('card recruit targets occur in play', recruits > 0, `${recruits} over ${actions} legal actions`);
   check('card army-move targets occur in play', moves > 0, `${moves}; cards: ${[...seenCards].join(', ')}`);
   check('no legal action is off every surface', stranded === 0, `${stranded} stranded`);
+}
+
+console.log('\n=== a card\'s bare region pick is a map click (Dreadful Spells, Cruel Weather) ===');
+{
+  // Player reports 45031a1d013o5x0m, 6z342y5h274r046w.
+  const setup = (card, die, prep) => {
+    const s = startGame(createGame({ seed: 8 }));
+    s.phase = 'actionResolution'; s.pendingChoice = null; s.currentPlayer = 'shadow';
+    for (const n of Object.keys(s.nations)) { s.nations[n].active = true; s.nations[n].step = 0; }
+    s.dice.shadow = [die]; s.dice.fp = ['muster'];
+    prep(s);
+    s.cards.shadow.hand = [card];
+    const p = wotrAdapter.legalActions(s, 'shadow').find((a) => a.kind === 'playEvent' && a.cardId === card);
+    return p ? wotrAdapter.applyAction(s, { ...p, die }, 'shadow') : null;
+  };
+  for (const [card, prep] of [
+    ['sh-char-19', (s) => { s.regions['dagorlad'].units = { sauron: { regular: 3, elite: 0 } }; s.regions['dagorlad'].nazgul = 3; s.regions['noman-lands'].units = { north: { regular: 2, elite: 0 } }; }],
+    ['sh-char-10', (s) => { s.fellowship.progress = 2; }],
+  ]) {
+    const t = setup(card, 'character', prep);
+    check(`${card} is playable`, !!t);
+    if (!t) continue;
+    const legal = wotrAdapter.legalActions(t, 'shadow');
+    const picks = legal.filter(isCardRegionPick);
+    check(`${card}: its targets are bare region picks`, picks.length > 0 && picks.every((a) => a.region), `${picks.length}`);
+    check(`${card}: no decision modal`, !eventChoiceInModal(legal));
+    check(`${card}: no panel buttons for them`, picks.every((a) => !panelShowsAction(a, legal, t)));
+  }
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

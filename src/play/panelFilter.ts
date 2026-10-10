@@ -6,7 +6,7 @@
 // stripping was meant to cure.
 import type { WotrAction } from '../adapter/wotrAction';
 import type { GameState } from '../engine/types';
-import { isDecisionAction, eventChoiceInModal, isCardRecruitTarget, isCardArmyMoveTarget, isSecondMusterTarget } from './actionText';
+import { isDecisionAction, eventChoiceInModal, isCardRecruitTarget, isCardArmyMoveTarget, isSecondMusterTarget, isCardRegionPick } from './actionText';
 
 /** Army moves and attacks: spatial, so they are map clicks, never buttons. */
 export type SpatialAction = Extract<WotrAction, { kind: 'moveArmy' | 'attack' }>;
@@ -36,7 +36,7 @@ export const BOARD_PATH: Record<string, string> = {
   cardRetreat: 'click a highlighted region to retreat there (Dead Men of Dunharrow)',
   revealMove: 'click a highlighted region to place the revealed Ring-bearers',
   separateMove: 'click a highlighted region to place the separated Companion(s)',
-  eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves and attacks via click-army-then-destination (both open the Army-move picker), a card assault via the besieged region and "⚔ Assault", companion placements via the highlighted region, a card move of Companions already on the map via their region\'s menu; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
+  eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, army moves and attacks via click-army-then-destination (both open the Army-move picker), a card assault via the besieged region and "⚔ Assault", companion placements via the highlighted region, a card move of Companions already on the map via their region\'s menu; a card\'s bare region pick (the Army it strikes, Cruel Weather\'s region) by clicking the highlighted region; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
   useElvenRing: 'the Elven Rings pill in the status bar',
   playEvent: 'click the card in your hand (the Ents Awake prompt owns its one free Character-card play)',
 };
@@ -77,6 +77,9 @@ export function panelShowsAction(a: WotrAction, legal: WotrAction[], _view: Game
     // move picker a Muster / Army die uses (player report 2s3p6y0x000k6b70: "Event card
     // recruitment should use that interface ... likewise all movement affected by cards").
     && !isCardRecruitTarget(a) && !isCardArmyMoveTarget(a)
+    // …and a card's bare REGION pick (the Army it strikes, where Cruel Weather blows the
+    // Fellowship): click the highlighted region (player report 45031a1d013o5x0m).
+    && !isCardRegionPick(a)
     // …and so is a card's ASSAULT on the Stronghold its Army besieges (from === to): the
     // besieged region and "⚔ Assault", like a die assault (player report 1w2k3i631m5c5a4z).
     && !(a.kind === 'eventTarget' && a.mode === 'attack' && !!a.from && a.from === a.to && !a.done)
