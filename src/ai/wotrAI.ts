@@ -1070,6 +1070,9 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       let best: WotrAction = { kind: 'playCombatCard', cardId: null }, bestVal = 1.5;
       for (const a of legal) {
         if (a.kind !== 'playCombatCard' || a.cardId == null) continue;
+        // Balrog of Moria may also be discarded from the table for Durin's Bane. The AI
+        // keeps it there for its Hunt use until that trade-off is measured (A/B).
+        if (state.cards.shadow.table.includes(a.cardId) && !state.cards.shadow.hand.includes(a.cardId)) continue;
         const v = combatCardValue(combatModsFor(a.cardId));
         if (v > bestVal) { bestVal = v; best = a; }
       }

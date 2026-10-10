@@ -264,6 +264,8 @@ export interface PendingCombat {
    *  prompt says the defender lost all units, instead of actual losses"). */
   atkWithdrew?: number;
   defWithdrew?: number;
+  /** Where a retreating defender went, for the battle-end log line (player report 3k6f3l215c5h1o47). */
+  defRetreatTo?: RegionId;
   /** RAW siege assault: the besieger occupies the region (`from`===`to`) and the
    *  DEFENDER's figures are in `to.siegeBox`. Set to the defender's side so combat
    *  reads/writes the boxed defender from the siege box instead of the region. */

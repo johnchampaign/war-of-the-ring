@@ -1158,6 +1158,10 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   without it the FP could re-declare in place and heal 1 Corruption *each time*
   (player report 4r4z: five declarations at Dale in one Fellowship phase took
   Corruption from 5 to 0). `scripts/probe-declare-once.mjs`.
+- **Balrog of Moria as a Combat card.** It may be discarded from the table to use its **Durin's Bane** Combat
+  effect "as if you were playing the card from your hand" (Card Text Reference; player report
+  221x631w3b3i4b1j) — offered in the Combat-card step whenever Durin's Bane's precondition holds.
+  The AI does not take this option yet (unmeasured).
 - **A declare ACTIVATES the Nation.** "If the Fellowship is declared in a City or
   Stronghold of a Free Peoples Nation, that Nation is activated ... and the Ring-bearers
   may be healed" (p.19), listed again among the activation triggers on p.34. The Almanac's

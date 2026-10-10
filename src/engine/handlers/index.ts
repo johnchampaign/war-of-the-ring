@@ -14,7 +14,7 @@ import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../po
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef } from '../data';
 import { moveFellowship, findCharacterRegion, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS, type RangeOpts } from '../charMove';
-import { log, logCardDraw, notify, sideDoes, sideName, sufferCorruption, shedCorruption } from '../log';
+import { log, logCardDraw, notify, sideDoes, sideName, sufferCorruption, shedCorruption, andList } from '../log';
 
 const FACE_LABEL: Record<string, string> = { character: 'a Character', army: 'an Army', muster: 'a Muster', armyMuster: 'an Army/Muster', event: 'an Event', will: 'a Will of the West' };
 const COMPANION_SET = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
@@ -1183,7 +1183,7 @@ function retreatShadowStack(state: GameState, from: RegionId, to: RegionId): voi
 /** The Dead Men's forced retreat, once its destination is known. */
 export function deadMenRetreat(state: GameState, from: string, to: string): void {
   retreatShadowStack(state, from, to);
-  log(state, null, 'event', `Dead Men: the Shadow Army retreats ${from} → ${to}`);
+  log(state, null, 'event', `Shadow retreats to ${to}`);
 }
 /** Destroy the Shadow army at `region` — units recycle to reinforcements, Nazgûl
  *  return to the Sauron pool, Minions are eliminated (Dead Men's "if it cannot
@@ -1225,7 +1225,7 @@ register('fp-char-22', {
       return;
     }
     if (unitCount(state, region) > 0 && dests.length === 1) deadMenRetreat(state, region, dests[0]!);
-    else { destroyShadowStack(state, region); log(state, null, 'event', `Dead Men: the Shadow Army at ${region} is destroyed`); }
+    else { destroyShadowStack(state, region); log(state, null, 'event', `The Shadow Army in ${region} is destroyed by the Dead Men`); }
   },
   canPlay: (state) => aragornRohanOrigin(state) !== null,
   repeat: 12,
@@ -1255,7 +1255,7 @@ register('fp-char-22', {
       const dst = state.regions[region]!;
       const u = dst.units.gondor ?? { regular: 0, elite: 0 }; u.regular += n; dst.units.gondor = u;
       state.reinforcements.gondor.regular -= n;
-      log(state, null, 'event', `Dead Men: recruit ${n} Gondor Regular${n === 1 ? '' : 's'} in ${region}`);
+      log(state, null, 'event', `${sideDoes('fp', 'muster')} ${n} Gondor Regular${n === 1 ? '' : 's'} in ${region}`);
       return;
     }
     if (!t.region) return; // a "goes with him" pick: recorded, nothing moves yet
@@ -1267,7 +1267,7 @@ register('fp-char-22', {
     o.force.characters = o.force.characters.filter((c) => !chosen.has(c));
     dst.characters.push(...moving);
     for (const c of moving) if (state.characters.inPlay[c]) state.characters.inPlay[c] = region;
-    log(state, null, 'event', `Dead Men of Dunharrow: ${moving.join(' + ')} ${o.from} → ${region}`);
+    log(state, null, 'event', `${andList(moving)} ${moving.length === 1 ? 'moves' : 'move'} ${o.from} → ${region}`);
     // 2. A Shadow Army there is attacked: a die's worth of hits, then it must retreat —
     //    destroyed (with its Nazgûl/Minions) if it cannot.
     if (armySide(state, region) === 'shadow') {
@@ -1276,7 +1276,7 @@ register('fp-char-22', {
       // The hits are logged BEFORE the casualties they cause (player report
       // 5a2d6z5y7037406d), and the Shadow chooses which units take them, like every
       // other card that rolls at an Army; the retreat follows once they are taken.
-      log(state, null, 'event', `The Dead Men score ${die} hit${die === 1 ? '' : 's'} on the Shadow Army at ${region} [${die}]`);
+      log(state, null, 'event', `The Dead Men score ${die} hit${die === 1 ? '' : 's'} on the Shadow Army in ${region} [${die}]`);
       notify(state, `Rolled [${die}]: ${die} hit${die === 1 ? '' : 's'} on the Shadow Army in ${rName(region)}, which must then retreat — or is destroyed, with its Nazgûl and Minions, if it cannot.`, 'Dead Men of Dunharrow');
       activateOnCompanionLand(state, 'fp', moving, region);
       queueOrApplyEventCasualties(state, 'shadow', region, die, { kind: 'card', card: 'fp-char-22', data: { region } });

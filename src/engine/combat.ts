@@ -1244,7 +1244,7 @@ function finishCombat(state: GameState, advance: boolean): void {
       // region — p.32's second capture trigger, from the DEFENDER's side of this battle.
       delete r.siegeBox; r.besieged = false;
       captured = true; captureIfEnemySettlement(state, pc.to, pc.defender);
-      outcome = `The sortie from ${name} is destroyed — ${side(pc.defender)} take the Stronghold`;
+      outcome = `The sortie from ${name} is destroyed — ${sideDoes(pc.defender, 'take')} the Stronghold`;
     } else if (garrison === 0 && defSurv === 0) {
       delete r.siegeBox; r.besieged = false;
       outcome = `Both Armies are destroyed at ${name}`;
@@ -1260,7 +1260,7 @@ function finishCombat(state: GameState, advance: boolean): void {
   } else if (assault) {
     if (advance && defSurv === 0 && atkSurv > 0) { // garrison destroyed — the besieger (already here) takes the Stronghold
       captured = true; delete r.siegeBox; r.besieged = false; captureIfEnemySettlement(state, pc.to, pc.attacker);
-      outcome = `${side(pc.attacker)} storm ${name}`;
+      outcome = `${sideDoes(pc.attacker, 'storm')} ${name}`;
     } else if (atkSurv === 0 && pc.rearguard && Object.values(pc.rearguard.units).some((u) => u.regular + u.elite > 0)) {
       // The assaulting force is gone but its rearguard still stands in the field: the
       // siege goes on — and if the garrison died too, the rearguard takes the
@@ -1291,10 +1291,10 @@ function finishCombat(state: GameState, advance: boolean): void {
     const won = advance && defSurv === 0 && atkSurv > 0;
     outcome = won
       ? ((pc.defWithdrew ?? 0) > 0
-        ? `${side(pc.defender)} retreat from ${name}`
-        : `${side(pc.defender)} are destroyed at ${name}`)
+        ? (pc.defRetreatTo ? `${sideDoes(pc.defender, 'retreat')} to ${REGIONS[pc.defRetreatTo]?.name ?? pc.defRetreatTo}` : `${sideDoes(pc.defender, 'retreat')} from ${name}`)
+        : `${side(pc.defender)} ${pc.defender === 'fp' ? 'are' : 'is'} destroyed at ${name}`)
       : mutualWipe ? `Both Armies are destroyed at ${name}`
-      : (pc.atkWithdrew ?? 0) > 0 ? `${side(pc.attacker)} withdraw from ${name}`
+      : (pc.atkWithdrew ?? 0) > 0 ? `${sideDoes(pc.attacker, 'withdraw')} from ${name}`
       : pc.siege ? `The siege of ${name} holds` : `The attack on ${name} is repulsed`;
     if (won) { advanceOffer = { from: pc.from, to: pc.to, owner: pc.attacker }; r.besieged = false; }
     if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
@@ -2190,7 +2190,7 @@ export function resolveRetreat(state: GameState, retreat: boolean): void {
   state.pendingChoice = null;
   if (retreat) {
     const dests = retreatOptions(state, pc);
-    if (dests.length === 1) { noteWithdrawal(state, pc, pc.defender); moveStack(state, pc.to, dests[0]!, pc.defender, true, true); finishCombat(state, true); return; }
+    if (dests.length === 1) { noteWithdrawal(state, pc, pc.defender); pc.defRetreatTo = dests[0]!; moveStack(state, pc.to, dests[0]!, pc.defender, true, true); finishCombat(state, true); return; }
     if (dests.length > 1) { state.pendingChoice = { owner: pc.defender, kind: 'retreatTo' }; return; } // defender picks where
     // none available -> stand
   }
@@ -2204,7 +2204,7 @@ export function resolveRetreatTo(state: GameState, region: RegionId): void {
   state.pendingChoice = null;
   const dests = retreatOptions(state, pc);
   const dest = dests.includes(region) ? region : dests[0];
-  if (dest) { noteWithdrawal(state, pc, pc.defender); moveStack(state, pc.to, dest, pc.defender, true, true); finishCombat(state, true); return; }
+  if (dest) { noteWithdrawal(state, pc, pc.defender); pc.defRetreatTo = dest; moveStack(state, pc.to, dest, pc.defender, true, true); finishCombat(state, true); return; }
   pc.round += 1; pc.step = 'attackerCard'; // shouldn't happen; stand as a fallback
 }
 
@@ -2476,8 +2476,15 @@ export function playableCombatCards(state: GameState, side: Side): string[] {
   // region made the exemption unreachable, locking the FP out even with a Companion.
   if (side === 'fp' && pc?.fpCardLock && pc.round === 0
     && !defForce(state, pc).characters.some(isCompanion)) return [];
-  return state.cards[side].hand.filter((id) => hasCombatEffect(id) && (!pc || combatPrecondMet(state, pc, id)));
+  const fromHand = state.cards[side].hand.filter((id) => hasCombatEffect(id) && (!pc || combatPrecondMet(state, pc, id)));
+  // Balrog of Moria on the table: "Or, you may discard 'Balrog of Moria' to use its
+  // Combat card effect as if you were playing the card from your hand" (Card Text
+  // Reference; player report 221x631w3b3i4b1j).
+  const fromTable = TABLE_COMBAT_CARDS.filter((id) => state.cards[side].table.includes(id) && hasCombatEffect(id) && (!pc || combatPrecondMet(state, pc, id)));
+  return [...fromHand, ...fromTable];
 }
+/** On-table cards whose text lets their owner discard them for their Combat effect. */
+const TABLE_COMBAT_CARDS = ['sh-char-17'];
 const hasPlayableCombatCard = (state: GameState, side: Side): boolean => playableCombatCards(state, side).length > 0;
 
 /** Resolve the 'combatCard' PendingChoice: record the chosen card (or none) for
@@ -2486,7 +2493,8 @@ export function resolvePlayCombatCard(state: GameState, cardId: string | null): 
   const pc = state.pendingCombat!;
   const owner = pc.step === 'attackerCard' ? pc.attacker : pc.defender;
   if (cardId) {
-    const hand = state.cards[owner].hand;
+    // From the hand — or, for Balrog of Moria, discarded from the table.
+    const hand = state.cards[owner].hand.includes(cardId) ? state.cards[owner].hand : state.cards[owner].table;
     const i = hand.indexOf(cardId);
     if (i >= 0) {
       hand.splice(i, 1);

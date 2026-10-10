@@ -301,9 +301,6 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
               title={pickAction && (pickAction(f) as { via?: string }).via === 'ring' ? 'Also spends one Elven Ring' : undefined}
               style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
           ))}
-          {pickAction && options.some((f) => (pickAction(f) as { via?: string }).via === 'ring') && (
-            <span style={{ fontSize: 11, color: '#998', alignSelf: 'center' }}>(any die but Will of the West also spends an Elven Ring)</span>
-          )}
         </div>
       )}
     </div>
