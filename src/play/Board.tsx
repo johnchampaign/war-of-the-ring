@@ -12,6 +12,12 @@ import { regionIds, regionPolygon, mapImage } from '../data/geometry';
 // Board crop rectangle (map-image pixel space) — see the note at its use site for
 // why this is hardcoded rather than read from blocked-areas.json.
 const BOARD_CROP = { x: 240, y: 2, w: 1511, h: 1318 };
+/** The printed Mordor Track's six steps on the board art (map pixels, measured off the
+ *  board image): steps 0–4, then the Crack of Doom (5). The Ring-bearers' token stands
+ *  on its step, as the figure does at the table (player report 0h2028003x3v361w). */
+const MORDOR_STEPS: readonly { x: number; y: number }[] = [
+  { x: 1558, y: 897 }, { x: 1583, y: 928 }, { x: 1624, y: 942 }, { x: 1667, y: 936 }, { x: 1661, y: 894 }, { x: 1618, y: 894 },
+];
 // Keep a token/marker anchor inside the visible crop. A few regions' polygons run
 // off the right edge into the printed (non-map) strip — e.g. Gorgoroth extends to
 // x=1920 — so their pole-of-inaccessibility anchor lands off-screen and the army
@@ -26,7 +32,6 @@ import mapData from '../../assets/map.json';
 import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
 import { HuntIndicator } from './HuntIndicator';
-import { MordorTrack } from './MordorTrack';
 import { RingGlyph } from './RingIcon';
 import { charName, charMark } from './charInfo';
 import { regionOccupants, fellowshipMarkerPoint } from './tokenPlacement';
@@ -216,8 +221,8 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
     {/* Always-visible Hunt status (top-right) — click for the full modifier breakdown. */}
     <HuntIndicator view={view} />
-    {/* The Mordor Track (bottom-right, only once the Ring-bearers are on it). */}
-    <MordorTrack view={view} />
+    {/* The Mordor Track is the board's own: the token stands on the printed step
+        (MordorSteps / FellowshipMarker below), not in a corner overlay. */}
     {/* Snap back to the default cropped view (also recovers from zoom/pan). */}
     <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 5, display: 'flex', gap: 6 }}>
       <button onClick={resetView} title="Reset view to the board crop"
@@ -396,6 +401,8 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           them, and the middle of Rivendell (where the Fellowship starts, and where
           Kindred of Glorfindel recruits) could not be clicked at all (player report
           1v2i0j6o2l2d4917: "Cant continue Play"). */}
+      {/* Without the art there is no printed track to stand on: draw its six steps. */}
+      {!boardArt && <g style={{ pointerEvents: 'none' }}><MordorSteps step={view.fellowship.mordor} /></g>}
       <FellowshipMarker view={view} onPick={pickRegion}
         onHover={(id) => { onHoverRegion?.(id); setHoverId(id); }}
         at={regionEls.find((e) => e?.id === view.fellowship.location)?.markerPoint ?? undefined} />
@@ -462,36 +469,55 @@ function ArmyBadge({ x, y, scale, army, titleSuffix = '' }: { x: number; y: numb
   );
 }
 
+/** The Mordor Track drawn on the polygon board (the art prints its own): six steps
+ *  joined in order, the last the Crack of Doom, steps behind the Ring-bearers dimmed. */
+function MordorSteps({ step }: { step: number | null }) {
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <polyline points={MORDOR_STEPS.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#7a3a2a" strokeWidth={3} opacity={0.8} />
+      {MORDOR_STEPS.map((p, i) => (
+        <g key={i}>
+          <circle cx={p.x} cy={p.y} r={15} fill={i === 5 ? '#3a1410' : '#2a2016'} stroke={i === 5 ? '#e08a72' : '#a8452e'} strokeWidth={2}
+            opacity={step !== null && i < step ? 0.55 : 0.95} />
+          <text x={p.x} y={p.y + 4} fontSize={i === 5 ? 13 : 11} fontWeight="bold" textAnchor="middle" fill={i === 5 ? '#e08a72' : '#e6c06a'}>{i === 5 ? '☉' : i}</text>
+        </g>
+      ))}
+    </g>
+  );
+}
+
 function FellowshipMarker({ view, onPick, onHover, at }: {
   view: GameState; onPick?: (id: RegionId) => void; onHover?: (id: RegionId | null) => void;
   /** Where to draw it: a spot clear of the region's other tokens (tokenPlacement.ts). */
   at?: { x: number; y: number };
 }) {
   const fs = view.fellowship;
+  // On the Mordor Track the figure has LEFT the map and stands on the printed track:
+  // the token goes on its step (player report 0h2028003x3v361w), not on the entrance.
+  if (fs.mordor !== null) {
+    const p = MORDOR_STEPS[Math.max(0, Math.min(5, fs.mordor))]!;
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <title>{`Ring-bearers on the Mordor Track — ${fs.mordor === 5 ? 'at the Crack of Doom' : `step ${fs.mordor} of 5, ${5 - fs.mordor} to the Crack of Doom`}`}</title>
+        <circle cx={p.x} cy={p.y} r={13} fill="#f2e6c2" stroke="#7a5a1e" strokeWidth={2} />
+        <RingGlyph cx={p.x} cy={p.y} r={7} />
+        {!fs.hidden && <circle cx={p.x + 12} cy={p.y - 12} r={6} fill="#c0392b" stroke="#fff" strokeWidth={1} />}
+      </g>
+    );
+  }
   const poly = regionPolygon(fs.location);
   if (!poly) return null;
   const anchor = at ?? clampToCrop(layoutTokensInPolygon(poly, 1, { tokenRadius: 9 }).anchor);
   const x = anchor.x - 12, y = anchor.y - 12;
-  // On the Mordor Track the figure has LEFT the map — it stands on the track, not
-  // on the entrance region. Keep a marker at the entrance so the route is readable,
-  // but stamp it with the step so it can't be misread as "still at Morannon".
-  const onTrack = fs.mordor !== null;
   return (
     // A click or hover on the marker is a click or hover on its region: the marker sits
     // inside that region's polygon, over the spot a player naturally aims for.
     <g onClick={() => onPick?.(fs.location)}
       onMouseEnter={() => onHover?.(fs.location)} onMouseLeave={() => onHover?.(null)}
       style={{ cursor: onPick ? 'pointer' : 'default' }}>
-      <title>{onTrack ? `Ring-bearers — Mordor Track step ${fs.mordor}/5 (see the track, lower right)` : 'The Fellowship'}</title>
-      <circle cx={anchor.x} cy={anchor.y} r={13} fill="#f2e6c2" stroke="#7a5a1e" strokeWidth={2}
-        opacity={onTrack ? 0.5 : 1} />
+      <title>The Fellowship</title>
+      <circle cx={anchor.x} cy={anchor.y} r={13} fill="#f2e6c2" stroke="#7a5a1e" strokeWidth={2} />
       <RingGlyph cx={anchor.x} cy={anchor.y} r={7} />
-      {onTrack && (
-        <g style={{ pointerEvents: 'none' }}>
-          <circle cx={x + 24} cy={y + 26} r={7.5} fill="#3a1410" stroke="#e3bf47" strokeWidth={1.4} />
-          <text x={x + 24} y={y + 29.5} fontSize={10} fontWeight="bold" fill="#e3bf47" textAnchor="middle">{fs.mordor}</text>
-        </g>
-      )}
       {!fs.hidden && <circle cx={x + 24} cy={y} r={6} fill="#c0392b" stroke="#fff" strokeWidth={1} />}
     </g>
   );
