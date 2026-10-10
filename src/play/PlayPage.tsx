@@ -29,6 +29,7 @@ import { NoticePopup, noticePending } from './NoticePopup';
 import { TurnSummary } from './TurnSummary';
 import { LogPanel, CopyLogButton } from './LogPanel';
 import { GameOverUpload, UploadLogButton } from './GameOverUpload';
+import { DiceStats } from './DiceStats';
 import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
@@ -101,6 +102,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Die-first turn flow (Ira #8): pick one of your dice → only that die's actions show
   // (in the panel AND on the board). null = no filter (every legal action visible).
   const [die, setDie] = useState<DieFace | null>(null); // the die face the player selected in the tray
+  const [diceStatsOpen, setDiceStatsOpen] = useState(false); // the end-of-game dice statistics
   const me: Side = g.you === 'shadow' ? 'shadow' : 'fp';
   // Move-receipt times for the game log (feature F): re-fetched whenever the log
   // grows. Best-effort — a failed fetch just leaves the log undated.
@@ -910,6 +912,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} style={barBtn} />
       {g.view && <UploadLogButton view={g.view} you={g.you as Side | null} mode={{ mode: client.mode, aiSide: client.aiSide }} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
         uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} style={barBtn} />}
+      {g.gameOver && g.view && (
+        <button onClick={() => setDiceStatsOpen(true)} title="Both players' dice over the game"
+          style={{ ...barBtn, cursor: 'pointer', background: '#33302a', color: '#e9e1cc', border: '1px solid #5a4a2a' }}>📊 Dice</button>
+      )}
       {onExit && (
         <button onClick={onExit} title="Leave to the lobby"
           style={{ padding: '3px 10px', fontSize: 12, borderRadius: 10, whiteSpace: 'nowrap', cursor: 'pointer', background: '#33302a', color: '#e9e1cc', border: '1px solid #5a4a2a' }}>
@@ -1366,6 +1372,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 ? 'Not ranked — no identities were attached to the seats.'
                 : "Not ranked — couldn't reach the leaderboard."}
         </p>
+      )}
+      {diceStatsOpen && g.view && (
+        <div onClick={() => setDiceStatsOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.62)', display: 'grid', placeItems: 'center', zIndex: 81 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#1c1710', fontFamily: 'system-ui', padding: '16px 22px', borderRadius: 12, border: '1px solid #5a4a2a', maxWidth: 'min(520px, 94vw)', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 8px 40px #000' }}>
+            <div style={{ fontSize: 14, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1 }}>Dice statistics</div>
+            <DiceStats view={g.view} />
+            <button onClick={() => setDiceStatsOpen(false)} style={{ marginTop: 12, padding: '6px 18px', background: '#3a3326', color: '#f0e9d8', border: '1px solid #6a5', borderRadius: 6, cursor: 'pointer', display: 'block', marginLeft: 'auto' }}>Close</button>
+          </div>
+        </div>
       )}
       <GameOverUpload view={g.view} you={g.you as Side | null} gameOver={g.gameOver} mode={{ mode: client.mode, aiSide: client.aiSide }} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
         uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} />

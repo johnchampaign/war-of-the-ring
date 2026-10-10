@@ -8,6 +8,7 @@
 //     was already uploaded (via the button) this game.
 import { useState } from 'react';
 import type { GameState, Side } from '../engine/types';
+import { DiceStats } from './DiceStats';
 import type { GameMode } from '../online/gameClient';
 
 // On the deployed site, post same-origin; from the local dev client (no Functions
@@ -65,6 +66,7 @@ export function GameOverUpload({ view, you, gameOver, clientBuild, uploaded, onU
   view: GameState; you: Side | null; gameOver: boolean; clientBuild?: string; uploaded: boolean; onUploaded: () => void; mode?: UploadMode;
 }) {
   const [stage, setStage] = useState<'offer' | 'uploading' | 'done' | 'error' | 'dismissed'>('offer');
+  const [stats, setStats] = useState(false);
   if (!gameOver || !view.winner || stage === 'dismissed') return null;
 
   const winnerName = view.winner === 'fp' ? 'Free Peoples' : 'Shadow';
@@ -82,7 +84,11 @@ export function GameOverUpload({ view, you, gameOver, clientBuild, uploaded, onU
         <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4, color: view.winner === 'fp' ? '#7fb6e6' : '#e6857f' }}>
           {winnerName} win!
         </div>
-        <div style={{ fontSize: 14, color: '#cbb', marginBottom: 14 }}>{view.winReason}</div>
+        <div style={{ fontSize: 14, color: '#cbb', marginBottom: 10 }}>{view.winReason}</div>
+        {/* Both players' dice over the game (player report zfi5pzt828h4v6xq); also on
+            the status bar's 📊 button once this card is closed. */}
+        <button onClick={() => setStats((v) => !v)} style={{ ...ghost, fontSize: 12, padding: '4px 10px', marginBottom: 12 }}>📊 Dice statistics {stats ? '▴' : '▾'}</button>
+        {stats && <div style={{ marginBottom: 14, maxHeight: '45vh', overflowY: 'auto' }}><DiceStats view={view} /></div>}
 
         {alreadyDone ? (
           <div style={{ color: '#9cc77a', fontSize: 14 }}>Thanks — log uploaded. It helps tune the AI.</div>

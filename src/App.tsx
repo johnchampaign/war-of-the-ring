@@ -17,6 +17,7 @@ import { loadLocalGame, peekLocalGame, clearLocalGame, describeSave, type LocalS
 import { wotrAdapter } from './adapter/wotrAdapter';
 import { makeGameClient, createOnlineGame, readOnlineInvite, claimSeat } from './online/gameClient';
 import { LoadArtPanel } from './play/LoadArtPanel';
+import { listOnlineGames, rememberOnlineGame, forgetOnlineGame, fetchOnlineGameStatus, onlineGameHref, type OnlineGameRef, type OnlineGameStatus } from './online/onlineGames';
 
 type Mode =
   | { kind: 'lobby' }
@@ -61,6 +62,8 @@ export function App() {
       void claimSeat(mode.gameId, mode.token, identity.token);
     }
   }, [mode, identity?.token]);
+  // Remember the seat so the lobby can list it while the game is on.
+  useEffect(() => { if (mode.kind === 'online') rememberOnlineGame(mode.gameId, mode.token); }, [mode]);
 
   // Dev routes — checked after the hooks above so hook order stays stable.
   if (hash === '#audit') return <PolygonAudit />;
@@ -94,6 +97,40 @@ export function App() {
     setMode({ kind: 'local', seed: 0, aiSide: save.aiSide ?? undefined, resume: save });
   };
   return <Lobby onStart={startLocal} onResume={resumeLocal} />;
+}
+
+/** The online games this browser has joined that are still being played, newest first
+ *  (player report a05cialu8jn3as70). Finished or unreachable ones drop off the list. */
+function OnlineGamesList() {
+  // The remembered seats are known at once, so their rows are laid out straight away
+  // ("checking…") and filled in when the server answers — the lobby below doesn't jump
+  // down when the list arrives.
+  const [rows, setRows] = useState<{ g: OnlineGameRef; st: OnlineGameStatus | undefined }[]>(() => listOnlineGames().map((g) => ({ g, st: undefined })));
+  useEffect(() => {
+    let live = true;
+    const refs = listOnlineGames();
+    if (!refs.length) return;
+    void Promise.all(refs.map(async (g) => ({ g, st: await fetchOnlineGameStatus(g) }))).then((all) => {
+      if (!live) return;
+      // A finished game is done with; one the server no longer knows is gone.
+      for (const { g, st } of all) if (!st || st.gameOver) forgetOnlineGame(g.gameId, g.token);
+      setRows(all.filter((r) => !!r.st && !r.st.gameOver).map((r) => ({ g: r.g, st: r.st! })));
+    });
+    return () => { live = false; };
+  }, []);
+  if (!rows.length) return null;
+  return (
+    <div style={{ margin: '14px 0 4px', textAlign: 'left', background: '#1a2230', border: '1px solid #3a4a6a', padding: 12, borderRadius: 8 }} data-testid="online-games">
+      <div style={{ fontSize: 12, color: '#bfd6f0', marginBottom: 6 }}>Your online games in progress</div>
+      {rows.map(({ g, st }) => (
+        <a key={g.gameId + g.token} href={onlineGameHref(g)}
+          style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 8px', margin: '4px 0', borderRadius: 6, background: '#22304a', color: '#e9e1cc', textDecoration: 'none', fontSize: 13 }}>
+          <span>{st ? `You play ${st.you === 'fp' ? 'the Free Peoples' : st.you === 'shadow' ? 'the Shadow' : '—'} · turn ${st.turn}` : 'Checking…'}</span>
+          <span style={{ color: st?.yourTurn ? '#ffd86a' : '#998', fontWeight: st?.yourTurn ? 700 : 400 }}>{!st ? '' : st.yourTurn ? 'Your move →' : 'Waiting →'}</span>
+        </a>
+      ))}
+    </div>
+  );
 }
 
 function Lobby({ onStart, onResume }: { onStart: (aiSide?: 'fp' | 'shadow') => void; onResume: () => void }) {
@@ -160,6 +197,7 @@ function Lobby({ onStart, onResume }: { onStart: (aiSide?: 'fp' | 'shadow') => v
         <p style={{ color: '#776', fontSize: 12, marginTop: -6, visibility: plays == null ? 'hidden' : 'visible' }}>
           {(plays ?? 0).toLocaleString()} games played
         </p>
+        <OnlineGamesList />
         {saved && (
           <div style={{ margin: '14px 0 4px', textAlign: 'left', background: '#1a2a1a', border: '1px solid #3a5a3a', padding: 12, borderRadius: 8 }}>
             <div style={{ fontSize: 12, color: '#bfe6bf', marginBottom: 6 }}>Game in progress</div>

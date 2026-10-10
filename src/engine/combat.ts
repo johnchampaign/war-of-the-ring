@@ -1114,7 +1114,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       // Logged in the same shape as Sudden Strike / Charge (player report 2t4s0c6p4q2f3f2q).
       const faces: number[] = [];
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= 4) h++; } return h; });
-      log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on 4+ → ${hits} hit${hits === 1 ? '' : 's'}`);
+      log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on 4+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
       if (hits > 0) applyForceCasualties(state, foe, foeSide, hits, 'regularsFirst');
     } else if (ef.mods.preCombatAttackFrom) {
       // Sudden Strike / Charge: "BEFORE the Combat roll, roll an additional attack
@@ -1140,7 +1140,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       const target = ef.side === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
       const faces: number[] = [];
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= target) h++; } return h; });
-      log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`);
+      log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
       if (hits > 0) {
         const left = absorbForced(state, foe, foeSide, hits);
         if (left > 0) applyForceCasualties(state, foe, foeSide, left, 'regularsFirst'); // residual: pre-combat leftovers auto-resolve (same as Durin's Bane)
@@ -1860,7 +1860,7 @@ export function combatStep(state: GameState): void {
           + ` → ${rolled} hit${rolled === 1 ? '' : 's'} total`
           + (hits !== rolled ? ` (${hits} after card effects)` : '');
         log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(aRoll, atkHits, atk, pc.attackerCard)}; defender ${fmt(dRoll, defHits, def, pc.defenderCard)}`,
-          { round: pc.round + 1, region: pc.to, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
+          { round: pc.round + 1, region: pc.to, attackerSide: pc.attacker, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
         for (const k of kills) {
           log(state, null, 'combat', k.line);
           if (k.card) state.log[state.log.length - 1]!.card = k.card;
