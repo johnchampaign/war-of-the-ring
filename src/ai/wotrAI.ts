@@ -354,6 +354,14 @@ export const armyHere = (state: GameState, id: RegionId, side: Side): boolean =>
   const r = state.regions[id]!;
   return (Object.keys(r.units) as Nation[]).some((n) => FP.has(n) === (side === 'fp') && (r.units[n]!.regular + r.units[n]!.elite) > 0);
 };
+/** The enemy garrison `side` holds under siege in `id` (its field Army besieging the
+ *  Stronghold), as a unit count — 0 when `side` is not besieging there. */
+const besiegedGarrison = (state: GameState, id: RegionId, side: Side): number => {
+  const r = state.regions[id]!;
+  if (!r.besieged || !r.siegeBox || !armyHere(state, id, side)) return 0;
+  const n = forceUnitCount(r.siegeBox);
+  return (Object.keys(r.siegeBox.units) as Nation[]).some((k) => FP.has(k) !== (side === 'fp')) ? Math.max(1, n) : 0;
+};
 
 /** Nothing in `id` feeds the Hunt: a Shadow-controlled Stronghold, a Shadow Army and a
  *  Nazgûl each grant the Shadow one failed-die re-roll on EVERY Hunt while the
@@ -939,6 +947,12 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   if (garrisonWorthy(state, actor, from) && unitCount(state, from) < 2) {
     s -= (REGIONS[from]!.vp * 14 + 10) * (1 + 1.5 * enemyPressure(state, actor));
   }
+  // Walking the field Army out of a siege we hold LIFTS it: the garrison is free again
+  // and the next action is spent besieging it back. The Shadow did exactly that, in and
+  // out of an FP-held Orthanc, never assaulting (player report q0vopcx9p3bcejso).
+  if (actor === 'shadow' && besiegedGarrison(state, from, actor) > 0) {
+    s -= REGIONS[from]!.vp * 25 + 20 + (from === target ? 30 : 0);
+  }
   // March toward the campaign target — and press harder when that target is standing
   // OPEN, so closing on a free capture outweighs the odds and ends the AI's habit of
   // parking next to an undefended Stronghold (player reports of both sides going quiet).
@@ -1280,6 +1294,31 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // and this vacating happens inside the battle's advance step.
       const d = state.pendingChoice!.data as { from: RegionId; to: RegionId };
       const owner: Side = state.pendingChoice!.owner;
+      // A Shadow Army that struck OUT of a siege it holds: advancing everyone lifts the
+      // siege (report q0vopcx9p3bcejso). Stay unless the ground ahead is an enemy
+      // Settlement worth taking, and then leave the garrison's size plus one behind so
+      // the siege holds and a sortie doesn't simply walk over the rearguard.
+      const garrison = owner === 'shadow' ? besiegedGarrison(state, d.from, owner) : 0;
+      if (garrison > 0) {
+        const stay = legal.find((a) => a.kind === 'advanceChoice' && !a.advance) ?? adv;
+        if (settlementCtrl(state, d.to) !== 'fp') return stay;
+        const r = state.regions[d.from]!;
+        const nations = (Object.keys(r.units) as Nation[]).filter((n) => sideOfNation(n) === 'shadow' && (r.units[n]!.regular + r.units[n]!.elite) > 0);
+        let keep = garrison + 1;
+        const units: NonNullable<MoveSel['units']> = {};
+        for (const n of nations) {
+          // Regulars hold the line; Elites go forward to take the Settlement.
+          let reg = r.units[n]!.regular, eli = r.units[n]!.elite;
+          const holdR = Math.min(reg, keep); reg -= holdR; keep -= holdR;
+          const holdE = Math.min(eli, keep); eli -= holdE; keep -= holdE;
+          const u: { regular?: number; elite?: number } = {};
+          if (reg > 0) u.regular = reg;
+          if (eli > 0) u.elite = eli;
+          if (u.regular || u.elite) units[n] = u;
+        }
+        if (!Object.keys(units).length) return stay;
+        return { kind: 'advanceChoice', advance: true, move: { units } };
+      }
       if (adv.kind === 'advanceChoice' && adv.advance && garrisonWorthy(state, owner, d.from)) {
         const r = state.regions[d.from]!;
         // Own side only: the advance moves the winner's figures, never anyone else's.
