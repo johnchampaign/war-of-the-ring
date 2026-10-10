@@ -1082,12 +1082,28 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     case 'combatCard': {
       // Play the most valuable combat card, or none if nothing helps enough.
       let best: WotrAction = { kind: 'playCombatCard', cardId: null }, bestVal = 1.5;
+      // "Both Armies add N" (Deadly Strife, Desperate Battle) lifts the enemy's dice as
+      // much as ours, so it only pays for the side rolling MORE of them; the Shadow
+      // played Deadly Strife outnumbered and handed the Free Peoples the bigger share
+      // (player report u5johl1hyn1y7jck). Shadow only.
+      const owner: Side = state.pendingChoice!.owner;
+      let diceEdge = 0;
+      if (owner === 'shadow' && pc) {
+        const units = (side: Side) => {
+          const region = side === pc.attacker ? pc.from : pc.to;
+          const box = pc.boxed === side ? state.regions[region]!.siegeBox : null;
+          return Math.min(5, box ? forceUnitCount(box) : unitCount(state, region));
+        };
+        diceEdge = units('shadow') - units('fp');
+      }
       for (const a of legal) {
         if (a.kind !== 'playCombatCard' || a.cardId == null) continue;
         // Balrog of Moria may also be discarded from the table for Durin's Bane. The AI
         // keeps it there for its Hunt use until that trade-off is measured (A/B).
         if (state.cards.shadow.table.includes(a.cardId) && !state.cards.shadow.hand.includes(a.cardId)) continue;
-        const v = combatCardValue(combatModsFor(a.cardId));
+        const mods = combatModsFor(a.cardId);
+        if (owner === 'shadow' && pc && mods?.symmetricBonus && diceEdge <= 0) continue;
+        const v = combatCardValue(mods);
         if (v > bestVal) { bestVal = v; best = a; }
       }
       return best;
