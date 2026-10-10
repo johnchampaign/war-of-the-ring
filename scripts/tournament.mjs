@@ -66,7 +66,11 @@ const strandedLeaderRegion = (s) => Object.keys(s.regions).find((id) => {
   return r.leaders > 0 && !hasFpUnits(r) && !hasFpUnits(r.siegeBox);
 }) ?? null;
 
-let stalls = 0, illegals = 0, timeouts = 0, leaks = 0, vanished = 0, stranded = 0;
+let stalls = 0, illegals = 0, timeouts = 0, leaks = 0, vanished = 0, stranded = 0, ghosts = 0;
+// An eliminated Character still standing on the board — a region's figures or a siege
+// box (player report riwixp8f8cyn1ktr: "attacked Carrock with Army + The Witch-king
+// (WK had fallen before!)").
+const ghostOnBoard = (s) => { for (const [id, r] of Object.entries(s.regions)) for (const c of [...r.characters, ...(r.siegeBox?.characters ?? [])]) if (s.characters.eliminated.includes(c)) return `${c} in ${id}`; return null; };
 // --- Fellowship telemetry (docs/ai-fellowship-plan.md groundwork): the baseline the
 // plan-machine A/Bs will be judged against. Win rate alone is too coarse — the
 // per-turn-quota experiment RAISED FP% while ruining the game.
@@ -122,6 +126,8 @@ for (let game = 0; game < GAMES; game++) {
     actions++;
     const lone = strandedLeaderRegion(state);
     if (lone) { stranded++; console.error(`  STRANDED FP LEADER in ${lone} on ${JSON.stringify(action)} [game ${game} seed ${seed}]`); break; }
+    const ghost = ghostOnBoard(state);
+    if (ghost) { ghosts++; console.error(`  ELIMINATED CHARACTER ON THE BOARD: ${ghost} after ${JSON.stringify(action)} [game ${game} seed ${seed}]`); break; }
 
     // Periodic codec round-trip + redaction leak check.
     if (actions % 50 === 0) {
@@ -155,10 +161,10 @@ console.log(`Games: ${GAMES} (FP=${CTRL.fp}, Shadow=${CTRL.shadow})`);
 console.log(`  winners: FP ${wins.fp}, Shadow ${wins.shadow}`);
 console.log(`  win reasons: ${JSON.stringify(reasons)}`);
 console.log(`  turns: min ${turnCounts[0] ?? '-'}, median ${med}, avg ${avg.toFixed(1)}, max ${turnCounts.at(-1) ?? '-'}`);
-console.log(`  stalls: ${stalls}, illegal-accepted: ${illegals}, timeouts: ${timeouts}, view-leaks: ${leaks}, vanished-units: ${vanished}, stranded-leaders: ${stranded}`);
+console.log(`  stalls: ${stalls}, illegal-accepted: ${illegals}, timeouts: ${timeouts}, view-leaks: ${leaks}, vanished-units: ${vanished}, stranded-leaders: ${stranded}, eliminated-on-board: ${ghosts}`);
 const favg = (xs) => (xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1) : '-');
 console.log(`  fellowship: Mordor entries ${fel.mordorEntries}/${fel.games} (mean turn ${favg(fel.entryTurns)}), heal-declares ${fel.healDeclares}, push-declares ${fel.pushDeclares} (mean progress ${favg(fel.progressAtPush)}), stalled pre-Mordor turns ${fel.stalledTurns}/${fel.preMordorTurns}, peak corruption ${favg(fel.peakCorruption)}`);
 
-const ok = stalls === 0 && illegals === 0 && timeouts === 0 && leaks === 0 && vanished === 0 && stranded === 0 && (wins.fp + wins.shadow) === GAMES;
+const ok = stalls === 0 && illegals === 0 && timeouts === 0 && leaks === 0 && vanished === 0 && stranded === 0 && ghosts === 0 && (wins.fp + wins.shadow) === GAMES;
 console.log(ok ? '\nsoak OK — all games terminated cleanly' : '\nSOAK FAILED');
 process.exit(ok ? 0 : 1);

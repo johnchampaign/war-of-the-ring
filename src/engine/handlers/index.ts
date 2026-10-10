@@ -1383,9 +1383,16 @@ register('sh-str-23', {
     placeUnits(state, 'sauron', 'nurn', 5, 0);
   },
 });
+/** "…is in play": entered AND not since eliminated. The cards that print this used to
+ *  check only that the figure had once entered, so Return of the Witch-king stood a
+ *  FALLEN Witch-king back up in Angmar (player report riwixp8f8cyn1ktr: "attacked
+ *  Carrock with Army + The Witch-king (WK had fallen before!)"; the soak's
+ *  eliminated-on-board gate found it in 7 games of 2000). */
+const characterInPlay = (state: GameState, id: string): boolean =>
+  state.characters.entered.includes(id) && !state.characters.eliminated.includes(id);
 // Return of the Witch-king: move the Witch-king to Angmar + recruit there.
 register('sh-str-12', {
-  canPlay: (state) => state.characters.entered.includes('witch-king'),
+  canPlay: (state) => characterInPlay(state, 'witch-king'),
   apply(state) {
     // Take him from wherever he stands — a besieged Shadow Stronghold keeps him in its
     // siege box, and searching the open field alone left him there while a second
@@ -1518,7 +1525,7 @@ register('sh-str-04', {
 for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
   register(id, {
     canPlay: (state) => {
-      if (!state.characters.entered.includes('gandalf-white')) return false;
+      if (!characterInPlay(state, 'gandalf-white')) return false; // "Gandalf the White is in play"
       if (!state.regions['fangorn']!.characters.some((c) => COMPANION_SET.has(c))) return false;
       // Strengthened play condition: the printed precondition can be met with nothing
       // for the Ents to do — no Shadow Army in Orthanc, no Saruman there, and Gandalf
@@ -2726,7 +2733,7 @@ register('sh-str-15', {
 register('sh-str-18', {
   // It also needs something to place in Minas Morgul: a Sauron Regular or a Nazgûl left
   // in reinforcements, and a Minas Morgul the Shadow can recruit into (player report 632u6l2z0v0w5669).
-  canPlay: (state) => state.characters.entered.includes('aragorn')
+  canPlay: (state) => characterInPlay(state, 'aragorn') // "Play if Aragorn is in play"
     && (canPlaceIn(state, 'sauron', 'minas-morgul', 'regular')
       || (((state.reinforcements.sauron as { nazgul?: number }).nazgul ?? 0) > 0 && recruitable(state, 'shadow', 'minas-morgul'))),
   apply(state) {
