@@ -507,6 +507,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       const name = EVENT_BY_ID[cardCompMoves[0]!.card]?.name ?? 'The card';
       out.push(`${name}: move Companions — click a highlighted region on the map, then where they go.`);
     }
+    // The Ents Awake: one Character card from the hand, free (player report 1q4m361n2s444f4d).
+    if (g.view?.pendingChoice?.kind === 'freeCharEvent' && g.yourTurn) out.push('The Ents Awake: you may play a Character Event card from your hand now, without a die — click it in your hand, or "Done" to play none.');
     if (cardRegionActs.length) {
       const card = cardRegionActs[0]!.card;
       const what = ({ 'sh-char-19': 'click the Free Peoples Army to strike', 'fp-str-06': 'click the Shadow Army to strike', 'fp-str-05': 'click the Shadow Army to strike',
@@ -514,7 +516,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       out.push(`${EVENT_BY_ID[card]?.name ?? 'The card'}: ${what} — the highlighted regions on the map.`);
     }
     return out;
-  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves, cardRegionActs]);
+  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves, cardRegionActs, g.view, g.yourTurn]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -741,7 +743,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         const moveOnly = isArmyMove2 || (isCardMove && !cardMoveActs.some((a) => a.mode === 'attack'));
         const reason = moveBlockReason(g.view, selected, id, g.you as Side, { moveOnly });
         if (reason) setBlockMsg(reason);
-      } else if (g.view && g.you && !musterTargets.has(id)) {
+      } else if (g.view && g.you && !musterTargets.has(id)
+        // Only while a muster is the question: not with a die picked that cannot muster,
+        // and not halfway through another Action (a second Army move, a Character move) —
+        // a Muster hint there answers a question nobody asked (player reports
+        // 3166044n3t3h3o6y, 213s201q0z15386w).
+        && (!activeDie || activeDie === 'muster' || activeDie === 'armyMuster' || activeDie === 'will')
+        && !isArmyMove2 && !isCharMove2) {
         // Clicked one of your own Settlements and it offered nothing at all: say why it
         // can't be mustered in (player report: "I can't muster in Lorien while it is
         // empty"). Every blocker — the Political Track, an enemy Control marker, an
@@ -765,7 +773,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets, activeDie, isCharMove2]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   // Where a Character or a Nazgûl may GO is always lit as a destination — a separation
   // and a card's Companion or Nazgûl move included — never in the green of "click here

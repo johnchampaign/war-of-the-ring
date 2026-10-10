@@ -55,12 +55,25 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
 
   // Pass is promoted to a prominent top button (Ira #8) so it's never lost in the list.
   const pass = actions.find((a) => a.kind === 'pass');
+  // The action that FINISHES what is in progress — a card's "done", the end of a
+  // Character-move chain, declining a second Army move or a second Muster figure, the
+  // end of the Fellowship phase. Each ends your part and hands play on, much as Pass
+  // does, so the big button becomes it instead of sitting greyed out with a lookalike
+  // in the list (player report 60165i6x3v273m52).
+  const finish = actions.find((a) => (a.kind === 'eventTarget' && a.done) || a.kind === 'charMove2'
+    || (a.kind === 'armyMove2' && a.done) || (a.kind === 'recruitSecond' && a.done) || a.kind === 'skipFellowshipPhase'
+    || a.kind === 'freeCharEvent');
+  const finishLabel = !finish ? '' : finish.kind === 'skipFellowshipPhase' ? 'End the Fellowship phase'
+    : finish.kind === 'freeCharEvent' ? 'Done — play no card'
+    : finish.kind === 'armyMove2' ? 'Done — no second Army move'
+    : finish.kind === 'recruitSecond' ? 'Done — no second figure'
+    : 'Done';
   // "Discard a die" is a last-resort action and the engine offers one per distinct
   // face, so a full roll put up to five near-identical lines at the top of the list
   // (player report 1v1g2y5x095p2m1n). They collapse into ONE button with the same
   // face picker the other ambiguous actions use.
   const allSkips = actions.filter((a) => a.kind === 'skipDie') as Extract<WotrAction, { kind: 'skipDie' }>[];
-  const live = actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie');
+  const live = actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie' && a !== finish);
   const reasonFor = new Map<WotrAction, string>(blocked.map((b) => [b.action, b.reason]));
   // Barred actions sort in with the real ones (same kind, same Nation order), so a
   // greyed "advance Rohan" sits where the player expects it, not in a footnote.
@@ -115,13 +128,11 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
     revealMove: 'The Fellowship was revealed — place it first by clicking a highlighted region on the map.',
     separateMove: 'Finish separating the Companions first — click a highlighted region on the map.',
     declareFellowship: 'Declare the Fellowship first — click a highlighted region on the map.',
-    charMove2: 'Finish the character move on the map first.',
   };
   const boardPending = view.pendingChoice ? pendingHint[view.pendingChoice.kind] : undefined;
   // The character-move chain (one Character die moves all eligible figures, p.24)
-  // parks EVERY other action until it's answered — and unlike the other pending
-  // kinds it renders a button ("Done moving characters"), so the rest-empty banner
-  // below never shows. Without this line a player who just did what they wanted
+  // parks EVERY other action until it's answered; its own note (below) says how to end
+  // it — the big button reads "Done" meanwhile — so it has no line in pendingHint. Without this line a player who just did what they wanted
   // (e.g. moved Gandalf to activate Rohan) sees their Muster dice dead and no
   // explanation (player report: "I should now be able to advance Rohan using [M]
   // dice but can't" — filed mid-chain).
@@ -129,7 +140,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // report 2w1m6i103h1m286n); the "your other dice unlock" line went — the Action ends
   // with the move and play passes to the opponent (reports 101p3k1y524x2v48, 231u2i4l5p19426w).
   const chainNote = view.pendingChoice?.kind === 'charMove2'
-    ? 'Character move in progress — move more Characters on the map, or click "Done moving characters" to end the Action.'
+    ? 'Character move in progress — move more Characters on the map, or click "Done" to end the Action.'
     : undefined;
 
   // Combat/hunt decisions are handled by the DecisionModal; this list is the
@@ -149,11 +160,12 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
         // The button is never REMOVED either: dropping it from the layout whenever
         // passing is illegal shoved the whole action list up and down between turns
         // (player report 1j0k1n13646w0p3f). It is always here, greyed when off.
-        <button disabled={busy || passOff} title={passWhyOff} onClick={() => pass && click(pass)}
+        <button disabled={busy || (finish ? false : passOff)} title={finish ? undefined : passWhyOff} onClick={() => (finish ? click(finish) : pass && click(pass))}
           style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 3px' : '0 0 8px', padding: compact ? '3px 10px' : '9px 10px', borderRadius: 6, fontSize: compact ? 11 : 14, fontWeight: 700,
-            background: passOff ? '#241f16' : '#4a3a1a', color: passOff ? '#6d6455' : '#ffe08a', border: `1px solid ${passOff ? '#3a342a' : '#7a5f24'}`, cursor: passOff ? 'default' : 'pointer' }}>
+            ...((finish ? false : passOff) ? { background: '#241f16', color: '#6d6455', border: '1px solid #3a342a', cursor: 'default' } : { background: '#4a3a1a', color: '#ffe08a', border: '1px solid #7a5f24', cursor: 'pointer' }) }}
+          data-testid="main-button">
           {/* Same label either way — the greyed look says it's off (player report 1r510z456m0z6p35). */}
-          Pass
+          {finish ? finishLabel : 'Pass'}
         </button>
       )}
       {/* Board-driven actions live on the MAP (not in this list) — point the player

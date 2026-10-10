@@ -95,8 +95,9 @@ function lureTitle(data: { companion?: string; level?: number } | undefined): st
  *  about (player reports 2r5l183z6n6f460d, 113f0x4k300a0u01). */
 export function modalDecisions(view: GameState | null | undefined, actions: WotrAction[]): WotrAction[] {
   const evModal = eventChoiceInModal(actions);
-  const freeCard = view?.pendingChoice?.kind === 'freeCharEvent';
-  return inNationOrder(actions).filter((a) => (isDecisionAction(a) || (evModal && a.kind === 'eventTarget') || (freeCard && a.kind === 'playEvent'))
+  // The Ents Awake's free Character card is played from the hand like any card, and
+  // "play none" is the big button (player report 1q4m361n2s444f4d) — no modal.
+  return inNationOrder(actions).filter((a) => (isDecisionAction(a) || (evModal && a.kind === 'eventTarget'))
     && a.kind !== 'retreatTo' && a.kind !== 'preCombatRetreat' && a.kind !== 'eaglesRefuge' && a.kind !== 'cardRetreat');
 }
 
