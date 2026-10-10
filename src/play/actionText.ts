@@ -10,6 +10,7 @@ import { playFacesFor, nationName, levelOf } from '../engine/data';
 import mapData from '../../assets/map.json';
 import eventCards from '../../assets/event-cards.json';
 import { charName, charDef } from './charInfo';
+import { entryRegions } from '../engine/minions';
 import { aFace } from './names';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
@@ -109,7 +110,9 @@ export function describeAction(a: WotrAction, view?: GameState): string {
         const fig = a.figure === 'leader' ? (a.nation === 'sauron' ? 'Nazgûl' : a.nation ? 'Leader' : 'Leader/Nazgûl') : 'Regular';
         return `Recruit ${a.nation && fig !== 'Nazgûl' ? `${nationName(a.nation)} ` : ''}${fig} in ${rName(a.region!)}`;
       }
-    case 'bringMinion': return `Bring ${charName(a.minion)} into play in ${rName(a.region)}`;
+    // In the panel the button stands for the Minion; with more than one region to enter
+    // it asks for the region on the map next (report 3v5t0l4a6t1g3f73).
+    case 'bringMinion': return view && entryRegions(view, a.minion).length > 1 ? `Bring ${charName(a.minion)} into play…` : `Bring ${charName(a.minion)} into play in ${rName(a.region)}`;
     // No "<card name>: " prefix — the player knows which card they just played, and it
     // made every button unwieldy (player report 2l4d2f146v333i3b).
     case 'eventTarget': return cap(eventTargetText(a));

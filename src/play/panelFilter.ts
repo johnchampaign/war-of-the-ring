@@ -27,7 +27,7 @@ export const BOARD_PATH: Record<string, string> = {
   moveCharacter: 'click the figure’s region, choose the figure, then a highlighted destination',
   recruitUnit: 'click a highlighted Settlement, then the bundle in the muster menu',
   recruitSecond: 'the second Muster figure: click a highlighted Settlement, then the figure in the muster menu ("no second figure" stays a button)',
-  bringMinion: 'click a highlighted region, then the Minion in the muster menu',
+  bringMinion: 'one panel button per Minion, then click a highlighted region (a single region enters at once)',
   declareFellowship: 'click a highlighted region to declare the Fellowship there',
   placeGandalf: 'click a highlighted region to place Gandalf the White there',
   retreatTo: 'click a highlighted region to retreat there (after choosing Retreat in the battle modal)'
@@ -104,7 +104,11 @@ export function panelShowsAction(a: WotrAction, legal: WotrAction[], _view: Game
     // "Bring the Witch-king into play in …" buttons (report 2j4j710i000x3k0b). NB
     // `bringUpgrade` (crowning Aragorn / Gandalf the White) carries no region and has no
     // board path at all, so it stays a button.
-    && a.kind !== 'bringMinion';
+    // A Minion's entry is ONE panel button per Minion ("Bring the Witch-king into play…"),
+    // which then asks for the region on the map — like Summon Gandalf the White (player
+    // report 3v5t0l4a6t1g3f73). The first offer stands for the Minion; the rest are its
+    // regions, clicked on the map.
+    && !(a.kind === 'bringMinion' && legal.find((x) => x.kind === 'bringMinion' && x.minion === a.minion) !== a);
 }
 
 /** An Event card's move of a Companion already on the map (not a separation, not a

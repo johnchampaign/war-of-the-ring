@@ -104,6 +104,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // `card`: a Companion move granted by an Event card (Fear! Fire! Foes!, Book of
   // Mazarbul, We Prove the Swifter, Gwaihir) — the same flow as a Character die's.
   const [charPick, setCharPick] = useState<{ from: RegionId; char: string; group?: string[]; card?: string } | null>(null);
+  // A Minion entering play, chosen from his panel button: his entry regions light up and
+  // a click places him (player report 3v5t0l4a6t1g3f73 — like Summon Gandalf the White).
+  const [minionPick, setMinionPick] = useState<string | null>(null);
   // Choosing WHO travels in a Companion group, before its destination (CompanionPicker).
   const [compPick, setCompPick] = useState<{ from: RegionId; candidates: string[]; card?: string } | null>(null);
   // When a clicked region offers more than one thing to move (e.g. the army AND its
@@ -456,7 +459,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // A Muster die's optional SECOND figure takes the same board flow as the first
   // (player report 6r5a254l3f035e3l); only "no second figure" stays a panel button.
   const secondMusterActs = useMemo(() => g.legalActions.filter(isSecondMusterTarget), [g.legalActions]);
-  const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...minionActs.map((a) => a.region), ...cardRecruitActs.map((a) => a.region!), ...secondMusterActs.map((a) => a.region!)]), [recruitActs, minionActs, cardRecruitActs, secondMusterActs]);
+  // Minions are no longer entered from the muster menu — their own panel button asks for
+  // the region (minionPick) — so their regions are not muster targets.
+  const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...cardRecruitActs.map((a) => a.region!), ...secondMusterActs.map((a) => a.region!)]), [recruitActs, cardRecruitActs, secondMusterActs]);
+  const minionPickActs = useMemo(() => (minionPick ? minionActs.filter((a) => a.minion === minionPick) : []), [minionPick, minionActs]);
+  const minionPickTargets = useMemo(() => new Set(minionPickActs.map((a) => a.region)), [minionPickActs]);
   const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets, ...cardCharSources, ...cardCompSources]), [boardArmyActs, cardMoveActs, cardCharSources, cardCompSources, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
   // The generic "why can't I do that?" hints (moveBlockReason / musterBlockReason)
   // belong to the BASIC Move / Muster actions during Action Resolution, and nowhere
@@ -557,7 +564,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     [boardArmyActs, cardMoveActs, trace, selected, charDestinations],
   );
 
-  const clearMove = () => { setSelected(null); setCharPick(null); setCompPick(null); setMoveMenu(null); setNazPick(null); setMusterMenu(null); setRoute([]); };
+  const clearMove = () => { setSelected(null); setCharPick(null); setCompPick(null); setMinionPick(null); setMoveMenu(null); setNazPick(null); setMusterMenu(null); setRoute([]); };
 
   // Begin moving whatever was chosen from a region: an army (select for the picker)
   // or a specific independent character (Nazgûl/Minion/Companion).
@@ -608,6 +615,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       const a = here[0];
       if (a) { clearMove(); void submit(a); }
       return;
+    }
+    // A Minion entering play from his panel button: the click places him.
+    if (minionPick) {
+      const a = minionPickActs.find((x) => x.region === id);
+      setMinionPick(null);
+      if (a) { clearMove(); void submit(a); }
+      return; // anywhere else cancels the pick
     }
     // A card's bare region pick: the click IS the answer.
     if (cardRegionTargets.has(id)) {
@@ -773,21 +787,21 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets, activeDie, isCharMove2]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets, activeDie, isCharMove2, minionPick, minionPickActs]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   // Where a Character or a Nazgûl may GO is always lit as a destination — a separation
   // and a card's Companion or Nazgûl move included — never in the green of "click here
   // to start something" (player report 395d3n1w3f085y56: separation and card moves
   // were green, the die's Character moves orange).
   const highlights = useMemo(() => {
-    const charGoals = new Set<RegionId>([...cardSepTargets, ...(isSeparateMove ? declareTargets : []), ...cardRegionTargets]);
+    const charGoals = new Set<RegionId>([...cardSepTargets, ...(isSeparateMove ? declareTargets : []), ...cardRegionTargets, ...minionPickTargets]);
     return {
       sources: new Set([...sources].filter((r) => !charGoals.has(r))),
       selected: activeRegion,
       destinations: new Set([...destinations, ...charGoals]),
       activate: activateTargets,
     };
-  }, [sources, activeRegion, destinations, activateTargets, cardSepTargets, isSeparateMove, declareTargets, cardRegionTargets]);
+  }, [sources, activeRegion, destinations, activateTargets, cardSepTargets, isSeparateMove, declareTargets, cardRegionTargets, minionPickTargets]);
   // The Muster die's second figure is a pending choice too, so it must be listed here or
   // its lit Settlements ignore the click (player report 310b003u0c1j3220).
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || cardCompMoves.length > 0 || cardRegionActs.length > 0 || isCardRecruit || isCardMove || cardAssaultActs.length > 0 || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2 || secondMusterActs.length > 0) ? onRegionClick : undefined;
@@ -899,6 +913,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     void submit(a);
   };
   const onPanelAction = (a: WotrAction) => {
+    // One button per Minion: with several entry regions, ask for the region on the map.
+    if (a.kind === 'bringMinion' && minionActs.filter((x) => x.minion === a.minion).length > 1) { clearMove(); setMinionPick(a.minion); return; }
     if (a.kind === 'advanceHoldBack' && g.view?.pendingChoice?.kind === 'advanceHoldBack') { onDecisionAction(a); return; }
     if ((a.kind === 'advanceChoice' || a.kind === 'relieveAdvance' || a.kind === 'besiegerAdvance') && g.view?.pendingChoice?.kind === a.kind) { onDecisionAction(a); return; }
     if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2', base: a }); return; }
@@ -1126,7 +1142,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 16, borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 280, boxShadow: '0 8px 40px #000' }}
             onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>Muster in {REGIONS[musterMenu]?.name ?? musterMenu}</div>
-            {[...recruitActs, ...minionActs, ...cardRecruitActs, ...secondMusterActs].filter((a) => a.region === musterMenu).map((a, i) => (
+            {[...recruitActs, ...cardRecruitActs, ...secondMusterActs].filter((a) => a.region === musterMenu).map((a, i) => (
               <button key={i} onClick={() => { setMusterMenu(null); void submit(a); }}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
                 {describeAction(a)}
@@ -1225,6 +1241,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             background: peekBoard ? '#caa84b' : '#2a2418', color: peekBoard ? '#1a1408' : '#f0e9d8', border: `2px solid ${peekBoard ? '#e6c869' : '#5a4a2a'}` }}>
           {peekBoard ? '↩ Back to choice' : '👁 Peek board'}
         </button>
+      )}
+      {minionPick && (
+        <div style={{ position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 92, padding: '8px 16px', fontSize: 14, fontWeight: 600,
+          borderRadius: 8, background: '#3a2a12', color: '#f0d090', border: '1px solid #6a531f', boxShadow: '0 4px 20px #000' }}>
+          ⚑ Bring {charName(minionPick)} into play — click a highlighted region (anywhere else cancels).
+        </div>
       )}
       {isRetreatPick && (
         <div style={{ position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 92, padding: '8px 16px', fontSize: 14, fontWeight: 600,

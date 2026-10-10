@@ -96,9 +96,15 @@ console.log('\n=== the two reported duplicates are gone from the list ===');
   check('…and it is spatial, so the board owns it', isSpatial(assault));
   check('…with a documented board path', !!BOARD_PATH.attack, BOARD_PATH.attack);
 
+  // A Minion's entry is ONE panel button per Minion, which then asks for the region on
+  // the map (player report 3v5t0l4a6t1g3f73) — the other regions are not buttons.
   const minion = { kind: 'bringMinion', minion: 'witch-king', region: 'morannon' };
-  check('"Bring the Witch-king into play in Morannon" is NOT a button', !shows(minion));
-  check('…with a documented board path', !!BOARD_PATH.bringMinion, BOARD_PATH.bringMinion);
+  const minion2 = { kind: 'bringMinion', minion: 'witch-king', region: 'barad-dur' };
+  const mouth = { kind: 'bringMinion', minion: 'mouth-of-sauron', region: 'barad-dur' };
+  const legalM = [minion, minion2, mouth];
+  check('one "Bring the Witch-king into play…" button, not one per region', shows(minion, legalM) && !shows(minion2, legalM));
+  check('…and the Mouth of Sauron has his own', shows(mouth, legalM));
+  check('…with a documented board path for the region', !!BOARD_PATH.bringMinion, BOARD_PATH.bringMinion);
 
   // The look-alikes. Both are region-less, so there is nothing on the map to click.
   check('crowning Aragorn IS still a button', shows({ kind: 'bringUpgrade', which: 'aragorn' }));
