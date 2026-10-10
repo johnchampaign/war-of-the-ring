@@ -86,9 +86,18 @@ function armed(units, hits, side = 'shadow') {
   const t = armed({ sauron: { regular: 0, elite: 1 } }, 1);
   check('single forced Elite reduction is auto-applied', !t.pendingChoice && t.regions['moria'].units.sauron?.regular === 1, shape(t.regions['moria']));
 
-  // But one Elite and TWO hits IS a choice: reduce twice, or remove outright.
+  // One Elite and TWO hits: it falls whichever way (reduce twice, or remove outright),
+  // so there is nothing to ask (player report 82pv41soao2luug6) — and for the Free
+  // Peoples it is removed outright, which spares a reinforcement Regular.
   const u = armed({ sauron: { regular: 0, elite: 1 } }, 2);
-  check('Elite + 2 hits is a genuine choice (reduce vs remove)', u.pendingChoice?.kind === 'eventCasualties', u.pendingChoice?.kind ?? 'none');
+  check('Elite + 2 hits: it falls without a prompt', !u.pendingChoice && count(u.regions['moria']) === 0, u.pendingChoice?.kind ?? shape(u.regions['moria']));
+  const fp = board(); fp.regions['moria'].units = { dwarves: { regular: 0, elite: 1 } };
+  const regs0 = fp.reinforcements.dwarves.regular;
+  queueOrApplyEventCasualties(fp, 'fp', 'moria', 2);
+  check('…a Free Peoples Elite is removed outright, no reinforcement Regular spent', !fp.pendingChoice && count(fp.regions['moria']) === 0 && fp.reinforcements.dwarves.regular === regs0, `${regs0} -> ${fp.reinforcements.dwarves.regular}`);
+  // A real choice still asks: {1R,1E} with 2 hits (the Regular and a reduction, or the Elite outright).
+  const v = armed({ sauron: { regular: 1, elite: 1 } }, 2);
+  check('{1R,1E} + 2 hits is still a genuine choice', v.pendingChoice?.kind === 'eventCasualties', v.pendingChoice?.kind ?? 'none');
 }
 
 // --- 2 hits cannot wipe {1R,1E}: removing that Elite costs 2 hits by itself --------
@@ -113,11 +122,14 @@ function armed(units, hits, side = 'shadow') {
   check('[auto] the Witch-king is eliminated with it', a.characters.eliminated.includes('witch-king'));
   check('[auto] and no longer on the map', !a.characters.inPlay['witch-king']);
 
-  // Prompted path: {1R,1E} needs 3 hits to clear (1 for the Regular, 2 for the Elite).
-  const b = armed({ sauron: { regular: 1, elite: 1 } }, 3);
+  // Prompted path: the casualty question raised and answered — the last unit falls
+  // through resolveCasualtyStep, and the Mouth of Sauron with it.
+  const b = board();
+  b.regions['moria'].units = { sauron: { regular: 1, elite: 0 } };
   b.regions['moria'].characters = ['mouth-of-sauron'];
   b.characters.inPlay['mouth-of-sauron'] = 'moria';
   if (!b.characters.entered.includes('mouth-of-sauron')) b.characters.entered.push('mouth-of-sauron');
+  b.pendingChoice = { owner: 'shadow', kind: 'eventCasualties', data: { region: 'moria', side: 'shadow', hits: 1, boxed: false, then: null } };
   let guard = 0;
   while (b.pendingChoice && guard++ < 8) resolveCasualtyStep(b, 'removeRegular', 'sauron');
   check('[prompted] the Army is gone', count(b.regions['moria']) === 0, shape(b.regions['moria']));

@@ -1139,7 +1139,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (!consumePreferred(state, actor, ['muster', 'armyMuster', 'will'], action.die)) throw new Error('No Muster die');
       if (!placeFigure(state, actor, action.nation, action.region, firstFigure(action))) throw new Error('Illegal recruit');
       // A two-figure muster: the second figure goes to a SEPARATE Settlement (RAW p.26).
-      if (action.then) state.pendingChoice = { owner: actor, kind: 'musterSecond', data: { figure: action.then, first: action.region } };
+      // A second figure only when one CAN be placed: with "no second figure" the only
+      // option, the Action simply ends (player report vqsir22ho0c54p7w) — a forced
+      // single option, resolved without a prompt.
+      if (action.then && recruitSecondTargets(state, actor, action.then, action.region).length > 1) state.pendingChoice = { owner: actor, kind: 'musterSecond', data: { figure: action.then, first: action.region } };
       else passResolutionTurn(state, actor);
       break;
     }

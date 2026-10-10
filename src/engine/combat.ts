@@ -396,10 +396,20 @@ function applyCasualtyOption(state: GameState, f: Force, side: Side, opt: Casual
 function absorbForced(state: GameState, f: Force, side: Side, hits: number, nation?: Nation): number {
   let left = hits;
   const taken: string[] = [];
+  // Enough hits to destroy every unit there (a Regular takes one, an Elite two) leaves
+  // nothing to choose: whatever the order, all of them fall. Asking anyway made the
+  // other player wait — online, for him to log on (player report 82pv41soao2luug6).
+  const capacity = (Object.keys(f.units) as Nation[]).filter((n) => !nation || n === nation)
+    .reduce((t, n) => t + (f.units[n]?.regular ?? 0) + 2 * (f.units[n]?.elite ?? 0), 0);
+  const overwhelmed = left >= capacity && capacity > 0;
   for (;;) {
     const opts = casualtyOptions(f, left, { state, side, nation });
-    if (left <= 0 || opts.length !== 1) break;
-    const o = opts[0]!;
+    if (left <= 0 || opts.length === 0 || (opts.length !== 1 && !overwhelmed)) break;
+    // When everything falls anyway, take each Elite off with its two hits rather than
+    // reducing it first: for the Free Peoples a reduction would also spend a Regular
+    // from their reinforcements, only for it to die too — the strictly worse order, so
+    // nobody would pick it (rules-spec D5). For the Shadow the two orders are identical.
+    const o = overwhelmed ? (opts.find((x) => x.step === 'removeRegular') ?? opts.find((x) => x.step === 'removeElite') ?? opts[0]!) : opts[0]!;
     const what = casualtyPhrase(state, side, o); // before the Regular is taken
     const spent = applyCasualtyOption(state, f, side, o);
     if (spent <= 0) break; // defensive: never spin
@@ -2041,6 +2051,13 @@ export function combatStep(state: GameState): void {
         return;
       }
       case 'retreatDecision': {
+        // "Retreat or stand?" is only a question with somewhere to go: with no free region
+        // to retreat into the Army stands, and its owner is not kept waiting — online, the
+        // whole game used to wait for him to log on (player report 82pv41soao2luug6).
+        if (!canRetreat(state)) {
+          log(state, null, 'combat', `${sideDoes(pc.defender, 'stand')} — there is no free region to retreat into`);
+          pc.round += 1; pc.step = 'attackerCard'; continue;
+        }
         state.pendingChoice = { owner: pc.defender, kind: 'combatRetreat' };
         return;
       }

@@ -201,8 +201,19 @@ export function advance(state: GameState): void {
         continue; // loop top enforces the hand limit (discard choice) before awaiting FP
       case 'fellowship':
         return; // await FP
-      case 'huntAllocation':
+      case 'huntAllocation': {
+        // Exactly one legal number of Hunt dice is no choice at all — allocate it rather
+        // than wait on the Shadow (player report 82pv41soao2luug6; a forced single
+        // option, as CLAUDE.md allows).
+        const { min, max } = huntAllocationBounds(state);
+        if (min === max) {
+          state.hunt.box = min;
+          log(state, null, 'hunt', `Shadow allocates ${min} ${min === 1 ? 'die' : 'dice'} to the Hunt (the only allowed number)`);
+          state.phase = 'actionRoll';
+          continue;
+        }
         return; // await Shadow
+      }
       case 'actionRoll':
         runActionRoll(state);
         state.phase = 'actionResolution';
