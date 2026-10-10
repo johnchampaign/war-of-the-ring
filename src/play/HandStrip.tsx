@@ -11,6 +11,12 @@ import { CardTypeBadge } from './cardTypeBadge';
 import { cardSideLine } from './names';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
+/** A touch screen (phone, tablet): there is no hover to read a card, and a tap is easy
+ *  to make by accident — so a tap on a playable card opens it large with a "Play" button
+ *  instead of playing it (player report oupr2melse2cu5pm). A mouse still plays on click. */
+const touchScreen = (): boolean => {
+  try { return typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches; } catch { return false; }
+};
 
 export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
   view: GameState; you: Side; onHoverCard?: (id: string | null) => void;
@@ -23,6 +29,8 @@ export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
   // "Play on the table" cards are face-up / public for both sides (Mithril Coat,
   // Wizard's Staff, persistent effects, special-tile cards, …).
   const [zoom, setZoom] = useState<string | null>(null);
+  const [zoomPlay, setZoomPlay] = useState<(() => void) | null>(null);
+  const touch = touchScreen();
   if (hand.length === 0) return null;
   // A compact card row (in-play cards, divider, then the hand), with the hint on its
   // own line underneath so it doesn't steal horizontal space.
@@ -34,17 +42,20 @@ export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
       <div style={wrap}>
         {hand.map((id, i) => {
           const act = playable?.get(id) ?? null;
-          return <HandCard key={i} id={id} onZoom={() => !id.startsWith('hidden') && setZoom(id)} onHover={onHoverCard}
-            play={act && onPlay && !busy ? () => onPlay(act) : null} />;
+          const playNow = act && onPlay && !busy ? () => onPlay(act) : null;
+          return <HandCard key={i} id={id} onZoom={() => { if (!id.startsWith('hidden')) { setZoomPlay(null); setZoom(id); } }} onHover={onHoverCard}
+            play={playNow && touch ? () => { setZoomPlay(() => playNow); setZoom(id); } : playNow} />;
         })}
       </div>
       <div style={{ fontSize: 10, color: '#776', padding: '2px 8px 4px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         <b style={{ color: '#998' }}>Hand ({hand.length})</b> ·{' '}
+        {/* One colour with the other hints, the action last (player report 3047593x5i1q1y6r). */}
         {playable && playable.size > 0
-          ? <>hover to preview · <b style={{ color: '#9f9' }}>click a lit card to play it</b> · 🔍 to enlarge</>
-          : <>hover to preview · click to enlarge</>}
+          ? (touch ? <>tap a card to read it · tap a lit card to read and play it</> : <>hover to preview · 🔍 to enlarge · click a lit card to play it</>)
+          : <>{touch ? 'tap' : 'hover'} to preview · {touch ? 'tap' : 'click'} to enlarge</>}
       </div>
-      {zoom && <CardZoom id={zoom} onClose={() => setZoom(null)} />}
+      {zoom && <CardZoom id={zoom} onClose={() => { setZoom(null); setZoomPlay(null); }}
+        onPlay={zoomPlay ? () => { const p = zoomPlay; setZoom(null); setZoomPlay(null); p(); } : undefined} />}
     </div>
   );
 }
@@ -112,13 +123,22 @@ function HandCard({ id, onZoom, onHover, play }: { id: string; onZoom: () => voi
 
 // Click-to-enlarge: full card art (or full text) over a dimmed backdrop. Exported so
 // the opponent's-turn recap can pop the same enlarged view from a logged card play.
-export function CardZoom({ id, onClose }: { id: string; onClose: () => void }) {
+export function CardZoom({ id, onClose, onPlay }: { id: string; onClose: () => void;
+  /** Touch screens: play the card from its enlarged view (see touchScreen). */
+  onPlay?: () => void }) {
   const art = useCardArt(id);
   const def = CARD.get(id);
   return (
-    <div style={zoomBackdrop} onClick={onClose}>
+    <div style={{ ...zoomBackdrop, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={onClose}>
+      {onPlay && (
+        <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+          <button onClick={onPlay} data-testid="zoom-play"
+            style={{ padding: '10px 22px', fontSize: 16, fontWeight: 700, borderRadius: 8, background: '#4a5a3a', color: '#f0e9d8', border: '1px solid #6a7', cursor: 'pointer' }}>Play this card</button>
+          <button onClick={onClose} style={{ padding: '10px 18px', fontSize: 16, borderRadius: 8, background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', cursor: 'pointer' }}>Cancel</button>
+        </div>
+      )}
       {art ? (
-        <img src={art} alt={def?.name ?? id} style={{ maxHeight: '88vh', maxWidth: '88vw', borderRadius: 8, boxShadow: '0 8px 40px #000' }} />
+        <img src={art} alt={def?.name ?? id} style={{ maxHeight: onPlay ? '78vh' : '88vh', maxWidth: '88vw', borderRadius: 8, boxShadow: '0 8px 40px #000' }} />
       ) : (
         <div style={zoomText} onClick={(e) => e.stopPropagation()}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -147,6 +167,6 @@ const img: React.CSSProperties = { height: 104, width: 'auto', borderRadius: 4, 
 // Above the status bar's drop-downs (70) and the Report button (71) — an enlarged card
 // opened from a drop-down sat under it (player report 5657121k373p5j0w).
 const zoomBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.8)', display: 'grid', placeItems: 'center', zIndex: 78, cursor: 'zoom-out' };
-const zoomText: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 10, maxWidth: 440, cursor: 'default' };
+const zoomText: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 10, maxWidth: 'min(440px, 92vw)', cursor: 'default' };
 const zoomReq: React.CSSProperties = { color: '#d8b48c', fontStyle: 'italic' };
 const textCard: React.CSSProperties = { width: 76, height: 104, flexShrink: 0, borderRadius: 4, padding: 4, userSelect: 'none', color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443', fontSize: 9 };

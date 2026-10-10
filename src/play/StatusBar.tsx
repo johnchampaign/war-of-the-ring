@@ -54,24 +54,31 @@ function HuntTilesBrowser({ view }: { view: GameState }) {
   const inPlay = (h.specialsInPlay ?? []).map((id) => `${tileLabel(SPECIAL_TILE_BY_CARD[id])} (${EVENT_BY_ID[id]?.name ?? id})`);
   const inPool = (h.specialsInPool ?? []).map((id) => `${tileLabel(SPECIAL_TILE_BY_CARD[id])} (${EVENT_BY_ID[id]?.name ?? id})`);
   const total = drawn.length + specialsDrawn.length;
+  // What is still IN the bag — the fixed tile mix minus everything drawn or set aside,
+  // which a player at the table works out by counting (player reports
+  // k36qtksthloqpbt3, um4d4stxjz78vv7r: "I still don't remember exactly what the pool
+  // is comprised of"). Grouped by face, most common first. Not the order: that is the
+  // shuffle, and it stays hidden.
+  const bagLabels = [...(h.pool ?? []).map((i) => tileLabel(STANDARD_TILE_LIST[i])), ...inPool];
+  const bagCounts = new Map<string, number>();
+  for (const l of bagLabels) bagCounts.set(l, (bagCounts.get(l) ?? 0) + 1);
+  const bag = [...bagCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return (
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
-        title="Hunt tiles drawn so far (the standard ones return when the pool reshuffles; special tiles never do), plus special tiles in play / in the pool">
-        Hunt tiles {total} {open ? '▴' : '▾'}
+        title="The Hunt tiles still in the bag, the ones drawn so far (the standard ones return when the bag empties; special tiles never do), and special tiles in play">
+        Hunt tiles {bagLabels.length} left {open ? "▴" : "▾"}
       </button>
       {open && (
         <div ref={ref} style={{ ...roster, ...flipStyle, ...wide }}>
-          <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5 }}>Drawn (out of the bag)</div>
+          <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5 }}>In the bag ({bagLabels.length})</div>
+          {bag.map(([l, n]) => <div key={l} style={{ fontSize: 12, padding: '1px 6px' }} data-testid="hunt-bag-row">{l}{n > 1 ? ` ×${n}` : ''}</div>)}
+          <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 6 }}>Drawn ({total})</div>
           {total === 0 && <div style={{ color: '#998', fontSize: 12, padding: '2px 6px' }}>No tiles drawn yet.</div>}
           {[...drawn, ...specialsDrawn].map((s, i) => <div key={i} style={{ fontSize: 12, padding: '1px 6px' }}>{s}</div>)}
           {inPlay.length > 0 && <>
             <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 6 }}>Special tiles in play (enter the bag on Mordor)</div>
             {inPlay.map((s, i) => <div key={i} style={{ fontSize: 12, padding: '1px 6px' }}>{s}</div>)}
-          </>}
-          {inPool.length > 0 && <>
-            <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 6 }}>Special tiles in the bag</div>
-            {inPool.map((s, i) => <div key={i} style={{ fontSize: 12, padding: '1px 6px' }}>{s}</div>)}
           </>}
           <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Drawn standard tiles reshuffle back in when the bag empties.</div>
         </div>
