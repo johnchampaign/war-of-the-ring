@@ -1172,6 +1172,22 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // it costs an extra hit AND the unit, which is only ever worth it for a human
       // playing around a siege requirement.
       const steps = legal.filter((a) => a.kind === 'casualtyStep') as Extract<WotrAction, { kind: 'casualtyStep' }>[];
+      // Shadow in a battle: an Army of five or fewer units rolls a die per unit, so
+      // removing a Regular costs a die every round to come while reducing an Elite
+      // costs none — reduce the Elite (player report 0r0z4m1t2b260556, which also
+      // notes it dodges Great Host's 2:1 hit). Above five the dice are capped anyway,
+      // so shed Regulars as before; and a siege attacker keeps its Elites, which it
+      // spends to press the assault round after round.
+      if (steps.length && state.pendingChoice?.kind === 'combatCasualties' && state.pendingChoice.owner === 'shadow' && pc) {
+        const d = state.pendingChoice.data as { region: RegionId; boxed?: boolean };
+        const box = d.boxed ? state.regions[d.region]?.siegeBox : null;
+        const units = box ? forceUnitCount(box) : unitCount(state, d.region);
+        const pressingSiege = pc.siege && pc.attacker === 'shadow';
+        if (units <= 5 && !pressingSiege) {
+          const reduce = steps.find((a) => a.step === 'reduceElite');
+          if (reduce) return reduce;
+        }
+      }
       if (steps.length) {
         return steps.find((a) => a.step === 'removeRegular')
           ?? steps.find((a) => a.step === 'reduceElite')
