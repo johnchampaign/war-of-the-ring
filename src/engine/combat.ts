@@ -1612,7 +1612,8 @@ export function combatStep(state: GameState): void {
           if (!due) continue;
           // Nothing to spend — or the card is outrun by the opponent's pre-combat
           // retreat and will never resolve, so its owner is not asked to pay for it.
-          if (due.range.max <= 0 || outrunByPreCombatRetreat(state, pc, side)) {
+          // …nor when the opponent's card cancels it first (it will never resolve).
+          if (due.range.max <= 0 || outrunByPreCombatRetreat(state, pc, side) || cancelledThisRound(pc, side)) {
             if (side === pc.attacker) pc.atkCardCost = 0; else pc.defCardCost = 0;
             continue;
           }
@@ -1625,7 +1626,10 @@ export function combatStep(state: GameState): void {
         // named automatically; with none the card has nothing to cancel.
         if (pc.wordsOfPowerTarget === undefined) {
           const wop = wordsOfPowerSide(pc);
-          if (wop) {
+          // Cancelled by Daring Defiance before it resolves (initiative 1 vs 0): nobody
+          // is named, and the Shadow is not asked (player report 3u1q184s3d1d0v70).
+          if (wop && cancelledThisRound(pc, wop)) pc.wordsOfPowerTarget = null;
+          else if (wop) {
             const options = wordsOfPowerCandidates(state, pc, wop);
             if (options.length > 1 && !outrunByPreCombatRetreat(state, pc, wop)) {
               state.pendingChoice = { owner: wop, kind: 'wordsOfPower', data: { card: wop === pc.attacker ? pc.attackerCard : pc.defenderCard, companions: options } };
@@ -1665,19 +1669,14 @@ export function combatStep(state: GameState): void {
         // cancel removes the opponent's card only if it resolves first — the
         // attacker (never the tie-winner) needs strictly lower initiative; the
         // defender wins ties.
-        const aIni = pc.attackerCard ? cardInitiative(pc.attackerCard) : 99;
-        const dIni = pc.defenderCard ? cardInitiative(pc.defenderCard) : 99;
-        // Daring Defiance cancels only by forfeiting "the Leadership of all the Companions
-        // participating in the battle"; while The White Rider has already forfeited
-        // Gandalf's, that is impossible and no part of the card takes effect (Almanac,
-        // Daring Defiance / Gandalf the White).
-        const fpCardNow = pc.attacker === 'fp' ? pc.attackerCard : pc.defenderCard;
-        const fpDefiance = !!fpCardNow && EVENT_BY_ID[fpCardNow]?.combat?.title === 'Daring Defiance';
-        const defianceVoid = fpDefiance && !!pc.whiteRiderForfeit;
-        if (defianceVoid) { if (pc.attacker === 'fp') aMods = EMPTY_MODS; else dMods = EMPTY_MODS; }
-        let aCancelled = false, dCancelled = false;
-        if (aMods.cancelEnemyCard && pc.defenderCard && aIni < dIni) { dMods = EMPTY_MODS; dCancelled = true; }
-        if (dMods.cancelEnemyCard && pc.attackerCard && dIni <= aIni) { aMods = EMPTY_MODS; aCancelled = true; }
+        // Who cancels whom — the one rule (combatCardCancellations), also read before the
+        // roll so a cancelled card asks no questions.
+        const cx = combatCardCancellations(pc);
+        const fpDefiance = cx.fpDefiance;
+        if (cx.defianceVoid) { if (pc.attacker === 'fp') aMods = EMPTY_MODS; else dMods = EMPTY_MODS; }
+        const aCancelled = cx.atk, dCancelled = cx.def;
+        if (dCancelled) dMods = EMPTY_MODS;
+        if (aCancelled) aMods = EMPTY_MODS;
         // …and when it does cancel, every Companion's Leadership is gone for this round,
         // so the Leader re-roll shrinks by all of it (player report n6r8a72c42xokefc: it
         // used to cancel for free). With no Shadow card to cancel nothing is forfeited.
@@ -1719,7 +1718,7 @@ export function combatStep(state: GameState): void {
         // the Nazgûl Leadership returns until the next round (Almanac, Words of Power).
         const whiteRider = !!pc.whiteRiderForfeit && silencedNow !== 'gandalf-white';
         // Remember which card came to nothing, for the after-casualties step.
-        const fpVoid = defianceVoid || fpSilencedCard;
+        const fpVoid = cx.defianceVoid || fpSilencedCard;
         pc.atkCardVoid = aCancelled || aOutrun || (pc.attacker === 'fp' && fpVoid);
         pc.defCardVoid = dCancelled || dOutrun || (pc.defender === 'fp' && fpVoid);
         // Announce each card WITH what it mechanically does this round, so the dice
@@ -1731,7 +1730,7 @@ export function combatStep(state: GameState): void {
           // A cancelled card is named plainly; the cancel gets its own line below, and
           // the cancelling card doesn't restate it (player report 3m5w464l281a6i5o).
           if (cancelled) return cardName(card);
-          if (card === fpCard && defianceVoid) return `${cardName(card)} — NO EFFECT: The White Rider has already forfeited Gandalf's Leadership, so the Companions cannot forfeit all of theirs`;
+          if (card === fpCard && cx.defianceVoid) return `${cardName(card)} — NO EFFECT: The White Rider has already forfeited Gandalf's Leadership, so the Companions cannot forfeit all of theirs`;
           if (card === fpCard && fpSilencedCard) return `${cardName(card)} — NO EFFECT: Words of Power has cancelled ${characterDef(silencedNow!)?.name ?? silencedNow}'s Leadership`;
           if (outrun) return `${cardName(card)} — TOO SLOW: the opposing card retreats its Army first, so this one never resolves`;
           // A conditional bonus hit ("+2 hits if it scored any") is named on the dice
@@ -2347,6 +2346,30 @@ export function resolveHeroicDeath(state: GameState, sacrifice: 'leader' | strin
 }
 
 /** The side that played Words of Power this round (always the Shadow), or null. */
+/** Which of this round's Combat cards are cancelled by the other (Daring Defiance,
+ *  Swarm of Bats). Cancels resolve in initiative order (lower first; tie -> defender): a
+ *  cancel removes the opponent's card only if it resolves first — the attacker needs
+ *  strictly lower initiative, the defender wins ties — and a card cancelled first
+ *  cancels nothing. Daring Defiance cancels only by forfeiting "the Leadership of all the
+ *  Companions participating in the battle"; once The White Rider has forfeited
+ *  Gandalf's that is impossible and no part of it takes effect (Almanac). */
+export function combatCardCancellations(pc: PendingCombat): { atk: boolean; def: boolean; fpDefiance: boolean; defianceVoid: boolean } {
+  const fpCardNow = pc.attacker === 'fp' ? pc.attackerCard : pc.defenderCard;
+  const fpDefiance = !!fpCardNow && EVENT_BY_ID[fpCardNow]?.combat?.title === 'Daring Defiance';
+  const defianceVoid = fpDefiance && !!pc.whiteRiderForfeit;
+  const cancels = (card: string | null | undefined, side: Side): boolean =>
+    !!card && !(defianceVoid && side === 'fp') && !!combatModsFor(card)?.cancelEnemyCard;
+  const aIni = pc.attackerCard ? cardInitiative(pc.attackerCard) : 99;
+  const dIni = pc.defenderCard ? cardInitiative(pc.defenderCard) : 99;
+  const def = cancels(pc.attackerCard, pc.attacker) && !!pc.defenderCard && aIni < dIni;
+  const atk = !def && cancels(pc.defenderCard, pc.defender) && !!pc.attackerCard && dIni <= aIni;
+  return { atk, def, fpDefiance, defianceVoid };
+}
+const cancelledThisRound = (pc: PendingCombat, side: Side): boolean => {
+  const cx = combatCardCancellations(pc);
+  return side === pc.attacker ? cx.atk : cx.def;
+};
+
 function wordsOfPowerSide(pc: PendingCombat): Side | null {
   for (const side of [pc.attacker, pc.defender]) {
     const card = side === pc.attacker ? pc.attackerCard : pc.defenderCard;

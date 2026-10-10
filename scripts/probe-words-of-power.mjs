@@ -24,7 +24,7 @@ check('a Words of Power card exists', !!WOP, WOP);
 /** Shadow (5 Isengard Regulars + 2 Nazgûl) out of Orthanc into the Fords of Isen,
  *  held by 3 Rohan Regulars and `chars`. Runs until the first prompt that isn't a
  *  combat-card or White Rider choice (both answered here). */
-function battle(seed, { chars = ['gandalf-white', 'legolas'], forfeit = true } = {}) {
+function battle(seed, { chars = ['gandalf-white', 'legolas'], forfeit = true, fpCard = null } = {}) {
   const s = startGame(createGame({ seed }));
   for (const r of Object.values(s.regions)) { r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = []; delete r.siegeBox; r.besieged = false; }
   s.nations.isengard.step = 0; s.nations.rohan.step = 0;
@@ -34,14 +34,14 @@ function battle(seed, { chars = ['gandalf-white', 'legolas'], forfeit = true } =
   s.regions['fords-of-isen'].characters = [...chars];
   for (const c of chars) if (!s.characters.entered.includes(c)) s.characters.entered.push(c);
   s.cards.shadow.hand = [WOP];
-  s.cards.fp.hand = [];
+  s.cards.fp.hand = fpCard ? [fpCard] : [];
   startBattle(s, 'shadow', 'orthanc', 'fords-of-isen');
   for (let i = 0; i < 40 && s.pendingCombat; i++) {
     combatStep(s);
     const ch = s.pendingChoice;
     if (!ch) continue;
     if (ch.kind === 'whiteRider') { resolveWhiteRider(s, forfeit); continue; }
-    if (ch.kind === 'combatCard') { resolvePlayCombatCard(s, ch.owner === 'shadow' ? WOP : null); continue; }
+    if (ch.kind === 'combatCard') { resolvePlayCombatCard(s, ch.owner === 'shadow' ? WOP : fpCard); continue; }
     return s;
   }
   return s;
@@ -109,6 +109,17 @@ const misses = (roll) => roll.dice.filter((d) => d !== 6 && d < roll.target).len
   const s = battle(4, { chars: [] });
   check('no wordsOfPower prompt', s.pendingChoice?.kind !== 'wordsOfPower', s.pendingChoice?.kind);
   check('target recorded as none', s.pendingCombat == null || s.pendingCombat.wordsOfPowerTarget === null, String(s.pendingCombat?.wordsOfPowerTarget));
+}
+
+{
+  // Player report 3u1q184s3d1d0v70: Daring Defiance (initiative 0) cancels Words of
+  // Power (initiative 1) before it resolves, so the Shadow must not be asked to name
+  // a Companion at all.
+  console.log('\n=== Cancelled by Daring Defiance: no Words of Power question ===');
+  const DD = Object.keys(EVENT_BY_ID).find((id) => EVENT_BY_ID[id]?.combat?.title === 'Daring Defiance');
+  const s = battle(5, { chars: ['strider', 'legolas'], fpCard: DD });
+  check('no wordsOfPower prompt', s.pendingChoice?.kind !== 'wordsOfPower', s.pendingChoice?.kind);
+  check('nobody is named', s.pendingCombat == null || s.pendingCombat.wordsOfPowerTarget === null, String(s.pendingCombat?.wordsOfPowerTarget));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall Words of Power checks passed');
