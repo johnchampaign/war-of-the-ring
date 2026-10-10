@@ -14,7 +14,7 @@ import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf, characterDef, sideOfNation, characterSide } from '../engine/data';
-import { unitCount, forceUnitCount, STACKING_LIMIT, splitBlockReason } from '../engine/armies';
+import { unitCount, forceUnitCount, STACKING_LIMIT, splitBlockReason, fellowshipRegion } from '../engine/armies';
 import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
 import { cardSplitBlockReason } from '../engine/handlers/index';
@@ -1002,7 +1002,7 @@ function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction
   if (actor === 'shadow') {
     const staging = nazgulStagingBonus(state, a.char, a.to, target);
     if (staging > 0) return staging;
-    if (a.char === 'nazgul') return (!fs.hidden && a.to === fs.location) ? 42 : 6;
+    if (a.char === 'nazgul') return (!fs.hidden && a.to === fellowshipRegion(state)) ? 42 : 6; // never on the Mordor Track
     return 4; // Minions: situational
   }
   // A separated Companion used to score a flat 4 for every destination, so it never
@@ -1461,7 +1461,7 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
   const fs = state.fellowship;
   const scoreMove = (a: Extract<WotrAction, { kind: 'moveCharacter' }>): number => {
     let s = 0;
-    if (owner === 'shadow' && a.char === 'nazgul' && !fs.hidden && a.to === fs.location) {
+    if (owner === 'shadow' && a.char === 'nazgul' && !fs.hidden && a.to === fellowshipRegion(state)) {
       // Press a revealed Fellowship — with ONE Ringwraith. The Hunt re-roll is
       // presence-gated, so the second wraith adds nothing; the die-driven chain
       // used to pile all five on (player report: 'spent [C] to move 5(!) Nazgul
@@ -1513,8 +1513,24 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
       // of piling all five onto the same square (player report: 'moved all 5 Nazgul
       // to fords of bruin... counterproductive', with the reasons itemised).
       const r = state.regions[a.region]!;
-      if (r.nazgul > 0 || r.characters.includes('witch-king')) return -5;
-      return 120 - dist(a.region, state.fellowship.location) * 20;
+      const occupied = r.nazgul > 0 || r.characters.includes('witch-king');
+      // Only a Nazgûl IN the Fellowship's region does anything there (the re-roll, the
+      // reveal): one per region near it used to fan a stack out into every neighbouring
+      // region, most of them off the Fellowship's road (player reports 2e1j445d0m3s5g4b,
+      // lkr5oqkt18zy6twe) — and on the Mordor Track, where it is in no region at all,
+      // around its entrance (report 1s2m3o0a0s6k232v). Now: the Fellowship's region;
+      // else a region ON its road to Mordor, within its next move, to meet it there;
+      // else join the Army staged on the campaign target; else stop.
+      const loc = fellowshipRegion(state);
+      if (loc && a.region === loc) return occupied ? -5 : 120;
+      if (loc && !occupied) {
+        const exit = MORDOR_ENTRANCES.reduce((b, e) => (dist(loc, e) < dist(loc, b) ? e : b), MORDOR_ENTRANCES[0]!);
+        const d = dist(loc, a.region);
+        if (d <= 2 && d + dist(a.region, exit) === dist(loc, exit)) return 40 - d * 10;
+      }
+      const staging = nazgulStagingBonus(state, 'nazgul', a.region as RegionId, target);
+      if (staging > 0) return staging / 2;
+      return -3;
     }
     // Place the (group of) Companion(s) — do this rather than piling the whole
     // Fellowship in. A landing spot that ACTIVATES a passive FP Nation outranks
