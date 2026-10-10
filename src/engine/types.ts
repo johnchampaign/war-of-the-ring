@@ -211,6 +211,9 @@ export type CombatStep =
   // "forfeit one or more points of Nazgul Leadership") pause here to be paid for.
   | 'cardCost'
   | 'beginRound'
+  // Blade of Westernesse / Fateful Strike / Black Breath (initiative 6): the card's
+  // owner picks WHICH figure it eliminates when there is more than one.
+  | 'combatKills'
   // Heroic Death (initiative 6, before casualties): the Free Peoples choose whether to
   // sacrifice a Leader or Companion to cancel hits.
   | 'heroicDeath'
@@ -311,6 +314,11 @@ export interface PendingCombat {
    *  that played it and the most hits it may cancel (those the enemy's Combat roll and
    *  Leader re-roll scored against it — not Confusion's self-inflicted '1's). */
   heroicDeath?: { side: Side; max: number };
+  /** Combat-card eliminations still to be chosen this round (Blade of Westernesse,
+   *  Fateful Strike, Black Breath): who picks, against which side's figures, and the
+   *  figures on offer — a Character id, 'nazgul' or 'leader' (player report
+   *  5p331i3s2a5j100w). The hits each one spends were already taken off. */
+  pendingKills?: Array<{ chooser: Side; card: string | null; target: 'attacker' | 'defender'; options: string[] }>;
   /** The White Rider battle-start choice: asked once; true if the FP forfeited
    *  Gandalf the White's Leadership to negate all Nazgûl Leadership this battle. */
   whiteRiderAsked?: boolean;

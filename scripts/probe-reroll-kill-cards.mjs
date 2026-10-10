@@ -7,7 +7,7 @@
 // (initiative 6) and names the card (report 493j1d205i604m69).
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
-import { startBattle, combatStep, resolvePlayCombatCard } from '../src/engine/combat.ts';
+import { startBattle, combatStep, resolvePlayCombatCard, resolveCombatKill } from '../src/engine/combat.ts';
 import { EVENT_BY_ID } from '../src/engine/data.ts';
 
 let failures = 0;
@@ -40,11 +40,15 @@ function battle(seed, { fpChars, shadowChars = [], nazgul = 0, leaders = 2, fpCa
   s.cards.fp.hand = fpCard ? [fpCard] : [];
   startBattle(s, 'shadow', 'orthanc', 'fords-of-isen');
   for (let i = 0; i < 40 && s.pendingCombat; i++) {
-    if (s.pendingCombat.defRoll) return s;
+    // A kill with more than one candidate is now the card owner's choice (report
+    // 5p331i3s2a5j100w); answer it with the first option, which is the old automatic pick.
+    if (s.pendingChoice?.kind === 'combatKill') { resolveCombatKill(s, s.pendingChoice.data.options[0]); continue; }
+    if (s.pendingCombat.defRoll && s.pendingCombat.step !== 'combatKills') return s;
     combatStep(s);
     const ch = s.pendingChoice;
     if (!ch) continue;
     if (ch.kind === 'combatCard') { resolvePlayCombatCard(s, ch.owner === 'shadow' ? shadowCard : fpCard); continue; }
+    if (ch.kind === 'combatKill') continue;
     return s;
   }
   return s;

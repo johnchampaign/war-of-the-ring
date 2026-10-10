@@ -214,55 +214,74 @@ const MINION_SET = new Set(['witch-king', 'saruman', 'mouth-of-sauron']);
  *  the siege box (assault or sortie), where the region's own `units`/`characters`
  *  belong to the OTHER side. */
 function applyCombatEliminations(state: GameState, e: Force, mods: CombatMods, ownHits: number,
-  rerollHits: number, lines: string[]): number {
+  rerollHits: number, lines: string[], ask?: { chooser: Side; card: string | null; target: 'attacker' | 'defender'; queue: NonNullable<PendingCombat['pendingKills']> }): number {
   let hits = ownHits;
-  const nameOf = (id: string) => characterDef(id)?.name ?? id;
-  const killChar = (id: string) => {
-    e.characters.splice(e.characters.indexOf(id), 1);
-    if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
-    delete state.characters.inPlay[id];
+  // WHICH figure falls is the card owner's choice whenever there is more than one
+  // (player report 5p331i3s2a5j100w): the kill is queued for the 'combatKills' step,
+  // which asks. With a single candidate it happens here, as before. The options are
+  // listed with the old automatic pick first, so an AI that takes the first keeps
+  // playing as it did.
+  const settle = (options: string[], cardName: string): void => {
+    if (!options.length) return;
+    if (options.length === 1 || !ask) { lines.push(combatKill(state, e, options[0]!, cardName)); return; }
+    ask.queue.push({ chooser: ask.chooser, card: ask.card, target: ask.target, options });
   };
   // Fateful Strike: "If your Leader re-roll scores one hit, additionally eliminate a
   // Nazgûl. If the re-roll scores two or more hits, you can eliminate a Minion instead
   // of a Nazgûl." No hit is spent ("additionally"). The Witch-king is a Minion, so he
-  // needs the two hits (Almanac). Deviation: the Free Peoples' pick is taken in their
-  // favour — a Minion whenever the re-roll allows one (he is gone for good; a Nazgûl
-  // only returns to the reinforcements).
+  // needs the two hits (Almanac).
   if (mods.eliminateNazgulIfHit && rerollHits > 0) {
-    const minion = rerollHits >= 2 ? e.characters.find((c) => MINION_SET.has(c)) : undefined;
-    if (minion) { killChar(minion); lines.push(`${nameOf(minion)} falls to the Fateful Strike`); }
-    else if (e.nazgul > 0) {
-      e.nazgul -= 1;
-      state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + 1;
-      lines.push('a Nazgûl falls to the Fateful Strike');
-    }
+    const minions = rerollHits >= 2 ? e.characters.filter((c) => MINION_SET.has(c)) : [];
+    settle([...minions, ...(e.nazgul > 0 ? ['nazgul'] : [])], 'the Fateful Strike');
   }
   // Blade of Westernesse: "Use one hit during the Leader re-roll to eliminate one
   // Minion" — the hit is spent on the kill (Almanac: it must be, if a Minion is there).
-  for (let n = Math.min(mods.eliminateMinion ?? 0, rerollHits); n > 0 && hits > 0; n--) {
-    const id = e.characters.find((c) => MINION_SET.has(c));
-    if (!id) break;
-    killChar(id);
-    hits -= 1;
-    lines.push(`${nameOf(id)} falls to the Blade of Westernesse`);
+  if ((mods.eliminateMinion ?? 0) > 0 && rerollHits > 0 && hits > 0) {
+    const minions = e.characters.filter((c) => MINION_SET.has(c));
+    if (minions.length) { hits -= 1; settle(minions, 'the Blade of Westernesse'); }
   }
   // Black Breath: "If your Leader re-roll scores at least one hit, you may additionally
   // eliminate one Free Peoples Leader … or a Companion, if the number of hits equals or
-  // exceeds the Companion's Level" — re-roll hits, and no hit spent. Shadow-optimal
-  // target: the highest-Level Companion the re-roll reaches, else one FP Leader.
-  // (Auto-resolved like the other combat-card eliminations.)
+  // exceeds the Companion's Level" — re-roll hits, and no hit spent. The Shadow picks;
+  // the highest-Level Companion within reach is offered first.
   if (mods.blackBreath && rerollHits > 0) {
     const comps = e.characters.filter((c) => COMPANION_IDS.has(c) && levelOf(c) <= rerollHits).sort((a, b) => levelOf(b) - levelOf(a));
-    if (comps.length) {
-      const id = comps[0]!;
-      killChar(id);
-      lines.push(`${nameOf(id)} falls to the Black Breath`);
-    } else if (e.leaders > 0) {
-      e.leaders -= 1;
-      lines.push('a Free Peoples Leader falls to the Black Breath');
-    }
+    settle([...comps, ...(e.leaders > 0 ? ['leader'] : [])], 'the Black Breath');
   }
   return hits;
+}
+
+/** Eliminate one figure a combat card struck (a Character id, 'nazgul' or 'leader')
+ *  from `e`; returns its log line. Nazgûl return to the reinforcements; Characters and
+ *  Free Peoples Leaders are gone for good. */
+function combatKill(state: GameState, e: Force, who: string, cardName: string): string {
+  if (who === 'nazgul') {
+    e.nazgul = Math.max(0, e.nazgul - 1);
+    state.reinforcements.sauron.nazgul = (state.reinforcements.sauron.nazgul ?? 0) + 1;
+    return `a Nazgûl falls to ${cardName}`;
+  }
+  if (who === 'leader') { e.leaders = Math.max(0, e.leaders - 1); return `a Free Peoples Leader falls to ${cardName}`; }
+  const i = e.characters.indexOf(who);
+  if (i >= 0) e.characters.splice(i, 1);
+  if (!state.characters.eliminated.includes(who)) state.characters.eliminated.push(who);
+  delete state.characters.inPlay[who];
+  return `${characterDef(who)?.name ?? who} falls to ${cardName}`;
+}
+const KILL_CARD_NAME = (card: string | null, mods: { eliminateNazgulIfHit?: number; eliminateMinion?: number; blackBreath?: boolean }): string =>
+  mods.eliminateNazgulIfHit ? 'the Fateful Strike' : mods.eliminateMinion ? 'the Blade of Westernesse' : mods.blackBreath ? 'the Black Breath' : (card ? EVENT_BY_ID[card]?.combat?.title ?? 'the card' : 'the card');
+
+/** Answer a pending combat-card elimination ('combatKill'): `who` falls. */
+export function resolveCombatKill(state: GameState, who: string): void {
+  const pc = state.pendingCombat!;
+  const k = pc.pendingKills?.[0];
+  if (!k || !k.options.includes(who)) throw new Error('That figure cannot be eliminated by this card.');
+  pc.pendingKills!.shift();
+  if (!pc.pendingKills!.length) pc.pendingKills = undefined;
+  state.pendingChoice = null;
+  const e = k.target === 'attacker' ? atkForce(state, pc) : defForce(state, pc);
+  const mods = (k.card ? combatModsFor(k.card) : null) ?? {};
+  log(state, null, 'combat', combatKill(state, e, who, KILL_CARD_NAME(k.card, mods)));
+  if (k.card) state.log[state.log.length - 1]!.card = k.card;
 }
 
 // --- Per-casualty allocation (rulebook p.30) ---------------------------------
@@ -1787,8 +1806,10 @@ export function combatStep(state: GameState): void {
         // Tied initiative 6: the defender's card resolves first. Logged after the dice.
         const kills: { line: string; card: string | null }[] = [];
         const dLines: string[] = [], aLines: string[] = [];
-        def = applyCombatEliminations(state, atkForce(state, pc), dMods, def, dRoll.rerollHits ?? 0, dLines);
-        atk = applyCombatEliminations(state, defForce(state, pc), aMods, atk, aRoll.rerollHits ?? 0, aLines);
+        const queue: NonNullable<PendingCombat['pendingKills']> = [];
+        def = applyCombatEliminations(state, atkForce(state, pc), dMods, def, dRoll.rerollHits ?? 0, dLines, { chooser: pc.defender, card: pc.defenderCard, target: 'attacker', queue });
+        atk = applyCombatEliminations(state, defForce(state, pc), aMods, atk, aRoll.rerollHits ?? 0, aLines, { chooser: pc.attacker, card: pc.attackerCard, target: 'defender', queue });
+        pc.pendingKills = queue.length ? queue : undefined;
         for (const line of dLines) kills.push({ line, card: pc.defenderCard });
         for (const line of aLines) kills.push({ line, card: pc.attackerCard });
         // Heroic Death: "you MAY eliminate one of your Leaders to cancel one hit, or
@@ -1836,6 +1857,15 @@ export function combatStep(state: GameState): void {
         // effects silently never fired in a real battle (player report: 'I played
         // Onslaught... It never asked' — twice). They are cleared when the NEXT
         // round begins ('attackerCard') or the battle ends.
+        pc.step = 'combatKills'; continue;
+      }
+      case 'combatKills': {
+        // The card's owner picks which figure falls (see applyCombatEliminations).
+        const k = pc.pendingKills?.[0];
+        if (k) {
+          state.pendingChoice = { owner: k.chooser, kind: 'combatKill', data: { card: k.card, options: k.options } };
+          return;
+        }
         pc.step = 'heroicDeath'; continue;
       }
       case 'heroicDeath': {

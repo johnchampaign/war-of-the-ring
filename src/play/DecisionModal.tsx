@@ -35,6 +35,7 @@ const CHOICE_TITLE: Record<string, string> = {
   retreatTo: 'Retreat — click a highlighted region on the map',
   eaglesRefuge: 'The Eagles are Coming! — fly the surviving Nazgûl to a Sauron Stronghold (click it on the map)',
   cardRetreat: 'Dead Men of Dunharrow — retreat the Army (click a highlighted region on the map)',
+  combatKill: 'Your Combat card strikes — choose the figure it eliminates',
   preCombatRetreat: 'Retreat before combat — choose a destination',
   huntDamage: 'The Hunt strikes!',
   huntPreventDraw: 'Prevent the Hunt tile draw? (you won’t see it)',

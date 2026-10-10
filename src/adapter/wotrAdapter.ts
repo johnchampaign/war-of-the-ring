@@ -14,7 +14,7 @@ import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, heldShadowStronghold, unitCount, STACKING_LIMIT,
   recruitNazgul, canRecruitNazgul, overStack, overStackBox, forceSide, removeStackUnit, charDieLeaders, figureForce, forceUnitCount,
 } from '../engine/armies';
-import { startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveWordsOfPower, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
+import { resolveCombatKill, startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveWordsOfPower, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
 import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending, returnSetAsideHuntTiles } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
@@ -210,6 +210,10 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // in-flight game can still be finished.
         const opts = pendingCasualtyOptions(state).map((o) => ({ kind: 'casualtyStep' as const, step: o.step, nation: o.nation }));
         return opts.length ? opts : [{ kind: 'chooseCasualties', plan: 'regularsFirst' }, { kind: 'chooseCasualties', plan: 'elitesFirst' }];
+      }
+      case 'combatKill': {
+        const d = state.pendingChoice!.data as { options: string[] };
+        return d.options.map((target) => ({ kind: 'combatKill' as const, target }));
       }
       case 'cardRetreat': {
         const d = state.pendingChoice!.data as { dests: RegionId[] };
@@ -907,6 +911,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       }
       break;
     }
+    case 'combatKill':
+      requireChoice(state, 'combatKill', actor);
+      resolveCombatKill(state, action.target);
+      break;
     case 'cardRetreat': {
       requireChoice(state, 'cardRetreat', actor);
       const d = state.pendingChoice!.data as { from: RegionId; dests: RegionId[]; thenChoice?: GameState['pendingChoice'] };

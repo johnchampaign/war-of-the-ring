@@ -1334,6 +1334,10 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const refuges = legal.filter((a): a is Extract<WotrAction, { kind: 'eaglesRefuge' }> => a.kind === 'eaglesRefuge');
       return refuges.reduce((b, a) => (dist(a.region, state.fellowship.location) < dist(b.region, state.fellowship.location) ? a : b), refuges[0]!) ?? legal[0]!;
     }
+    // Blade of Westernesse / Fateful Strike / Black Breath: the options come with the
+    // strongest pick first (a Minion before a Nazgûl; the highest-Level Companion
+    // before a Leader), which is what both AIs did when the engine chose for them.
+    case 'combatKill': return legal[0]!;
     case 'cardRetreat': { // a card's forced retreat: toward a friendly Settlement if possible
       const me: Side = state.pendingChoice!.owner;
       return legal.find((a) => a.kind === 'cardRetreat' && settlementCtrl(state, a.region) === me) ?? legal[0]!;

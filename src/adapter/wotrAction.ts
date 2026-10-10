@@ -20,6 +20,8 @@ export type WotrAction =
   | { kind: 'revealMove'; target: RegionId }
   /** The Eagles are Coming!: the Shadow flies the surviving Nazgûl to this uncaptured Sauron Stronghold. */
   | { kind: 'eaglesRefuge'; region: RegionId }
+  /** Blade of Westernesse / Fateful Strike / Black Breath: which figure the card eliminates (a Character id, 'nazgul' or 'leader'). */
+  | { kind: 'combatKill'; target: string }
   /** A card's forced retreat (Dead Men of Dunharrow): the retreating side picks the free region. */
   | { kind: 'cardRetreat'; region: RegionId }
   | { kind: 'enterMordor' }
