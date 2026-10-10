@@ -12,7 +12,9 @@ export function HuntIndicator({ view }: { view: GameState }) {
   const [open, setOpen] = useState(false);
   const fs = view.fellowship;
   const box = view.hunt.box;
-  const fpDice = view.hunt.fpDiceInBox;
+  // The die of a Fellowship move whose Hunt is still being resolved is not in the box
+  // yet (p.41), so it isn't shown until the Action ends (player report 5v48363m643y5c06).
+  const fpDice = view.hunt.fpDiceInBox - (view.hunt.fpDieEntering ? 1 : 0);
   const onMordor = fs.mordor !== null;
   // Off the Mordor Track the Shadow rolls up to 5 Eye dice, each Free Peoples die in the
   // box adding +1, so the overlay shows the rolled dice and the number they hit on. On

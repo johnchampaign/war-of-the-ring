@@ -14,7 +14,8 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
   const fs = view.fellowship;
   const box = view.hunt.box;
   const dice = Math.min(5, box);
-  const bonus = view.hunt.fpDiceInBox ?? 0;
+  // The moving Fellowship's die joins the box only once its Hunt is over (p.41).
+  const bonus = (view.hunt.fpDiceInBox ?? 0) - (view.hunt.fpDieEntering ? 1 : 0);
   const onMordor = fs.mordor !== null;
   // The re-rolls are judged where the Ring-bearers FIGURE stands — its last known
   // position, which is public whether the Fellowship is hidden or revealed (its true

@@ -1480,6 +1480,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       passResolutionTurn(state, actor); break; // yield to opponent (who has more dice)
     default: throw new Error(`Unknown action ${(action as { kind: string }).kind}`);
   }
+  // The Action is over once nothing is left to answer: the moving Fellowship's die has
+  // now joined the Hunt Box for display too (report 5v48363m643y5c06).
+  if (!state.pendingChoice && state.hunt.fpDieEntering) delete state.hunt.fpDieEntering;
   // Tag the entries this action just logged with the die it spent, so the UI (turn
   // summary, log) can show "which die" the player used. The last face appended to
   // usedDice this dispatch is the die consumed; nothing appended = a free/phase action.

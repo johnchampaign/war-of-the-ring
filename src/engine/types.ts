@@ -93,6 +93,10 @@ export interface HuntState {
   box: number;
   /** Free Peoples dice in the Hunt Box this turn (each adds +1 to Hunt rolls). */
   fpDiceInBox: number;
+  /** The die of the Fellowship move being resolved has gone into `fpDiceInBox`, but by
+   *  the rules it joins the Hunt Box only once that move's Hunt is over (p.41). Set by
+   *  the move, cleared when the Action ends; the UI leaves the die out until then. */
+  fpDieEntering?: boolean;
   /** The most recent Hunt roll (set just before drawing), stamped onto each draw. */
   lastRoll?: HuntRoll;
   /** Remaining standard Hunt Pool tiles (drawable); each entry is a tile index
