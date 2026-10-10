@@ -2,7 +2,7 @@
 // downloaded (artCache), each card renders as its real image; otherwise a compact
 // text card (name + initiative) stands in — fully legible without any art. Hidden
 // opponent cards never reach here (redact.ts replaces them with 'hidden').
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useCardArt } from './artCache';
 import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
@@ -40,18 +40,52 @@ export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
       {/* The cards get the full width. The "Hand (N)" label used to sit to their left
           and eat horizontal space the cards wanted; it has moved into the line
           underneath (player report 572i6e714m1d2j3t). */}
-      <div style={handWrap}>
+      <ScrollRow>
         {hand.map((id, i) => {
           const act = playable?.get(id) ?? null;
           const playNow = act && onPlay && !busy ? () => onPlay(act) : null;
           return <HandCard key={i} id={id} onZoom={() => { if (!id.startsWith('hidden')) { setZoomPlay(null); setZoom(id); } }} onHover={onHoverCard}
             play={playNow && touch ? () => { setZoomPlay(() => playNow); setZoom(id); } : playNow} />;
         })}
-      </div>
+      </ScrollRow>
       {/* The "Hand (N) · hover to preview · click to enlarge" line under the cards is
           gone — space the cards want more (player report 0e4z5e1m4z4p3t32). */}
       {zoom && <CardZoom id={zoom} onClose={() => { setZoom(null); setZoomPlay(null); }}
         onPlay={zoomPlay ? () => { const p = zoomPlay; setZoom(null); setZoomPlay(null); p(); } : undefined} />}
+    </div>
+  );
+}
+
+/** A row of cards that scrolls sideways WITHOUT a scrollbar (player report
+ *  6c2d1z2v2r2q175y: "there is a scrollbar on the hand"). A scrollbar that came and
+ *  went also moved everything below it (6p3u624f0c6e0s2w); with none there is nothing
+ *  to come and go. The mouse wheel scrolls it sideways, and a fade with a chevron marks
+ *  each edge that has more cards beyond it. */
+function ScrollRow({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edge, setEdge] = useState({ l: false, r: false });
+  const update = () => {
+    const el = ref.current; if (!el) return;
+    const l = el.scrollLeft > 2, r = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+    setEdge((e) => (e.l === l && e.r === r ? e : { l, r }));
+  };
+  useLayoutEffect(update);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    ro?.observe(el);
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      el.scrollLeft += e.deltaY; e.preventDefault(); update();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => { ro?.disconnect(); el.removeEventListener('wheel', onWheel); };
+  }, []);
+  return (
+    <div style={{ position: 'relative' }}>
+      <div ref={ref} onScroll={update} style={handWrap}>{children}</div>
+      {edge.l && <div style={{ ...fade, left: 0, justifyContent: 'flex-start', background: 'linear-gradient(to right, #14110b 30%, #14110b00)' }}>‹</div>}
+      {edge.r && <div style={{ ...fade, right: 0, justifyContent: 'flex-end', background: 'linear-gradient(to left, #14110b 30%, #14110b00)' }}>›</div>}
     </div>
   );
 }
@@ -195,11 +229,11 @@ export function CardZoom({ id, onClose, onPlay }: { id: string; onClose: () => v
 }
 
 const wrap: React.CSSProperties = { display: 'flex', gap: 6, overflowX: 'auto', padding: '5px 8px', background: '#14110b', borderTop: '1px solid #2a2418', alignItems: 'center' };
-// The hand's scrollbar track is ALWAYS there (thin, in the panel's colours): with
-// `auto` it came and went as the hand gained or lost a card — playing one could tip it
-// either way — and its height moved the hand, the hints and everything under them
-// (player report 6p3u624f0c6e0s2w).
-const handWrap: React.CSSProperties = { ...wrap, overflowX: 'scroll', scrollbarWidth: 'thin', scrollbarColor: '#5a4a2a #14110b' };
+// No scrollbar at all on the card rows (see ScrollRow): one that came and went with the
+// hand's size moved everything below it (player reports 6p3u624f0c6e0s2w,
+// 6c2d1z2v2r2q175y).
+const handWrap: React.CSSProperties = { ...wrap, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none' };
+const fade: React.CSSProperties = { position: 'absolute', top: 0, bottom: 0, width: 30, pointerEvents: 'none', display: 'flex', alignItems: 'center', padding: '0 3px', color: '#e6c06a', fontSize: 22, fontWeight: 700, textShadow: '0 0 4px #000' };
 const label: React.CSSProperties = { fontSize: 11, color: '#998', alignSelf: 'center', marginRight: 2, whiteSpace: 'nowrap', flexShrink: 0 };
 // A hand card is clicked to PLAY it, so nothing on it should offer a text cursor or
 // swallow the click — the type badge over its corner did both (player report
