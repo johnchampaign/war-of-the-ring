@@ -32,7 +32,9 @@ export function HuntIndicator({ view }: { view: GameState }) {
           <span style={{ fontSize: 11, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 0.5 }}>⊙ Hunt</span>
           <span style={{ marginLeft: 'auto', fontSize: 10, color: '#887', border: '1px solid #4a4332', borderRadius: 8, width: 14, height: 14, lineHeight: '13px', textAlign: 'center' }}>ⓘ</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, margin: '3px 0', maxWidth: 140 }}
+        {/* Held at one die's height so the panel doesn't shrink when the box is empty
+            and the row shows the word instead (player report 350i466r2w242b3m). */}
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, margin: '3px 0', maxWidth: 140, minHeight: 16 }}
           title={onMordor ? `${box} Eye + ${fpDice} Free Peoples ${fpDice === 1 ? 'die' : 'dice'} in the Hunt Box — an Eye tile deals ${box + fpDice}` : `${dice} Hunt ${dice === 1 ? 'die' : 'dice'}, hitting on ${hitOn}+`}>
           {Array.from({ length: dice }).map((_, i) => (
             <span key={i} style={pip}>⚅</span>
@@ -40,7 +42,7 @@ export function HuntIndicator({ view }: { view: GameState }) {
           {onMordor && Array.from({ length: fpDice }).map((_, i) => (
             <span key={`fp${i}`} style={{ ...pip, color: '#7fa6d6' }}>⚅</span>
           ))}
-          {box === 0 && !(onMordor && fpDice > 0) && <span style={{ fontSize: 11, color: '#776' }}>empty</span>}
+          {box === 0 && !(onMordor && fpDice > 0) && <span style={{ fontSize: 11, color: '#776', lineHeight: '16px' }}>empty</span>}
           {!onMordor && box > 5 && <span style={{ fontSize: 10, color: '#887' }}>+{box - 5}</span>}
         </div>
         {/* The to-hit number on its own line, not trailing the dice (player report 326g4536416k3q0g). */}

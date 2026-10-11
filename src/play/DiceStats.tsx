@@ -12,6 +12,7 @@ const ACTION_FACES: Record<Side, string[]> = {
   fp: ['character', 'army', 'muster', 'armyMuster', 'event', 'will'],
   shadow: ['character', 'army', 'muster', 'armyMuster', 'event', 'eye'],
 };
+const TABLE_FACES = ['character', 'army', 'muster', 'armyMuster', 'event', 'will', 'eye'];
 
 export interface DiceTally {
   action: Record<Side, Record<string, number>>;
@@ -71,16 +72,34 @@ export function DiceStats({ view }: { view: GameState }) {
   return (
     <div style={{ textAlign: 'left', fontSize: 12, color: '#e9e1cc' }} data-testid="dice-stats">
       <div style={sub}>Action dice rolled</div>
-      {SIDES.map((s) => (
-        <div key={s} style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', margin: '3px 0' }}>
-          <span style={{ width: 84, color: color(s), fontWeight: 700 }}>{name(s)}</span>
-          {ACTION_FACES[s].filter((f) => t.action[s][f]).map((f) => (
-            <span key={f} style={{ background: FACE[f]?.bg ?? '#555', color: '#fff', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>
-              {FACE[f]?.label ?? f} ×{t.action[s][f]}
-            </span>
-          ))}
-        </div>
-      ))}
+      {/* A table: the faces head fixed columns and each side's counts sit under them
+          (player report 6t5m4u2z340v390k: the variable-width chips looked ragged). */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'separate', borderSpacing: '4px 3px', margin: '0 -4px' }}>
+          <thead>
+            <tr>
+              <td />
+              {TABLE_FACES.map((f) => (
+                <td key={f} style={{ background: FACE[f]?.bg ?? '#555', color: '#fff', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'center' }}>
+                  {FACE[f]?.label ?? f}
+                </td>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {SIDES.map((s) => (
+              <tr key={s}>
+                <td style={{ width: 84, color: color(s), fontWeight: 700 }}>{name(s)}</td>
+                {TABLE_FACES.map((f) => (
+                  <td key={f} style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: ACTION_FACES[s].includes(f) ? '#e9e1cc' : '#665' }}>
+                    {ACTION_FACES[s].includes(f) ? t.action[s][f] ?? 0 : '–'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div style={sub}>Combat dice (with re-rolls)</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18 }}>
         {SIDES.map((s) => (
