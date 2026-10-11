@@ -30,6 +30,8 @@ import { TurnSummary } from './TurnSummary';
 import { LogPanel, CopyLogButton } from './LogPanel';
 import { GameOverUpload, UploadLogButton } from './GameOverUpload';
 import { DiceStats } from './DiceStats';
+import { useSettings } from './settings';
+import { SettingsButton } from './SettingsPanel';
 import { ReportButton } from './ReportButton';
 import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
@@ -103,6 +105,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // (in the panel AND on the board). null = no filter (every legal action visible).
   const [die, setDie] = useState<DieFace | null>(null); // the die face the player selected in the tray
   const [diceStatsOpen, setDiceStatsOpen] = useState(false); // the end-of-game dice statistics
+  const settings = useSettings(); // the player's display settings (⚙)
   const me: Side = g.you === 'shadow' ? 'shadow' : 'fp';
   // Move-receipt times for the game log (feature F): re-fetched whenever the log
   // grows. Best-effort — a failed fetch just leaves the log undated.
@@ -923,6 +926,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       {undoButton}
       <button onClick={() => setLogOpen(true)} title="Open the game log"
         style={{ ...barBtn, cursor: 'pointer', background: '#33302a', color: '#e9e1cc', border: '1px solid #5a4a2a' }}>📜 Log</button>
+      <SettingsButton style={barBtn} />
       <ReportButton report={client.report} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined} style={barBtn} />
       {g.view && <UploadLogButton view={g.view} you={g.you as Side | null} mode={{ mode: client.mode, aiSide: client.aiSide }} clientBuild={typeof __DBF_BUILD_ID__ === 'string' ? __DBF_BUILD_ID__ : undefined}
         uploaded={logsUploaded} onUploaded={() => setLogsUploaded(true)} style={barBtn} />}
@@ -1217,7 +1221,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                       Hover a card, a region, or the Guide to inspect it here.
                     </div>
                     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                      <LogPanel view={g.view} times={logTimes} recentTurns={2} />
+                      <LogPanel view={g.view} times={logTimes} recentTurns={settings.sideLog === 'all' ? undefined : 2} />
                     </div>
                   </div>
                 )}
@@ -1365,7 +1369,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           particular — the result is shown neutral there. */}
       <BattlePopup view={g.view} seen={battleSeen} onSeen={setBattleSeen} you={(client as { mode?: string }).mode === 'hotseat' ? null : (g.you as Side | null)} />
       <NoticePopup view={g.view} seen={noticeSeen} onSeen={setNoticeSeen} />
-      <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} onOpenLog={() => setLogOpen(true)} hold={resultPending} />
+      {settings.recap === 'show' && <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} onOpenLog={() => setLogOpen(true)} hold={resultPending} />}
       {g.gameOver && g.ranked && (
         <p style={{ margin: '8px 12px', fontSize: 14, color: g.ranked.recorded ? '#6c6' : '#caa' }}>
           {g.ranked.recorded

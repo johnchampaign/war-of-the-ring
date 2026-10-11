@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import type { GameState, Side } from '../engine/types';
 import { DiceStats } from './DiceStats';
+import { settingsMarker } from './settings';
 import type { GameMode } from '../online/gameClient';
 
 // On the deployed site, post same-origin; from the local dev client (no Functions
@@ -28,7 +29,7 @@ export async function uploadGameLog(view: GameState, you: Side | null, clientBui
     const tag = m?.mode ? ` [mode: ${m.mode}${m.mode === 'vs-ai' && m.aiSide ? `, AI=${m.aiSide}` : ''}]` : '';
     const message = (winner
       ? `GAME COMPLETE — ${winner} wins (${view.winReason ?? '?'}). Uploaded for AI tuning. (turns: ${view.turn})`
-      : `GAME IN PROGRESS — uploaded for AI tuning (turn ${view.turn}, ${view.phase}).`) + tag;
+      : `GAME IN PROGRESS — uploaded for AI tuning (turn ${view.turn}, ${view.phase}).`) + tag + settingsMarker();
     const res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -50,7 +51,7 @@ export function UploadLogButton({ view, you, clientBuild, uploaded, onUploaded, 
     const ok = await uploadGameLog(view, you, clientBuild, mode);
     if (ok) { onUploaded(); setStage('idle'); } else setStage('error');
   };
-  const label = stage === 'uploading' ? '⏳ Uploading…' : done ? '✓ Log sent' : stage === 'error' ? '⚠ Retry upload' : '⬆ Upload log';
+  const label = stage === 'uploading' ? '⏳ Uploading…' : done ? '✓ Log sent' : stage === 'error' ? '⚠ Retry' : '⬆ Upload';
   return (
     <button onClick={click} disabled={done || stage === 'uploading'}
       title={done ? 'This game’s log has been uploaded — thank you!' : 'Upload this game’s log to help tune the AI (no personal data)'}

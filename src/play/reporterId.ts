@@ -28,7 +28,7 @@ export function reporterMarker(): string {
 }
 
 /** Strip the reporter marker from a message for display. */
-export const stripReporterMarker = (msg: string): string => msg.replace(MARKER, '').trim();
+export const stripReporterMarker = (msg: string): string => msg.replace(MARKER, '').replace(/\n*<!-- settings:[^>]*-->/g, '').trim();
 
 export function getSeenResponses(): Set<string> {
   try { return new Set<string>(JSON.parse(localStorage.getItem(LS_SEEN_RESPONSES) || '[]')); } catch { return new Set(); }

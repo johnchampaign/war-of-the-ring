@@ -33,6 +33,7 @@ import { FP_NATIONS } from '../engine/types';
 import type { GameState, RegionId, Nation, Side } from '../engine/types';
 import { HuntIndicator } from './HuntIndicator';
 import { RingGlyph } from './RingIcon';
+import { useSettings } from './settings';
 import { charName, charMark } from './charInfo';
 import { regionOccupants, fellowshipMarkerPoint } from './tokenPlacement';
 
@@ -110,6 +111,10 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   const [hoverId, setHoverId] = useState<RegionId | null>(null);
   const neighbours = useMemo(() => new Set<string>(hoverId ? regions[hoverId]?.adjacency ?? [] : []), [hoverId]);
   const boardArt = polyOnly ? null : art;
+  // The border rings are a player setting (players disagree about them on the board
+  // art, which prints its own borders — report 574c280b6j6t5b5d).
+  const { reachRings } = useSettings();
+  const showRings = !!hoverId && (reachRings === 'on' || (reachRings === 'polygonOnly' && !boardArt));
 
   const regionEls = useMemo(() => regionIds.map((id) => {
     const poly = regionPolygon(id);
@@ -376,7 +381,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           a move-highlight keep it: theirs is the stronger signal, and doubling the
           strokes just muddies both. Pointer-transparent throughout — hit-testing stays
           with the region paths underneath. */}
-      {hoverId && (
+      {showRings && (
         <g style={{ pointerEvents: 'none' }}>
           {regionEls.map((e) => {
             if (!e) return null;

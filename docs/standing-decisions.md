@@ -12,6 +12,7 @@ otherwise leave it open as backlog. Add a line here whenever John makes a new ca
 | **Rules sources.** Rulebook, FAQ, the Card Text Reference, and the Almanac (used throughout `docs/rules-spec.md`). A report citing the Almanac is a rules fix once checked against the local PDF. | established |
 | **Defer to the prolific playtester on presentation.** Reporter `r-bme7eu3t-mtq2vh0m` has a clear vision for layout, battle presentation, the side panel, the hand, wording and consistency; implement their suggestions. | 2026-09-13 |
 | **Event cards use the map.** Recruitment, movement, attacks and figure picks that an Event card grants go through the map interface, like die actions (report 2s3p6y0x000k6b70). | 2026-09-10 |
+| **Presentation disagreements become settings.** When players disagree about how something looks or behaves on screen, John picks the default and the alternative becomes a choice on the ⚙ Settings panel (`src/play/settings.ts`): display only, never rules, hidden information or AI. Add one only when two real player camps exist. When a player asks for a presentation change that is (or becomes) a setting, the reply tells them where to find it: "the ⚙ button at the top right, beside Log". | 2026-10-11 |
 | **AI changes are measured, not guessed.** Shadow-AI changes pass the two-gate A/B in `docs/ai-humanlike-yardstick.md`; the Shadow AI and FP AI are each owned by an interactive session. AI strategy feedback from players is backlog for those sessions, not a question for John. | 2026-08-31, 2026-09-10 |
 
 ## Settled specifics
@@ -26,7 +27,7 @@ otherwise leave it open as backlog. Add a line here whenever John makes a new ca
 | Push to `main` and deploy verified fixes without asking (an exception to John's global "pushing waits for me" note). | 2026-10-08 |
 | Board art: the download prompt stays (legal reasons). John won't seek permission for or pay for replacement art, but would include it as an option if someone provided it. | 2026-09-10 |
 | Sign-in: anonymous play stays; optional profile features are welcome but not scheduled. | 2026-09-10 |
-| Hover reach rings: left as they are (players disagree). | 2026-09-10 |
+| Hover reach rings: on by default; "only on the plain map" and "never" are ⚙ Settings choices. | 2026-10-11 |
 | Abandoned ranked games forfeit after a period of inactivity: the idle human seat loses once a ranked game has had no move for 14 days (`functions/_lib/forfeit.ts`, daily from the reminder cron). Games already quiet before the rule started (last move before 2026-09-27) are grandfathered. | 2026-10-11 |
 
 ## What still genuinely needs John

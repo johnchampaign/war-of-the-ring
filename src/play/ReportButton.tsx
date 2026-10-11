@@ -5,6 +5,7 @@
 // matters. Captures the build id so a report ties back to a deploy.
 import { useState } from 'react';
 import { reporterMarker } from './reporterId';
+import { settingsMarker } from './settings';
 
 type Sev = 'bug' | 'rules-question' | 'feedback';
 
@@ -29,7 +30,7 @@ export function ReportButton({ report, clientBuild, style }: {
       // filtered to this game (Axis & Allies / Tyrants / … share the table).
       // Append this device's reporter marker so we can surface our resolution
       // note back to them later (see /api/my-responses + ReportResponseModal).
-      const r = await report({ message: msg.trim() + reporterMarker(), severity: sev, category: 'wotr', clientBuild });
+      const r = await report({ message: msg.trim() + settingsMarker() + reporterMarker(), severity: sev, category: 'wotr', clientBuild });
       // Only confirm on a real, server-issued id — never show a false "thank you".
       if (!r?.reportId) throw new Error("Couldn't save the report. Please try again.");
       setSentId(r.reportId);
