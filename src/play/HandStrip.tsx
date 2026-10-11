@@ -3,7 +3,7 @@
 // text card (name + initiative) stands in — fully legible without any art. Hidden
 // opponent cards never reach here (redact.ts replaces them with 'hidden').
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useCardArt } from './artCache';
+import { useCardArt, backId } from './artCache';
 import type { GameState, Side } from '../engine/types';
 import type { WotrAction } from '../adapter/wotrAction';
 import eventCards from '../../assets/event-cards.json';
@@ -101,31 +101,36 @@ export function OpponentHand({ view, you }: { view: GameState; you: Side }) {
   const sideBg = opp === 'shadow' ? '#4a1c1c' : '#1b3350';
   const counts = hand.reduce((m, id) => { const d = deckOf(id); m[d] = (m[d] ?? 0) + 1; return m; }, {} as Record<string, number>);
   const label = `${opp === 'fp' ? 'Free Peoples' : 'Shadow'} hand: ${hand.length} card${hand.length === 1 ? '' : 's'}${hand.length ? ` (${counts.Character ?? 0} Character, ${counts.Strategy ?? 0} Strategy)` : ''}`;
-  // Full-size beside Politics; half-height when the side column is too narrow for the
-  // two to sit side by side and everything stacks (a 1440px screen), where every
-  // pixel up here is one the action list loses.
+  // Full-size when the column is wide; half-height in a narrow one (a 1440px screen),
+  // where every pixel up here is one the action list loses.
   const ref = useRef<HTMLDivElement>(null);
   const [stacked, setStacked] = useState(false);
   useLayoutEffect(() => {
-    const el = ref.current, row = el?.parentElement?.parentElement;
-    if (!el || !row || typeof ResizeObserver === 'undefined') return;
-    const measure = () => setStacked(el.parentElement!.offsetWidth >= row.clientWidth - 2);
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setStacked(el.clientWidth < 280);
     measure();
-    const ro = new ResizeObserver(measure); ro.observe(row);
+    const ro = new ResizeObserver(measure); ro.observe(el);
     return () => ro.disconnect();
   }, []);
   const h = stacked ? 52 : 104;
   return (
     <div ref={ref} style={{ ...handWrap, borderTop: 'none', minHeight: h + 10 }} title={label} data-testid="opponent-hand">
       {hand.length === 0 && <span style={{ fontSize: 11, color: '#776', fontStyle: 'italic' }}>{label}</span>}
-      {hand.map((id, i) => {
-        const deck = deckOf(id);
-        return (
-          <div key={i} style={{ ...textCard, height: h, width: Math.round(h * 76 / 104), padding: 2, background: `repeating-linear-gradient(45deg, ${sideBg}, ${sideBg} 6px, #00000033 6px, #00000033 12px)`, justifyContent: 'center', alignItems: 'center', gap: 6, cursor: 'default', border: '2px solid #c9a24a88' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: deck === 'Character' ? FACE.character.bg : FACE.armyMuster.bg, borderRadius: 4, padding: '1px 4px', boxShadow: '0 1px 3px #000' }}>{stacked ? (deck === 'Character' ? 'Char' : 'Strat') : deck}</span>
-          </div>
-        );
-      })}
+      {hand.map((id, i) => <OpponentCardBack key={i} deck={deckOf(id)} side={opp} h={h} stacked={stacked} sideBg={sideBg} />)}
+    </div>
+  );
+}
+
+/** One face-down card: the deck's real back when the art is cached (player report
+ *  2p4h6f1u1j5u0d68), otherwise a drawn back in the side's colours. */
+function OpponentCardBack({ deck, side, h, stacked, sideBg }: { deck: string; side: Side; h: number; stacked: boolean; sideBg: string }) {
+  const art = useCardArt(backId(side, deck));
+  const w = Math.round(h * 76 / 104);
+  if (art) return <img src={art} alt={`${deck} card`} title={`${deck} card`} style={{ height: h, width: w, borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', userSelect: 'none' }} />;
+  return (
+    <div style={{ ...textCard, height: h, width: w, padding: 2, background: `repeating-linear-gradient(45deg, ${sideBg}, ${sideBg} 6px, #00000033 6px, #00000033 12px)`, justifyContent: 'center', alignItems: 'center', gap: 6, cursor: 'default', border: '2px solid #c9a24a88' }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: deck === 'Character' ? FACE.character.bg : FACE.armyMuster.bg, borderRadius: 4, padding: '1px 4px', boxShadow: '0 1px 3px #000' }}>{stacked ? (deck === 'Character' ? 'Char' : 'Strat') : deck}</span>
     </div>
   );
 }

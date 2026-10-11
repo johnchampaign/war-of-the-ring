@@ -113,8 +113,11 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   const boardArt = polyOnly ? null : art;
   // The border rings are a player setting (players disagree about them on the board
   // art, which prints its own borders — report 574c280b6j6t5b5d).
+  // "Only on the plain map" still outlines the hovered region itself in Image mode —
+  // only the dashed neighbour rings go (player report 0k016d4j0i1c3j12).
   const { reachRings } = useSettings();
-  const showRings = !!hoverId && (reachRings === 'on' || (reachRings === 'polygonOnly' && !boardArt));
+  const showRings = !!hoverId && reachRings !== 'off';
+  const showNeighbourRings = reachRings === 'on' || (reachRings === 'polygonOnly' && !boardArt);
 
   const regionEls = useMemo(() => regionIds.map((id) => {
     const poly = regionPolygon(id);
@@ -386,7 +389,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           {regionEls.map((e) => {
             if (!e) return null;
             const isHovered = e.id === hoverId;
-            if (!isHovered && !neighbours.has(e.id)) return null;
+            if (!isHovered && (!showNeighbourRings || !neighbours.has(e.id))) return null;
             // A functional highlight owns the region's outline — don't fight it.
             if (!isHovered && (hl.selected === e.id || hl.destinations?.has(e.id) || hl.sources?.has(e.id) || hl.activate?.has(e.id))) return null;
             const d = polyPath(e.poly);

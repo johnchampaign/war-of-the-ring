@@ -5,12 +5,12 @@
 // load-art flow in the Rebellion / Tyrants / A&A ports.
 import { useState } from 'react';
 import {
-  downloadAllArt, downloadBoardArt, clearArt, useArtLoaded, ART_SOURCE_NOTE,
+  downloadAllArt, downloadBoardArt, downloadBackArt, clearArt, useArtLoaded, ART_SOURCE_NOTE,
   TOTAL_CARD_COUNT, SHEET_COUNT, type DownloadProgress,
 } from './artCache';
 
 export function LoadArtPanel() {
-  const { loaded, meta, hasBoard } = useArtLoaded();
+  const { loaded, meta, hasBoard, hasBacks, ready } = useArtLoaded();
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState<DownloadProgress | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -24,6 +24,12 @@ export function LoadArtPanel() {
   const addBoard = async () => {
     setBusy(true); setErr(null);
     try { await downloadBoardArt(); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  };
+  const addBacks = async () => {
+    setBusy(true); setErr(null);
+    try { await downloadBackArt(); }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   };
@@ -46,6 +52,11 @@ export function LoadArtPanel() {
           {!hasBoard && (
             <button onClick={addBoard} disabled={busy} style={primary}>
               {busy ? 'Adding board map…' : 'Add board map (new)'}
+            </button>
+          )}
+          {ready && !hasBacks && (
+            <button onClick={addBacks} disabled={busy} style={primary}>
+              {busy ? 'Adding card backs…' : "Add card backs for the opponent's hand (new)"}
             </button>
           )}
           <button onClick={drop} disabled={busy} style={ghost}>Remove cached art</button>

@@ -22,11 +22,11 @@ export const DEFAULT_SETTINGS: Settings = { reachRings: 'on', sideLog: 'recent',
 export const SETTING_CHOICES: { [K in keyof Settings]: { label: string; hint: string; options: { value: Settings[K]; label: string }[] } } = {
   reachRings: {
     label: 'Border rings on hover',
-    hint: 'Dashed rings around every region that borders the one under the pointer — a region left unringed is behind an impassable border.',
+    hint: 'The region under the pointer is outlined in white, and every region bordering it gets a dashed ring — a region left unringed is behind an impassable border.',
     options: [
-      { value: 'on', label: 'Always' },
-      { value: 'polygonOnly', label: 'Only on the plain map (the board art shows the borders)' },
-      { value: 'off', label: 'Never' },
+      { value: 'on', label: 'Outline and border rings, on either map' },
+      { value: 'polygonOnly', label: 'Border rings only on the plain map (the board art shows its borders); the outline always' },
+      { value: 'off', label: 'No outline or rings' },
     ],
   },
   sideLog: {

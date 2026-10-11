@@ -8,7 +8,7 @@
 // order and could spend a different die than the one clicked. That is how a
 // Character-die army move became an ARMY-die move, which then offered the Army
 // die's second move (player report: "I only get 1 move when using a [C]", p.27).
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useGame, ChatPanel } from 'digital-boardgame-framework/client';
 import type { GameClientApi, LogTime } from '../online/gameClient';
 import type { GameState, RegionId, Side, DieFace, Nation } from '../engine/types';
@@ -106,6 +106,20 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [die, setDie] = useState<DieFace | null>(null); // the die face the player selected in the tray
   const [diceStatsOpen, setDiceStatsOpen] = useState(false); // the end-of-game dice statistics
   const settings = useSettings(); // the player's display settings (⚙)
+  // Politics sits beside the status chips when the side column has room for both
+  // (430 + 240), otherwise at the top of the inspector column (report 3i2j21042q3v2g36).
+  const sideRef = useRef<HTMLDivElement>(null);
+  const [politicsUp, setPoliticsUp] = useState(true);
+  useLayoutEffect(() => {
+    const el = sideRef.current;
+    if (!el) return;
+    const measure = () => setPoliticsUp(el.clientWidth >= 670); // the chips' 430 (their rows' width) + Politics at 240
+    measure(); // now, not only when the observer first reports (it can be late)
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [!!g.view]); // the column exists once the game has loaded
   const me: Side = g.you === 'shadow' ? 'shadow' : 'fp';
   // Move-receipt times for the game log (feature F): re-fetched whenever the log
   // grows. Best-effort — a failed fetch just leaves the log undated.
@@ -1141,35 +1155,32 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             </div>
           </div>
         </div>
-        <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          {/* The status bar lives at the top of the right column (may wrap to several
-              rows). The Undo button rides along at its right end (after Elven Rings). */}
-          <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} onHoverCard={onHoverCard} trailing={statusTrailing} elvenActions={elvenActions} onAction={(a) => void submit(a)} />
-          {/* Dice pool and Politics share one row when there's width; when the column
-              is narrow they WRAP (Politics drops below the dice, each full-width) so the
-              Politics reinforcement pips can't run off the right edge (report 6q0s). */}
-          <div style={{ flexShrink: 0, maxHeight: '42%', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', minHeight: 0, overflowY: 'auto', borderBottom: '1px solid #2a2418' }}>
-            {/* The OPPONENT's hand (card backs) and dice sit up here, above the actions;
-                yours sit below them, over your hand — so the two pools are no longer
-                lumped together (player report 0e4z5e1m4z4p3t32). */}
-            <div style={{ flex: '1 1 200px', minWidth: 0, overflow: 'auto', background: '#1a160f' }}>
-              <OpponentHand view={g.view} you={g.you as Side} />
-              <DiceTray view={g.view} you={g.you as Side} only="opp" />
+        <div ref={sideRef} style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {/* Top: the status chips, with Politics beside them where the column is wide
+              enough (it wraps below them otherwise). Politics used to share a block with
+              the opponent's dice and the cards in play, and that block's height set how
+              much room the actions had left (player report 3i2j21042q3v2g36). */}
+          <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid #2a2418' }}>
+            <div style={{ flex: politicsUp ? '0 0 430px' : '1 1 auto', minWidth: 0 }}>
+              <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} onHoverCard={onHoverCard} trailing={statusTrailing} elvenActions={elvenActions} onAction={(a) => void submit(a)} />
             </div>
-            <div style={{ flex: '1 1 270px', minWidth: 0, overflow: 'auto', borderLeft: '1px solid #2a2418' }}>
-              <PoliticsPanel view={g.view} />
-              {/* Cards in play belong with the board state, not wedged against the
-                  player's hand — they are not yours to play and they were crowding out
-                  the cards that are (player report 572i6e714m1d2j3t). */}
-              <TabledStrip view={g.view} onHoverCard={onHoverCard} />
-            </div>
-          </div>
+            {politicsUp && (
+              <div style={{ flex: '1 1 0', minWidth: 0, borderLeft: '1px solid #2a2418', background: '#15110b' }}>
+                <PoliticsPanel view={g.view} />
+              </div>
+            )}
           </div>
           {/* Lower area: action buttons + hand on the LEFT, the big enlarge/inspect
               area filling the RIGHT (it takes all the room that's left there). */}
           <div style={{ display: 'flex', flex: '1 1 auto', minHeight: 0, borderTop: '1px solid #2a2418' }}>
             <div style={{ flex: '0 0 44%', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              {/* A mirror: the OPPONENT's hand (card backs) and dice above the actions,
+                  yours below them — the same column, so neither shifts the other
+                  (player reports 0e4z5e1m4z4p3t32, 3i2j21042q3v2g36). */}
+              <div style={{ flexShrink: 0, background: '#1a160f', borderBottom: '1px solid #2a2418' }}>
+                <OpponentHand view={g.view} you={g.you as Side} />
+                <DiceTray view={g.view} you={g.you as Side} only="opp" />
+              </div>
               {/* Action buttons (compact — half height). */}
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
                 <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardHints={boardHints} blocked={blockedPanel} selectedDie={activeDie} />
@@ -1203,7 +1214,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             </div>
             {/* The enlarge/inspect area — fills the whole right side of the lower area
                 (enlarged cards & board territories). The Report / Log buttons float over it. */}
-            <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418', minHeight: 0 }}>
+            <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #2a2418', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              {/* Cards in play belong with the board state, not wedged against the
+                  player's hand (player report 572i6e714m1d2j3t). They sit over the log, so
+                  when one appears it is the log that gives up the room, never the actions
+                  (player report 3i2j21042q3v2g36). */}
+              {/* A column too narrow for Politics beside the chips has it here instead:
+                  under the chips it took the actions' room (report 3i2j21042q3v2g36). */}
+              {!politicsUp && <div style={{ flexShrink: 0, maxHeight: '45%', overflowY: 'auto', borderBottom: '1px solid #2a2418' }}><PoliticsPanel view={g.view} /></div>}
+              <div style={{ flexShrink: 0 }}><TabledStrip view={g.view} onHoverCard={onHoverCard} /></div>
+              <div style={{ flex: 1, minHeight: 0 }}>
               {/* Blank while the Log pop-up is open: otherwise a lingering hover
                   shows here, dimmed behind the pop-up backdrop, beside the pop-up's
                   own bright preview — the "doubled (and flickering) card" report.
@@ -1225,6 +1245,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                     </div>
                   </div>
                 )}
+              </div>
             </div>
           </div>
         </div>

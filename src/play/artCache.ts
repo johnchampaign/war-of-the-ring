@@ -27,6 +27,21 @@ const CARDS: CardMeta[] = (eventCardsJson as { cards: any[] }).cards.map((c) => 
   id: c.id, sheetId: String(c.sheetId), region: c.region as RegionRect,
 }));
 const SHEETS = (assetUrlsJson as { sheets: Record<string, { url: string; w: number; h: number }> }).sheets;
+/** The four card BACKS, for the opponent's hand (player report 2p4h6f1u1j5u0d68). Each
+ *  deck's sheet carries its back in the bottom-right cell of the 9×5 grid — the same
+ *  sheets the cards come from, so the download fetches nothing extra. */
+const BACK_REGION: RegionRect = [0.888889, 0.8, 0.111111, 0.2];
+export const BACK_IDS = { fpCharacter: 'back:fp-character', fpStrategy: 'back:fp-strategy', shadowCharacter: 'back:shadow-character', shadowStrategy: 'back:shadow-strategy' } as const;
+const BACKS: CardMeta[] = [
+  { id: BACK_IDS.fpCharacter, sheetId: '7', region: BACK_REGION },
+  { id: BACK_IDS.fpStrategy, sheetId: '1941', region: BACK_REGION },
+  { id: BACK_IDS.shadowCharacter, sheetId: '1942', region: BACK_REGION },
+  { id: BACK_IDS.shadowStrategy, sheetId: '48', region: BACK_REGION },
+];
+/** The cached back for a side's deck. */
+export const backId = (side: 'fp' | 'shadow', deck: string): string =>
+  side === 'fp' ? (deck === 'Character' ? BACK_IDS.fpCharacter : BACK_IDS.fpStrategy)
+    : (deck === 'Character' ? BACK_IDS.shadowCharacter : BACK_IDS.shadowStrategy);
 
 export const TOTAL_CARD_COUNT = CARDS.length;
 /** Distinct Steam-CDN sheets we'd fetch (deduped). */
@@ -142,6 +157,11 @@ export async function downloadAllArt(onProgress?: (p: DownloadProgress) => void)
       await dbPut(card.id, out);
       cardsDone++;
     }
+    for (const back of BACKS.filter((b) => b.sheetId === sheetId)) {
+      const out = await cropToBlob(bmp, back.region);
+      totalBytes += out.size;
+      await dbPut(back.id, out);
+    }
     bmp.close();
     sheetsDone++;
     report('slicing');
@@ -180,6 +200,31 @@ export async function downloadBoardArt(): Promise<void> {
   await dbPut(BOARD_ID, blob);
   const meta = await dbGet<ArtMeta>(META_KEY);
   if (meta) await dbPut(META_KEY, { ...meta, totalBytes: meta.totalBytes + blob.size });
+  notifyArtChanged();
+}
+
+/** True once the card backs are cached (added after the first art release, so an
+ *  earlier download lacks them — the art panel then offers to add them). */
+export async function hasBackArt(): Promise<boolean> {
+  try { return !!(await dbGet<Blob>(BACK_IDS.shadowStrategy)) && !!(await dbGet<Blob>(BACK_IDS.fpCharacter)); } catch { return false; }
+}
+
+/** Fetch the four decks' sheets once more and cache just their backs. */
+export async function downloadBackArt(): Promise<void> {
+  let added = 0;
+  for (const back of BACKS) {
+    const sheet = SHEETS[back.sheetId];
+    if (!sheet) continue;
+    const resp = await fetch(sheet.url, { headers: { Accept: 'image/*' } });
+    if (!resp.ok) throw new Error(`Sheet ${back.sheetId} fetch failed: HTTP ${resp.status}`);
+    const bmp = await createImageBitmap(await resp.blob());
+    const out = await cropToBlob(bmp, back.region);
+    bmp.close();
+    await dbPut(back.id, out);
+    added += out.size;
+  }
+  const meta = await dbGet<ArtMeta>(META_KEY);
+  if (meta) await dbPut(META_KEY, { ...meta, totalBytes: meta.totalBytes + added });
   notifyArtChanged();
 }
 
@@ -257,7 +302,7 @@ export function useBoardArt(): string | null { return useCardArt(BOARD_ID); }
 const ART_EVENT = 'wotr-art-changed';
 export function notifyArtChanged(): void { window.dispatchEvent(new CustomEvent(ART_EVENT)); }
 
-export interface ArtState { loaded: boolean; meta: ArtMeta | null; hasBoard: boolean; ready: boolean }
+export interface ArtState { loaded: boolean; meta: ArtMeta | null; hasBoard: boolean; hasBacks?: boolean; ready: boolean }
 
 /** Mirror of the last settled cache state, in localStorage. Reading IndexedDB is
  *  async, so the very first paint knows nothing; without this the art panel drew
@@ -295,9 +340,10 @@ export function useArtLoaded(): ArtState {
       if (cancelled) return;
       if (meta) await preloadAllArt();
       const hasBoard = await hasBoardArt();
+      const hasBacks = await hasBackArt();
       if (cancelled) return;
       writeArtHint({ loaded: !!meta, meta, hasBoard });
-      setS({ loaded: !!meta, meta, hasBoard, ready: true });
+      setS({ loaded: !!meta, meta, hasBoard, hasBacks, ready: true });
     };
     refresh();
     const h = () => refresh();
