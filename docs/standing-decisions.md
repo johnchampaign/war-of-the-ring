@@ -27,6 +27,7 @@ otherwise leave it open as backlog. Add a line here whenever John makes a new ca
 | Board art: the download prompt stays (legal reasons). John won't seek permission for or pay for replacement art, but would include it as an option if someone provided it. | 2026-09-10 |
 | Sign-in: anonymous play stays; optional profile features are welcome but not scheduled. | 2026-09-10 |
 | Hover reach rings: left as they are (players disagree). | 2026-09-10 |
+| Abandoned ranked games forfeit after a period of inactivity: the idle human seat loses once a ranked game has had no move for 14 days (`functions/_lib/forfeit.ts`, daily from the reminder cron). Games already quiet before the rule started (last move before 2026-09-27) are grandfathered. | 2026-10-11 |
 
 ## What still genuinely needs John
 

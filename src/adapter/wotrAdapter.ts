@@ -7,6 +7,7 @@ import type { WotrAction, MoveSel } from './wotrAction';
 import {
   advance, consumeDie, passResolutionTurn, huntAllocationBounds, checkRingVictory,
 } from '../engine/phases';
+import { forfeit } from '../engine/victory';
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, MORDOR_ENTRANCES, fellowshipPath } from '../engine/fellowship';
 import { extraHunt, queueTakenAlive, wornWithSorrowOptions, resolveWornWithSorrow } from '../engine/hunt';
 import { log, logCardDraw, sideDoes } from '../engine/log';
@@ -1472,6 +1473,13 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // 4x501k6r1s450d64). Say what happened, not why we assume it happened.
       log(state, null, 'pass', `${sideDoes(actor, 'discard')} a die without using it`);
       passResolutionTurn(state, actor); break;
+    case 'forfeit': {
+      // Submitted by the scheduled sweep for the seat that has left a ranked game idle
+      // (dispatch has already checked it is that seat's turn). The game ends at once.
+      const who = actor === 'fp' ? 'Free Peoples' : 'Shadow';
+      forfeit(state, actor, `${who} forfeit — no move${action.days ? ` in ${action.days} days` : ''}`);
+      break;
+    }
     case 'pass':
       requirePhase(state, 'actionResolution');
       // Log the pass publicly (player report: "a player passing should be listed in

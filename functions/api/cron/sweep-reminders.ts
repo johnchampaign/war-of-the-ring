@@ -24,7 +24,11 @@
 //                                                  truncated. Also runs daily at IDLE_PRUNE_HOUR_UTC.
 //   POST /api/cron/sweep-reminders?prune=finished  framework pruneFinishedGames() only, budgeted;
 //                                                  re-call until truncated is false
-import { makeCronServer, pruneResolvedSnapshots, countSnapshots, ageOutGamelogs, type Env } from '../../_lib/server';
+//   POST /api/cron/sweep-reminders?forfeit=1       abandoned ranked games only: the idle human seat
+//                                                  forfeits after FORFEIT_IDLE_DAYS (4 per call; re-call
+//                                                  while remaining > 0; add &dry=1 to list without acting).
+//                                                  Also runs daily at FORFEIT_HOUR_UTC.
+import { makeCronServer, pruneResolvedSnapshots, countSnapshots, ageOutGamelogs, forfeitIdleRankedGames, type Env } from '../../_lib/server';
 
 // Nudge a seat only once it's been on the clock a good while — async PvP, not a
 // chess clock. The framework marks a turn reminded so it won't re-nag each sweep.
@@ -39,6 +43,9 @@ const PRUNE_HOUR_UTC = 4;
 // clears a backlog. On 2026-09-29, 707 idle games held ~half of all snapshots.
 const IDLE_PRUNE_HOUR_UTC = 5;
 const IDLE_DAYS = 30;
+// 06:00 UTC: abandoned ranked games forfeit (see forfeitIdleRankedGames). Its own hour,
+// for the same subrequest-budget reason as the prunes.
+const FORFEIT_HOUR_UTC = 6;
 // Game-log uploads (category *-gamelog) auto-resolve after this many days.
 const GAMELOG_MAX_AGE_DAYS = 30;
 
@@ -71,6 +78,13 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
       const t0 = Date.now();
       const aged = await ageOutGamelogs(env, GAMELOG_MAX_AGE_DAYS);
       return json({ ok: true, mode: 'gamelogs', ms: Date.now() - t0, agedOutGamelogs: aged.count, ...(aged.error ? { ageOutError: aged.error } : {}) });
+    }
+
+    // ?forfeit=1 — abandoned ranked games only (manual run / backlog).
+    if (url.searchParams.get('forfeit')) {
+      const t0 = Date.now();
+      const r = await forfeitIdleRankedGames(env, { dryRun: !!url.searchParams.get('dry') });
+      return json({ ok: true, mode: 'forfeit', ms: Date.now() - t0, ...r });
     }
 
     const server = makeCronServer(env);
@@ -114,14 +128,24 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
       } catch (e) { idle = { error: (e as Error).message ?? String(e) }; }   // never blocks the sweep
     }
 
+    // Daily: abandoned ranked games forfeit, before the sweep (subrequest budget).
+    const forfeitDue = new Date().getUTCHours() === FORFEIT_HOUR_UTC;
+    let forfeits: { forfeited?: number; remaining?: number; error?: string } = {};
+    if (forfeitDue) {
+      try {
+        const r = await forfeitIdleRankedGames(env);
+        forfeits = { forfeited: r.forfeited.length, remaining: r.remaining, ...(r.errors.length ? { error: r.errors[0] } : {}) };
+      } catch (e) { forfeits = { error: (e as Error).message ?? String(e) }; }   // never blocks the sweep
+    }
+
     const t0 = Date.now();
     const result = await server.sweepTurnReminders({ olderThanMs: OLDER_THAN_MS, budgetMs: SWEEP_BUDGET_MS });
     const sweepMs = Date.now() - t0;
     // Visible via `wrangler pages deployment tail` — which half of a run is slow.
-    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs, pruneDue, ...result, prunedSnapshots: prune.count, pruneError: prune.error, agedOutGamelogs: aged.count, ageOutError: aged.error, ...(idleDue ? { idleTrim: idle } : {}) }));
+    console.log(JSON.stringify({ cron: 'sweep-reminders', sweepMs, pruneDue, ...result, prunedSnapshots: prune.count, pruneError: prune.error, agedOutGamelogs: aged.count, ageOutError: aged.error, ...(idleDue ? { idleTrim: idle } : {}), ...(forfeitDue ? { forfeits } : {}) }));
     return json({ ok: true, emailsConfigured: !!env.RESEND_API_KEY, sweepMs, prunedSnapshots: prune.count,
       ...(prune.error ? { pruneError: prune.error } : {}), agedOutGamelogs: aged.count,
-      ...(aged.error ? { ageOutError: aged.error } : {}), ...(idleDue ? { idleTrim: idle } : {}), ...result });
+      ...(aged.error ? { ageOutError: aged.error } : {}), ...(idleDue ? { idleTrim: idle } : {}), ...(forfeitDue ? { forfeits } : {}), ...result });
   } catch (e) {
     const msg = (e as Error).message ?? 'error';
     return json({ error: msg }, /not configured/i.test(msg) ? 503 : 500);

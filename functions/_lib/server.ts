@@ -14,6 +14,8 @@ import { wotrAdapter } from '../../src/adapter/wotrAdapter';
 import { wotrControllers } from '../../src/ai/wotrControllers';
 import type { GameState } from '../../src/engine/types';
 import type { WotrAction } from '../../src/adapter/wotrAction';
+import { forfeitIdle, type ForfeitOpts, type ForfeitResult } from './forfeit';
+export { FORFEIT_IDLE_DAYS } from './forfeit';
 
 export interface Env {
   SUPABASE_URL: string;
@@ -227,4 +229,11 @@ export async function countSnapshots(env: Env): Promise<number | null> {
     const { count, error } = await supabase(env).from('dbf_snapshots').select('*', { count: 'exact', head: true });
     return error ? null : (count ?? null);
   } catch { return null; }
+}
+
+// ————— Abandoned ranked games: see ./forfeit.ts ————————————————————————————————
+/** The daily forfeit pass against the live store, through the request-path server (so
+ *  a forfeit is rated like any other ending). */
+export function forfeitIdleRankedGames(env: Env, opts: ForfeitOpts = {}): Promise<ForfeitResult> {
+  return forfeitIdle(makeServer(env), makeStore(env), opts);
 }

@@ -4,6 +4,17 @@
 import type { GameState, Side } from './types';
 import { log } from './log';
 
+/** A player abandons the game (no move for a long while): the other side wins. Ranked
+ *  games otherwise never ended, so walking away from a lost game cost nothing
+ *  (player report a05cialu8jn3as70; John, 2026-10-11). Not offered as a legal action —
+ *  the scheduled sweep submits it for the idle seat. */
+export function forfeit(state: GameState, side: Side, reason: string): void {
+  if (state.winner) return;
+  state.pendingChoice = null;
+  state.pendingCombat = null;
+  win(state, side === 'fp' ? 'shadow' : 'fp', reason);
+}
+
 function win(state: GameState, side: Side, reason: string): void {
   state.winner = side;
   state.winReason = reason;

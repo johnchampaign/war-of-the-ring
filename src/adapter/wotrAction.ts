@@ -65,6 +65,7 @@ export type WotrAction =
   | { kind: 'attack'; from: RegionId; to: RegionId; rearguard?: MoveSel; die?: DieFace }
   | { kind: 'skipDie'; face: DieFace } // discard a die, no effect
   | { kind: 'pass' }             // yield to opponent, no die spent
+  | { kind: 'forfeit'; days?: number } // the idle seat concedes (scheduled sweep only; never in legalActions)
   // Interactive combat sub-machine (resolving a PendingChoice).
   | { kind: 'playCombatCard'; cardId: string | null } // play a combat card (or none)
   | { kind: 'chooseCasualties'; plan: 'regularsFirst' | 'elitesFirst' } // batch plan — Return to Valinor (multi-region), and legacy saves

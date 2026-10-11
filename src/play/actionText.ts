@@ -126,6 +126,7 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     case 'attack': return a.from === a.to ? `⚔ Assault the siege at ${rName(a.to)}` : `Attack ${rName(a.to)} (from ${rName(a.from)})`;
     case 'skipDie': return `Discard ${aFace(a.face)} die`;
     case 'pass': return 'Pass';
+    case 'forfeit': return 'Forfeit the game';
     case 'playCombatCard': return a.cardId ? combatTitle(a.cardId) : 'No combat card';
     // The bare action (no `back`) is the button that OPENS the split picker, so it
     // must not promise "the whole Army forward" — that reads as a decision already
