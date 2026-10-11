@@ -14,7 +14,7 @@ import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf, characterDef, sideOfNation, characterSide } from '../engine/data';
-import { unitCount, forceUnitCount, STACKING_LIMIT, splitBlockReason, fellowshipRegion } from '../engine/armies';
+import { unitCount, forceUnitCount, STACKING_LIMIT, splitBlockReason, fellowshipRegion, armySide } from '../engine/armies';
 import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
 import { cardSplitBlockReason } from '../engine/handlers/index';
@@ -1673,6 +1673,17 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
       const rouse = owner === 'fp' && a.companion !== 'nazgul' && separationActivates(state, a.companion as never, a.region)
         && settlementCtrl(state, a.region) !== 'shadow' ? 40 : 0;
       return 110 + rouse - (target ? dist(a.region, target) : 0);
+    }
+    // Cruel Weather blows the Fellowship one region: AWAY from Mordor, so its next
+    // moves are spent walking back. It used to fall through to the recruit scoring
+    // below (closest to the army campaign target) and pushed it from Hollin into
+    // Moria (player report 4t142j4z4p205c20). A Nazgûl / Shadow Army already there
+    // breaks ties (the Hunt re-roll).
+    if (a.card === 'sh-char-10' && a.region) {
+      const away = Math.min(...MORDOR_ENTRANCES.map((e) => dist(a.region!, e)));
+      const r = state.regions[a.region]!;
+      const hunters = r.nazgul > 0 || r.characters.includes('witch-king') || armySide(state, a.region as RegionId) === 'shadow' ? 0.5 : 0;
+      return 50 + away + hunters;
     }
     if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
     if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;

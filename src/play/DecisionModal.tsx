@@ -192,7 +192,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
               style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
                 background: undo.foreknowledge ? '#4a3a1a' : '#2c3a2c', color: undo.foreknowledge ? '#ffe08a' : '#cfe6c0',
                 border: `1px solid ${undo.foreknowledge ? '#7a5f24' : '#3a5a3a'}` }}>
-              ↶ Undo{undo.foreknowledge ? ' (reveals info)' : ''}
+              ↶ Undo
             </button>
           </div>
         )}

@@ -921,12 +921,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Undo button lives inline in the status bar (to the right of the Elven Rings).
   const undoButton = undoCap ? (
     <button onClick={onUndoClick} disabled={!undoCap.canUndo}
-      title={undoCap.reason ?? (undoCap.canUndo ? 'Undo your last action' : 'Nothing to undo')}
+      title={undoCap.reason ?? (undoCap.canUndo ? (undoCap.foreknowledge ? 'Undo back past a random outcome you have seen (recorded)' : 'Undo your last action') : 'Nothing to undo')}
       style={{ padding: '3px 10px', fontSize: 12, fontWeight: 600, borderRadius: 10, whiteSpace: 'nowrap', cursor: undoCap.canUndo ? 'pointer' : 'default',
         background: undoCap.canUndo ? (undoCap.foreknowledge ? '#4a3a1a' : '#2c3a2c') : '#231f18',
         color: undoCap.canUndo ? (undoCap.foreknowledge ? '#ffe08a' : '#cfe6c0') : '#776',
         border: `1px solid ${undoCap.canUndo ? (undoCap.foreknowledge ? '#7a5f24' : '#3a5a3a') : '#3a342a'}` }}>
-      ↶ Undo{undoCap.canUndo && undoCap.foreknowledge ? ' (reveals info)' : ''}
+      {/* Static label: the colour + confirm dialog flag a revealing undo; a longer
+          label shifted the bar (player report 3851673g6s3j5t29). */}
+      ↶ Undo
     </button>
   ) : null;
   // Status-bar trailing controls: Undo + Lobby. Kept in the bar's flow (not a fixed
@@ -1173,7 +1175,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           {/* Lower area: action buttons + hand on the LEFT, the big enlarge/inspect
               area filling the RIGHT (it takes all the room that's left there). */}
           <div style={{ display: 'flex', flex: '1 1 auto', minHeight: 0, borderTop: '1px solid #2a2418' }}>
-            <div style={{ flex: '0 0 44%', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <div style={{ flex: '0 0 45%', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               {/* A mirror: the OPPONENT's hand (card backs) and dice above the actions,
                   yours below them — the same column, so neither shifts the other
                   (player reports 0e4z5e1m4z4p3t32, 3i2j21042q3v2g36). */}

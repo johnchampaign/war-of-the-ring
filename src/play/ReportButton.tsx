@@ -46,11 +46,14 @@ export function ReportButton({ report, clientBuild, style }: {
   // report 1f176r151s725a01).
   const close = () => { setOpen(false); setSentId(null); setErr(null); };
 
-  if (!open) {
-    return <button onClick={() => setOpen(true)} style={{ ...fab, ...style }} title="Report a problem or share feedback">⚑ Report</button>;
-  }
+  // The button stays rendered while the dialog is open: it used to vanish on click,
+  // shifting the status bar under the dialog (player report 5o3m2h3k565d641q).
+  const button = <button onClick={() => setOpen(true)} style={{ ...fab, ...style }} title="Report a problem or share feedback">⚑ Report</button>;
+  if (!open) return button;
 
   return (
+    <>
+    {button}
     <div style={backdrop} onClick={close}>
       <div style={modal} onClick={(e) => e.stopPropagation()}>
         {sentId ? (
@@ -85,6 +88,7 @@ export function ReportButton({ report, clientBuild, style }: {
         )}
       </div>
     </div>
+    </>
   );
 }
 
