@@ -55,7 +55,10 @@ export function HuntTileFace({ draw, size = 58, caption: showCaption = true }: {
       }}>
         <span style={{ fontSize: Math.round(size * (num ? 0.48 : 0.45)), fontWeight: 800, color: ink, fontFamily: 'Georgia, "Times New Roman", serif', textShadow: '0 1px 0 #fff4' }}>{center}</span>
         {draw.reveal && <span title="Reveals the Fellowship" style={{ position: 'absolute', top: -6, right: -6, lineHeight: 0 }}><RevealedDot size={Math.max(10, Math.round(size / 4))} /></span>}
-        {draw.stop && <span title="Stops the Fellowship" style={{ position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)', fontSize: 9, fontWeight: 700, background: '#a83232', color: '#fff', borderRadius: 5, padding: '1px 5px', letterSpacing: 0.5 }}>STOP</span>}
+        {/* The banner scales with the token, so a small tile in the Hunt tiles
+            dropdown looks like the full-size one instead of wrapping to a vertical
+            S-T-O-P over the face (player report 2s1w5x393j4b2914). */}
+        {draw.stop && <span title="Stops the Fellowship" style={{ position: 'absolute', bottom: -Math.round(size * 0.14), left: '50%', transform: 'translateX(-50%)', fontSize: Math.max(6, Math.round(size * 0.155)), lineHeight: 1.2, whiteSpace: 'nowrap', fontWeight: 700, background: '#a83232', color: '#fff', borderRadius: Math.round(size / 12), padding: `${size >= 48 ? 1 : 0}px ${Math.max(2, Math.round(size * 0.086))}px`, letterSpacing: size >= 48 ? 0.5 : 0.2 }}>STOP</span>}
       </div>
       {showCaption && caption && <span style={{ fontSize: 11, color: '#cbbf9a' }}>{caption}</span>}
     </div>

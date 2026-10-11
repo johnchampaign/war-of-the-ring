@@ -48,7 +48,7 @@ function tileLabel(t: HuntTileDef | undefined): string {
 // deducible from the fixed tile mix minus the drawn ones. The tiles are drawn as the
 // same tokens the Hunt popup shows (HuntTileFace, smaller) so the two stay in sync
 // (player report 3f146d6j6q510u43).
-type TileEntry = { key: string; tile: HuntTileDef; title: string; n?: number };
+type TileEntry = { key: string; tile: HuntTileDef; title: string };
 const standardEntry = (i: number): TileEntry | null => {
   const t = STANDARD_TILE_LIST[i];
   return t ? { key: `s:${tileLabel(t)}`, tile: t, title: tileLabel(t) } : null;
@@ -57,16 +57,16 @@ const specialEntry = (id: string): TileEntry | null => {
   const t = SPECIAL_TILE_BY_CARD[id];
   return t ? { key: `c:${id}`, tile: t, title: `${tileLabel(t)} (${EVENT_BY_ID[id]?.name ?? id})` } : null;
 };
+// Every tile is its own token, with no caption under it: the card a special tile
+// came in on is in its tooltip, and captions or "×2" counts pushed the strip out of
+// line (player report 2s1w5x393j4b2914). The bottom padding leaves room for a STOP
+// banner hanging off a tile's lower edge.
 function TileStrip({ tiles }: { tiles: TileEntry[] }) {
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '10px 2px', padding: '4px 2px 6px' }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '8px 2px', padding: '4px 2px 8px' }}>
       {tiles.map((e, i) => (
-        <span key={`${e.key}:${i}`} title={e.title} data-testid="hunt-tile"
-          style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          {/* A special tile keeps its caption (the card that brought it in); the
-              standard faces say it all. */}
-          <HuntTileFace draw={tileAsDraw(e.tile)} size={34} caption={!!e.tile.introducedBy} />
-          {e.n !== undefined && e.n > 1 && <span style={{ fontSize: 11, color: '#cbbf9a', marginTop: e.tile.stop ? 6 : 0 }}>×{e.n}</span>}
+        <span key={`${e.key}:${i}`} title={e.title} data-testid="hunt-tile" style={{ display: 'inline-flex' }}>
+          <HuntTileFace draw={tileAsDraw(e.tile)} size={34} caption={false} />
         </span>
       ))}
     </div>
@@ -85,9 +85,9 @@ function HuntTilesBrowser({ view }: { view: GameState }) {
   // is comprised of"). Grouped by face, most common first. Not the order: that is the
   // shuffle, and it stays hidden.
   const bagTiles = [...(h.pool ?? []).map(standardEntry), ...(h.specialsInPool ?? []).map(specialEntry)].filter(present);
-  const groups = new Map<string, TileEntry>();
-  for (const e of bagTiles) { const g = groups.get(e.key); if (g) g.n! += 1; else groups.set(e.key, { ...e, n: 1 }); }
-  const bag = [...groups.values()].sort((a, b) => b.n! - a.n! || a.title.localeCompare(b.title));
+  const count = new Map<string, number>();
+  for (const e of bagTiles) count.set(e.key, (count.get(e.key) ?? 0) + 1);
+  const bag = [...bagTiles].sort((a, b) => count.get(b.key)! - count.get(a.key)! || a.title.localeCompare(b.title));
   const head: React.CSSProperties = { fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5 };
   return (
     <span style={{ position: 'relative' }}>

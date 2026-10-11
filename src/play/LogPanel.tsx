@@ -99,7 +99,7 @@ export function LogPanel({ view, times, onHoverCard, recentTurns }: {
       <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, padding: '4px 8px 2px', flexShrink: 0 }}>
         Game log <span style={{ textTransform: 'none', letterSpacing: 0 }}>({recentTurns ? 'recent turns, ' : ''}newest first)</span>
       </div>
-      <div style={{ overflowY: 'auto', padding: '0 8px 6px', fontFamily: 'system-ui' }}>
+      <div className="wotr-log" style={{ overflowY: 'auto', padding: '0 8px 6px', fontFamily: 'system-ui' }}>
         {newestFirst.length === 0
           ? <div style={{ fontSize: 12, color: '#776' }}>No events yet.</div>
           : newestFirst.map((e, i) => {

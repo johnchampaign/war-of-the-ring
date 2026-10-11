@@ -189,11 +189,12 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
   // a black strip in beside the side panel, where it blended into the UI (report
   // 27186l5t0j6k4134). Vertical slack is deliberately left unclamped — the black band
   // above/below is what lets the northern and southern border regions be centred.
+  // Zoomed in, the 15% slack was a sliver, so the printed board past the crop's edges
+  // (the far west, the strip east of Mordor) could never be panned to (player report
+  // 6m525o2y0m3c3n4x): horizontally the limit is now the whole board image.
   const clampVb = (v: { x: number; y: number; w: number; h: number }) => {
     const w = Math.min(CROP.w, Math.max(CROP.w / 8, v.w)), h = w * ASPECT;
-    const minX = Math.max(CROP.x - w * 0.15, 0);
-    const maxX = Math.max(minX, Math.min(CROP.x + CROP.w - w * 0.85, W - w));
-    return { w, h, x: Math.min(Math.max(v.x, minX), maxX), y: Math.min(Math.max(v.y, CROP.y - h * 0.15), CROP.y + CROP.h - h * 0.85) };
+    return { w, h, x: Math.min(Math.max(v.x, 0), Math.max(0, W - w)), y: Math.min(Math.max(v.y, CROP.y - h * 0.15), CROP.y + CROP.h - h * 0.85) };
   };
   const zoomAt = useCallback((px: number, py: number, factor: number) => {
     setVb((cur) => {

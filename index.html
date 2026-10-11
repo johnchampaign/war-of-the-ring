@@ -11,7 +11,12 @@
          than to 100vh: in an online game the sign-in bar sits above it, and a 100vh
          page under a 34px bar made the document 100vh+34px tall -> both scrollbars
          and the board pushed off the bottom (player report 2t2n). -->
-    <style>html, body, #root { margin: 0; padding: 0; height: 100%; }</style>
+    <!-- The arrow, not the text I-beam, everywhere except where you type or read
+         the game log: an I-beam over a greyed-out die or a label read as "this is
+         text" (player report 4z634n6q4m4i4y5h). Text can still be selected. -->
+    <style>html, body, #root { margin: 0; padding: 0; height: 100%; }
+      body { cursor: default; }
+      input, textarea, [contenteditable], .wotr-log { cursor: auto; }</style>
   </head>
   <body>
     <div id="root"></div>
