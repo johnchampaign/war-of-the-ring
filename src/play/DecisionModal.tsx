@@ -125,7 +125,6 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
     huntRedraw: 'fp-char-05', wornDiscard: 'sh-char-15', lureChoice: 'sh-char-13', nazgulStrike: 'sh-char-08b' };
   const eventCard = choice?.kind === 'eventTarget' ? (choice.data as { card?: string } | undefined)?.card
     : choice ? ((choice.data as { card?: string } | undefined)?.card ?? CHOICE_CARD[choice.kind]) : undefined;
-  const combatCard = pc ? revealedCard(pc.attacker === you ? pc.attackerCard ?? pc.defenderCard : pc.defenderCard ?? pc.attackerCard) : null;
   // A retreat DESTINATION is picked on the map (the highlighted regions), not from a
   // list of buttons — the binary Retreat-or-stand choice above it stays here (player
   // report 0f3003342g666741). The modal keeps its frame so the battle context is
@@ -142,7 +141,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
   return (
     <div style={backdrop}>
       <div style={modal}>
-        {pc && <CombatHeader pc={pc} view={view} />}
+        {pc && <CombatHeader pc={pc} view={view} onHover={setHoverCard} />}
         {/* The card roll this question follows from (Dreadful Spells, Return to Valinor…). */}
         {context && context.length > 0 && (
           <div data-testid="decision-context" style={{ background: '#2a2418', border: '1px solid #5a4a2a', borderRadius: 6, padding: '6px 9px', margin: '8px 0 0', fontSize: 13, color: '#e8dcc0' }}>
@@ -176,11 +175,11 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
               {decisions.map((a, i) => <DecisionButton key={i} action={a} disabled={busy} onClick={() => click(a)} onHover={setHoverCard} guide={view.fellowship.guide} label={eliteLabel(a, view)} />)}
             </div>
             {/* With nothing hovered, show the card the prompt is ABOUT: the Event card
-                being resolved, or — in a battle — the Combat card already revealed this
-                round, at a readable size (player reports 1w0z61380p6d094e,
-                1p5e543o6h015i0r: "there is no card to hover over", "the image is
-                hilariously tiny"). The attacker's card is shown when both are up. */}
-            <CardBlurb id={hoverCard ?? eventCard ?? combatCard} />
+                being resolved (player report 1w0z61380p6d094e). In a battle nothing
+                shows by default: hovering either revealed Combat card above (or a card
+                button) previews it here, as elsewhere — defaulting to one card left the
+                other side's unreadable (player report 4z0v2o4v2b3g4930). */}
+            <CardBlurb id={hoverCard ?? eventCard ?? null} />
           </>
         ) : (
           <div style={{ color: '#cc9', marginTop: 12 }}>Waiting for {sideName(pc ? (choice?.owner ?? pc.attacker) : you)} to decide…</div>
@@ -201,7 +200,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
   );
 }
 
-function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']>; view: GameState }) {
+function CombatHeader({ pc, view, onHover }: { pc: NonNullable<GameState['pendingCombat']>; view: GameState; onHover?: (id: string | null) => void }) {
   // Whose figures are where: EITHER side can be the one in the siege box. On an
   // assault the boxed side is the defending garrison; on a SORTIE (p.32) it is the
   // attacker, and `from === to`, so reading the region for the attacker showed the
@@ -256,8 +255,8 @@ function CombatHeader({ pc, view }: { pc: NonNullable<GameState['pendingCombat']
       )}
       {(pc.attackerCard || pc.defenderCard) && (
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-          {pc.attackerCard && <PlayedCard id={pc.attackerCard} who="Attacker" />}
-          {pc.defenderCard && <PlayedCard id={pc.defenderCard} who="Defender" />}
+          {pc.attackerCard && <PlayedCard id={pc.attackerCard} who="Attacker" onHover={onHover} />}
+          {pc.defenderCard && <PlayedCard id={pc.defenderCard} who="Defender" onHover={onHover} />}
         </div>
       )}
     </div>
@@ -292,19 +291,14 @@ function ArmySize({ label, force, side, view }: { label: string; force?: { units
   );
 }
 
-/** A Combat card id only if it is actually revealed: a card the opponent has declared
- *  but not yet turned face up reaches this seat as a 'hidden…' placeholder, and must
- *  never be resolved to a real card here (RAW p.29). */
-const revealedCard = (id: string | null | undefined): string | null =>
-  (!id || id === 'hidden' || id.startsWith('hidden')) ? null : id;
-
-function PlayedCard({ id, who }: { id: string; who: string }) {
+function PlayedCard({ id, who, onHover }: { id: string; who: string; onHover?: (id: string | null) => void }) {
   // 'hidden' = the opponent has DECLARED a Combat card but it's still face down
   // (RAW p.29: the declaration is open, the card's identity secret until reveal).
   const hidden = id === 'hidden' || id.startsWith('hidden');
   const art = useCardArt(hidden ? null : id);
+  const hov = !hidden && onHover ? { onMouseEnter: () => onHover(id), onMouseLeave: () => onHover(null) } : {};
   return (
-    <div style={{ fontSize: 11, color: '#aa9', textAlign: 'center' }}>
+    <div style={{ fontSize: 11, color: '#aa9', textAlign: 'center', cursor: hov.onMouseEnter ? 'help' : undefined }} {...hov}>
       <div>{who}: {hidden ? 'a Combat card (face down)' : cardName(id)}</div>
       {hidden
         ? <div style={{ height: 80, width: 56, borderRadius: 3, marginTop: 2, background: '#2a2418', border: '1px dashed #6a5f3a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8a7f5a', fontSize: 22 }}>?</div>

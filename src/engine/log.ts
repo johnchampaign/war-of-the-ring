@@ -27,20 +27,21 @@ export function andList(items: string[]): string {
 /** Every Corruption change is logged in one voice: "The Ring-bearers suffer N
  *  Corruption" / "The Ring-bearers shed N Corruption", with the running total
  *  (player report 5540322n1d113g2o — "shed" rather than the rulebook's "heal",
- *  which doesn't fit "Corruption" grammatically). Applies the clamped change, logs
+ *  which doesn't fit "Corruption" grammatically), as "(before → after)" (player
+ *  report 4b6h4x2t6e3a3e18). Applies the clamped change, logs
  *  only an actual change, and returns it. `why` is an optional trailing clause. */
 export function sufferCorruption(state: GameState, n: number, why = ''): number {
   const before = state.fellowship.corruption;
   state.fellowship.corruption = Math.min(12, before + Math.max(0, n));
   const d = state.fellowship.corruption - before;
-  if (d > 0) log(state, null, 'hunt', `The Ring-bearers suffer ${d} Corruption${why ? ` ${why}` : ''} (Total: ${state.fellowship.corruption})`);
+  if (d > 0) log(state, null, 'hunt', `The Ring-bearers suffer ${d} Corruption${why ? ` ${why}` : ''} (${before} → ${state.fellowship.corruption})`);
   return d;
 }
 export function shedCorruption(state: GameState, n: number, why = ''): number {
   const before = state.fellowship.corruption;
   state.fellowship.corruption = Math.max(0, before - Math.max(0, n));
   const d = before - state.fellowship.corruption;
-  if (d > 0) log(state, null, 'hunt', `The Ring-bearers shed ${d} Corruption${why ? ` ${why}` : ''} (Total: ${state.fellowship.corruption})`);
+  if (d > 0) log(state, null, 'hunt', `The Ring-bearers shed ${d} Corruption${why ? ` ${why}` : ''} (${before} → ${state.fellowship.corruption})`);
   return d;
 }
 

@@ -217,7 +217,7 @@ export function advance(state: GameState): void {
         const { min, max } = huntAllocationBounds(state);
         if (min === max) {
           state.hunt.box = min;
-          log(state, null, 'hunt', `Shadow allocates ${min} ${min === 1 ? 'die' : 'dice'} to the Hunt (the only allowed number)`);
+          log(state, null, 'hunt', `Shadow allocates ${min} ${min === 1 ? 'die' : 'dice'} to the Hunt`); // no "(the only allowed number)": other forced moves don't say so either (report 2h191a0k1k6n2c0m)
           state.phase = 'actionRoll';
           continue;
         }

@@ -27,7 +27,7 @@ console.log('\n=== one legal number of Hunt dice is allocated without asking ===
   advance(s);
   check('the Shadow is not asked', s.phase !== 'huntAllocation', s.phase);
   check('one die went to the Hunt Box', s.hunt.box === 1, String(s.hunt.box));
-  check('…and the log says so', s.log.some((e) => /allocates 1 die to the Hunt \(the only allowed number\)/.test(e.msg)));
+  check('…and the log says so', s.log.some((e) => /allocates 1 die to the Hunt$/.test(e.msg)));
   const t = startGame(createGame({ seed: 3 }));
   t.phase = 'huntAllocation'; t.pendingChoice = null;
   advance(t);

@@ -44,9 +44,12 @@ export function beginReveal(state: GameState): void {
   // has been successful" (p.39; player report 4y720k5x4n5t4755). The revealMove path
   // already counts its starting region; this is the no-Progress case.
   const loc = fs.location;
+  const hadHidden = fs.hidden;
   const wasHidden = fs.hidden && fs.mordor === null;
   const strongholds = wasHidden && heldShadowStronghold(state, loc) ? [loc] : [];
   fs.hidden = false; fs.progress = 0;
+  // The reveal gets its own line, as a declaration does (player report 1o362m1a3w0e5658).
+  if (hadHidden) logRevealed(state);
   if (state.pendingChoice) return;
   if (wasHidden && loc === 'moria' && state.cards.shadow.table.includes('sh-char-17')) {
     // The Balrog is asked first and carries the Stronghold tile with it, as on a reveal
@@ -200,10 +203,9 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // A 0 or a healing tile still ends in a "Hunt resolved" line, like every other
   // Hunt (player report 614c1h504g655n0z).
   if (damage <= 0) {
-    const wasHidden = fs.hidden;
     if (damage < 0) shedCorruption(state, -damage);
+    logHuntResolved(state, 0);
     if (reveal) beginReveal(state);
-    logHuntResolved(state, 0, reveal, wasHidden);
     return;
   }
 
@@ -220,9 +222,9 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
     damage = Math.max(0, damage - level);
     // The casualty may have made Gollum the Guide — re-ask whether the icon still reveals.
     if (damage === 0) {
-      const wasHidden = fs.hidden, rv = revealIcon && !gollumIgnoresReveal(state, numbered);
+      const rv = revealIcon && !gollumIgnoresReveal(state, numbered);
+      logHuntResolved(state, 0);
       if (rv) beginReveal(state);
-      logHuntResolved(state, 0, rv, wasHidden);
       return;
     }
   }
@@ -240,10 +242,9 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   if (fs.companions.length > 0 || huntReductionAvailable(state, reveal)) {
     state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, revealIcon, numbered, ...(opts.source ? { source: opts.source } : {}) } };
   } else {
-    const wasHidden = fs.hidden;
     fs.corruption = Math.min(12, fs.corruption + damage);
+    logHuntResolved(state, damage);
     if (reveal) beginReveal(state);
-    logHuntResolved(state, damage, reveal, wasHidden);
   }
 }
 
@@ -551,23 +552,26 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
   // revealed on purpose), so record what actually happened.
   const draws = state.hunt.draws;
   if (draws?.length) draws[draws.length - 1]!.reveal = reveal;
-  const wasHidden = fs.hidden;
   if (damage > 0) fs.corruption = Math.min(12, fs.corruption + damage);
+  logHuntResolved(state, damage);
   if (reveal) beginReveal(state); // may set the revealMove choice — after clearing this one
-  logHuntResolved(state, damage, reveal, wasHidden);
 }
 /** The closing line of every Hunt. Says what the remaining damage actually cost and
  *  the running total — a long Hunt (redraw → sacrifice → Guide ability) used to end
  *  on a bare "corruption N", so the player couldn't check the arithmetic (report) —
- *  in the shared Corruption voice (player report 5540322n1d113g2o). Reports the
- *  tile's OUTCOME, not the transient flag: when the reveal hands the FP a "where does
- *  the figure stand" choice, `hidden` is still true at this instant (player report:
- *  board and status said revealed, the log said hidden). */
-function logHuntResolved(state: GameState, damage: number, reveal: boolean, wasHidden: boolean): void {
-  const fs = state.fellowship;
+ *  in the shared Corruption voice (player report 5540322n1d113g2o). A reveal is no
+ *  longer a clause here: it gets its own "The Fellowship is revealed in X" line once
+ *  the figure has actually moved (player report 1o362m1a3w0e5658), so this is logged
+ *  BEFORE beginReveal. */
+function logHuntResolved(state: GameState, damage: number): void {
   const taken = damage > 0 ? `The Ring-bearers suffer ${damage} Corruption` : 'no Corruption';
-  const status = reveal && wasHidden ? 'is revealed' : reveal || !fs.hidden ? 'remains revealed' : 'remains hidden';
-  log(state, null, 'hunt', `Hunt resolved — ${taken} (Total: ${fs.corruption}); the Fellowship ${status}`);
+  log(state, null, 'hunt', `Hunt resolved — ${taken} (Total: ${state.fellowship.corruption})`);
+}
+/** "The Fellowship is revealed in X" — logged where the figure ends up (after the
+ *  revealMove, or in place), mirroring the declaration line. */
+export function logRevealed(state: GameState): void {
+  const fs = state.fellowship;
+  log(state, null, 'fellowship', fs.mordor !== null ? 'The Fellowship is revealed on the Mordor Track' : `The Fellowship is revealed in ${fs.location}`);
 }
 /** Log one −1 step of a Hunt-damage reduction, so the running total is legible. */
 function logReduce(state: GameState, from: number, why: string): void {

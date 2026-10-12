@@ -2,6 +2,7 @@
 // run-on). Your unspent dice are prominent; the opponent's are smaller. Action dice
 // are open information once rolled, so both pools are shown. Spent dice this round
 // (usedDice) are listed dimmed so you can see what you've already done.
+import { useState } from 'react';
 import type { GameState, Side, DieFace } from '../engine/types';
 import { poolSize } from '../engine/dice';
 
@@ -15,11 +16,11 @@ export const FACE: Record<string, { label: string; bg: string }> = {
   eye: { label: 'Eye', bg: '#a83232' },          // Shadow Eye → Hunt Box
 };
 
-function Chip({ face, dim, selected, dimmed, onClick }: { face: string; dim?: boolean; selected?: boolean; dimmed?: boolean; onClick?: () => void }) {
+function Chip({ face, dim, selected, onClick }: { face: string; dim?: boolean; selected?: boolean; onClick?: () => void }) {
   const f = FACE[face] ?? { label: face, bg: '#555' };
   const style: React.CSSProperties = {
     background: f.bg, color: '#fff', borderRadius: 5, padding: '3px 7px', fontSize: 12, fontWeight: 600,
-    opacity: dim ? 0.4 : dimmed ? 0.45 : 1, whiteSpace: 'nowrap',
+    opacity: dim ? 0.4 : 1, whiteSpace: 'nowrap',
     border: selected ? '2px solid #ffe08a' : onClick ? '2px solid transparent' : undefined,
     boxShadow: selected ? '0 0 6px #ffd86a' : undefined,
   };
@@ -33,6 +34,13 @@ function Pool({ title, dice, used, mine, selectedDie, onSelectDie, toRoll, inAct
   // page did; nothing else can be picked meanwhile (player report 6b0u2t1l4w535d1d).
   const spentAt = inAction ? used.lastIndexOf(inAction) : -1;
   const clickable = mine && !!onSelectDie && dice.length > 0 && spentAt < 0;
+  // Only the die actually clicked glows, not every die showing that face, and the
+  // others keep full colour: dimming them made them look like dice already spent
+  // this turn (player report 094l0v3y5s383718). The filter is still by face — any
+  // die of a face does the same things. A face chosen by the page rather than a click
+  // lights the first die showing it.
+  const [picked, setPicked] = useState(-1);
+  const glowAt = selectedDie ? (dice[picked] === selectedDie ? picked : dice.indexOf(selectedDie)) : -1;
   return (
     <div style={{ marginBottom: mine ? 6 : 0 }}>
       <div style={{ fontSize: 11, color: '#998', marginBottom: 3 }}>
@@ -46,8 +54,8 @@ function Pool({ title, dice, used, mine, selectedDie, onSelectDie, toRoll, inAct
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
         {dice.length === 0 && used.length === 0 && <span style={{ color: '#776', fontSize: 12, fontStyle: 'italic' }}>none yet</span>}
         {dice.map((d, i) => clickable
-          ? <Chip key={`u${i}`} face={d} selected={selectedDie === d} dimmed={!!selectedDie && selectedDie !== d} onClick={() => onSelectDie!(selectedDie === d ? null : d)} />
-          : <Chip key={`u${i}`} face={d} dimmed={spentAt >= 0} />)}
+          ? <Chip key={`u${i}`} face={d} selected={i === glowAt} onClick={() => { setPicked(i); onSelectDie!(i === glowAt ? null : d); }} />
+          : <Chip key={`u${i}`} face={d} />)}
         {used.map((d, i) => i === spentAt ? <Chip key={`s${i}`} face={d} selected /> : <Chip key={`s${i}`} face={d} dim />)}
       </div>
     </div>

@@ -9,7 +9,7 @@ import {
 } from '../engine/phases';
 import { forfeit } from '../engine/victory';
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, MORDOR_ENTRANCES, fellowshipPath } from '../engine/fellowship';
-import { extraHunt, queueTakenAlive, wornWithSorrowOptions, resolveWornWithSorrow } from '../engine/hunt';
+import { extraHunt, logRevealed, queueTakenAlive, wornWithSorrowOptions, resolveWornWithSorrow } from '../engine/hunt';
 import { log, logCardDraw, sideDoes } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, heldShadowStronghold, unitCount, STACKING_LIMIT,
@@ -1445,6 +1445,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       fs.progress = 0;
       fs.hidden = false;
       state.pendingChoice = null;
+      logRevealed(state); // its own line, where the figure ends up (player report 1o362m1a3w0e5658)
       // Revealing through a Shadow Stronghold draws a Hunt tile per such Stronghold on
       // the traced path (rulebook p.39), each drawn once the one before it resolves.
       const strongholds = traversed.filter((r) => heldShadowStronghold(state, r));
