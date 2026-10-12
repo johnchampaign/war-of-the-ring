@@ -14,7 +14,7 @@ import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf, characterDef, sideOfNation, characterSide } from '../engine/data';
-import { unitCount, forceUnitCount, STACKING_LIMIT, splitBlockReason, fellowshipRegion, armySide } from '../engine/armies';
+import { unitCount, forceUnitCount, forceLeadership, STACKING_LIMIT, splitBlockReason, fellowshipRegion, armySide, type Force } from '../engine/armies';
 import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
 import { cardSplitBlockReason } from '../engine/handlers/index';
@@ -1095,6 +1095,49 @@ function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction
   return 4;
 }
 
+/** Hits scored by `n` Combat dice hitting on `t`+, with up to `lead` misses re-rolled
+ *  on `rt`+ (a 1 always misses, a 6 always hits), as a distribution over 0..n. */
+function hitDistribution(n: number, t: number, lead: number, rt: number): number[] {
+  const p = (7 - Math.min(6, Math.max(2, t))) / 6, pr = (7 - Math.min(6, Math.max(2, rt))) / 6;
+  const binom = (k: number, q: number) => {
+    const d = [1];
+    for (let i = 0; i < k; i++) { d.push(0); for (let j = d.length - 1; j >= 0; j--) d[j] = d[j]! * (1 - q) + (j ? d[j - 1]! * q : 0); }
+    return d;
+  };
+  const out = new Array<number>(n + 1).fill(0), first = binom(n, p);
+  first.forEach((ph, h) => binom(Math.min(lead, n - h), pr).forEach((pr2, r) => { out[h + r]! += ph * pr2; }));
+  return out;
+}
+
+/** What a "both Armies add N" card (Deadly Strife, Desperate Battle) is worth to `side`
+ *  this round: the extra hits it lands on the enemy minus the extra hits it lets the
+ *  enemy land, each capped by what the other Army can absorb. The player who reported
+ *  the old "only with more dice" rule pointed out why both caps matter (report
+ *  3w0r36515c5d2q6w): a small Army's losses are bounded, so the bigger side's extra hits
+ *  go to waste while the small side's land in full; and the attacker hitting on 6
+ *  (a siege, or a City/Fortification's first round) gains more from the bonus than a
+ *  defender hitting on 5 once Leader re-rolls are counted. */
+function sharedBonusEdge(state: GameState, side: Side, mods: CombatMods): number {
+  const pc = state.pendingCombat!;
+  const force = (s: Side): Force => {
+    const region = s === pc.attacker ? pc.from : pc.to;
+    return pc.boxed === s ? state.regions[region]!.siegeBox! : state.regions[region]!;
+  };
+  const hp = (f: Force) => Object.values(f.units).reduce((t, u) => t + u!.regular + 2 * u!.elite, 0);
+  const landed = (s: Side, bonus: number) => {
+    const f = force(s), foe = force(s === 'fp' ? 'shadow' : 'fp');
+    const captains = s === 'fp' ? f.characters.filter((c) => SHARED_BONUS_CAPTAINS.has(c)).length : 0;
+    const n = Math.min(5, forceUnitCount(f) + captains);
+    const t = (s === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5) - bonus;
+    const cap = hp(foe);
+    return hitDistribution(n, t, Math.min(5, forceLeadership(state, f, s)), t).reduce((e, ph, h) => e + ph * Math.min(h, cap), 0);
+  };
+  const b = mods.rollBonus ?? 0, foe: Side = side === 'fp' ? 'shadow' : 'fp';
+  return (landed(side, b) - landed(side, 0)) - (landed(foe, b) - landed(foe, 0));
+}
+// "Captain of the West" Companions add a Combat die to a Free Peoples Army (combat.ts).
+const SHARED_BONUS_CAPTAINS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'aragorn']);
+
 function combatCardValue(m: CombatMods | null): number {
   if (!m) return 0;
   // NB the additional-attack cards (Sudden Strike / Charge / We Come to Kill) carry no
@@ -1143,27 +1186,16 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     case 'combatCard': {
       // Play the most valuable combat card, or none if nothing helps enough.
       let best: WotrAction = { kind: 'playCombatCard', cardId: null }, bestVal = 1.5;
-      // "Both Armies add N" (Deadly Strife, Desperate Battle) lifts the enemy's dice as
-      // much as ours, so it only pays for the side rolling MORE of them; the Shadow
-      // played Deadly Strife outnumbered and handed the Free Peoples the bigger share
-      // (player report u5johl1hyn1y7jck). Shadow only.
+      // "Both Armies add N" (Deadly Strife, Desperate Battle) helps the enemy too, so the
+      // Shadow plays one only when it gains more hits than it gives (sharedBonusEdge).
       const owner: Side = state.pendingChoice!.owner;
-      let diceEdge = 0;
-      if (owner === 'shadow' && pc) {
-        const units = (side: Side) => {
-          const region = side === pc.attacker ? pc.from : pc.to;
-          const box = pc.boxed === side ? state.regions[region]!.siegeBox : null;
-          return Math.min(5, box ? forceUnitCount(box) : unitCount(state, region));
-        };
-        diceEdge = units('shadow') - units('fp');
-      }
       for (const a of legal) {
         if (a.kind !== 'playCombatCard' || a.cardId == null) continue;
         // Balrog of Moria may also be discarded from the table for Durin's Bane. The AI
         // keeps it there for its Hunt use until that trade-off is measured (A/B).
         if (state.cards.shadow.table.includes(a.cardId) && !state.cards.shadow.hand.includes(a.cardId)) continue;
         const mods = combatModsFor(a.cardId);
-        if (owner === 'shadow' && pc && mods?.symmetricBonus && diceEdge <= 0) continue;
+        if (owner === 'shadow' && pc && mods?.symmetricBonus && sharedBonusEdge(state, owner, mods) <= 0) continue;
         const v = combatCardValue(mods);
         if (v > bestVal) { bestVal = v; best = a; }
       }
