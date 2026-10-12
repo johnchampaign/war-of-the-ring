@@ -237,7 +237,10 @@ export interface VariableCost {
 
 const VARIABLE_COST: Record<string, VariableCost> = {
   'Relentless Assault': { kind: 'selfHits', timing: 'preRoll', cap: 2, min: 0 },
-  'Dread and Despair': { kind: 'nazgulLeadership', timing: 'preRoll', cap: 99, min: 1 },
+  // The Almanac lets any amount be forfeited, but the Free Peoples roll at most 5 dice and
+  // never fewer than 1, so a 5th point can take no die away and only costs re-rolls:
+  // the choice runs 1 to 4 (player report 3b1u1m0p0g3b0x6i; docs/rules-spec.md).
+  'Dread and Despair': { kind: 'nazgulLeadership', timing: 'preRoll', cap: 4, min: 1 },
   'Onslaught': { kind: 'selfHits', timing: 'postCasualty', cap: 4, min: 0 },
 };
 

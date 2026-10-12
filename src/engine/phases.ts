@@ -184,13 +184,22 @@ export function advance(state: GameState): void {
     if (state.flags.actionEndDraw) {
       const d = state.flags.actionEndDraw;
       delete state.flags.actionEndDraw;
+      // An empty deck is not offered, and with nothing to draw there is no question
+      // to ask — it is logged instead (player report kf9x31vcjonyswly).
       if (d.palantir && palantirActive(state)) {
-        state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
-        return;
+        const decks = state.cards.shadow.draw;
+        if (decks.character.length || decks.strategy.length) {
+          state.pendingChoice = { owner: 'shadow', kind: 'bonusDraw', data: {} };
+          return;
+        }
+        log(state, null, 'event', 'The Palantír of Orthanc draws nothing — both Shadow Event decks are empty');
       }
       if (d.guideDeck && state.fellowship.guide === 'gandalf-grey') {
-        state.pendingChoice = { owner: 'fp', kind: 'guideDraw', data: { deck: d.guideDeck } };
-        return;
+        if (state.cards.fp.draw[d.guideDeck].length) {
+          state.pendingChoice = { owner: 'fp', kind: 'guideDraw', data: { deck: d.guideDeck } };
+          return;
+        }
+        log(state, null, 'event', `Gandalf the Grey (Guide) draws nothing — the Free Peoples ${d.guideDeck === 'character' ? 'Character' : 'Strategy'} deck is empty`);
       }
     }
     if (enforceHandLimit(state)) return;          // over 6 cards -> pause to discard (choice)

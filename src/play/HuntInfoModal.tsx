@@ -17,6 +17,7 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
   // The moving Fellowship's die joins the box only once its Hunt is over (p.41).
   const bonus = (view.hunt.fpDiceInBox ?? 0) - (view.hunt.fpDieEntering ? 1 : 0);
   const onMordor = fs.mordor !== null;
+  const mordorBox = onMordor ? box + Math.max(0, bonus) : box; // the Hunt Box's count as shown
   // The re-rolls are judged where the Ring-bearers FIGURE stands — its last known
   // position, which is public whether the Fellowship is hidden or revealed (its true
   // whereabouts live on the Progress track, not the map). So the concrete sources are
@@ -30,7 +31,10 @@ export function HuntInfoModal({ view, onClose }: { view: GameState; onClose: () 
         <div style={{ fontSize: 14, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>⊙ The Hunt for the Ring</div>
 
         <div style={box1}>
-          <Row k="Hunt Box" v={`${box} ${box === 1 ? 'die' : 'dice'}`} note={onMordor ? 'on the Mordor Track — see below' : `the Shadow rolls ${dice} (max 5) when the Fellowship moves`} />
+          {/* On the Mordor Track the Free Peoples dice count too — an Eye tile deals every
+              die in the box — so they are added in, as the overlay shows (report 0j41526j21585k3u). */}
+          <Row k="Hunt Box" v={`${mordorBox} ${mordorBox === 1 ? 'die' : 'dice'}`}
+            note={onMordor ? `${box} Eye + ${Math.max(0, bonus)} Free Peoples — an Eye tile deals ${mordorBox}` : `the Shadow rolls ${dice} (max 5) when the Fellowship moves`} />
           {/* No roll on the Mordor Track, so no bonus to add (player report 4g032640016e4q4g). */}
           {bonus > 0 && !onMordor && <Row k="Box bonus" v={`+${bonus}`} note="Free Peoples dice in the box — added to every Hunt die" />}
           <Row k="Progress" v={onMordor ? `Mordor ${fs.mordor}/5` : `${fs.progress} step${fs.progress === 1 ? '' : 's'}`} />

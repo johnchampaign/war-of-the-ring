@@ -1709,6 +1709,17 @@ export function combatStep(state: GameState): void {
             else dMods = { ...dMods, ownLeadershipPenalty: forfeit };
           }
         }
+        // Swarm of Bats: "If the Free Peoples player did not play a card, add 1 to all dice
+        // on your Leader re-roll" (Card Text Reference). Only the cancel half was modelled
+        // (player report 3f4x1u484q2c0z12).
+        {
+          const shCard = pc.attacker === 'shadow' ? pc.attackerCard : pc.defenderCard;
+          const fpCard = pc.attacker === 'fp' ? pc.attackerCard : pc.defenderCard;
+          if (shCard && !fpCard && EVENT_BY_ID[shCard]?.combat?.title === 'Swarm of Bats') {
+            if (pc.attacker === 'shadow') aMods = { ...aMods, rerollBonus: (aMods.rerollBonus ?? 0) + 1 };
+            else dMods = { ...dMods, rerollBonus: (dMods.rerollBonus ?? 0) + 1 };
+          }
+        }
         // A pre-combat retreat resolves first and ends the battle before the roll, so
         // the slower card never resolves — same "revealed but does nothing" treatment
         // as a cancelled card (player report: Scouts@1 vs Dread and Despair@3).

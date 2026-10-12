@@ -88,16 +88,6 @@ function ResolvingCard({ view, onHoverCard }: { view: GameState; onHoverCard: (i
   );
 }
 
-/** Where each Character that enters during the game may come in (the board hint shown
- *  while its entry is legal). */
-const ENTER_HINT: Record<string, string> = {
-  aragorn: 'Aragorn can enter play: Strider becomes Aragorn where he stands.',
-  'gandalf-white': 'Gandalf the White can enter play: in place of Gandalf the Grey if he is on the map, otherwise in Fangorn or any unconquered Elven Stronghold.',
-  saruman: 'Saruman can enter play in Orthanc.',
-  'witch-king': 'The Witch-king can enter play in any region with a Shadow Army that includes at least one Sauron unit.',
-  'mouth-of-sauron': 'The Mouth of Sauron can enter play in any unconquered Sauron Stronghold.',
-};
-
 export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: () => void }) {
   // Realtime move push when available (online); polling fallback otherwise.
   const g = useGame<GameState, WotrAction>(client as any, { subscribe: client.subscribeMoves });
@@ -595,10 +585,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     }
     // The Ents Awake: one Character card from the hand, free (player report 1q4m361n2s444f4d).
     if (g.view?.pendingChoice?.kind === 'freeCharEvent' && g.yourTurn) out.push('The Ents Awake: you may play a Character Event card from your hand now, without a die — click it in your hand, or "Done" to play none.');
-    // A Character that may come into play now, and where (player report
-    // 504u5o696f1g2x68) — the entry action itself is unchanged.
-    const entering = new Set(g.legalActions.flatMap((a) => a.kind === 'bringMinion' ? [a.minion] : a.kind === 'bringUpgrade' ? [a.which] : []));
-    for (const id of ['aragorn', 'gandalf-white', 'saruman', 'witch-king', 'mouth-of-sauron']) if (entering.has(id as never)) out.push(ENTER_HINT[id]!);
+    // No hint for bringing a Character into play: that is a side-panel action with nothing
+    // to do on the map first (player report 5b1q2u530o1u6u6a).
     if (cardRegionActs.length) {
       const card = cardRegionActs[0]!.card;
       const what = ({ 'sh-char-19': 'click the Free Peoples Army to strike', 'fp-str-06': 'click the Shadow Army to strike', 'fp-str-05': 'click the Shadow Army to strike',
@@ -1150,7 +1138,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                       ? `Declare the Fellowship: click a highlighted region to place it there (within ${g.view.fellowship.progress} region${g.view.fellowship.progress === 1 ? '' : 's'} of its last-known spot). Or "End the Fellowship phase" on the right.`
                       : charPick ? `Moving ${charPick.char === 'nazgul' ? 'the Nazgûl' : (charPick.group ?? [charPick.char]).map(charName).join(', ')} — click a highlighted region to move there (or click the piece again to cancel).`
                         : selected ? `Selected ${regionName(selected)} — click a highlighted region to move/attack (or click again to cancel).`
-                          : isArmyMove2 ? 'Second Army move — click a green Army to move it (a different Army), or “Done — no second Army move” on the right.'
+                          : isArmyMove2 ? 'Second Army move — click a green Army to move it (a different Army), or “Done” on the right.'
                             : null}
                 </div>
               )}

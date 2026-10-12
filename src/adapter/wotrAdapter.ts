@@ -292,7 +292,9 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return opts;
       }
       case 'bonusDraw':
-        return [{ kind: 'bonusDraw', deck: 'character' }, { kind: 'bonusDraw', deck: 'strategy' }, { kind: 'bonusDraw', deck: 'none' }];
+        // Only a deck with cards left is offered (player report kf9x31vcjonyswly).
+        return [...(['character', 'strategy'] as const).filter((d) => state.cards.shadow.draw[d].length > 0)
+          .map((deck) => ({ kind: 'bonusDraw' as const, deck })), { kind: 'bonusDraw', deck: 'none' }];
       case 'guideDraw':
         return [{ kind: 'guideDraw', draw: true }, { kind: 'guideDraw', draw: false }];
       case 'freeCharEvent': {

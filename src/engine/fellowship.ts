@@ -477,9 +477,19 @@ export function revealMoveBlockReason(state: GameState, to: RegionId): string | 
 export function beginSeparation(state: GameState, id: CharacterId): boolean {
   const fs = state.fellowship;
   if (fs.mordor !== null || !fs.companions.includes(id)) return false;
+  if (fs.sepGuide === undefined) fs.sepGuide = fs.guide; // the Guide before this group left
   fs.companions.splice(fs.companions.indexOf(id), 1);
   reassignGuide(state);
   return true;
+}
+
+/** "; Strider becomes the Guide" when the separation changed the Guide, else nothing —
+ *  a separation that leaves the Guide in place says nothing about him (report 5w1b265f0s302w0q). */
+function sepGuideNote(state: GameState): string {
+  const fs = state.fellowship;
+  const changed = fs.sepGuide !== undefined && fs.sepGuide !== fs.guide;
+  delete fs.sepGuide;
+  return changed ? `; ${guideLabel(fs.guide)} becomes the Guide` : '';
 }
 
 /** Separation ON THE MORDOR TRACK. Rulebook p.44: "Companions in the Fellowship can
@@ -516,7 +526,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
   // Army holding the open field (player report). `figureForce` picks the right one.
   figureForce(state, dest, 'fp').characters.push(id);
   // Logged before the Nation it rouses, so the log reads in order (report j59rj32xtre3q5g8).
-  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separates from the Fellowship and moves to ${dest}; ${guideLabel(fs.guide)} becomes the Guide`);
+  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separates from the Fellowship and moves to ${dest}${sepGuideNote(state)}`);
   const nations = activatableNations(id);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && nations.includes(dn) && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')) {
@@ -541,7 +551,7 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
 export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: RegionId): void {
   const fs = state.fellowship;
   for (const id of ids) { state.characters.inPlay[id] = dest; figureForce(state, dest, 'fp').characters.push(id); }
-  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} ${ids.length === 1 ? 'separates' : 'separate'} from the Fellowship and ${ids.length === 1 ? 'moves' : 'move'} to ${dest}; ${guideLabel(fs.guide)} becomes the Guide`);
+  log(state, null, 'fellowship', `${ids.map((id) => COMPANIONS[id]?.name ?? id).join(', ')} ${ids.length === 1 ? 'separates' : 'separate'} from the Fellowship and ${ids.length === 1 ? 'moves' : 'move'} to ${dest}${sepGuideNote(state)}`);
   const dn = REGIONS[dest]!.nation as Nation | null;
   if (dn && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')
     && ids.some((id) => activatableNations(id).includes(dn))) {

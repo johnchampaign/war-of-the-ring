@@ -63,11 +63,9 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   const finish = actions.find((a) => (a.kind === 'eventTarget' && a.done) || a.kind === 'charMove2'
     || (a.kind === 'armyMove2' && a.done) || (a.kind === 'recruitSecond' && a.done) || a.kind === 'skipFellowshipPhase'
     || a.kind === 'freeCharEvent');
-  const finishLabel = !finish ? '' : finish.kind === 'skipFellowshipPhase' ? 'End the Fellowship phase'
-    : finish.kind === 'freeCharEvent' ? 'Done — play no card'
-    : finish.kind === 'armyMove2' ? 'Done — no second Army move'
-    : finish.kind === 'recruitSecond' ? 'Done — no second figure'
-    : 'Done';
+  // Plain "Done": the player knows what they are in the middle of, and the board hint
+  // says it too (player report 1o2x3x6h5x510p68).
+  const finishLabel = !finish ? '' : finish.kind === 'skipFellowshipPhase' ? 'End the Fellowship phase' : 'Done';
   // "Discard a die" is a last-resort action and the engine offers one per distinct
   // face, so a full roll put up to five near-identical lines at the top of the list
   // (player report 1v1g2y5x095p2m1n). They collapse into ONE button with the same

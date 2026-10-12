@@ -84,6 +84,9 @@ export interface FellowshipState {
   companions: CharacterId[];
   /** Current Guide character id. */
   guide: CharacterId;
+  /** The Guide when a separation began, held until the separated Companions are placed
+   *  so the log names a new Guide only when the Guide really changed. */
+  sepGuide?: CharacterId;
   /** Mordor Track step 0..5 once on the track, else null. */
   mordor: number | null;
 }
