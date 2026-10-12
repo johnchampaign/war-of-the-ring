@@ -710,6 +710,11 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'moveFellowship':
       // On the Mordor Track, NOT moving costs +1 Corruption/turn — push every turn.
       if (fs.mordor !== null) return fs.corruption >= 11 ? 40 : 95;
+      // At a Mordor entrance the only way on is to enter Mordor in the next Fellowship
+      // phase, which zeroes Progress anyway: a move from here banks nothing and draws a
+      // Hunt. (Reports 5m626h2p5p42263l, 1s5v3a38234y721v: it moved on from the Morannon,
+      // was revealed, and the figure stepped back into Dagorlad.)
+      if (MORDOR_ENTRANCES.includes(fs.location)) return 1;
       // Pre-Mordor each move triggers a Hunt, so the push eases as Corruption climbs
       // and leans on declare-to-heal to bring it back down. But the old curve
       // (72 - 9x, floor 8) fell off a cliff: by Corruption 5 the Fellowship move lost
@@ -1084,15 +1089,16 @@ function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction
   // went anywhere worth going and simply stood where it was dropped (player report:
   // the FP "take a bunch of guys out of the fellowship anddddd forgot about them").
   // Give the two things a loose Companion is actually FOR real weight:
-  const def = REGIONS[a.to]!;
-  //  1. walking into a friendly City/Stronghold of a Nation that is not yet At War
-  //     rouses it (activateNation on entry) — the whole point of separating.
-  if ((def.settlement === 'City' || def.settlement === 'Stronghold')
-    && !!def.nation && FP.has(def.nation) && settlementCtrl(state, a.to) !== 'shadow'
-    && state.nations[def.nation]!.step > 0) return 34;
+  //  1. walking into a friendly City/Stronghold of a PASSIVE Nation he can rouse
+  //     activates it — the whole point of separating.
   //  2. joining one of our Armies adds its Leadership to every battle it fights.
-  if (armyHere(state, a.to, 'fp')) return 18;
-  return 4;
+  // Each counts only if the move GAINS it. Entering an already-active Nation's City,
+  // or walking from one Army to another, scored the same, so Gandalf the White
+  // wandered for nothing (report 0a3n2s6h3m2p2d3x: "moved Gandalf the White three
+  // times in a row").
+  if ((a.chars ?? [a.char]).some((c) => separationActivates(state, c, a.to))) return 34;
+  if (armyHere(state, a.to, 'fp') && !armyHere(state, a.from, 'fp')) return 18;
+  return 2;
 }
 
 /** Hits scored by `n` Combat dice hitting on `t`+, with up to `lead` misses re-rolled
@@ -1148,6 +1154,11 @@ function combatCardValue(m: CombatMods | null): number {
     + (m.bonusHitsIfOutnumber ?? 0) + (m.enemyRollPenalty ?? 0) * 2 + (m.maxDiceEnemy != null ? 2 : 0)
     + (m.enemyDiceReduction ?? 0) * 2
     + (m.cancelEnemyCard ? 3 : 0) + (m.negateEnemyReroll ? 2 : 0) + (m.cancelHits ?? 0) * 2;
+  // Heroic Death (sacrificeLeaderToCancelHit) scores 0, so the AI never plays it. Valuing
+  // it like a cancelled hit (x2) was tried 2026-10-12 on top of the new sacrifice rule
+  // (resolveChoice 'heroicDeath'): Free Peoples wins 1165->1122, 1117->1097, 1091->1095
+  // over 3 x 2000 games (-59). A body is worth more than the hit it cancels as a rule;
+  // playing it well needs a battle-length judgement this function cannot make.
 }
 
 function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
@@ -1255,6 +1266,13 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       const guideIn = state.fellowship.companions.includes(state.fellowship.guide);
       const guideLevel = guideIn ? levelOf(state.fellowship.guide) : 0;
       const randomMightKill = wouldCorrupt - 1 >= 12; // a random Companion absorbs as little as 1
+      // NOT sparing Strider off the Track. Report 415m002c653z0n5m ("Strider is
+      // eliminated to absorb 3 Hunt damage" on turn 3) argues he is worth more alive —
+      // his Guide ability, and the crowning of Aragorn. Tried 2026-10-12: draw a random
+      // Companion instead unless that could leave the Ring-bearers dead. Free Peoples
+      // wins over 3 x 2000 games against f6bbe6b: 1124->1058, 1078->1076, 1070->1070
+      // (-68). The AI does not yet USE a living Strider enough to repay the Corruption a
+      // random Hobbit leaves behind; revisit once it plans the crowning.
       const takeGuide = guideIn && (damage >= guideLevel || randomMightKill);
       const casualty = (): WotrAction | undefined => (takeGuide
         ? legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide')
@@ -1522,8 +1540,11 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     case 'heroicDeath': {
       // If the hits would destroy the Army, sacrifice whoever saves it (a Leader
       // first, else the lowest-Level Companion that suffices) — everyone in it dies
-      // with it otherwise. Short of that, trade a Leader for a unit (what the card
-      // was played for), but never a Companion.
+      // with it otherwise. Short of that, a Level-2 Companion on two or more hits
+      // (he cancels two; Captain of the West is worth one die, which a unit also is,
+      // and the unit keeps the Army alive), else a Leader, else a Hobbit — but never
+      // the Level-3 figures, whose Guide ability, Action die or crowning is worth more
+      // than the hits (report 6o494h2s1b105k71; it used to spend only Leaders).
       const d = state.pendingChoice!.data as { hits: number; leaders: number; companions: string[] };
       const f = heroicDeathForce(state);
       const hp = f ? Object.values(f.units).reduce((n, u) => n + (u?.regular ?? 0) + 2 * (u?.elite ?? 0), 0) : Infinity;
@@ -1534,7 +1555,11 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         const saver = d.companions.filter((c) => d.hits - levelOf(c) < hp).sort((a, b) => levelOf(a) - levelOf(b))[0];
         return (saver && pick(saver)) || decline;
       }
-      return (d.leaders > 0 && pick('leader')) || decline;
+      const levelTwo = d.hits >= 2 ? d.companions.find((c) => levelOf(c) === 2) : undefined;
+      if (levelTwo) return pick(levelTwo) ?? decline;
+      if (d.leaders > 0) return pick('leader') ?? decline;
+      const hobbit = d.companions.find((c) => levelOf(c) === 1);
+      return (hobbit && pick(hobbit)) || decline;
     }
     case 'wordsOfPower': {
       // Silencing Gandalf the White while The White Rider is in use gives back ALL the
