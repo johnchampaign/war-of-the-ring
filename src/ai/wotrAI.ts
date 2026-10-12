@@ -942,6 +942,16 @@ function diplomaticScore(state: GameState, actor: Side, nation: Nation): number 
     if (!ns.active) return 12;                                          // can't reach War yet — barely worth a die
     const army = Math.min(nationArmy(state, nation), 10);
     const proximity = ns.step === 1 ? 46 : ns.step === 2 ? 30 : 20;     // one step from War is the decisive unlock
+    // NOT a "blocked at the gate" bonus. Report ql63eqcko4i5n20v ("over-musters…
+    // should attack somewhere") led to a measurement: musters almost never fire into an
+    // empty pool (low on 6% of turns, still placing units), but a stack held back only by
+    // the Political Track does park — nine Southrons in West Harondor beside a Pelargir
+    // held by one to three, still two steps from War, in 5 of 100 games against the
+    // human-like yardstick, while the Muster dice went on Minions and recruits. Tried
+    // 2026-10-12: +20 here when 5+ of the Nation's units stand next to an FP Settlement.
+    // Shadow attacks rose 572 -> 714 per 100 games, but wins against 8292a8f did not:
+    // heuristic FP 835->860, 883->893, 909->857; human-like 915->958, 910->865, 933->921
+    // (-31 over 12000 games, noise). Reverted.
     return proximity + army * 2;
   }
   if (!ns.active) return 8;                                             // FP advances toward War reactively
