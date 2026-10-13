@@ -162,6 +162,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // A Minion entering play, chosen from his panel button: his entry regions light up and
   // a click places him (player report 3v5t0l4a6t1g3f73 — like Summon Gandalf the White).
   const [minionPick, setMinionPick] = useState<string | null>(null);
+  const minionAutoDie = useRef(false); // the pick selected the paying die itself
   // Choosing WHO travels in a Companion group, before its destination (CompanionPicker).
   const [compPick, setCompPick] = useState<{ from: RegionId; candidates: string[]; card?: string } | null>(null);
   // When a clicked region offers more than one thing to move (e.g. the army AND its
@@ -691,6 +692,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (minionPick) {
       const a = minionPickActs.find((x) => x.region === id);
       setMinionPick(null);
+      if (!a && minionAutoDie.current) setDie(null); // cancelled: give the die back
+      minionAutoDie.current = false;
       if (a) { clearMove(); void submit(a); }
       return; // anywhere else cancels the pick
     }
@@ -874,19 +877,22 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     clearMove();
   }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets, activeDie, isCharMove2, minionPick, minionPickActs, isReveal, isSeparateMove]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
-  // Where a Character or a Nazgûl may GO is always lit as a destination — a separation
-  // and a card's Companion or Nazgûl move included — never in the green of "click here
-  // to start something" (player report 395d3n1w3f085y56: separation and card moves
-  // were green, the die's Character moves orange).
+  // THE TWO COLOURS (docs/ui-conventions.md): GREEN is "pick what to act with" — an
+  // Army to move, a Settlement to muster in, a Character to move; ORANGE is "pick where
+  // the thing already chosen goes". So every placement is orange: a Character's or a
+  // Nazgûl's move, a separation, a card's target, a Minion entering play, and — since
+  // player report 20735e000s6b3s1d — Gandalf the White's entry, the Fellowship's
+  // declare or reveal, and a retreat, which were lit green (report 395d3n1w3f085y56 was
+  // the same mix-up for separations).
   const highlights = useMemo(() => {
-    const charGoals = new Set<RegionId>([...cardSepTargets, ...(isSeparateMove ? declareTargets : []), ...cardRegionTargets, ...minionPickTargets]);
+    const charGoals = new Set<RegionId>([...cardSepTargets, ...declareTargets, ...cardRegionTargets, ...minionPickTargets]);
     return {
       sources: new Set([...sources].filter((r) => !charGoals.has(r))),
       selected: activeRegion,
       destinations: new Set([...destinations, ...charGoals]),
       activate: activateTargets,
     };
-  }, [sources, activeRegion, destinations, activateTargets, cardSepTargets, isSeparateMove, declareTargets, cardRegionTargets, minionPickTargets]);
+  }, [sources, activeRegion, destinations, activateTargets, cardSepTargets, declareTargets, cardRegionTargets, minionPickTargets]);
   // The Muster die's second figure is a pending choice too, so it must be listed here or
   // its lit Settlements ignore the click (player report 310b003u0c1j3220).
   const pickRegion = g.yourTurn && (!g.view?.pendingChoice || isReveal || isSeparateMove || isCardSep || isCardCharPick || cardCompMoves.length > 0 || cardRegionActs.length > 0 || isCardRecruit || isCardMove || cardAssaultActs.length > 0 || isPlaceGandalf || isRetreatPick || isCharMove2 || isArmyMove2 || secondMusterActs.length > 0) ? onRegionClick : undefined;
@@ -1015,7 +1021,17 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   };
   const onPanelAction = (a: WotrAction) => {
     // One button per Minion: with several entry regions, ask for the region on the map.
-    if (a.kind === 'bringMinion' && minionActs.filter((x) => x.minion === a.minion).length > 1) { clearMove(); setMinionPick(a.minion); return; }
+    if (a.kind === 'bringMinion' && minionActs.filter((x) => x.minion === a.minion).length > 1) {
+      clearMove(); setMinionPick(a.minion);
+      // Mid-Action from here on, like Gandalf the White's entry (player report
+      // 20735e000s6b3s1d): the die that will pay is picked out in the tray, and the
+      // side panel clears down to the one thing being done.
+      if (!activeDie && g.view && g.you) {
+        const face = (g.view.dice[g.you as Side] ?? []).find((f) => dieAllowsAction(a, g.view!, g.you as Side, f));
+        if (face) { setDie(face); minionAutoDie.current = true; }
+      }
+      return;
+    }
     if (a.kind === 'advanceHoldBack' && g.view?.pendingChoice?.kind === 'advanceHoldBack') { onDecisionAction(a); return; }
     if ((a.kind === 'advanceChoice' || a.kind === 'relieveAdvance' || a.kind === 'besiegerAdvance') && g.view?.pendingChoice?.kind === a.kind) { onDecisionAction(a); return; }
     if (a.kind === 'armyMove2' && a.from && a.to && !a.done) { setMoveDraft({ from: a.from, to: a.to, kind: 'armyMove2', base: a }); return; }
@@ -1114,9 +1130,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   4k5e3n4x6o6y411g, 5u1y292b0s0o4n35): the side panel already says it,
                   and the banner sat over the Mordor track. Only the specific,
                   in-progress placements below still name themselves on the map. */}
-              {sources.size > 0 && (isCardSep || isSeparateMove || isReveal || isRetreatPick || isPlaceGandalf || placeActs.length > 0 || !!charPick || !!selected || isArmyMove2) && (
+              {/* The ONE banner for a pick the board is waiting on, here at the foot of the
+                  map — Minions and retreats used to have a second, brown one at the top
+                  of the screen (player report 20735e000s6b3s1d). */}
+              {(sources.size > 0 || !!minionPick) && (!!minionPick || isCardSep || isSeparateMove || isReveal || isRetreatPick || isPlaceGandalf || placeActs.length > 0 || !!charPick || !!selected || isArmyMove2) && (
                 <div style={{ color: '#bfe6bf', background: 'rgba(18,26,18,0.92)', border: '1px solid #2f4a2f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
-                  {isCardSep
+                  {minionPick
+                    ? `Bringing ${charName(minionPick)} into play — click a highlighted region to place him there (anywhere else cancels).`
+                    : isCardSep
                     ? (cardSepActs[0]!.companion === 'nazgul'
                       ? 'Moving the Nazgûl — click a highlighted region to fly them there.'
                       : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`)
@@ -1140,6 +1161,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                         : selected ? `Selected ${regionName(selected)} — click a highlighted region to move/attack (or click again to cancel).`
                           : isArmyMove2 ? 'Second Army move — click a green Army to move it (a different Army), or “Done” on the right.'
                             : null}
+                  {/* A card's roll that ends in a retreat (The Spirit of Mordor, Dead Men…)
+                      shows its dice with the question. */}
+                  {isRetreatPick && rollContext.map((n) => <div key={n.seq} style={{ fontSize: 12, marginTop: 4, color: '#e8dcc0' }}>{n.title ? `${n.title}: ` : ''}<NoticeText msg={n.msg} /></div>)}
                 </div>
               )}
             </div>
@@ -1173,7 +1197,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               </div>
               {/* Action buttons (compact — half height). */}
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
-                <ActionPanel actions={panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null} boardHints={boardHints} blocked={blockedPanel} selectedDie={activeDie} />
+                <ActionPanel actions={minionPick ? [] : panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null}
+                  boardHints={minionPick ? [`Bring ${charName(minionPick)} into play — click a highlighted region on the map, or anywhere else on it to cancel.`] : boardHints}
+                  blocked={minionPick ? [] : blockedPanel} selectedDie={activeDie} />
               </div>
               {chatClient && g.you && (
                 <ChatPanel client={chatClient} you={g.you} seatLabel={seatLabel} title="Table talk"
@@ -1361,19 +1387,6 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             background: peekBoard ? '#caa84b' : '#2a2418', color: peekBoard ? '#1a1408' : '#f0e9d8', border: `2px solid ${peekBoard ? '#e6c869' : '#5a4a2a'}` }}>
           {peekBoard ? '↩ Back to choice' : '👁 Peek board'}
         </button>
-      )}
-      {minionPick && (
-        <div style={{ position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 92, padding: '8px 16px', fontSize: 14, fontWeight: 600,
-          borderRadius: 8, background: '#3a2a12', color: '#f0d090', border: '1px solid #6a531f', boxShadow: '0 4px 20px #000' }}>
-          ⚑ Bring {charName(minionPick)} into play — click a highlighted region (anywhere else cancels).
-        </div>
-      )}
-      {isRetreatPick && (
-        <div style={{ position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 92, padding: '8px 16px', fontSize: 14, fontWeight: 600,
-          borderRadius: 8, background: '#3a2a12', color: '#f0d090', border: '1px solid #6a531f', boxShadow: '0 4px 20px #000' }}>
-          {isEaglesPick ? '⚑ The Eagles are Coming! — click a highlighted Sauron Stronghold to fly the surviving Nazgûl there.' : '⚑ Retreat — click a highlighted region to fall back there.'}
-          {rollContext.map((n) => <div key={n.seq} style={{ fontSize: 12, fontWeight: 400, marginTop: 4, color: '#e8dcc0' }}>{n.title ? `${n.title}: ` : ''}<NoticeText msg={n.msg} /></div>)}
-        </div>
       )}
       <HuntPopup view={g.view} seen={huntSeen} onSeen={setHuntSeen} />
       {/* In hotseat the seat changes hands every turn, so "you" names nobody in

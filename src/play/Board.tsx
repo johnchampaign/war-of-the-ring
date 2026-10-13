@@ -87,9 +87,9 @@ function presentArmies(r: GameState['regions'][string], sarumanLead = false): Ar
 }
 
 export interface BoardHighlights {
-  sources?: Set<RegionId>;       // regions you can act FROM (green)
+  sources?: Set<RegionId>;       // regions you can act FROM (green) — docs/ui-conventions.md
   selected?: RegionId | null;    // the chosen source (bright)
-  destinations?: Set<RegionId>;  // valid targets for the chosen source (yellow)
+  destinations?: Set<RegionId>;  // where the chosen thing can go (orange) — docs/ui-conventions.md
   activate?: Set<RegionId>;      // separation destinations that ROUSE a nation (gold ★ banner)
 }
 
