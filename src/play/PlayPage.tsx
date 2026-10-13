@@ -689,13 +689,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       return;
     }
     // A Minion entering play from his panel button: the click places him.
+    // A click anywhere else does nothing — Undo is the way back out, as for Gandalf
+    // the White (player report 09162r675n4p1v37).
     if (minionPick) {
       const a = minionPickActs.find((x) => x.region === id);
+      if (!a) return;
       setMinionPick(null);
-      if (!a && minionAutoDie.current) setDie(null); // cancelled: give the die back
       minionAutoDie.current = false;
-      if (a) { clearMove(); void submit(a); }
-      return; // anywhere else cancels the pick
+      clearMove(); void submit(a);
+      return;
     }
     // A card's bare region pick: the click IS the answer.
     if (cardRegionTargets.has(id)) {
@@ -906,8 +908,17 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Army moves/attacks AND independent-character (Nazgûl/Minion/Companion) moves are done on
   // the board; combat/hunt decisions go to the modal. Keep them out of the button list.
   // Undo availability (re-read each render; reflects the local client's history).
-  const undoCap = client.undo ? client.undoStatus?.() : undefined;
+  // While a Minion is being placed nothing has been sent to the game yet, so Undo
+  // backs out of the placement itself (player report 09162r675n4p1v37: it undid the
+  // move before and left the placement hanging, with the panel still empty).
+  const cancelMinionPick = () => {
+    if (minionAutoDie.current) setDie(null); // give the die back
+    minionAutoDie.current = false;
+    setMinionPick(null);
+  };
+  const undoCap = client.undo ? (minionPick ? { canUndo: true, foreknowledge: false, reason: undefined } : client.undoStatus?.()) : undefined;
   const onUndoClick = () => {
+    if (minionPick) { cancelMinionPick(); return; }
     const s = client.undoStatus?.();
     if (!s?.canUndo) return;
     if (s.foreknowledge) setUndoConfirm(true); else void runUndo();
@@ -1020,6 +1031,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     void submit(a);
   };
   const onPanelAction = (a: WotrAction) => {
+    // A side-panel Action supersedes whatever was picked on the map: an Army left
+    // selected (Edoras) stayed lit through Kindred of Glorfindel (player report
+    // 683g1k2v5y5f465v).
+    clearMove();
     // One button per Minion: with several entry regions, ask for the region on the map.
     if (a.kind === 'bringMinion' && minionActs.filter((x) => x.minion === a.minion).length > 1) {
       clearMove(); setMinionPick(a.minion);
@@ -1052,7 +1067,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   return (
     // height:100% (not 100vh) so the page fills whatever box its parent gives it --
     // online, that box is the viewport MINUS the sign-in bar above it (report 2t2n).
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
+    <div className="wotr-play" style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
       {busy && <BusyOverlay />}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Board column sized to the crop's width at full available height, so the
@@ -1136,7 +1151,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               {(sources.size > 0 || !!minionPick) && (!!minionPick || isCardSep || isSeparateMove || isReveal || isRetreatPick || isPlaceGandalf || placeActs.length > 0 || !!charPick || !!selected || isArmyMove2) && (
                 <div style={{ color: '#bfe6bf', background: 'rgba(18,26,18,0.92)', border: '1px solid #2f4a2f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
                   {minionPick
-                    ? `Bringing ${charName(minionPick)} into play — click a highlighted region to place him there (anywhere else cancels).`
+                    ? `Bringing ${charName(minionPick)} into play — click a highlighted region to place him there (Undo to change your mind).`
                     : isCardSep
                     ? (cardSepActs[0]!.companion === 'nazgul'
                       ? 'Moving the Nazgûl — click a highlighted region to fly them there.'
@@ -1198,7 +1213,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               {/* Action buttons (compact — half height). */}
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
                 <ActionPanel actions={minionPick ? [] : panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null}
-                  boardHints={minionPick ? [`Bring ${charName(minionPick)} into play — click a highlighted region on the map, or anywhere else on it to cancel.`] : boardHints}
+                  boardHints={minionPick ? [`Bring ${charName(minionPick)} into play — click a highlighted region on the map (Undo to change your mind).`] : boardHints}
                   blocked={minionPick ? [] : blockedPanel} selectedDie={activeDie} />
               </div>
               {chatClient && g.you && (
@@ -1225,7 +1240,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 </div>
               )}
                 <DiceTray view={g.view} you={g.you as Side} only="mine" selectedDie={activeDie} onSelectDie={g.yourTurn && !g.view.pendingChoice && !inActionDie ? setDie : undefined} inActionDie={inActionDie} />
-                <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} playable={playableCards} onPlay={(a) => void submit(a)} busy={busy} />
+                <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} playable={playableCards} onPlay={(a) => { if (minionPick) cancelMinionPick(); clearMove(); void submit(a); }} busy={busy} />
               </div>
             </div>
             {/* The enlarge/inspect area — fills the whole right side of the lower area
@@ -1488,6 +1503,10 @@ function NazgulCountPicker({ pick, onConfirm, onCancel }: {
 function BusyOverlay() {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, cursor: 'progress', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'transparent' }}>
+      {/* Stray drag-selections no longer paint blue across the board and panels; the
+          log, a reply to a report, and anything you type still show what is
+          selected, so it can be copied (player report 66563r4a72662j1r). */}
+      <style>{'.wotr-play ::selection{background:transparent}.wotr-play .wotr-log ::selection,.wotr-play .wotr-selectable ::selection,.wotr-play textarea::selection,.wotr-play input::selection{background:#3d5f8f;color:#fff}'}</style>
       <style>{'@keyframes wotr-spin{to{transform:rotate(360deg)}}@keyframes wotr-attn{0%{box-shadow:0 0 0 0 #ffd36a,0 6px 20px #000c}100%{box-shadow:0 0 0 10px #ffd36a00,0 6px 20px #000c}}'}</style>
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, background: '#1c1710e6', color: '#e9e1cc', fontFamily: 'system-ui', fontSize: 13, padding: '8px 14px', borderRadius: 20, border: '1px solid #5a4a2a', boxShadow: '0 4px 18px #000a' }}>
         <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid #5a4a2a', borderTopColor: '#e6b85a', animation: 'wotr-spin 0.8s linear infinite', display: 'inline-block' }} />

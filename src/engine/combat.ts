@@ -422,7 +422,9 @@ function absorbForced(state: GameState, f: Force, side: Side, hits: number, nati
   // skip the log: an invisible casualty reads as a broken battle. Two reports in
   // one day — '2E took my hit and I concluded Shield Wall cancelled it', and 'the
   // log didn't say that' on an Elite reduction — were both this silence.
-  if (taken.length) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties (forced): ${taken.join('; ')}`);
+  // One line per unit, the same as a chosen casualty — forced losses used to share one
+  // line while chosen ones each had their own (player report 692l2005000t3z4m).
+  for (const what of taken) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties (forced): ${what}`);
   return left;
 }
 const cap1 = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
@@ -475,7 +477,7 @@ function applyForceCasualties(state: GameState, f: Force, side: Side, hits: numb
       else { const n = nations[0]!; taken.push(casualtyPhrase(state, side, { step: 'removeRegular', nation: n, cost: 1 })); f.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
     }
   }
-  if (taken.length) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties: ${taken.join('; ')}`);
+  for (const what of taken) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties: ${what}`);
   finishForceCasualties(state, f, side);
 }
 

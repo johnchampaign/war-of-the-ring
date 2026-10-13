@@ -49,7 +49,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   const click = async (a: WotrAction) => { setBusy(true); try { await onAction(a); } finally { setBusy(false); } };
 
   if (gameOver) {
-    return <div style={panel}><h3>Game over</h3><p>{view.winner === 'fp' ? 'Free Peoples' : 'Shadow'} wins — {view.winReason}</p></div>;
+    return <div style={panel}><h3>Game over</h3><p>{view.winner === 'fp' ? 'Free Peoples win' : 'Shadow wins'} — {view.winReason}</p></div>;
   }
   if (!yourTurn) return <div style={panel}>Waiting for the other player…</div>;
 

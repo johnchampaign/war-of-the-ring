@@ -116,8 +116,9 @@ console.log('\n=== 3b. batch-plan casualties are named too (Return to Valinor, D
   s.regions['gorgoroth'].units = { sauron: { regular: 2, elite: 1 } };
   const mark = s.log.length;
   applyCasualties(s, 'gorgoroth', 'shadow', 2, 'regularsFirst');
-  const line = msgs(s, mark).find((m) => /^Shadow casualties: /.test(m));
-  check('one line naming both losses', line === 'Shadow casualties: a Sauron Regular is eliminated; a Sauron Regular is eliminated', line);
+  // One line per unit, like a chosen casualty (report 692l2005000t3z4m).
+  const lines = msgs(s, mark).filter((m) => /^Shadow casualties: /.test(m));
+  check('a line naming each loss', lines.length === 2 && lines.every((l) => l === 'Shadow casualties: a Sauron Regular is eliminated'), JSON.stringify(lines));
 }
 
 console.log('\n=== 4. removing a Shadow table card ===');

@@ -8,7 +8,7 @@ export function ReportResponseModal({ notice, onDismiss }: {
 }) {
   return (
     <div style={backdrop} onClick={onDismiss}>
-      <div style={modal} onClick={(e) => e.stopPropagation()}>
+      <div className="wotr-selectable" style={modal} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontSize: 12, color: '#e6b85a', fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           Reply to your problem report
         </div>

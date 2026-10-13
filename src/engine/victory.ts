@@ -19,7 +19,8 @@ function win(state: GameState, side: Side, reason: string): void {
   state.winner = side;
   state.winReason = reason;
   state.phase = 'gameOver';
-  log(state, null, 'victory', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} wins: ${reason}`);
+  // "the Free Peoples" are plural, "the Shadow" singular (player report 1p2d6j180n0p5s1w).
+  log(state, null, 'victory', `${side === 'fp' ? 'Free Peoples win' : 'Shadow wins'}: ${reason}`);
 }
 
 /** Ring-based conditions — checked continuously (after any Corruption/Mordor
@@ -27,8 +28,8 @@ function win(state: GameState, side: Side, reason: string): void {
 export function checkRingVictory(state: GameState): boolean {
   if (state.winner) return true;
   const fs = state.fellowship;
-  if (fs.corruption >= 12) { win(state, 'shadow', 'Ring-bearers corrupted (12)'); return true; }
-  if (fs.mordor === 5 && fs.corruption < 12) { win(state, 'fp', 'Ring destroyed at the Crack of Doom'); return true; }
+  if (fs.corruption >= 12) { win(state, 'shadow', 'The Ring-bearers are corrupted (12)'); return true; }
+  if (fs.mordor === 5 && fs.corruption < 12) { win(state, 'fp', 'The Ring is destroyed at the Crack of Doom'); return true; }
   return false;
 }
 

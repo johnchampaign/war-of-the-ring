@@ -28,7 +28,7 @@ export async function uploadGameLog(view: GameState, you: Side | null, clientBui
     // text — no schema change, and the public report summary carries it.
     const tag = m?.mode ? ` [mode: ${m.mode}${m.mode === 'vs-ai' && m.aiSide ? `, AI=${m.aiSide}` : ''}]` : '';
     const message = (winner
-      ? `GAME COMPLETE — ${winner} wins (${view.winReason ?? '?'}). Uploaded for AI tuning. (turns: ${view.turn})`
+      ? `GAME COMPLETE — ${winner} ${view.winner === 'fp' ? 'win' : 'wins'} (${view.winReason ?? '?'}). Uploaded for AI tuning. (turns: ${view.turn})`
       : `GAME IN PROGRESS — uploaded for AI tuning (turn ${view.turn}, ${view.phase}).`) + tag + settingsMarker();
     const res = await fetch(ENDPOINT, {
       method: 'POST',
@@ -70,7 +70,6 @@ export function GameOverUpload({ view, you, gameOver, clientBuild, uploaded, onU
   const [stats, setStats] = useState(false);
   if (!gameOver || !view.winner || stage === 'dismissed') return null;
 
-  const winnerName = view.winner === 'fp' ? 'Free Peoples' : 'Shadow';
   // If the log was already uploaded this game (via the button), don't re-prompt.
   const alreadyDone = uploaded || stage === 'done';
   const upload = async () => {
@@ -83,7 +82,7 @@ export function GameOverUpload({ view, you, gameOver, clientBuild, uploaded, onU
     <div style={backdrop}>
       <div style={card}>
         <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4, color: view.winner === 'fp' ? '#7fb6e6' : '#e6857f' }}>
-          {winnerName} win!
+          {view.winner === 'fp' ? 'Free Peoples win!' : 'Shadow wins!'}
         </div>
         <div style={{ fontSize: 14, color: '#cbb', marginBottom: 10 }}>{view.winReason}</div>
         {/* Both players' dice over the game (player report zfi5pzt828h4v6xq); also on
