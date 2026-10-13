@@ -1292,6 +1292,23 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         const reduceCard = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'reduceCard');
         if (reduceCard) return reduceCard;
       }
+      // GOLLUM'S −1. With Gollum as Guide the Free Peoples may reveal the Fellowship to
+      // take 1 off a hit — speed for safety (report 5y710h445c4l222i: "you would want to
+      // use Gollum's Guide ability to reveal to reduce the Hunt damage"). It was used
+      // only to stave off a lethal hit. Measured 2026-10-13 against 4ddc80c, FP wins over
+      // 3 x 2000 (base 1298, 1288, 1256), revealing once the hit would bring Corruption to:
+      //   >= 8 with Shadow VP <= 4: 1384, 1406, 1354 (+302)
+      //   >= 6 with Shadow VP <= 4: 1440, 1449, 1405 (+452);  >= 6, any VP: +524
+      //   >= 4 with Shadow VP <= 4: 1481, 1481, 1445 (+565)
+      //   >= 3, any VP            : 1529, 1524, 1479 (+690)  <- shipped
+      //   >= 1 (always)           : 1525, 1525, 1484 — the curve is flat below 3
+      // Cut at 3, where Companions start being spent instead of Corruption (below), and
+      // not lower: the heuristic Shadow may punish a revealed Fellowship less than a
+      // human does, so the curve's low end is the part self-play is least able to judge.
+      if (wouldCorrupt >= 3) {
+        const reveal = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'reduceReveal');
+        if (reveal) return reveal;
+      }
       // Gandalf gambit (playtester suggestion): on a meaty hit, sacrifice Gandalf
       // the Grey as the casualty — it absorbs the damage AND unlocks Gandalf the
       // White (a stronger piece + the die he brings). Only while Corruption is not

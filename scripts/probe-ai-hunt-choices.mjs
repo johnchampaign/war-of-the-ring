@@ -145,7 +145,9 @@ const mordorHit = (damage, corruption, companions, guide) => {
 }
 {
   // With nobody left the damage has to be Corruption — and the AI must not stall.
+  // (Already revealed, so Gollum's reveal is no way out either.)
   const state = mordorHit(2, 5, [], 'gollum');
+  state.fellowship.hidden = false;
   const pick = decide(state);
   check('an empty Fellowship takes the Corruption', pick.kind === 'huntDamage' && pick.mode === 'corruption', JSON.stringify(pick));
 }
@@ -211,8 +213,10 @@ console.log('\n=== a lethal hit spends the free reductions before conceding ==='
     && wotrAdapter.legalActions(after, 'fp').some((a) => a.kind === 'huntDamage' && a.mode === 'reduceSeparate'));
 }
 {
-  // A hit that is NOT lethal keeps the old policy — the reveal is not spent for free.
-  const state = mordorHit(1, 3, [], 'gollum');
+  // A small hit at low Corruption is still taken on the dial: Gollum's reveal is spent
+  // once the hit would bring Corruption to 3 (report 5y710h445c4l222i, measured), not
+  // below.
+  const state = mordorHit(1, 1, [], 'gollum');
   state.fellowship.mordor = 4;
   const pick = decide(state);
   check('a survivable hit is still taken on the Corruption dial',

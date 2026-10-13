@@ -9,6 +9,7 @@
 //  - 6i5t4m4t5g3w5o4y / 4m2o4b5x323q1i14 / 0b6o1772366f0i44: on a 1-damage hit, with a
 //    Will of the West die in hand and a Minion in play, Gandalf the Grey takes it.
 //  - (follow-up) and no Companion separates there either.
+//  - 5y710h445c4l222i: Gollum reveals the Fellowship to soak 1 once Corruption climbs.
 //  - 591g3k3a234p0321: Advantageous Position is not played when the Shadow already hits
 //    only on 6s.
 import { Rng } from 'digital-boardgame-framework';
@@ -74,6 +75,15 @@ const hunt = (guide, damage, corruption, dice = []) => {
   s.dice.fp = ['character'];
   const b = decide(s);
   check('…without the Will die: he does not', b.mode !== 'guide', JSON.stringify(b));
+}
+
+{
+  // Report 5y710h445c4l222i: Gollum as Guide reveals the Fellowship to take 1 off a hit.
+  const s = fpTurn();
+  s.fellowship.guide = 'gollum'; s.fellowship.companions = []; s.fellowship.hidden = true; s.fellowship.corruption = 5;
+  s.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage: 2, reveal: false, numbered: true } };
+  const a = decide(s);
+  check('Gollum guiding, 2 damage at Corruption 5: he reveals the Fellowship (−1)', a.mode === 'reduceReveal', JSON.stringify(a));
 }
 
 console.log('\n=== Advantageous Position ===');
