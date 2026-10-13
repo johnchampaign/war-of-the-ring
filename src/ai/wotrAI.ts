@@ -203,8 +203,16 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // that declaring out of Rivendell (into Parth Celebrant) exposes the Fellowship to
     // the "not in a Free Peoples Settlement" cards, Cruel Weather and Nazgûl. Tried
     // 2026-10-13 — no distance declare out of an unbesieged FP Stronghold: FP wins
-    // 1303->1249, 1269->1227, 1262->1220 against ea944c0 (-138). The same lesson as
-    // BANK above: these declares are the walk.
+    // 1303->1249, 1269->1227, 1262->1220 against ea944c0 (-138); re-run against 334a4f7
+    // 1484->1439, 1503->1494, 1472->1452 (-74). NOT because it is slower — the reporter's
+    // follow-up (1o1t4t721z3f4u07) was right that Progress, not the figure, sets the pace:
+    // Mordor entries 1974 vs 1972 and the mean entry turn 7.9 in both. The cost is
+    // Corruption (Ring-bearers corrupted 498 -> 543 per 2000), the extra Stronghold tile
+    // a reveal out of Rivendell draws through Moria among it. Its gains — the Shadow's
+    // "not in a Free Peoples Settlement" cards, Cruel Weather and Nazgûl hunts denied —
+    // are ones the heuristic Shadow barely exploits, so self-play cannot price them; a
+    // human Shadow may. (A suspected cause, the HEAL plan reading a figure left in
+    // Rivendell as "resting", was tested too: gating HEAL on Progress < 2 changed no game.)
     if (state.fellowship.progress >= 4) {
       const here = toMordor(state.fellowship.location);
       const gains = declares.filter((a) => noRerolls(a.target) && here - toMordor(a.target) >= 3);
