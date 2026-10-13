@@ -10,6 +10,7 @@ import { RollLine, CorruptionLine, describeDraw, HuntTileFace, strongholdRevealL
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt } from './artCache';
 import { RollRow } from './combatDice';
+import { NoticeText } from './NoticePopup';
 import { CardZoom } from './HandStrip';
 import type { GameState, Side, Nation } from '../engine/types';
 import { eliteHasReplacement } from '../engine/combat';
@@ -145,7 +146,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
         {/* The card roll this question follows from (Dreadful Spells, Return to Valinor…). */}
         {context && context.length > 0 && (
           <div data-testid="decision-context" style={{ background: '#2a2418', border: '1px solid #5a4a2a', borderRadius: 6, padding: '6px 9px', margin: '8px 0 0', fontSize: 13, color: '#e8dcc0' }}>
-            {context.map((n) => <div key={n.seq}>{n.title ? <b>{n.title}: </b> : null}{n.msg}</div>)}
+            {context.map((n) => <div key={n.seq}>{n.title ? <b>{n.title}: </b> : null}<NoticeText msg={n.msg} /></div>)}
           </div>
         )}
         {choice && <div style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 4px' }}>

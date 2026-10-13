@@ -16,6 +16,7 @@ import { pruneTableCards, palantirActive, wornWithSorrowActive } from './persist
 import { sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { log, sideDoes, sufferCorruption } from './log';
+import { canPlayCard } from './handlers/registry';
 
 const opponent = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 
@@ -125,10 +126,15 @@ export function advance(state: GameState): void {
     // — after the card's own casualty choice, before the Shadow's next action.
     if (state.flags.fpFreeCharEventPrompt) {
       state.flags.fpFreeCharEventPrompt = false;
-      if (state.flags.fpFreeCharEventThisTurn && state.phase === 'actionResolution') {
+      // Asked only when there IS a Character card the Free Peoples could play; with none
+      // there is nothing to decline, so the offer lapses without a log line (player
+      // report 4m295f1w2253720d).
+      const canPlayOne = state.cards.fp.hand.some((c) => EVENT_BY_ID[c]?.deck === 'Character' && canPlayCard(state, c, 'fp'));
+      if (state.flags.fpFreeCharEventThisTurn && state.phase === 'actionResolution' && canPlayOne) {
         state.pendingChoice = { owner: 'fp', kind: 'freeCharEvent', data: {} };
         return;
       }
+      state.flags.fpFreeCharEventThisTurn = false;
     }
     // The rest of a Reveal's Shadow Stronghold tiles (p.39), one at a time, each after
     // the previous tile's choices are answered and before the Hunt counts as finished.

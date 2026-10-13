@@ -7,6 +7,8 @@
 // any) is settled, and the Shadow does not act until it is answered.
 import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
+import { canPlayCard } from '../src/engine/handlers/registry.ts';
+import { EVENT_BY_ID } from '../src/engine/data.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -52,6 +54,9 @@ if (cards.length) {
   s = drive(wotrAdapter.applyAction(s, cards[0], 'fp'));
   check('the card played without spending a die', s.dice.fp.length === diceBefore, `dice ${diceBefore} -> ${s.dice.fp.length}`);
   check('the free play is consumed', !s.flags.fpFreeCharEventThisTurn && !s.flags.fpFreeCharEventPrompt);
+  // Only the FREE card's line names Gandalf the White (player report 4m295f1w2253720d).
+  const lines = s.log.filter((e) => e.card).map((e) => e.msg);
+  check('the Ents line is plain; the free card says (Gandalf the White)', lines.some((m) => /The Ents Awake: \w+$/.test(m)) && lines.some((m) => m.endsWith('(Gandalf the White)') && !m.includes('Ents Awake')), lines.join(' | '));
   check('...and now the Shadow acts', s.pendingChoice === null ? wotrAdapter.currentActor(s) === 'shadow' : true, `actor ${wotrAdapter.currentActor(s)}, pending ${s.pendingChoice?.kind ?? 'none'}`);
 }
 
@@ -61,7 +66,24 @@ s = drive(wotrAdapter.applyAction(s, { ...wotrAdapter.legalActions(s, 'fp').find
 if (s.pendingChoice?.kind === 'freeCharEvent') {
   s = wotrAdapter.applyAction(s, { kind: 'freeCharEvent', decline: true }, 'fp');
   check('declined: flag cleared, Shadow to act', !s.flags.fpFreeCharEventThisTurn && wotrAdapter.currentActor(s) === 'shadow', `actor ${wotrAdapter.currentActor(s)}`);
+  check('the decline reads like the other free-card lines', s.log.some((e) => e.msg === 'Free Peoples decline to play another Character card (Gandalf the White)'), s.log.at(-1)?.msg);
 } else check('prompt was raised', false, JSON.stringify(s.pendingChoice));
+
+console.log('\n=== no playable Character card: no prompt, nothing to decline ===');
+{
+  s = setup();
+  // Keep only Character cards that cannot be played here, beside The Ents Awake.
+  const pile = Object.values(s.cards.fp).find((v) => v && typeof v === 'object' && Array.isArray(v.character) && v !== s.cards.fp.discard);
+  const dead = [...s.cards.fp.hand, ...pile.character].filter((id) => id !== 'fp-char-19' && EVENT_BY_ID[id]?.deck === 'Character' && !canPlayCard(s, id, 'fp'));
+  if (!dead.length) check('found an unplayable Character card to hold', false);
+  else {
+    s.cards.fp.hand = ['fp-char-19', dead[0]];
+    const ents = wotrAdapter.legalActions(s, 'fp').find((a) => a.kind === 'playEvent' && a.cardId === 'fp-char-19');
+    s = drive(wotrAdapter.applyAction(s, { ...ents, die: 'character' }, 'fp'));
+    check('no free-card prompt', s.pendingChoice?.kind !== 'freeCharEvent' && !s.flags.fpFreeCharEventThisTurn, JSON.stringify(s.pendingChoice));
+    check('no decline line', !s.log.some((e) => /decline to play another/.test(e.msg)));
+  }
+}
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

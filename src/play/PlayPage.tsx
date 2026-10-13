@@ -25,7 +25,7 @@ import { sortieForce, retreatBlockReason } from '../engine/combat';
 import { DiceTray } from './DiceTray';
 import { HuntPopup, huntResultPending } from './HuntPopup';
 import { BattlePopup, battleResultPending } from './BattlePopup';
-import { NoticePopup, noticePending } from './NoticePopup';
+import { NoticePopup, NoticeText, noticePending } from './NoticePopup';
 import { TurnSummary } from './TurnSummary';
 import { LogPanel, CopyLogButton } from './LogPanel';
 import { GameOverUpload, UploadLogButton } from './GameOverUpload';
@@ -1372,7 +1372,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         <div style={{ position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 92, padding: '8px 16px', fontSize: 14, fontWeight: 600,
           borderRadius: 8, background: '#3a2a12', color: '#f0d090', border: '1px solid #6a531f', boxShadow: '0 4px 20px #000' }}>
           {isEaglesPick ? '⚑ The Eagles are Coming! — click a highlighted Sauron Stronghold to fly the surviving Nazgûl there.' : '⚑ Retreat — click a highlighted region to fall back there.'}
-          {rollContext.map((n) => <div key={n.seq} style={{ fontSize: 12, fontWeight: 400, marginTop: 4, color: '#e8dcc0' }}>{n.title ? `${n.title}: ` : ''}{n.msg}</div>)}
+          {rollContext.map((n) => <div key={n.seq} style={{ fontSize: 12, fontWeight: 400, marginTop: 4, color: '#e8dcc0' }}>{n.title ? `${n.title}: ` : ''}<NoticeText msg={n.msg} /></div>)}
         </div>
       )}
       <HuntPopup view={g.view} seen={huntSeen} onSeen={setHuntSeen} />

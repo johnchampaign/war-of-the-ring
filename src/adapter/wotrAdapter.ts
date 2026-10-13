@@ -831,7 +831,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Pits of Mordor played with an Army die drew a Palantír card).
       const palantirWasActive = actor === 'shadow' && playedWithFace === 'event' && palantirActive(state);
       // Name the played card in the log (playing an Event reveals it — public info).
-      log(state, null, 'event', `${sideDoes(actor, 'play')} ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId}`);
+      // The Ents Awake's free Character card says why it cost no die.
+      log(state, null, 'event', `${sideDoes(actor, 'play')} ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId}${freePlay ? ' (Gandalf the White)' : ''}`);
       state.log[state.log.length - 1]!.card = action.cardId; // make it hoverable in the log
       hand.splice(idx, 1);
       // Run the immediate part FIRST, then check the remaining targets — so the choice
@@ -1010,7 +1011,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'freeCharEvent': {
       requireChoice(state, 'freeCharEvent', actor); // declined the Ents Awake free play — it is "immediately" or not at all
       state.flags.fpFreeCharEventThisTurn = false;
-      log(state, null, 'event', 'The Ents Awake: the Free Peoples decline the free Character-card play');
+      log(state, null, 'event', 'Free Peoples decline to play another Character card (Gandalf the White)');
       state.pendingChoice = null; break;
     }
     case 'guideDraw': {

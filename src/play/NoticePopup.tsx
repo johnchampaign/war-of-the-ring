@@ -4,6 +4,7 @@
 // this to be acknowledged) and each notice pops exactly once. Waits until no
 // decision is pending so it never sits over a choice modal.
 import type { GameState } from '../engine/types';
+import { CDie } from './combatDice';
 
 /** Is there a notice the player hasn't clicked through yet? */
 export const noticePending = (view: GameState, seen: number): boolean =>
@@ -30,12 +31,27 @@ export function NoticePopup({ view, seen, onSeen }: { view: GameState; seen: num
         </div>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, textAlign: 'left' }}>
           {fresh.map((n) => (
-            <li key={n.seq} style={{ fontSize: 14, padding: '4px 0', lineHeight: 1.4 }}>{n.msg}</li>
+            <li key={n.seq} style={{ fontSize: 14, padding: '4px 0', lineHeight: 1.4 }}><NoticeText msg={n.msg} /></li>
           ))}
         </ul>
         <button style={btn} onClick={dismiss}>OK</button>
       </div>
     </div>
+  );
+}
+
+/** A card's dice roll ("Rolled [1 1 4 2 1], hitting on 5+: …" — The Spirit of Mordor,
+ *  Athelas, Candles of Corpses, the Eagles) drawn as dice, a success in gold, the way
+ *  the battle popup shows them (player report 2k3d2m0s0a5j330q). Anything else is text. */
+export function NoticeText({ msg }: { msg: string }) {
+  const m = /^Rolled \[([1-6](?: [1-6])*)\], (\w+) on ([2-6])\+(.*)$/s.exec(msg);
+  if (!m) return <>{msg}</>;
+  const dice = m[1]!.split(' ').map(Number), target = Number(m[3]);
+  return (
+    <>
+      <span style={{ display: 'block', margin: '2px 0 4px' }}>{dice.map((d, i) => <CDie key={i} n={d} target={target} />)}</span>
+      {`${m[2]![0]!.toUpperCase()}${m[2]!.slice(1)} on ${target}+${m[4]}`}
+    </>
   );
 }
 

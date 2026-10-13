@@ -127,7 +127,9 @@ export function OpponentHand({ view, you }: { view: GameState; you: Side }) {
 function OpponentCardBack({ deck, side, h, stacked, sideBg }: { deck: string; side: Side; h: number; stacked: boolean; sideBg: string }) {
   const art = useCardArt(backId(side, deck));
   const w = Math.round(h * 76 / 104);
-  if (art) return <img src={art} alt={`${deck} card`} title={`${deck} card`} style={{ height: h, width: w, borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', userSelect: 'none' }} />;
+  // The real back keeps its own proportions, at the height of your own hand's cards —
+  // it was squeezed to the drawn back's 76:104 (player report 661g33335l3a1i15).
+  if (art) return <img src={art} alt={`${deck} card`} title={`${deck} card`} style={{ height: h, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', userSelect: 'none' }} />;
   return (
     <div style={{ ...textCard, height: h, width: w, padding: 2, background: `repeating-linear-gradient(45deg, ${sideBg}, ${sideBg} 6px, #00000033 6px, #00000033 12px)`, justifyContent: 'center', alignItems: 'center', gap: 6, cursor: 'default', border: '2px solid #c9a24a88' }}>
       <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: deck === 'Character' ? FACE.character.bg : FACE.armyMuster.bg, borderRadius: 4, padding: '1px 4px', boxShadow: '0 1px 3px #000' }}>{stacked ? (deck === 'Character' ? 'Char' : 'Strat') : deck}</span>

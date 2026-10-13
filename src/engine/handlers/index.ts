@@ -1586,10 +1586,9 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
           // in between).
           state.flags.fpFreeCharEventPrompt = true;
           // No log line of its own for the OFFER — nothing has happened yet (player
-          // report 44356n1p2p07390m); the card's play line names why a free card may
-          // follow, and the free play (or the decline) is logged when it happens.
-          const played = [...state.log].reverse().find((e) => e.card === id);
-          if (played && !played.msg.endsWith('(Gandalf the White)')) played.msg += ' (Gandalf the White)';
+          // report 44356n1p2p07390m). The free play (or the decline) is logged when it
+          // happens, and it is THAT line which names Gandalf the White, not this card's
+          // own play (player report 4m295f1w2253720d).
         }
       };
       // A BESIEGED Army is still IN its region (p.31) — only its units sit in the
