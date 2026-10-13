@@ -144,7 +144,7 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     };
     const healAdjacent = (t: RegionId): boolean => (REGIONS[t]?.adjacency ?? []).some((a) => isHealSettlement(state, a));
     const closestToMordor = (cands: typeof declares) => cands.reduce((best, a) => {
-      const da = dist(a.target, 'morannon'), db = dist(best.target, 'morannon');
+      const da = toMordor(a.target), db = toMordor(best.target);
       if (da !== db) return da < db ? a : best;
       const sa = threatDist(a.target), sb = threatDist(best.target);
       if (sa !== sb) return sa > sb ? a : best;
@@ -179,8 +179,8 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // (player report: Progress 3, sat in a region with a Shadow Army and Nazgûl,
     // "should've declared somewhere empty so it could move without hunt re-rolls").
     if (!noRerolls(state.fellowship.location) && state.fellowship.progress >= 1) {
-      const here = dist(state.fellowship.location, 'morannon');
-      const clean = declares.filter((a) => a.target !== state.fellowship.location && noRerolls(a.target) && dist(a.target, 'morannon') <= here);
+      const here = toMordor(state.fellowship.location);
+      const clean = declares.filter((a) => a.target !== state.fellowship.location && noRerolls(a.target) && toMordor(a.target) <= here);
       if (clean.length) return closestToMordor(clean);
     }
     // Fellowship-plan BANK (stage 3, tried and REVERTED 2026-08-16): suppress this
@@ -200,8 +200,8 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // (2000-game A/B: corruption deaths 318→519, FP 46.9%→43.7% — the figure sat
     // too far back and the Ring died in transit), so distance-buying declares stay.
     if (state.fellowship.progress >= 4) {
-      const here = dist(state.fellowship.location, 'morannon');
-      const gains = declares.filter((a) => noRerolls(a.target) && here - dist(a.target, 'morannon') >= 3);
+      const here = toMordor(state.fellowship.location);
+      const gains = declares.filter((a) => noRerolls(a.target) && here - toMordor(a.target) >= 3);
       if (gains.length) return closestToMordor(gains);
     }
     return legal.find((a) => a.kind === 'skipFellowshipPhase') ?? legal[0]!;
@@ -487,6 +487,13 @@ function moriaAhead(fs: GameState['fellowship']): boolean {
   if (dist(fs.location, 'moria') > 3) return false;
   return dist(fs.location, 'morannon') > dist('moria', 'morannon');
 }
+/** Steps to the nearer Mordor entrance. Minas Morgul is as good a door as the Morannon
+ *  (p.43), but every Fellowship distance used to be measured to the Morannon alone, so
+ *  from North Ithilien the AI revealed into Dagorlad rather than straight into Minas
+ *  Morgul — a whole turn slower (report 50184k4453066d3n). */
+function toMordor(t: RegionId): number {
+  return Math.min(dist(t, 'morannon'), dist(t, 'minas-morgul'));
+}
 export function dist(from: RegionId, to: RegionId): number {
   if (from === to) return 0;
   const key = `${from}>${to}`;
@@ -715,6 +722,10 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // Hunt. (Reports 5m626h2p5p42263l, 1s5v3a38234y721v: it moved on from the Morannon,
       // was revealed, and the figure stepped back into Dagorlad.)
       if (MORDOR_ENTRANCES.includes(fs.location)) return 1;
+      // Likewise once an entrance is within the Progress already banked: the next
+      // Fellowship phase declares there and goes in, so another move is a Hunt roll for
+      // ground it does not need (report 4v503t4g6f496w49: Progress 1 in Dagorlad).
+      if (fs.hidden && toMordor(fs.location) <= fs.progress) return 1;
       // Pre-Mordor each move triggers a Hunt, so the push eases as Corruption climbs
       // and leans on declare-to-heal to bring it back down. But the old curve
       // (72 - 9x, floor 8) fell off a cliff: by Corruption 5 the Fellowship move lost
@@ -955,7 +966,9 @@ function diplomaticScore(state: GameState, actor: Side, nation: Nation): number 
     return proximity + army * 2;
   }
   if (!ns.active) return 8;                                             // FP advances toward War reactively
-  return ns.step === 1 ? 30 : 20;
+  // Finish one Nation before starting the next: a step only pays once the Nation is At
+  // War, and North then Elves left both two steps short (report 334n152r4u1p2h3o).
+  return ns.step === 1 ? 30 : ns.step === 2 ? 24 : 20;
 }
 
 /** Muster where it matters: into/near an existing army or near the campaign target —
@@ -974,6 +987,12 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
   // is exactly the weight measured when the term was introduced, but once they are
   // genuinely closing, covering our own Settlements outranks pressing the attack.
   s += garrisonGap(state, a.region, actor) * ((REGIONS[a.region]!.vp ?? 0) * 20 + 30) * (1 + 1.5 * enemyPressure(state, actor));
+  // NOT a Free Peoples "muster where the Shadow is about to strike" term. Reports
+  // 40736j3x5z665456, 1m4j350n0t1x0u6o, 6c502v5f6d1e6t5z (Gondor, the Woodland Realm,
+  // Edoras) asked the FP to muster before the Fellowship moves when a Shadow Army is
+  // near. Tried 2026-10-13: +35 here with a Shadow Army within two regions. FP wins
+  // 1166->1134, 1119->1111 against bef53ae (-40): the extra musters came out of the
+  // Fellowship's dice. A narrower version may still pay.
   return s;
 }
 
@@ -1022,6 +1041,15 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // unit marching off really does hand it over.
   if (garrisonWorthy(state, actor, from) && unitCount(state, from) < 2) {
     s -= (REGIONS[from]!.vp * 14 + 10) * (1 + 1.5 * enemyPressure(state, actor));
+  }
+  // The Free Peoples walking their Army out of a Stronghold with a Shadow Army within
+  // two regions: the garrison split leaves one unit, which reads as "held" above but
+  // falls to the first assault. Erebor -> Dale and -> Iron Hills, Minas Tirith ->
+  // Osgiliath, Woodland Realm with a Shadow Army on the Old Forest Road (reports
+  // 52180q19226b5i5j, 2k100f5d3a1d5l6m, 6p5h6c4v0x0v5u3m, 686j2r6o26631e4o).
+  if (actor === 'fp' && REGIONS[from]!.settlement === 'Stronghold' && settlementCtrl(state, from) === 'fp'
+    && enemyNear(state, from, 'shadow', 2) && !armyHere(state, to, 'shadow')) {
+    s -= 45;
   }
   // Walking the field Army out of a siege we hold LIFTS it: the garrison is free again
   // and the next action is spent besieging it back. The Shadow did exactly that, in and
@@ -1217,7 +1245,12 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         if (state.cards.shadow.table.includes(a.cardId) && !state.cards.shadow.hand.includes(a.cardId)) continue;
         const mods = combatModsFor(a.cardId);
         if (owner === 'shadow' && pc && mods?.symmetricBonus && sharedBonusEdge(state, owner, mods) <= 0) continue;
-        const v = combatCardValue(mods);
+        let v = combatCardValue(mods);
+        // A to-hit penalty is wasted on an enemy who already hits only on 6s (an attacker
+        // in a siege, or in a City/Fortification's first round): a 6 still hits
+        // (report 591g3k3a234p0321, Advantageous Position).
+        const enemyOn6 = pc && owner === pc.defender && (pc.siege || (pc.fortified && pc.round === 0));
+        if (enemyOn6 && mods?.enemyRollPenalty) v -= mods.enemyRollPenalty * 2;
         if (v > bestVal) { bestVal = v; best = a; }
       }
       return best;
@@ -1251,7 +1284,12 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // the Grey as the casualty — it absorbs the damage AND unlocks Gandalf the
       // White (a stronger piece + the die he brings). Only while Corruption is not
       // yet critical (the sacrifice covers the whole hit regardless of his Level).
-      if (damage >= 2 && state.fellowship.guide === 'gandalf-grey' && wouldCorrupt < 10) {
+      // On a 1 too when a Will of the West die is in hand and a Minion is in play: Gandalf
+      // the White can then come at once, with his Action die, and Strider takes over as
+      // Guide (reports 6i5t4m4t5g3w5o4y, 4m2o4b5x323q1i14, 0b6o1772366f0i44).
+      const whiteAtOnce = state.dice.fp.includes('will')
+        && ['saruman', 'witch-king', 'mouth-of-sauron'].some((m) => state.characters.entered.includes(m));
+      if ((damage >= 2 || (damage >= 1 && whiteAtOnce)) && state.fellowship.guide === 'gandalf-grey' && wouldCorrupt < 10) {
         const guide = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide');
         if (guide) return guide;
       }
@@ -1288,6 +1326,14 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         ? legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide')
         : legal.find((a) => a.kind === 'huntDamage' && a.mode === 'random'))
         ?? legal.find((a) => a.kind === 'huntDamage' && (a.mode === 'guide' || a.mode === 'random'));
+      // A Hobbit Guide can SEPARATE to take 1 off the hit instead of falling to it: the
+      // same reduction for the same body, but he lives on (off the Track), it is no
+      // casualty for Worn with Sorrow and Toil, and the next Hobbit — then Gollum — takes
+      // over as Guide (reports 5w0j532f3c4x4p6w, 0p5c0p1n2b6y0f4r). Wherever a body is
+      // about to be spent, that comes first.
+      const hobbitSteps = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'reduceSeparate');
+      const spendBody = state.fellowship.companions.length > 0 && (state.fellowship.mordor !== null || wouldCorrupt >= 3);
+      if (hobbitSteps && spendBody) return hobbitSteps;
       if (state.fellowship.mordor !== null && state.fellowship.companions.length > 0) {
         const cas = casualty();
         if (cas) return cas;
@@ -1602,7 +1648,7 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       if (!moves.length) return legal[0]!;
       const healSpots = (Object.keys(state.regions) as RegionId[]).filter((id) => isHealSettlement(state, id));
       const healDist = (t: RegionId): number => healSpots.reduce((m, h) => Math.min(m, dist(t, h)), Infinity);
-      const rank = (t: RegionId): number[] => [dist(t, 'morannon'), huntClean(state, t) ? 0 : 1, huntThreat(state, t), healDist(t)];
+      const rank = (t: RegionId): number[] => [toMordor(t), huntClean(state, t) ? 0 : 1, huntThreat(state, t), healDist(t)];
       let best = moves[0]!, bestRank = rank(best.target);
       for (const a of moves.slice(1)) {
         const r = rank(a.target);

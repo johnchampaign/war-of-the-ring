@@ -130,7 +130,10 @@ const mordorHit = (damage, corruption, companions, guide) => {
     after = wotrAdapter.applyAction(after, decide(after), 'fp');
   }
   const line = after.log.map((e) => e.msg).find((m) => m.startsWith('Hunt resolved')) ?? '';
-  check('the Ring-bearers survive it — Strider absorbed 3 of the 6, so 10 not 13', line.includes('(Total: 10)'), line);
+  // 10 at most: Strider absorbs 3 of the 6; since 2026-10-13 the Hobbit Guides who
+  // follow him step out of the Fellowship to take 1 each as well (report 5w0j532f3c4x4p6w).
+  const total = Number(/\(Total: (\d+)\)/.exec(line)?.[1] ?? 99);
+  check('the Ring-bearers survive it — Strider absorbed 3 of the 6, so 10 or less, not 13', total <= 10, line);
 }
 {
   // The reverse: a hit SMALLER than the Guide's Level wastes his absorption, so a
