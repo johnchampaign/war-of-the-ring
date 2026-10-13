@@ -1321,6 +1321,11 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // Cut at 3, where Companions start being spent instead of Corruption (below), and
       // not lower: the heuristic Shadow may punish a revealed Fellowship less than a
       // human does, so the curve's low end is the part self-play is least able to judge.
+      // Open refinement (report 703q682j6q2i0z1z): a human weighs the Ring race against
+      // the Shadow's military clock and skips the reveal when pressed for time — e.g.
+      // Shadow at 9+ VP and the dice for the remaining Mordor steps only just in hand,
+      // where the dice spent re-hiding would cost the finish. Self-play's slower Shadow
+      // never creates that squeeze, so it is unmeasured here, not ruled out.
       if (wouldCorrupt >= 3) {
         const reveal = legal.find((a) => a.kind === 'huntDamage' && a.mode === 'reduceReveal');
         if (reveal) return reveal;
