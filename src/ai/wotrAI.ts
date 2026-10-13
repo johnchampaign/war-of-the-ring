@@ -894,6 +894,14 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // is simply dead. Keep it for its combat half instead (player report: "SP played
       // Flocks of Crebain while I was in Mordor (no effect)").
       if (a.cardId === 'sh-char-16' && fs.mordor !== null) return 1;
+      // The Lidless Eye trades the die that plays it, plus up to three more, for Eyes in
+      // the Hunt Box that only bite if the Free Peoples go on to move the Fellowship this
+      // turn — and they may have no Character die left to do it. A human holds it for its
+      // combat half (player report 0p0317323p0h3v66: "ban the AI from playing it").
+      // Below every real option, so it is never chosen as an Event. Measured 2026-10-13
+      // against 07df9c2, Shadow wins over 3 x 2000: heuristic FP 471/476/521 ->
+      // 516/497/528 (+73), human-like FP 642/600/601 -> 660/640/626 (+83).
+      if (a.cardId === 'sh-char-18') return -5;
       // Worn with Sorrow and Toil only bites "if a Companion IN THE FELLOWSHIP is taken
       // as a casualty" — and a Companion can never rejoin the Fellowship, so with the
       // Fellowship down to the Ring-bearers the trigger can never fire again for the
@@ -1349,7 +1357,9 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // Companion instead unless that could leave the Ring-bearers dead. Free Peoples
       // wins over 3 x 2000 games against f6bbe6b: 1124->1058, 1078->1076, 1070->1070
       // (-68). The AI does not yet USE a living Strider enough to repay the Corruption a
-      // random Hobbit leaves behind; revisit once it plans the crowning.
+      // random Hobbit leaves behind; revisit once it plans the crowning. Re-tried
+      // 2026-10-13 against 07df9c2 (report s62i9vajpqaq09pi, after the Gollum −1 and
+      // the Mordor-approach changes): 1529->1492, 1524->1462, 1479->1462 (-116). Still no.
       const takeGuide = guideIn && (damage >= guideLevel || randomMightKill);
       const casualty = (): WotrAction | undefined => (takeGuide
         ? legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide')
