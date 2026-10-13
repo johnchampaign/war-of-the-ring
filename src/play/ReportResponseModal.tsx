@@ -2,6 +2,8 @@
 // filed has been resolved with a note (fetched from /api/my-responses, gated by
 // the seen-responses set so each reply pops exactly once). The reply copy is
 // written for the reporter; this just frames it and echoes their original words.
+import { stripReporterMarker } from './reporterId';
+
 export function ReportResponseModal({ notice, onDismiss }: {
   notice: { reportId: string; message: string; response: string };
   onDismiss: () => void;
@@ -12,9 +14,9 @@ export function ReportResponseModal({ notice, onDismiss }: {
         <div style={{ fontSize: 12, color: '#e6b85a', fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           Reply to your problem report
         </div>
-        {notice.message && (
+        {stripReporterMarker(notice.message) && (
           <div style={{ fontSize: 13, color: '#998', marginBottom: 14, fontStyle: 'italic' }}>
-            “{notice.message}”
+            “{stripReporterMarker(notice.message)}”
           </div>
         )}
         <div style={{ fontSize: 14, color: '#ece4d2', lineHeight: 1.55, whiteSpace: 'pre-wrap', marginBottom: 16 }}>

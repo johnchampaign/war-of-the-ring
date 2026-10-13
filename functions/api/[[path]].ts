@@ -172,7 +172,9 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         .filter((r) => r.resolution && typeof r.message === 'string' && r.message.includes(marker))
         .map((r) => ({
           reportId: r.reportId,
-          message: r.message.replace(/\n*<!-- reporter:[a-zA-Z0-9-]{4,64} -->/g, '').trim().slice(0, 2000), // the full report as filed (submit caps it at 2000)
+          // The full report as filed (submit caps it at 2000), minus the machine markers the
+          // client appends (reporter id, ⚙ settings) — they leaked into the popup (report 1c6i6c324x083b5w).
+          message: r.message.replace(/\n*<!-- [a-z]+:[^>]*-->/g, '').trim().slice(0, 2000),
           response: (r.resolution!.note ?? '').trim(),
           at: r.resolution!.at,
         }))
