@@ -8,6 +8,7 @@
 //    rather than falling as the casualty.
 //  - 6i5t4m4t5g3w5o4y / 4m2o4b5x323q1i14 / 0b6o1772366f0i44: on a 1-damage hit, with a
 //    Will of the West die in hand and a Minion in play, Gandalf the Grey takes it.
+//  - (follow-up) and no Companion separates there either.
 //  - 591g3k3a234p0321: Advantageous Position is not played when the Shadow already hits
 //    only on 6s.
 import { Rng } from 'digital-boardgame-framework';
@@ -45,6 +46,9 @@ console.log('\n=== Mordor approach ===');
   const legal = wotrAdapter.legalActions(s, 'fp');
   const a = decide(s);
   check('Progress 1 in Dagorlad: no further move', legal.some((x) => x.kind === 'moveFellowship') && a.kind !== 'moveFellowship', JSON.stringify(a).slice(0, 100));
+  // …nor does it strip the Fellowship on the doorstep: the Companions are the bodies
+  // that absorb the Mordor Track's Hunt.
+  check('…and no Companion separates on the doorstep', a.kind !== 'separateCompanion', JSON.stringify(a).slice(0, 100));
 }
 
 console.log('\n=== Hunt damage ===');

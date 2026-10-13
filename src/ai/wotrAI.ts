@@ -199,6 +199,12 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // separated-Companion movement. But declaring NEVER mid-journey tested worse
     // (2000-game A/B: corruption deaths 318→519, FP 46.9%→43.7% — the figure sat
     // too far back and the Ring died in transit), so distance-buying declares stay.
+    // NOT held back in a safe Free Peoples Stronghold. Report 4v5k54173r2s462a argued
+    // that declaring out of Rivendell (into Parth Celebrant) exposes the Fellowship to
+    // the "not in a Free Peoples Settlement" cards, Cruel Weather and Nazgûl. Tried
+    // 2026-10-13 — no distance declare out of an unbesieged FP Stronghold: FP wins
+    // 1303->1249, 1269->1227, 1262->1220 against ea944c0 (-138). The same lesson as
+    // BANK above: these declares are the walk.
     if (state.fellowship.progress >= 4) {
       const here = toMordor(state.fellowship.location);
       const gains = declares.filter((a) => noRerolls(a.target) && here - toMordor(a.target) >= 3);
@@ -804,7 +810,8 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // refuses), so what a player sees as "it separated everyone as soon as they got
       // to Mordor" is the AI emptying the Fellowship on the doorstep — the worst
       // possible moment (player report).
-      if (fs.mordor !== null || MORDOR_ENTRANCES.includes(fs.location)) return 1;
+      // …and on the doorstep too, once an entrance is within the Progress banked.
+      if (fs.mordor !== null || MORDOR_ENTRANCES.includes(fs.location) || (fs.hidden && toMordor(fs.location) <= fs.progress)) return 1;
       return passiveFp && fs.corruption < 6 ? 40 : 12;
     }
     case 'attack': {
@@ -992,7 +999,9 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
   // Edoras) asked the FP to muster before the Fellowship moves when a Shadow Army is
   // near. Tried 2026-10-13: +35 here with a Shadow Army within two regions. FP wins
   // 1166->1134, 1119->1111 against bef53ae (-40): the extra musters came out of the
-  // Fellowship's dice. A narrower version may still pay.
+  // Fellowship's dice. The narrower version — +25 only with a Shadow Army ADJACENT to a
+  // City or Stronghold — measured 1303->1259, 1269->1269, 1262->1280 against ea944c0
+  // (-26). Not shipped either.
   return s;
 }
 
@@ -1060,7 +1069,10 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // March toward the campaign target — and press harder when that target is standing
   // OPEN, so closing on a free capture outweighs the odds and ends the AI's habit of
   // parking next to an undefended Stronghold (player reports of both sides going quiet).
-  if (target) {
+  // A Free Peoples Army of three or fewer cannot take a Shadow Stronghold, so a lone
+  // Regular inching toward the campaign target is a die spent for nothing (report
+  // 5h3n20602m3l6h5o: "Carrock → Old Ford… inscrutable").
+  if (target && !(actor === 'fp' && unitCount(state, from) < 4 && settlementCtrl(state, target) === enemy && held(target))) {
     const open = settlementCtrl(state, target) === enemy && !held(target);
     s += -(dist(to, target) - dist(from, target)) * (open ? 20 : 12) * (pressing ? 1.5 : 1);
     if (to === target) s += 30;
