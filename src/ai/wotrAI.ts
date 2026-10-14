@@ -1374,6 +1374,10 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // random Hobbit leaves behind; revisit once it plans the crowning. Re-tried
       // 2026-10-13 against 07df9c2 (report s62i9vajpqaq09pi, after the Gollum −1 and
       // the Mordor-approach changes): 1529->1492, 1524->1462, 1479->1462 (-116). Still no.
+      // Read with care (report 0r1v2t3w4o153250): the heuristic Shadow is slow to press
+      // its military clock, so a faster Ring buys little in self-play while a Corruption
+      // point always costs. Against a human Shadow, Strider's speed should count for more
+      // — the mirror image of the Gollum −1's caveat (above).
       const takeGuide = guideIn && (damage >= guideLevel || randomMightKill);
       const casualty = (): WotrAction | undefined => (takeGuide
         ? legal.find((a) => a.kind === 'huntDamage' && a.mode === 'guide')

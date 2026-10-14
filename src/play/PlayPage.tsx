@@ -585,6 +585,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // in `panelActionsAll` (reports 6y3j4u31164n1c5r, 2j4j710i000x3k0b) remove the last
   // two buttons that were covering for this, so the pointer has to be honest now.
   const boardHints = useMemo(() => {
+    // Each line already wears a green "Map" tag, so none says "on the map" (player
+    // report 4s343h5x4v3s1a5h: "' — on the map.' is quite ungainly").
     const out: string[] = [];
     // AN EVENT CARD RESOLVING ON THE MAP gets ONE line, naming the card and what to
     // click — never the Action-die lines ("Move or attack", "Muster"), and never an empty
@@ -607,7 +609,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
         : isCardMove ? 'click a green Army, then where it goes'
         : isCardRecruit ? 'click a highlighted Settlement to recruit there'
         : sources.size ? 'click a highlighted region' : null;
-      if (what) out.push(`${name}: ${what} — on the map.`);
+      if (what) out.push(`${name}: ${what}.`);
       return out;
     }
     // Character and Nazgûl moves are covered by "Move or attack" (player report
@@ -615,15 +617,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // Not mid Character-move chain: the panel's own "Character move in progress" note
     // already says it, and two pointers in one place was overkill (player report
     // 2z056o2o6n4d136b).
-    if ((boardArmyActs.length || charSources.size) && g.view?.pendingChoice?.kind !== 'charMove2') out.push('Move or attack — click a highlighted region on the map.');
-    if (musterTargets.size) out.push('Muster — click a highlighted region on the map.');
+    if ((boardArmyActs.length || charSources.size) && g.view?.pendingChoice?.kind !== 'charMove2') out.push('Move or attack — click a highlighted region.');
+    if (musterTargets.size) out.push('Muster — click a highlighted region.');
     // The Fellowship phase is board-driven too (player report 414d1l3969347125).
-    if (g.legalActions.some((a) => a.kind === 'declareFellowship')) out.push('Declare the Fellowship — click a highlighted region on the map.');
+    if (g.legalActions.some((a) => a.kind === 'declareFellowship')) out.push('Declare the Fellowship — click a highlighted region.');
     // A card moving Companions already on the map points at the map like a Character
     // die does (player report 231u2i4l5p19426w).
     if (cardCompMoves.length) {
       const name = EVENT_BY_ID[cardCompMoves[0]!.card]?.name ?? 'The card';
-      out.push(`${name}: move Companions — click a highlighted region on the map, then where they go.`);
+      out.push(`${name}: move Companions — click a highlighted region, then where they go.`);
     }
     // The Ents Awake: one Character card from the hand, free (player report 1q4m361n2s444f4d).
     if (g.view?.pendingChoice?.kind === 'freeCharEvent' && g.yourTurn) out.push('The Ents Awake: you may play a Character Event card from your hand now, without a die — click it in your hand, or "Done" to play none.');
@@ -633,7 +635,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       const card = cardRegionActs[0]!.card;
       const what = ({ 'sh-char-19': 'click the Free Peoples Army to strike', 'fp-str-06': 'click the Shadow Army to strike', 'fp-str-05': 'click the Shadow Army to strike',
         'fp-char-18': 'click the Nazgûl the Eagles strike', 'sh-char-10': 'click the region the Fellowship is driven into' } as Record<string, string>)[card] ?? 'click a highlighted region';
-      out.push(`${EVENT_BY_ID[card]?.name ?? 'The card'}: ${what} — the highlighted regions on the map.`);
+      out.push(`${EVENT_BY_ID[card]?.name ?? 'The card'}: ${what}.`);
     }
     return out;
   }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves, cardRegionActs, g.view, g.yourTurn, cardSepActs, isCardSep, cardCharPicks, cardAssaultActs, isCardMove, isCardRecruit, sources]);
@@ -1264,7 +1266,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   don't shift sideways as it comes and goes (player report 485g3n106y053y21). */}
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto', scrollbarGutter: 'stable' }}>
                 <ActionPanel actions={minionPick ? [] : panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null}
-                  boardHints={minionPick ? [`Bring ${charName(minionPick)} into play — click a highlighted region on the map (Undo to change your mind).`] : boardHints}
+                  boardHints={minionPick ? [`Bring ${charName(minionPick)} into play — click a highlighted region (Undo to change your mind).`] : boardHints}
                   blocked={minionPick ? [] : blockedPanel} selectedDie={activeDie} />
               </div>
               {chatClient && g.you && (
