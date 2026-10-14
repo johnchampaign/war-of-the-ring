@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { describeAction, isDecisionAction, eventChoiceInModal } from './actionText';
 import { RollLine, CorruptionLine, describeDraw, HuntTileFace, strongholdRevealLine, type Draw } from './huntView';
 import { HuntInfoModal } from './HuntInfoModal';
-import { useCardArt } from './artCache';
+import { useCardArt, backId } from './artCache';
 import { RollRow } from './combatDice';
 import { NoticeText } from './NoticePopup';
 import { CardZoom } from './HandStrip';
@@ -256,8 +256,8 @@ function CombatHeader({ pc, view, onHover }: { pc: NonNullable<GameState['pendin
       )}
       {(pc.attackerCard || pc.defenderCard) && (
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-          {pc.attackerCard && <PlayedCard id={pc.attackerCard} who="Attacker" onHover={onHover} />}
-          {pc.defenderCard && <PlayedCard id={pc.defenderCard} who="Defender" onHover={onHover} />}
+          {pc.attackerCard && <PlayedCard id={pc.attackerCard} who="Attacker" side={pc.attacker} onHover={onHover} />}
+          {pc.defenderCard && <PlayedCard id={pc.defenderCard} who="Defender" side={pc.defender} onHover={onHover} />}
         </div>
       )}
     </div>
@@ -292,16 +292,21 @@ function ArmySize({ label, force, side, view }: { label: string; force?: { units
   );
 }
 
-function PlayedCard({ id, who, onHover }: { id: string; who: string; onHover?: (id: string | null) => void }) {
+function PlayedCard({ id, who, side, onHover }: { id: string; who: string; side: Side; onHover?: (id: string | null) => void }) {
   // 'hidden' = the opponent has DECLARED a Combat card but it's still face down
   // (RAW p.29: the declaration is open, the card's identity secret until reveal).
   const hidden = id === 'hidden' || id.startsWith('hidden');
   const art = useCardArt(hidden ? null : id);
+  // A face-down card shows its deck's real back once the art is cached, like the
+  // opponent's hand (player report 2c0n1q5b1m371g72).
+  const back = useCardArt(hidden ? backId(side, id === 'hidden-character' ? 'Character' : 'Strategy') : null);
   const hov = !hidden && onHover ? { onMouseEnter: () => onHover(id), onMouseLeave: () => onHover(null) } : {};
   return (
     <div style={{ fontSize: 11, color: '#aa9', textAlign: 'center', cursor: hov.onMouseEnter ? 'help' : undefined }} {...hov}>
       <div>{who}: {hidden ? 'a Combat card (face down)' : cardName(id)}</div>
-      {hidden
+      {hidden && back
+        ? <img src={back} alt="A face-down Combat card" style={{ height: 80, borderRadius: 3, marginTop: 2 }} />
+        : hidden
         ? <div style={{ height: 80, width: 56, borderRadius: 3, marginTop: 2, background: '#2a2418', border: '1px dashed #6a5f3a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8a7f5a', fontSize: 22 }}>?</div>
         : art && <img src={art} alt={cardName(id)} style={{ height: 80, borderRadius: 3, marginTop: 2 }} />}
     </div>

@@ -14,11 +14,15 @@ import type { Side, DieFace } from '../engine/types';
  *  DiceTray colours), so the cost is visible at a glance. */
 export function DieTag({ face }: { face: string }) {
   const f = FACE[face] ?? { label: face, bg: '#555' };
-  return <span style={{ background: f.bg, color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{f.label}</span>;
+  return <span style={{ background: f.bg, color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, lineHeight: TAG_LINE, fontWeight: 700, flexShrink: 0 }}>{f.label}</span>;
 }
 
 // The fixed die column every action button starts with: the die it spends, or a
 // "choose die" pointer when more than one die could pay.
+/** Explicit line heights for the action list: a button's and a board hint's text line,
+ *  and the small die / "Map" tag inside them (shorter, so it never sets the height). */
+const LINE = '18px';
+const TAG_LINE = '14px';
 const DIE_COL = { width: 62, flexShrink: 0, display: 'flex', alignItems: 'center' } as const;
 const CHOOSE_DIE = <span style={{ fontSize: 10, color: '#cb8', whiteSpace: 'nowrap' }}>choose die ▸</span>;
 
@@ -169,8 +173,11 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       {/* Board-driven actions live on the MAP (not in this list) — point the player
           there, one line per kind that is actually available right now. */}
       {boardHints.map((hint) => (
-        <div key={hint} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#23341f', border: '1px solid #4a6a3a', borderRadius: 5, padding: '6px 9px', margin: '3px 0', fontSize: 12, color: '#cfe6c0' }}>
-          <span style={{ background: '#3f5a33', color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>Map</span>
+        // The same box as an action button — padding, border and an explicit line
+        // height — so a hint and a button are the same height (player report
+        // 231c1m1h6s5a5e2g: the hints sat a pixel short).
+        <div key={hint} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#23341f', border: '1px solid #4a6a3a', borderRadius: 5, padding: '7px 10px', margin: '3px 0', fontSize: 12, lineHeight: LINE, color: '#cfe6c0' }}>
+          <span style={{ background: '#3f5a33', color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 10, lineHeight: TAG_LINE, fontWeight: 700 }}>Map</span>
           <span>{hint}</span>
         </div>
       ))}
@@ -199,7 +206,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       {chainNote && (
         <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', margin: '4px 0', fontSize: 13 }}>⚑ {chainNote}</div>
       )}
-      {live.length === 0 && skips.length === 0 && boardHints.length === 0 && (
+      {live.length === 0 && skips.length === 0 && boardHints.length === 0 && !chainNote && (
         boardPending
           ? <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', fontSize: 13 }}>⚑ {boardPending}</div>
           : <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>
@@ -285,9 +292,13 @@ function ActionButton({ action, disabled, onClick, onHover, options, forceDie, c
             1q5s140023682d2j: these lists should be padded the way the log is). */}
         {/* An ambiguous action's "choose die" sits in that same column, where its die
             would otherwise be (player report 3k081r652z44460p). */}
-        <span style={DIE_COL}>
-          {ambiguous ? CHOOSE_DIE : tagDie && <DieTag face={tagDie} />}
-        </span>
+        {/* Mid-Action the choices spend no die of their own, so an empty column would
+            only indent them (player report 6x1d086j0p221v49). */}
+        {(ambiguous || tagDie || !view?.pendingChoice) && (
+          <span style={DIE_COL}>
+            {ambiguous ? CHOOSE_DIE : tagDie && <DieTag face={tagDie} />}
+          </span>
+        )}
         {art && <img src={art} alt="" style={{ height: compact ? 30 : 48, borderRadius: 3, flexShrink: 0 }} />}
         <span style={{ minWidth: 0 }}>{describeAction(action, view)}</span>
       </button>
@@ -357,4 +368,4 @@ function RemoveWithCardsButton({ acts, disabled, onClick, onHover, options, forc
 }
 
 const panel: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 12, background: '#211c14', color: '#eee', fontFamily: 'system-ui' };
-const btn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'left', margin: '3px 0', padding: '7px 10px', background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', borderRadius: 5, cursor: 'pointer', fontSize: 13 };
+const btn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'left', margin: '3px 0', padding: '7px 10px', background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', borderRadius: 5, cursor: 'pointer', fontSize: 13, lineHeight: LINE, boxSizing: 'border-box' };

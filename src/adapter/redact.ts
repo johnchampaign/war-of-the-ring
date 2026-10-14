@@ -53,8 +53,12 @@ export function redactStateForViewer(state: GameState, viewer: Side | null): Gam
   // the opponent's committed-but-unrevealed card with a face-down marker ('hidden')
   // rather than erasing it. Once the round begins (both locked), they're public.
   if (v.pendingCombat && viewer != null && (v.pendingCombat.step === 'attackerCard' || v.pendingCombat.step === 'defenderCard')) {
-    if (viewer !== v.pendingCombat.attacker) v.pendingCombat.attackerCard = v.pendingCombat.attackerCard ? 'hidden' : null;
-    if (viewer !== v.pendingCombat.defender) v.pendingCombat.defenderCard = v.pendingCombat.defenderCard ? 'hidden' : null;
+    // The marker names the card's DECK, as a hand card's does: a card played face down
+    // still shows its back, which is how the battle window can draw that back (player
+    // report 2c0n1q5b1m371g72).
+    const faceDown = (id: string | null | undefined) => (!id ? null : EVENT_BY_ID[id]?.deck === 'Character' ? 'hidden-character' : 'hidden-strategy');
+    if (viewer !== v.pendingCombat.attacker) v.pendingCombat.attackerCard = faceDown(v.pendingCombat.attackerCard);
+    if (viewer !== v.pendingCombat.defender) v.pendingCombat.defenderCard = faceDown(v.pendingCombat.defenderCard);
   }
 
   // Log: public entries + the viewer's own secret ones (log-format v2: `secret`

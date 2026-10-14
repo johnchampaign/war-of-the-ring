@@ -19,9 +19,13 @@ export const FACE: Record<string, { label: string; bg: string }> = {
 function Chip({ face, dim, selected, onClick }: { face: string; dim?: boolean; selected?: boolean; onClick?: () => void }) {
   const f = FACE[face] ?? { label: face, bg: '#555' };
   const style: React.CSSProperties = {
+    // One box for the clickable <button> and the inert <span>: the same font, line
+    // height and border, so a die keeps its size when the tray stops taking clicks
+    // mid-Action (player report 505p390k4o102e4a: the dice grew while a card resolved).
     background: f.bg, color: '#fff', borderRadius: 5, padding: '3px 7px', fontSize: 12, fontWeight: 600,
+    fontFamily: 'inherit', lineHeight: '16px', display: 'inline-block', boxSizing: 'border-box',
     opacity: dim ? 0.4 : 1, whiteSpace: 'nowrap',
-    border: selected ? '2px solid #ffe08a' : onClick ? '2px solid transparent' : undefined,
+    border: selected ? '2px solid #ffe08a' : '2px solid transparent',
     boxShadow: selected ? '0 0 6px #ffd86a' : undefined,
   };
   if (onClick) return <button type="button" onClick={onClick} style={{ ...style, cursor: 'pointer' }}>{f.label}</button>;

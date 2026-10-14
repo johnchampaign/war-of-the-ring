@@ -471,11 +471,14 @@ export function drawHuntTileNumber(state: GameState, source: string, outcome: (n
 /** Resolve a Hunt after the Fellowship moves while NOT on the Mordor Track. If the
  *  Shadow holds Flocks of Crebain, pause for their choice to discard it for +1 to all
  *  Hunt dice; otherwise roll immediately. */
-export function resolveHunt(state: GameState): void {
+/** `dieEnters` is false when an Event card (not an Action die) moved the Fellowship:
+ *  "an Action die used to play this card is not added to the Hunt box" (Almanac,
+ *  There Is Another Way). The Hunt is still rolled as normal. */
+export function resolveHunt(state: GameState, dieEnters = true): void {
   const h = state.hunt;
   const level = Math.min(5, h.box);
   const bonus = h.fpDiceInBox;   // dice already in the box (before this move's die)
-  if (!fellowshipDieSkipsHuntBox(state)) { h.fpDiceInBox += 1; h.fpDieEntering = true; } // FP die enters the Hunt Box (unless "The Last Battle")
+  if (dieEnters && !fellowshipDieSkipsHuntBox(state)) { h.fpDiceInBox += 1; h.fpDieEntering = true; } // FP die enters the Hunt Box (unless "The Last Battle")
   if (level <= 0) return;
   if (state.cards.shadow.table.includes('sh-char-16')) {
     state.pendingChoice = { owner: 'shadow', kind: 'crebain', data: { level, bonus, rerolls: huntRerolls(state) } };
@@ -522,7 +525,7 @@ export function resolveCrebain(state: GameState, use: boolean): void {
 
 /** Resolve a step on the Mordor Track: draw a tile (advancing unless it's a Stop)
  *  and apply it — no Hunt roll. Wizard's Staff / Mithril Coat may intercept. */
-export function resolveMordorStep(state: GameState): void {
+export function resolveMordorStep(state: GameState, dieEnters = true): void {
   const fs = state.fellowship;
   if (fs.mordor === null) return;
   // Eye-tile damage on the Mordor Track = the dice in the Hunt Box, "including Free
@@ -534,7 +537,7 @@ export function resolveMordorStep(state: GameState): void {
   // for rolled Hunt dice (p.41), and in Mordor no roll happens — so dice from earlier
   // Fellowship moves this turn do add up. (Report: 2 Shadow + 1 FP die dealt 2, not 3.)
   const level = state.hunt.box + state.hunt.fpDiceInBox;
-  if (!fellowshipDieSkipsHuntBox(state)) { state.hunt.fpDiceInBox += 1; state.hunt.fpDieEntering = true; } // FP die enters the Hunt Box (unless "The Last Battle")
+  if (dieEnters && !fellowshipDieSkipsHuntBox(state)) { state.hunt.fpDiceInBox += 1; state.hunt.fpDieEntering = true; } // FP die enters the Hunt Box (unless "The Last Battle")
   // On the Mordor Track the tile is drawn automatically (no Hunt roll); record that.
   state.hunt.lastRoll = { level, bonus: 0, dice: [], rerolls: [], successes: level, mordor: true };
   beginHuntDraw(state, level, true);

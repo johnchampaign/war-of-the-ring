@@ -523,7 +523,7 @@ register('fp-char-10', {
     if (t.mode === 'hide') { state.fellowship.hidden = true; log(state, null, 'fellowship', 'There Is Another Way: Fellowship hidden (Gollum)'); }
     // 'move' is deferred to finalize (it raises a Hunt choice); 'none' does nothing.
   },
-  finalize: (state, _side, applied) => { if (applied.some((t) => t.mode === 'move')) moveFellowship(state); },
+  finalize: (state, _side, applied) => { if (applied.some((t) => t.mode === 'move')) moveFellowship(state, true); },
 });
 // Bilbo's Song: a pure heal, so it is not offered with no Corruption to remove
 // (player report 0k6e6n2c6m6g153q).
@@ -964,7 +964,11 @@ register('sh-str-10', {
       // battle as a rearguard, returns to Umbar, and never advances — the combat driver
       // restores a rearguard only after the forced advance.
       const rearguard = t.move ? corsairsStayBehind(state, t.from!, t.move) : undefined;
-      log(state, null, 'event', `Corsairs of Umbar: the Umbar Army lands at ${t.to} and gives battle${rearguard ? ' (part of it stays in Umbar)' : ''}`);
+      // The die-move format, like every card move (player report 5k04685w425w1y6o); the
+      // battle logs its own line, so the card no longer narrates the landing.
+      const stay = rearguard ? Object.values(rearguard.units ?? {}).reduce((t, u) => t + (u?.regular ?? 0) + (u?.elite ?? 0), 0) : 0;
+      const landing = unitCount(state, t.from!) - stay;
+      log(state, null, 'army', `Shadow Army moves ${t.from} → ${t.to}${rearguard ? ` (${landing} unit${landing === 1 ? '' : 's'})` : ''}`);
       startBattle(state, 'shadow', t.from!, t.to!, { noCease: true, mustAdvance: true, rearguard });
       return;
     }
@@ -2014,8 +2018,9 @@ function cardAttackRearguard(state: GameState, t: EventTarget, side: Side, mustF
 function applyNazgulArmyAction(state: GameState, t: EventTarget, applied: EventTarget[] = [], mustFight = cardAttackFighters('sh-char-23')): void {
   if (t.mode === 'attack') {
     const rearguard = cardAttackRearguard(state, t, 'shadow', mustFight);
+    // No card-level line: the battle's own "Shadow attacks …" line already says it
+    // (player report 5f5m4v322e1r1122).
     startBattle(state, 'shadow', t.from!, t.to!, { rearguard });
-    log(state, null, 'event', `Nazgûl-led attack ${t.from} → ${t.to}`);
   }
   else {
     // A split of a Nazgûl-led Army must keep the card's qualifying figure with the

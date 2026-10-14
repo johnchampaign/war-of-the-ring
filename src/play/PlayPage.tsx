@@ -147,6 +147,17 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Drop the pending prompt outright once the turn leaves you, so it cannot come back
   // pointing at an action from a turn that has already ended.
   useEffect(() => { if (!g.yourTurn) setDiePick(null); }, [g.yourTurn]);
+  // A press anywhere outside the prompt dismisses it, and the click still goes through
+  // to whatever was pressed: the question belongs to the action that raised it, and
+  // carrying on with the map or the panel means it is no longer being asked (player
+  // report 6a0m1s6y2g68426j).
+  const diePickRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!diePick) return;
+    const onDown = (e: PointerEvent) => { if (!diePickRef.current?.contains(e.target as Node)) setDiePick(null); };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [diePick]);
   const charDieOk = !activeDie || activeDie === 'character' || activeDie === 'will';
   const [selected, setSelected] = useState<RegionId | null>(null);
   // A card that moves an Army "through more than one region" is traced step by step:
@@ -374,13 +385,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const m = new Map<string, WotrAction>();
     // A card lights only if the selected die can pay for it, like the panel's list
     // (player report 1e2v5l5f0q5d6h0v).
-    if (g.yourTurn) for (const a of g.legalActions) {
+    // Nothing in hand lights while a Minion is being placed (player report 450z6f2h0t4p3c1c).
+    if (g.yourTurn && !minionPick) for (const a of g.legalActions) {
       if (a.kind !== 'playEvent' || m.has(a.cardId)) continue;
       if (activeDie && g.view && g.you && !dieAllowsAction(a, g.view, g.you as Side, activeDie)) continue;
       m.set(a.cardId, a);
     }
     return m;
-  }, [g.legalActions, g.yourTurn, activeDie, g.view, g.you]);
+  }, [g.legalActions, g.yourTurn, activeDie, g.view, g.you, minionPick]);
   // Retreat destinations are board clicks (player report 0f3003342g666741): the
   // battle modal asks Retreat-or-stand, the MAP answers "to where".
   // The Eagles are Coming!'s refuge for the surviving Nazgûl is the same kind of pick —
@@ -534,7 +546,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const musterTargets = useMemo(() => new Set([...recruitActs.map((a) => a.region), ...cardRecruitActs.map((a) => a.region!), ...secondMusterActs.map((a) => a.region!)]), [recruitActs, cardRecruitActs, secondMusterActs]);
   const minionPickActs = useMemo(() => (minionPick ? minionActs.filter((a) => a.minion === minionPick) : []), [minionPick, minionActs]);
   const minionPickTargets = useMemo(() => new Set(minionPickActs.map((a) => a.region)), [minionPickActs]);
-  const sources = useMemo(() => new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets, ...cardCharSources, ...cardCompSources]), [boardArmyActs, cardMoveActs, cardCharSources, cardCompSources, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
+  // While a Minion is being placed only his entry regions (orange) are live, as when
+  // Gandalf the White enters play (player report 450z6f2h0t4p3c1c).
+  const sources = useMemo(() => minionPick ? new Set<RegionId>() : new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets, ...cardCharSources, ...cardCompSources]), [minionPick, boardArmyActs, cardMoveActs, cardCharSources, cardCompSources, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
   // The generic "why can't I do that?" hints (moveBlockReason / musterBlockReason)
   // belong to the BASIC Move / Muster actions during Action Resolution, and nowhere
   // else. Every other map click is a different question — placing the Ring-bearers on
@@ -574,7 +588,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const out: string[] = [];
     // Character and Nazgûl moves are covered by "Move or attack" (player report
     // 38082l3z263r3e4h: the separate character hint read as excluding the Nazgûl).
-    if (boardArmyActs.length || charSources.size) out.push('Move or attack — click a highlighted region on the map.');
+    // Not mid Character-move chain: the panel's own "Character move in progress" note
+    // already says it, and two pointers in one place was overkill (player report
+    // 2z056o2o6n4d136b).
+    if ((boardArmyActs.length || charSources.size) && g.view?.pendingChoice?.kind !== 'charMove2') out.push('Move or attack — click a highlighted region on the map.');
     if (musterTargets.size) out.push('Muster — click a highlighted region on the map.');
     // The Fellowship phase is board-driven too (player report 414d1l3969347125).
     if (g.legalActions.some((a) => a.kind === 'declareFellowship')) out.push('Declare the Fellowship — click a highlighted region on the map.');
@@ -1068,6 +1085,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // height:100% (not 100vh) so the page fills whatever box its parent gives it --
     // online, that box is the viewport MINUS the sign-in bar above it (report 2t2n).
     <div className="wotr-play" style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0c0a07' }}>
+      {/* Page-wide styles. They used to live inside the busy overlay, so they only
+          applied while a move was resolving: text selection went back to blue the
+          moment it closed (player report 0h1t4a5d4g2x0a3l), and the die prompt's glow
+          had no keyframes. Stray drag-selections no longer paint blue across the board
+          and panels; the log, a reply to a report, and anything you type still show
+          what is selected, so it can be copied (player report 66563r4a72662j1r). */}
+      <style>{'.wotr-play ::selection{background:transparent}.wotr-play .wotr-log ::selection,.wotr-play .wotr-selectable ::selection,.wotr-play textarea::selection,.wotr-play input::selection{background:#3d5f8f;color:#fff}'}</style>
+      <style>{'@keyframes wotr-spin{to{transform:rotate(360deg)}}@keyframes wotr-attn{0%{box-shadow:0 0 0 0 #ffd36a,0 6px 20px #000c}100%{box-shadow:0 0 0 10px #ffd36a00,0 6px 20px #000c}}@keyframes wotr-late{to{opacity:1}}'}</style>
       {busy && <BusyOverlay />}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Board column sized to the crop's width at full available height, so the
@@ -1211,7 +1236,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                 <DiceTray view={g.view} you={g.you as Side} only="opp" />
               </div>
               {/* Action buttons (compact — half height). */}
-              <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto' }}>
+              {/* The scrollbar's room is kept even when the list fits, so the buttons
+                  don't shift sideways as it comes and goes (player report 485g3n106y053y21). */}
+              <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto', scrollbarGutter: 'stable' }}>
                 <ActionPanel actions={minionPick ? [] : panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null}
                   boardHints={minionPick ? [`Bring ${charName(minionPick)} into play — click a highlighted region on the map (Undo to change your mind).`] : boardHints}
                   blocked={minionPick ? [] : blockedPanel} selectedDie={activeDie} />
@@ -1230,7 +1257,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   the prompt is open (a pendingChoice resolving, a timeout), and a
                   prompt for an action you can no longer take is worse than none. */}
               {diePick && g.yourTurn && g.view && g.you && (
-                <div data-testid="die-pick-prompt" style={{ position: 'absolute', bottom: '100%', left: 6, right: 6, marginBottom: 4, zIndex: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '7px 10px', background: '#3a2a12', border: '1px solid #c9a24a', borderRadius: 6, fontSize: 13, color: '#f0d090', boxShadow: '0 6px 20px #000c', animation: 'wotr-attn 0.45s ease-out 3' }}>
+                <div ref={diePickRef} data-testid="die-pick-prompt" style={{ position: 'absolute', bottom: '100%', left: 6, right: 6, marginBottom: 4, zIndex: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '7px 10px', background: '#3a2a12', border: '1px solid #c9a24a', borderRadius: 6, fontSize: 13, color: '#f0d090', boxShadow: '0 6px 20px #000c', animation: 'wotr-attn 0.45s ease-out 3' }}>
                   <span>Which die pays for “{describeAction(diePick, g.view)}”?</span>
                   {dieOptions(diePick, g.view, g.you as Side).map((f) => (
                     <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
@@ -1331,7 +1358,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   // are the only ones on offer (player report 2l4d2f146v333i3b).
                   : o.kind === 'cardchar' ? o.label
                   : o.kind === 'cardgroup' ? `All of them together (${o.acts.map((a) => charName((a as Extract<WotrAction, { kind: 'eventTarget' }>).companion!)).join(', ')})`
-                  : o.kind === 'chargroup' || (o.kind === 'cardcomps' && o.chars.length > 1) ? `Move Companions… (${o.chars.map(charName).join(', ')})`
+                  : o.kind === 'chargroup' || (o.kind === 'cardcomps' && o.chars.length > 1) ? 'Move Companions…' // the names are on the map already (player report 4v4x3j59451y4y4z)
                   : o.kind === 'cardcomps' ? charName(o.chars[0]!)
                   : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
               </button>
@@ -1503,12 +1530,11 @@ function NazgulCountPicker({ pick, onConfirm, onCancel }: {
 function BusyOverlay() {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, cursor: 'progress', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'transparent' }}>
-      {/* Stray drag-selections no longer paint blue across the board and panels; the
-          log, a reply to a report, and anything you type still show what is
-          selected, so it can be copied (player report 66563r4a72662j1r). */}
-      <style>{'.wotr-play ::selection{background:transparent}.wotr-play .wotr-log ::selection,.wotr-play .wotr-selectable ::selection,.wotr-play textarea::selection,.wotr-play input::selection{background:#3d5f8f;color:#fff}'}</style>
-      <style>{'@keyframes wotr-spin{to{transform:rotate(360deg)}}@keyframes wotr-attn{0%{box-shadow:0 0 0 0 #ffd36a,0 6px 20px #000c}100%{box-shadow:0 0 0 10px #ffd36a00,0 6px 20px #000c}}'}</style>
-      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, background: '#1c1710e6', color: '#e9e1cc', fontFamily: 'system-ui', fontSize: 13, padding: '8px 14px', borderRadius: 20, border: '1px solid #5a4a2a', boxShadow: '0 4px 18px #000a' }}>
+      {/* The pill only shows once a move has really taken a while (a server round
+          trip, a long AI turn): against the local AI most clicks resolve at once, and
+          a pill flashing up on every one of them was noise (player report
+          1a2q4d4q483q334m). The overlay still swallows clicks from the start. */}
+      <div style={{ opacity: 0, animation: 'wotr-late 0.15s ease-out 0.6s forwards', marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, background: '#1c1710e6', color: '#e9e1cc', fontFamily: 'system-ui', fontSize: 13, padding: '8px 14px', borderRadius: 20, border: '1px solid #5a4a2a', boxShadow: '0 4px 18px #000a' }}>
         <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid #5a4a2a', borderTopColor: '#e6b85a', animation: 'wotr-spin 0.8s linear infinite', display: 'inline-block' }} />
         Resolving your move…
       </div>

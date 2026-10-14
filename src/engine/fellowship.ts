@@ -206,7 +206,10 @@ function pathAvoiding(from: RegionId, to: RegionId, avoid: ReadonlySet<RegionId>
 /** Move the Fellowship (Character die / event). Must be Hidden and not blocked.
  *  Advances Progress (or a Mordor step), runs the Hunt, then adds the FP die to
  *  the Hunt Box (raising subsequent Hunt rolls and returned next turn). */
-export function moveFellowship(state: GameState): void {
+/** `byEvent`: an Event card moved the Fellowship (There Is Another Way), so the die
+ *  that played the card stays out of the Hunt Box (Almanac; player report
+ *  5v1j3w4f5x006i4l). */
+export function moveFellowship(state: GameState, byEvent = false): void {
   const fs = state.fellowship;
   if (!fs.hidden) return;
   // Log the MOVE before resolving the Hunt it triggers, so the log reads in causal
@@ -218,11 +221,11 @@ export function moveFellowship(state: GameState): void {
     // track, the Hunt Box and the status area all correctly showed 1 (player report).
     // `applyDrawnTile` logs the step the Fellowship actually ends on.
     log(state, null, 'fellowship', 'The Fellowship moves on the Mordor Track');
-    resolveMordorStep(state); // adds the FP die to the Hunt Box internally
+    resolveMordorStep(state, !byEvent); // adds the FP die to the Hunt Box internally
   } else {
     fs.progress += 1;
     log(state, null, 'fellowship', `The Fellowship moves (progress ${fs.progress})`);
-    resolveHunt(state);       // ditto
+    resolveHunt(state, !byEvent);       // ditto
   }
   state.flags.fellowshipDeclaredOrMovedThisTurn = true;
 }
