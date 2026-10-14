@@ -11,7 +11,7 @@ import { applyCasualties, startBattle, queueOrApplyEventCasualties, runEventStri
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
-import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef } from '../data';
+import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef, theNation, nationsArePlural } from '../data';
 import { moveFellowship, findCharacterRegion, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS, type RangeOpts } from '../charMove';
 import { log, logCardDraw, notify, sideDoes, sideName, sufferCorruption, shedCorruption, andList } from '../log';
@@ -2284,10 +2284,15 @@ function moveCompanionsCard(card: string, trigger: RegionId[], nation: Nation): 
   const checkRouse = (state: GameState): void => {
     if (isAtWar(state, nation)) return;
     if (rousing(state)) {
-      activateNation(state, nation, { viaCompanion: true }); advancePolitical(state, nation, 99);
-      const nm = nation.charAt(0).toUpperCase() + nation.slice(1);
-      log(state, null, 'event', `A Companion rouses the ${nm} to War`);
-      notify(state, `A Companion in ${trigger.map((r) => REGIONS[r]?.name ?? r).join(' / ')} rouses the ${nm} to war!`, 'A Nation is Roused');
+      // This card really does take the Nation to War, so its popup says so (and covers
+      // the activation too). No card-level log line: the activation and the advance
+      // log themselves (player report 2l302f3d2s3x0i2x).
+      const wasPassive = !state.nations[nation].active;
+      activateNation(state, nation, { viaCompanion: true, quiet: true }); advancePolitical(state, nation, 99);
+      if (isAtWar(state, nation)) {
+        const nm = nation === 'north' ? 'the North' : theNation(nation);
+        notify(state, `A Companion in ${trigger.map((r) => REGIONS[r]?.name ?? r).join(' / ')} ${wasPassive ? 'activates' : 'rouses'} ${nm}, and ${nationsArePlural([nation]) ? 'they go' : 'it goes'} to War.`, 'A Nation Goes to War');
+      }
     }
   };
   // ONE step per group: the target names a Companion, where he stands and where he
@@ -2489,10 +2494,13 @@ register('fp-char-17', separateViaCard({
   // (report 476n3s6q0c1i2c2w).
   always: (state) => {
     if (!thereAndBackRousing(state)) return;
-    activateNation(state, 'dwarves', { viaCompanion: true }); activateNation(state, 'north', { viaCompanion: true });
+    // It ACTIVATES the Dwarves and the North and advances all three one step — nobody
+    // goes to War unless a Nation was already one step away. The activation popups
+    // come from activateNation, the rest is in the log; the card used to add its own
+    // log line and a "roused to war" popup on top (player reports 2l302f3d2s3x0i2x,
+    // 11153d5u314b0h27).
+    activateNation(state, 'dwarves', { viaCompanion: true, by: 'There and Back Again' }); activateNation(state, 'north', { viaCompanion: true, by: 'There and Back Again' });
     advancePolitical(state, 'dwarves', 1); advancePolitical(state, 'elves', 1); advancePolitical(state, 'north', 1);
-    log(state, null, 'event', 'There and Back Again rouses the Dwarves/Elves/North');
-    notify(state, 'There and Back Again rouses the Dwarves, Elves and North to war!', 'A Nation is Roused');
   },
   // …but only while one of those three Nations can still be moved by it.
   extraPlay: (state) => thereAndBackRousing(state)

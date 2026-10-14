@@ -1206,9 +1206,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                     : isCardSep
                     ? (cardSepActs[0]!.companion === 'nazgul'
                       ? 'Moving the Nazgûl — click a highlighted region to fly them there.'
-                      : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`)
+                      : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there.${activateTargets.size ? ' A gold ★ region activates that Nation.' : ''}`)
                     : isSeparateMove
-                    ? `Separating Companions — click a highlighted region to place the group there (up to Progress + the highest Level in the group). You can first add more Companions to travel together using the buttons on the right.${activateTargets.size ? ' A gold ★ region rouses that Nation to war.' : ''}`
+                    ? `Separating Companions — click a highlighted region to place the group there (up to Progress + the highest Level in the group). You can first add more Companions to travel together using the buttons on the right.${activateTargets.size ? ' A gold ★ region activates that Nation.' : ''}`
                     : isReveal
                     ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
                     // Retreats and Gandalf's entry are board clicks too, and they share

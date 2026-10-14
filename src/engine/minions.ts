@@ -77,6 +77,6 @@ export function bringMinion(state: GameState, minion: Minion, region: RegionId):
   figureForce(state, region, 'shadow').characters.push(minion);
   // Arrival first, then its consequence (player report 091v195c5o6p001a).
   log(state, null, 'muster', `${minion} arrives in ${region}`);
-  if (minion === 'witch-king') for (const n of FP_NATIONS as Nation[]) activateNation(state, n);
+  if (minion === 'witch-king') for (const n of FP_NATIONS as Nation[]) activateNation(state, n, { by: 'The Witch-king' });
   return true;
 }

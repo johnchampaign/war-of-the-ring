@@ -1,10 +1,10 @@
 // The Political Track (rules-spec §8). step 0 = "At War"; passive nations can't
 // reach step 0 until activated.
 import type { GameState, Nation } from './types';
-import { sideOfNation, nationName } from './data';
+import { sideOfNation, nationName, theNation } from './data';
 import type { RegionId } from './types';
 import { threatsAndPromisesActive, wormtongueAllowsActivation } from './persistent';
-import { log } from './log';
+import { log, notify } from './log';
 
 /** A Nation as the subject of a log line, with its verb agreeing: "Gondor advances",
  *  "The North advances", but "Elves advance" — the Dwarves, the Elves and the Southrons
@@ -17,14 +17,30 @@ export function nationSubject(n: Nation): { name: string; plural: boolean } {
 
 export const isAtWar = (state: GameState, n: Nation): boolean => state.nations[n].step === 0;
 
+/** A Nation mid-sentence: "the Elves", "the North", "Gondor". */
+const nationObject = (n: Nation): string => (n === 'north' ? 'the North' : theNation(n));
+
 /** Activate a Nation. `trigger` carries the activation source so persistent cards
- *  (Wormtongue) can veto it; default (no trigger) is a generic activation. */
-export function activateNation(state: GameState, n: Nation, trigger: { region?: RegionId; viaCompanion?: boolean; viaAttack?: boolean; viaDeclare?: boolean } = {}): void {
+ *  (Wormtongue) can veto it; default (no trigger) is a generic activation. `by` names
+ *  what activated it for the popup ("Gimli activates the Dwarves."); `quiet` leaves
+ *  the popup to a caller that announces more than the activation.
+ *
+ *  EVERY activation pops one notice, titled "A Nation is Activated", from here. They
+ *  used to be announced ad hoc — a Companion's arrival popped "A Nation is Roused",
+ *  an attack or a walk-in was silent, and There and Back Again called three Nations
+ *  "roused to war" when none of them was At War yet. Activated (passive → active) is
+ *  not At War (step 0), and the popup no longer blurs them (player reports
+ *  11153d5u314b0h27, 5e0u6l4h341n6g5q). */
+export function activateNation(state: GameState, n: Nation, trigger: { region?: RegionId; viaCompanion?: boolean; viaAttack?: boolean; viaDeclare?: boolean; by?: string; quiet?: boolean } = {}): void {
   if (!wormtongueAllowsActivation(state, n, trigger)) return; // Wormtongue: Rohan stays passive
   if (!state.nations[n].active) {
     state.nations[n].active = true;
     const s = nationSubject(n);
     log(state, null, 'politics', `${s.name} ${s.plural ? 'are' : 'is'} activated`);
+    if (!trigger.quiet) {
+      const obj = nationObject(n);
+      notify(state, trigger.by ? `${trigger.by} activates ${obj}.` : `${obj.charAt(0).toUpperCase()}${obj.slice(1)} ${s.plural ? 'are' : 'is'} activated.`, 'A Nation is Activated');
+    }
   }
 }
 

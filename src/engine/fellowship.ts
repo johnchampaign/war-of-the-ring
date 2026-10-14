@@ -3,14 +3,14 @@
 // caller (the AI pushes toward Mordor).
 import type { GameState, RegionId, CharacterId, Nation } from './types';
 import { FP_NATIONS } from './types';
-import { REGIONS, levelOf, COMPANIONS, nationName, STANDARD_TILE_LIST, characterDef, EVENT_BY_ID, sideOfNation } from './data';
+import { REGIONS, levelOf, COMPANIONS, STANDARD_TILE_LIST, characterDef, EVENT_BY_ID, sideOfNation } from './data';
 import { resolveHunt, resolveMordorStep, pruneFellowshipOnTableCards, queueTakenAlive } from './hunt';
 export { pruneFellowshipOnTableCards };
 import { activateNation } from './politics';
 import { settlementController, figureForce, heldShadowStronghold, companionLandingActivates, regionHops } from './armies';
 import { activateOnCompanionLand } from './charMove';
 import { MINION_IDS } from './minions';
-import { log, notify, sufferCorruption, shedCorruption } from './log';
+import { log, sufferCorruption, shedCorruption } from './log';
 
 /** Highest-Level Companion in the Fellowship becomes Guide; Gollum if none. */
 export function reassignGuide(state: GameState): void {
@@ -278,7 +278,7 @@ export function declareFellowship(state: GameState, target: RegionId): void {
     // Player report 1y222s09436d5q0z: the port was skipping the activation entirely.
     // `viaDeclare` is what lets it through Wormtongue at Edoras/Helm's Deep, and
     // rousing Rohan then discards Wormtongue via its own table condition.
-    activateNation(state, def.nation as Nation, { region: fs.location, viaDeclare: true });
+    activateNation(state, def.nation as Nation, { region: fs.location, viaDeclare: true, by: 'Declaring the Fellowship' });
     // Worn with Sorrow and Toil (sh-char-15) carries its own printed discard
     // clause: "discard this card from the table if the Fellowship is declared in a
     // City or Stronghold controlled by the Free Peoples" — exactly this branch's
@@ -536,12 +536,8 @@ export function placeSeparatedCompanion(state: GameState, id: CharacterId, dest:
     // A Companion ending movement in a Nation's City/Stronghold ACTIVATES it (rulebook
     // p.34) — it does NOT advance the Political Track. Advancing is a separate explicit
     // action (Boromir/Legolas/Gimli's "use any Action die to advance", i.e. companionMuster).
-    const wasPassive = !state.nations[dn].active;
-    activateNation(state, dn, { viaCompanion: true });
-    if (wasPassive && state.nations[dn].active) {
-      // A Nation's name takes no article: "activates Rohan" (player report 686c616m692n5104).
-      notify(state, `${COMPANIONS[id]?.name ?? id} activates ${nationName(dn)}.`, 'A Nation is Roused');
-    }
+    // The popup ("Gimli activates the Dwarves.") comes from activateNation.
+    activateNation(state, dn, { viaCompanion: true, by: COMPANIONS[id]?.name ?? id });
   }
   pruneFellowshipOnTableCards(state);
 }
@@ -559,11 +555,7 @@ export function placeSeparatedGroup(state: GameState, ids: CharacterId[], dest: 
   if (dn && (REGIONS[dest]!.settlement === 'City' || REGIONS[dest]!.settlement === 'Stronghold')
     && ids.some((id) => activatableNations(id).includes(dn))) {
     // Presence ACTIVATES the Nation (p.34); it does not advance the Political Track.
-    const wasPassive = !state.nations[dn].active;
-    activateNation(state, dn, { viaCompanion: true });
-    if (wasPassive && state.nations[dn].active) {
-      notify(state, `The Companions activate ${nationName(dn)}.`, 'A Nation is Roused');
-    }
+    activateNation(state, dn, { viaCompanion: true, by: 'The Companions' });
   }
   pruneFellowshipOnTableCards(state);
 }
