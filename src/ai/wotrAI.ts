@@ -17,6 +17,7 @@ import { REGIONS, levelOf, characterDef, sideOfNation, characterSide } from '../
 import { unitCount, forceUnitCount, forceLeadership, STACKING_LIMIT, splitBlockReason, fellowshipRegion, armySide, type Force } from '../engine/armies';
 import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
+import { characterDestinations } from '../engine/charMove';
 import { cardSplitBlockReason } from '../engine/handlers/index';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
@@ -1850,6 +1851,19 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
       const hunters = r.nazgul > 0 || r.characters.includes('witch-king') || armySide(state, a.region as RegionId) === 'shadow' ? 0.5 : 0;
       return 50 + away + hunters;
     }
+    // Picking a Nazgûl to fly is only worth it if some landing beats stopping. On the
+    // Mordor Track no landing scores above 'done', so the AI picked a Nazgûl, then
+    // stopped at the destination step and The Black Captain Commands did nothing at
+    // all — no recruit, no attack (player report 706o116h4g4f6j3x).
+    if (a.companion === 'nazgul' && a.from && !a.region) {
+      const best = Math.max(-Infinity, ...characterDestinations(state, 'shadow', 'nazgul', a.from as RegionId)
+        .filter((r) => r !== a.from).map((region) => score({ ...a, region })));
+      return best > -1 ? 100 : -2;
+    }
+    // The Black Captain Commands: the two free Nazgûl come BEFORE the Army's move or
+    // attack (the card allows both, and either one first forfeits them), so they outrank
+    // even a Stronghold attack (60 + 2 VP × 20).
+    if (a.card === 'sh-char-24' && a.mode === 'recruit') return 101;
     if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
     if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;
     // A card move may overstack (the excess is removed afterwards), so every unit past

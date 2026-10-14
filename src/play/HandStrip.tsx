@@ -207,13 +207,6 @@ export function CardZoom({ id, onClose, onPlay }: { id: string; onClose: () => v
   const def = CARD.get(id);
   return (
     <div style={{ ...zoomBackdrop, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={onClose}>
-      {onPlay && (
-        <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={onPlay} data-testid="zoom-play"
-            style={{ padding: '10px 22px', fontSize: 16, fontWeight: 700, borderRadius: 8, background: '#4a5a3a', color: '#f0e9d8', border: '1px solid #6a7', cursor: 'pointer' }}>Play this card</button>
-          <button onClick={onClose} style={{ padding: '10px 18px', fontSize: 16, borderRadius: 8, background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', cursor: 'pointer' }}>Cancel</button>
-        </div>
-      )}
       {art ? (
         <img src={art} alt={def?.name ?? id} style={{ maxHeight: onPlay ? '78vh' : '88vh', maxWidth: '88vw', borderRadius: 8, boxShadow: '0 8px 40px #000' }} />
       ) : (
@@ -229,6 +222,14 @@ export function CardZoom({ id, onClose, onPlay }: { id: string; onClose: () => v
           {def?.eventText && <p style={{ fontSize: 13 }}><b>Event:</b> {def.eventText}</p>}
           {def?.combat?.title && <p style={{ fontSize: 13 }}><b>Combat — {def.combat.title}:</b>{' '}
             {def.combat.precondition && <span style={zoomReq}>[{def.combat.precondition}] </span>}{def.combat.text}</p>}
+        </div>
+      )}
+      {/* Below the card, not above it (player report 2k711o5f0q4x5y2k). */}
+      {onPlay && (
+        <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+          <button onClick={onPlay} data-testid="zoom-play"
+            style={{ padding: '10px 22px', fontSize: 16, fontWeight: 700, borderRadius: 8, background: '#4a5a3a', color: '#f0e9d8', border: '1px solid #6a7', cursor: 'pointer' }}>Play this card</button>
+          <button onClick={onClose} style={{ padding: '10px 18px', fontSize: 16, borderRadius: 8, background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', cursor: 'pointer' }}>Cancel</button>
         </div>
       )}
     </div>
