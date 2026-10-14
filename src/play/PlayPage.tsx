@@ -586,6 +586,30 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // two buttons that were covering for this, so the pointer has to be honest now.
   const boardHints = useMemo(() => {
     const out: string[] = [];
+    // AN EVENT CARD RESOLVING ON THE MAP gets ONE line, naming the card and what to
+    // click — never the Action-die lines ("Move or attack", "Muster"), and never an empty
+    // panel saying "No actions" (player report 675k70191l1c724t: The Ringwraiths Are
+    // Abroad showed "No actions" while other cards showed the die's "Move or attack").
+    // docs/ui-conventions.md, "Event cards".
+    const resolving = g.view?.pendingChoice?.kind === 'eventTarget' && g.yourTurn
+      ? (g.view.pendingChoice.data as { card?: string } | undefined)?.card : undefined;
+    if (resolving) {
+      const name = EVENT_BY_ID[resolving]?.name ?? 'The card';
+      const regionWhat = ({ 'sh-char-19': 'click the Free Peoples Army to strike', 'fp-str-06': 'click the Shadow Army to strike', 'fp-str-05': 'click the Shadow Army to strike',
+        'fp-char-18': 'click the Nazgûl the Eagles strike', 'sh-char-10': 'click the region the Fellowship is driven into' } as Record<string, string>)[resolving];
+      const nazgul = cardSepActs.some((a) => a.companion === 'nazgul');
+      const what = cardRegionActs.length ? (regionWhat ?? 'click a highlighted region')
+        : cardCompMoves.length ? 'move Companions — click a highlighted region, then where they go'
+        : nazgul ? 'move the Nazgûl — click a highlighted region to fly them there'
+        : isCardSep ? `place ${charName(cardSepActs[0]!.companion!)} — click a highlighted region`
+        : cardCharPicks.length ? (cardCharPicks.every((a) => a.companion === 'nazgul') ? 'click a region with Nazgûl, then where they fly' : 'click the region of the figure to move, then where it goes')
+        : cardAssaultActs.length && !isCardMove ? 'click the besieged region to assault'
+        : isCardMove ? 'click a green Army, then where it goes'
+        : isCardRecruit ? 'click a highlighted Settlement to recruit there'
+        : sources.size ? 'click a highlighted region' : null;
+      if (what) out.push(`${name}: ${what} — on the map.`);
+      return out;
+    }
     // Character and Nazgûl moves are covered by "Move or attack" (player report
     // 38082l3z263r3e4h: the separate character hint read as excluding the Nazgûl).
     // Not mid Character-move chain: the panel's own "Character move in progress" note
@@ -612,7 +636,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       out.push(`${EVENT_BY_ID[card]?.name ?? 'The card'}: ${what} — the highlighted regions on the map.`);
     }
     return out;
-  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves, cardRegionActs, g.view, g.yourTurn]);
+  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves, cardRegionActs, g.view, g.yourTurn, cardSepActs, isCardSep, cardCharPicks, cardAssaultActs, isCardMove, isCardRecruit, sources]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -1257,8 +1281,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   the prompt is open (a pendingChoice resolving, a timeout), and a
                   prompt for an action you can no longer take is worse than none. */}
               {diePick && g.yourTurn && g.view && g.you && (
-                <div ref={diePickRef} data-testid="die-pick-prompt" style={{ position: 'absolute', bottom: '100%', left: 6, right: 6, marginBottom: 4, zIndex: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '7px 10px', background: '#3a2a12', border: '1px solid #c9a24a', borderRadius: 6, fontSize: 13, color: '#f0d090', boxShadow: '0 6px 20px #000c', animation: 'wotr-attn 0.45s ease-out 3' }}>
-                  <span>Which die pays for “{describeAction(diePick, g.view)}”?</span>
+                <div ref={diePickRef} data-testid="die-pick-prompt" style={{ position: 'absolute', bottom: '100%', left: 6, right: 6, marginBottom: 4, zIndex: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '7px 10px', background: '#3a2a12', border: '1px solid #c9a24a', borderRadius: 6, fontSize: 13, color: '#f0d090', boxShadow: '0 6px 20px #000c', animation: 'wotr-attn 0.25s ease-out 1' }}>
+                  {/* One quick pulse (three slow ones dragged — player report 032k395g2c07105p),
+                      and the question on a line of its own, so the dice always start the next
+                      one whatever the card's name (1y5y1g696w5s3x3u). */}
+                  <span style={{ flexBasis: '100%' }}>Which die pays for “{describeAction(diePick, g.view)}”?</span>
                   {dieOptions(diePick, g.view, g.you as Side).map((f) => (
                     <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
                       style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>

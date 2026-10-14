@@ -44,3 +44,14 @@ into play with more than one possible region) — the side panel clears down to 
 step, and the die paying for it stays picked out in your tray. A placement started from
 the panel is the one kind that can still be backed out of: click anywhere else on the
 map, and the die is released again.
+
+## Event cards
+
+While an Event card is resolving and its next step is a click on the map, the side
+panel shows **one** green "Map" line naming the card and what to click ("The
+Ringwraiths Are Abroad: click a region with Nazgûl, then where they fly — on the
+map."). It does not show the Action-die lines ("Move or attack",
+"Muster"): those describe what a die could do, and the die is already spent on the
+card. Steps the card asks for in the panel (a Nation, a yes/no) stay panel buttons.
+Player report 675k70191l1c724t: The Ringwraiths Are Abroad showed "No actions" while
+other cards showed the die's "Move or attack".

@@ -9,6 +9,19 @@ import { startGame } from '../../src/adapter/wotrAdapter';
 // Game-log uploads come from any origin (incl. the dev client on localhost), so
 // that one public endpoint is CORS-open. It writes non-PII AI-tuning data only.
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+/** A local report's text is capped, but the machine markers the client appends at the END
+ *  (`<!-- reporter:… -->`, `<!-- settings:… -->`) must survive the cut: at a flat 2000
+ *  characters a report with pasted HTML lost the player's own words AND the reporter id,
+ *  so the reply never reached their popup (reports 54034m71001h320x, 4c5e6k0n373s0a05,
+ *  3f5j4h20071i6y3x). The text keeps the first REPORT_TEXT_MAX characters. */
+const REPORT_TEXT_MAX = 8000;
+function capReportMessage(raw: string): string {
+  const markers = raw.match(/\n*<!-- [a-z]+:[^>]*-->/g) ?? [];
+  const text = raw.replace(/\n*<!-- [a-z]+:[^>]*-->/g, '');
+  const cut = text.length > REPORT_TEXT_MAX ? `${text.slice(0, REPORT_TEXT_MAX)}\n[… cut at ${REPORT_TEXT_MAX} characters]` : text;
+  return cut + markers.join('');
+}
+
 const json = (data: unknown, status = 200, extra: Record<string, string> = {}): Response =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...extra } });
 const randomId = (): string => {
@@ -94,7 +107,7 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
           // so "option X isn't offered" reports are diagnosable without a repro.
           reporterView: typeof body?.snapshot === 'string' ? body.snapshot.slice(0, 200000) : '',
           clientLog: Array.isArray(body?.log) ? body.log.slice(-3000) : [], // local game log, for triage
-          message: String(body?.message ?? '').slice(0, 2000),
+          message: capReportMessage(String(body?.message ?? '')),
           severity: ['bug', 'rules-question', 'feedback'].includes(sev) ? sev : 'bug',
           category: 'wotr',
           clientBuild: typeof body?.clientBuild === 'string' ? body.clientBuild : undefined,
@@ -172,9 +185,10 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         .filter((r) => r.resolution && typeof r.message === 'string' && r.message.includes(marker))
         .map((r) => ({
           reportId: r.reportId,
-          // The full report as filed (submit caps it at 2000), minus the machine markers the
-          // client appends (reporter id, ⚙ settings) — they leaked into the popup (report 1c6i6c324x083b5w).
-          message: r.message.replace(/\n*<!-- [a-z]+:[^>]*-->/g, '').trim().slice(0, 2000),
+          // The full report as filed (submit caps it — capReportMessage), minus the machine
+          // markers the client appends (reporter id, ⚙ settings) — they leaked into the popup
+          // (report 1c6i6c324x083b5w).
+          message: r.message.replace(/\n*<!-- [a-z]+:[^>]*-->/g, '').trim().slice(0, REPORT_TEXT_MAX),
           response: (r.resolution!.note ?? '').trim(),
           at: r.resolution!.at,
         }))
