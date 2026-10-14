@@ -229,7 +229,7 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     const s = score(state, actor, a, target) + rng.next() * 0.5; // tiny noise for tie-breaks
     if (s > bestScore) { bestScore = s; best = a; }
   }
-  return maybeAttackRearguard(state, actor, maybeFitStack(state, actor, maybeSplitGarrison(state, actor, best))); // hold a threatened origin; don't overstack
+  return payWithEventDie(state, actor, maybeAttackRearguard(state, actor, maybeFitStack(state, actor, maybeSplitGarrison(state, actor, best)))); // hold a threatened origin; don't overstack
 }
 
 /** Is `from` a VP Settlement of ours that a departing Army must not simply abandon?
@@ -258,6 +258,22 @@ function garrisonWorthy(state: GameState, actor: Side, from: RegionId): boolean 
  *  is always legal where the whole move was (it moves a strict subset to the same
  *  region). Leaders/Nazgûl/Characters advance with the army; a Regular (else an
  *  Elite) holds. */
+/** Play an Event card with an EVENT die when one is left. Left to itself the engine
+ *  pays with the card's own icon die (Army, Muster, Character) — but that die can still
+ *  move, attack or muster, while an Event die can only play or draw cards; and only an
+ *  Event die triggers Gandalf the Grey's Guide draw or the Palantír (report
+ *  1m2s5r0z6j5v3a3p: Wisdom of Elrond on an Army/Muster die with two Event dice left).
+ *  Not the Will of the West — the most flexible die of all. Mirror of Galadriel keeps
+ *  the engine's own choice (it needs a Character die left to convert). */
+//  SHADOW ONLY, measured 2026-10-14 against 9fa5313 (FP wins over 3 x 2000, base 1506,
+//  1501, 1480): Shadow only 1505, 1492, 1492 (neutral); Free Peoples only 1494, 1484,
+//  1455 (-54) — the FP AI leans on its cards, and the Event die it keeps plays a second
+//  card later in the turn. So the Free Peoples keep the engine's icon-die-first payment.
+function payWithEventDie(state: GameState, actor: Side, action: WotrAction): WotrAction {
+  if (actor !== 'shadow' || action.kind !== 'playEvent' || action.die || action.cardId === 'fp-char-13') return action;
+  return state.dice[actor].includes('event') ? { ...action, die: 'event' } : action;
+}
+
 /** A Shadow whole-Army move that would overstack the destination moves only what fits
  *  (Elites first; the Nazgûl and Minions go along) — anything past the limit is removed
  *  on arrival, and the AI was throwing away whole Armies' worth of Regulars marching
@@ -869,7 +885,21 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     // (player feedback: "your two Prime Directives should be getting GtW and
     // Aragorn out ASAP for the extra dice").
     case 'bringUpgrade': return 90;
-    case 'bringMinion': return 55 - (target ? Math.min(10, dist(a.region, target)) : 0); // +1 die and a strong leader — placed toward the front
+    case 'bringMinion': {
+      let v = 55 - (target ? Math.min(10, dist(a.region, target)) : 0); // +1 die and a strong leader — placed toward the front
+      // Saruman sooner: his Action die, his abilities and the cards that need him are
+      // worth more than the next step on the Political Track, which can wait (report
+      // 1q112f1z0d6x262j). But the first Minion in play is what lets Gandalf the White
+      // come — so while the Free Peoples hold an unused Will of the West and the White
+      // could come this turn, hold him back (he waits for their last die).
+      if (a.minion === 'saruman') {
+        const firstMinion = !['witch-king', 'mouth-of-sauron'].some((m) => state.characters.entered.includes(m));
+        const whiteCanCome = firstMinion && state.dice.fp.includes('will') && !state.characters.entered.includes('gandalf-white')
+          && !state.fellowship.companions.includes('gandalf-grey');
+        v += whiteCanCome ? -30 : 25;
+      }
+      return v;
+    }
     case 'recruitUnit': return recruitScore(state, actor, a, target); // build the war stacks WHERE THEY MATTER
     case 'moveArmy': return armyMoveScore(state, actor, a.from, a.to, target);
     case 'moveCharacter': return moveCharacterScore(state, actor, a, target); // reposition Nazgûl/Companions
@@ -1018,7 +1048,11 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
   // 1166->1134, 1119->1111 against bef53ae (-40): the extra musters came out of the
   // Fellowship's dice. The narrower version — +25 only with a Shadow Army ADJACENT to a
   // City or Stronghold — measured 1303->1259, 1269->1269, 1262->1280 against ea944c0
-  // (-26). Not shipped either.
+  // (-26). Not shipped either. The reporter's conservative version (3f5j4h20071i6y3x) —
+  // +25 only when a Muster or Army/Muster die pays and Strider is not the Guide, so no
+  // die the Fellowship could use goes to it — measured 1506->1497, 1501->1488,
+  // 1480->1457 against 9fa5313 (-45). Not shipped. Self-play's slow Shadow rarely makes
+  // the threat real (the reporter's own reading), so this stays open for a better test.
   return s;
 }
 
@@ -1089,7 +1123,10 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // A Free Peoples Army of three or fewer cannot take a Shadow Stronghold, so a lone
   // Regular inching toward the campaign target is a die spent for nothing (report
   // 5h3n20602m3l6h5o: "Carrock → Old Ford… inscrutable").
-  if (target && !(actor === 'fp' && unitCount(state, from) < 4 && settlementCtrl(state, target) === enemy && held(target))) {
+  // Refined (report 4c5e6k0n373s0a05: "a bit too blunt"): what decides is the garrison
+  // it marches on, and Companions — Captains of the West — count as strength.
+  const fpStrength = actor === 'fp' ? unitCount(state, from) + state.regions[from]!.characters.filter((c) => FP_COMPANIONS.has(c)).length : 0;
+  if (target && !(actor === 'fp' && settlementCtrl(state, target) === enemy && held(target) && fpStrength < unitCount(state, target))) {
     const open = settlementCtrl(state, target) === enemy && !held(target);
     s += -(dist(to, target) - dist(from, target)) * (open ? 20 : 12) * (pressing ? 1.5 : 1);
     if (to === target) s += 30;
@@ -1208,6 +1245,7 @@ function sharedBonusEdge(state: GameState, side: Side, mods: CombatMods): number
   const b = mods.rollBonus ?? 0, foe: Side = side === 'fp' ? 'shadow' : 'fp';
   return (landed(side, b) - landed(side, 0)) - (landed(foe, b) - landed(foe, 0));
 }
+const FP_COMPANIONS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 // "Captain of the West" Companions add a Combat die to a Free Peoples Army (combat.ts).
 const SHARED_BONUS_CAPTAINS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'aragorn']);
 
