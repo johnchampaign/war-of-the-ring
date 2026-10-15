@@ -648,7 +648,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'changeGuide':
       requirePhase(state, 'fellowship');
       if (!setGuide(state, action.companion)) throw new Error('Not an eligible Guide');
-      break; // free choice — stays in the Fellowship phase (may still declare/enter/skip)
+      // A new Guide is nominated "at the end of each Fellowship phase" (p.38), so
+      // naming one closes the phase — after any declaration or Mordor entry, never
+      // before them (player report 6d5b4l4o6b4a630x).
+      log(state, null, 'fellowship', 'Free Peoples end the Fellowship phase');
+      state.phase = 'huntAllocation'; break;
     case 'declareFellowship': {
       requirePhase(state, 'fellowship');
       if (state.flags.fellowshipDeclaredThisTurn) throw new Error('The Fellowship has already been declared this turn');
@@ -680,7 +684,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     case 'enterMordor':
       requirePhase(state, 'fellowship');
       if (!enterMordor(state)) throw new Error('Cannot enter Mordor from here');
-      state.phase = 'huntAllocation'; break;
+      break; // the phase stays open: the Guide may still be changed at its end (p.38)
     case 'allocateHunt': {
       requirePhase(state, 'huntAllocation');
       const { min, max } = huntAllocationBounds(state);

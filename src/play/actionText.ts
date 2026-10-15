@@ -52,7 +52,7 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     case 'moveFellowship': return 'Move the Fellowship';
     case 'hideFellowship': return 'Hide the Fellowship';
     case 'separateCompanion': return `Separate ${charName(a.companion)}`;
-    case 'changeGuide': return `Make ${charName(a.companion)} the Guide`;
+    case 'changeGuide': return `Make ${charName(a.companion)} the Guide and end the phase`; // p.38: the Guide changes at the phase's end
     // The die chip / picker already says which dice can pay (player report 5d682g3j3s4i221d).
     // Named after the Companion's ABILITY, the way the Voice of Saruman action already
     // is — "High Warden of the White Tower: advance Gondor", not "Boromir: advance

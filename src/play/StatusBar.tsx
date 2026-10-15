@@ -66,7 +66,7 @@ function TileStrip({ tiles }: { tiles: TileEntry[] }) {
     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '8px 2px', padding: '4px 2px 8px' }}>
       {tiles.map((e, i) => (
         <span key={`${e.key}:${i}`} title={e.title} data-testid="hunt-tile" style={{ display: 'inline-flex' }}>
-          <HuntTileFace draw={tileAsDraw(e.tile)} size={34} caption={false} />
+          <HuntTileFace draw={tileAsDraw(e.tile)} size={34} />
         </span>
       ))}
     </div>
@@ -176,13 +176,13 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
           {entries.map(([id, region]) => {
             const d = charDef(id);
             const shadow = isMinion(id);
-            // Laid out like the Fallen roster — FP / SH tag, name, Level · Leadership —
+            // Laid out like the Fallen roster — FP / SA tag, name, Level · Leadership —
             // with the region LAST so the stats line up row to row, all on one line
             // (player reports 5m6m5x6x4r3f3u5x, 4n143r2r004b0s6f, 246q2j5g30546b3e).
             return (
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
-                <span style={{ ...sideTagCell, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SH' : 'FP'}</span>
+                <span style={{ ...sideTagCell, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SA' : 'FP'}</span>
                 <span style={charNameCell}>{charName(id)}</span>
                 <span style={{ ...statsCell, color: '#b9b29c' }}>{d ? `Level ${d.level === 'inf' ? '∞' : d.level}${d.leadership ? ` · Leadership ${d.leadership}` : ''}` : ''}</span>
                 {/* The region is an engine id here; the player should read its NAME
@@ -198,7 +198,7 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ padding: '3px 6px', borderRadius: 5, cursor: 'help', maxWidth: 380, whiteSpace: 'normal' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                  <span style={{ ...sideTagCell, color: isMinion(id) ? '#e6857f' : '#7fa8e6' }}>{isMinion(id) ? 'SH' : 'FP'}</span>
+                  <span style={{ ...sideTagCell, color: isMinion(id) ? '#e6857f' : '#7fa8e6' }}>{isMinion(id) ? 'SA' : 'FP'}</span>
                   <span style={charNameCell}>{charName(id)}</span>
                 </div>
                 <div style={{ color: '#b9b29c', fontSize: 11, paddingLeft: 24 }}>{charDef(id)?.enterCondition}</div>
@@ -234,7 +234,7 @@ function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (i
             return (
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
-                <span style={{ ...sideTagCell, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SH' : 'FP'}</span>
+                <span style={{ ...sideTagCell, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SA' : 'FP'}</span>
                 <span style={{ ...charNameCell, color: '#c9bfae', textDecoration: 'line-through' }}>{charName(id)}</span>
                 {d && <span style={{ ...statsCell, color: '#8d8677' }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
               </div>
@@ -294,9 +294,9 @@ function DiscardBrowser({ view, onHoverCard }: { view: GameState; onHoverCard?: 
             <div key={i} onMouseEnter={() => r.id && onHoverCard?.(r.id)}
               style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 6px', borderRadius: 5, cursor: r.id ? 'help' : 'default' }}>
               {/* A fixed column for the side, so every card name starts at the same x
-                  whether it is prefixed "Free Peoples" or "Shadow" (player report
-                  1q5s140023682d2j: these lists should line up the way the log does). */}
-              <span style={{ flexShrink: 0, width: 66, fontSize: 10, fontWeight: 700, color: r.side === 'Free Peoples' ? '#7fa8e6' : '#e6857f' }}>{r.side}</span>
+                  (player report 1q5s140023682d2j: these lists should line up the way the
+                  log does), tagged FP / SA like the rosters and the log (report 1m5l3z1n0g3q3l33). */}
+              <span style={{ ...sideTagCell, color: r.side === 'Free Peoples' ? '#7fa8e6' : '#e6857f' }}>{r.side === 'Free Peoples' ? 'FP' : 'SA'}</span>
               <span style={{ fontSize: 12, color: r.id ? '#e9e1cc' : '#998' }}>{r.label}</span>
             </div>
           ))}
@@ -416,7 +416,7 @@ const pill: React.CSSProperties = { background: '#33302a', padding: '3px 8px', b
 // floor under it fixes both: short names pad out to the same width, long ones simply
 // push the detail right instead of being hyphen-free-wrapped into nonsense.
 const charNameCell: React.CSSProperties = { fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap', minWidth: 140 };
-// The FP / SH tag and the "Level · Leadership" column of the character rosters: fixed
+// The FP / SA tag (Free Peoples / Shadow Armies, rulebook p.46) and the "Level · Leadership" column of the character rosters: fixed
 // floors so every row's columns start at the same x, and never wrapped ("Leadership /
 // 1" on its own line — player report 0q171e05196c6t53).
 const sideTagCell: React.CSSProperties = { flexShrink: 0, fontSize: 10, fontWeight: 700, minWidth: 16 };

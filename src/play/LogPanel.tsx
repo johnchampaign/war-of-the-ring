@@ -48,7 +48,7 @@ function shortTime(iso: string): string {
 /** The whole log as plain text, oldest first — what this seat can see, nothing more. */
 export function logAsText(view: GameState): string {
   return (view.log ?? []).map((e) => {
-    const who = e.actor === 'fp' ? 'FP ' : e.actor === 'shadow' ? 'SH ' : '';
+    const who = e.actor === 'fp' ? 'FP ' : e.actor === 'shadow' ? 'SA ' : '';
     return `T${e.turn} ${who}${e.kind}: ${prettify(e.msg, e.actor)}`;
   }).join('\n');
 }
@@ -119,7 +119,7 @@ export function LogPanel({ view, times, onHoverCard, recentTurns }: {
               {/* Who acted (player report: the kind tags alone don't say whose action it was).
                   Engine/phase entries (rolls, combat rounds) have no actor — blank keeps columns aligned. */}
               <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, width: 18, color: e.actor === 'fp' ? '#7fa8e6' : e.actor === 'shadow' ? '#e6857f' : '#554' }}>
-                {e.actor === 'fp' ? 'FP' : e.actor === 'shadow' ? 'SH' : ''}
+                {e.actor === 'fp' ? 'FP' : e.actor === 'shadow' ? 'SA' : ''}
               </span>
               <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', color: KIND_COLOR[e.kind] ?? '#998', width: 52 }}>{e.kind}</span>
               {/* A PRIVATE line — "You discard Shadows Gather face down" — reaches only its

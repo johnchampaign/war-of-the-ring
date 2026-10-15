@@ -20,10 +20,10 @@ export function describeDraw(d: Draw): string {
 // from the bag — a square parchment token (rulebook p.6 shows them; they used to be
 // drawn as round discs — player report 130t4n2t2g4i091g) with its PRINTED face (a number, the 👁 Eye
 // of Sauron, or 🎲 a die), an Eye/Reveal pip and a STOP banner when the tile carries
-// them. The caption names the TILE ("the ‘3’ tile", "an Eye tile"), NOT the damage —
-// the damage/Corruption is the separate outcome shown by CorruptionLine, so a "3"
-// tile can never be mistaken for "3 damage".
-export function HuntTileFace({ draw, size = 58, caption: showCaption = true }: { draw: Draw; size?: number; caption?: boolean }) {
+// them. No caption under it, in any dialog: the token speaks for itself, and the
+// damage is the separate outcome CorruptionLine shows (player report 1q266e5e11165t1a;
+// the Hunt tiles dropdown already went caption-free).
+export function HuntTileFace({ draw, size = 58 }: { draw: Draw; size?: number }) {
   const v = draw.value;
   const num = typeof v === 'number';
   const heal = num && (v as number) < 0;
@@ -41,14 +41,9 @@ export function HuntTileFace({ draw, size = 58, caption: showCaption = true }: {
     : 'radial-gradient(circle at 35% 30%, #e6d6ad, #c2a86f)';
   const rim = kind === 'shadow' ? '#6d1f16' : kind === 'fp' ? '#27506e' : blank ? '#564e3a' : '#7a5a28';
   const ink = kind === 'shadow' ? '#2e0b06' : kind === 'fp' ? '#0f2a3e' : blank ? '#2a2418' : '#3a2a0e';
-  // Name the TILE, not its effect — and a special tile is named by the card it came
-  // in on, which is how players talk about it ("the Shelob's Lair tile").
-  const caption = draw.specialCard ? `“${draw.specialCard}” tile`
-    : blank ? 'blank tile' : heal ? `“heal ${-(v as number)}” tile`
-    : v === 'eye' ? 'Eye of Sauron tile' : v === 'die' ? 'die tile' : null; // a number says it all (report 264i5v3q6l065747)
   return (
     <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: `0 ${Math.round(size / 10)}px` }}>
-      <div style={{
+      <div title={draw.specialCard ? `${draw.specialCard} tile` : undefined} style={{
         position: 'relative', width: size, height: size, borderRadius: Math.round(size / 9), background: face,
         border: `2px solid ${rim}`, display: 'grid', placeItems: 'center',
         boxShadow: '0 2px 7px #000a, inset 0 1px 2px #fff5, inset 0 -2px 4px #0004',
@@ -60,14 +55,13 @@ export function HuntTileFace({ draw, size = 58, caption: showCaption = true }: {
             S-T-O-P over the face (player report 2s1w5x393j4b2914). */}
         {draw.stop && <span title="Stops the Fellowship" style={{ position: 'absolute', bottom: -Math.round(size * 0.14), left: '50%', transform: 'translateX(-50%)', fontSize: Math.max(6, Math.round(size * 0.155)), lineHeight: 1.2, whiteSpace: 'nowrap', fontWeight: 700, background: '#a83232', color: '#fff', borderRadius: Math.round(size / 12), padding: `${size >= 48 ? 1 : 0}px ${Math.max(2, Math.round(size * 0.086))}px`, letterSpacing: size >= 48 ? 0.5 : 0.2 }}>STOP</span>}
       </div>
-      {showCaption && caption && <span style={{ fontSize: 11, color: '#cbbf9a' }}>{caption}</span>}
     </div>
   );
 }
 
 /** A tile from the bag (not yet drawn) in the shape HuntTileFace draws, so the Hunt
  *  tiles dropdown shows the very same tokens as the Hunt popup (player report
- *  3f146d6j6q510u43). A special tile is coloured and named as a drawn one is. */
+ *  3f146d6j6q510u43). A special tile is coloured as a drawn one is. */
 export function tileAsDraw(t: HuntTileDef): Draw {
   return {
     seq: 0, value: t.value, damage: 0, reveal: t.reveal, stop: t.stop, onMordor: false,

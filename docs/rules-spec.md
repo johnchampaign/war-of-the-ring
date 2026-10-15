@@ -1158,6 +1158,11 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   without it the FP could re-declare in place and heal 1 Corruption *each time*
   (player report 4r4z: five declarations at Dale in one Fellowship phase took
   Corruption from 5 to 0). `scripts/probe-declare-once.mjs`.
+  Entering Mordor does not end the phase either. **Changing the Guide does**: p.38
+  has a new Guide nominated "at the end of each Fellowship phase", so naming one is
+  the phase's last act — after any declaration or Mordor entry (player report
+  6d5b4l4o6b4a630x; earlier a Guide could be named first, and entering Mordor shut
+  the phase before a Guide change).
 - **Balrog of Moria as a Combat card.** It may be discarded from the table to use its **Durin's Bane** Combat
   effect "as if you were playing the card from your hand" (Card Text Reference; player report
   221x631w3b3i4b1j) — offered in the Combat-card step whenever Durin's Bane's precondition holds.
