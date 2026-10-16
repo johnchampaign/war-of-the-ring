@@ -7,8 +7,17 @@ import type { GameState } from '../engine/types';
 import { CDie } from './combatDice';
 
 /** Is there a notice the player hasn't clicked through yet? */
+/** The questions a card's roll leads straight into — which units fall, where the Nazgûl
+ *  fly, where the Army retreats. Their roll is shown WITH the question instead (see
+ *  PlayPage rollContext), so the popup waits for those. */
+export const ROLL_QUESTIONS = new Set(['eventCasualties', 'eaglesRefuge', 'cardRetreat']);
+/** A notice waits only for a battle in progress or the question its own roll leads
+ *  into — not for an unrelated prompt such as the next turn's discard, which used to
+ *  push the result behind the next decision (player report 184z1h4c0v086i62). The Hunt
+ *  popup works the same way. */
 export const noticePending = (view: GameState, seen: number): boolean =>
-  (view.notices ?? []).some((n) => n.seq > seen) && !view.pendingChoice && !view.pendingCombat;
+  (view.notices ?? []).some((n) => n.seq > seen) && !view.pendingCombat
+  && !(view.pendingChoice && ROLL_QUESTIONS.has(view.pendingChoice.kind));
 
 export function NoticePopup({ view, seen, onSeen }: { view: GameState; seen: number; onSeen: (seq: number) => void }) {
   const notices = view.notices ?? [];

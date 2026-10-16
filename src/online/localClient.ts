@@ -96,10 +96,20 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
     });
   };
 
+  // The AI waits while the human has a result of their own action still to see — a card's
+  // roll, a Hunt tile, a battle's outcome. It used to reply inside the same submit, so the
+  // human's popup only appeared after the AI's move and its questions (player report
+  // 184z1h4c0v086i62: the Athelas roll popped up after the Shadow's Stormcrow prompt).
+  // Released by resumeAI(), which the page calls once those popups are clicked through —
+  // never by a poll, so a slow reader isn't overtaken.
+  let aiHeld = false;
+  const resultMarks = (s: GameState): string =>
+    `${(s.notices ?? []).reduce((m, n) => Math.max(m, n.seq), 0)}/${(s.hunt.draws ?? []).reduce((m, d) => Math.max(m, d.seq), 0)}/${s.lastBattle?.seq ?? 0}`;
+
   // Let the AI take every turn that is its own until control returns to the human
   // (or the game ends). Guarded against a stall so it can never loop forever.
   const runAI = (): void => {
-    if (!aiSide) return;
+    if (!aiSide || aiHeld) return;
     let guard = 0;
     while (!wotrAdapter.result?.(state) && guard++ < 2000) {
       const actor = wotrAdapter.currentActor(state) as Side | null;
@@ -166,13 +176,26 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
         // Snapshot the pre-action state so this step can be undone.
         history.push({ state: clone(state), fp: fingerprint(state) });
         if (history.length > HISTORY_CAP) history.shift();
+        const marks = resultMarks(state);
         state = wotrAdapter.applyAction(state, action, actor);
+        if (aiSide && resultMarks(state) !== marks && wotrAdapter.currentActor(state) === aiSide) aiHeld = true;
       }
       const afterHuman = state.log.length;
       runAI();                                            // then let the AI take its turn(s)
       oppLogStart = aiSide ? afterHuman : before;         // vs-AI: AI's entries; hotseat: the acting player's turn (for the next viewer)
       stampNow();
       persistNow();
+      return snapshot();
+    },
+    /** True while the AI is waiting for the human to see a result (see aiHeld). */
+    aiHeld: () => aiHeld,
+    /** The human has seen their results: let the AI take its turn(s). */
+    resumeAI: async () => {
+      if (!aiHeld) return snapshot();
+      aiHeld = false;
+      const before = state.log.length;
+      runAI();
+      if (state.log.length !== before) { stampNow(); persistNow(); }
       return snapshot();
     },
     legalActions: async () => {
@@ -196,6 +219,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
       const foreknowledge = prev.fp !== fingerprint(state);
       history.pop();
       state = prev.state;
+      aiHeld = false; // back before the action whose result held the AI
       // Record a foreknowledge undo on the (restored) log so it's visible that the
       // player re-decided after seeing a random outcome.
       // In hotseat the undoer is whoever is to act in the restored state, not the fixed

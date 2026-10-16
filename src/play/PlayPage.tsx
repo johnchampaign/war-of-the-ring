@@ -25,7 +25,7 @@ import { sortieForce, retreatBlockReason } from '../engine/combat';
 import { DiceTray } from './DiceTray';
 import { HuntPopup, huntResultPending } from './HuntPopup';
 import { BattlePopup, battleResultPending } from './BattlePopup';
-import { NoticePopup, NoticeText, noticePending } from './NoticePopup';
+import { NoticePopup, NoticeText, noticePending, ROLL_QUESTIONS } from './NoticePopup';
 import { TurnSummary } from './TurnSummary';
 import { LogPanel, CopyLogButton } from './LogPanel';
 import { GameOverUpload, UploadLogButton } from './GameOverUpload';
@@ -318,7 +318,6 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // where the Nazgûl fly, where the Army retreats. The roll is shown WITH that question
   // instead, so the player sees the dice before answering (player reports
   // 070f5x2t003i394j, 3d5q0g6q6r460b5z); answering marks it seen.
-  const ROLL_QUESTIONS = new Set(['eventCasualties', 'eaglesRefuge', 'cardRetreat']);
   const rollContext = g.view?.pendingChoice && ROLL_QUESTIONS.has(g.view.pendingChoice.kind)
     ? (g.view.notices ?? []).filter((n) => n.seq > noticeSeen) : [];
   const markRollSeen = () => { if (rollContext.length) setNoticeSeen(Math.max(...rollContext.map((n) => n.seq))); };
@@ -336,6 +335,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     setBattleSeen(g.view.lastBattle?.seq ?? 0);
     setNoticeSeen(maxSeq(g.view.notices));
   }, [g.view, undoTick]);
+  // Local play against the AI: the AI waits while a result of the human's own action is
+  // still on screen (localClient aiHeld) and moves once it is clicked through — the same
+  // tests the popups use to show themselves, so it cannot wait on a popup that is not
+  // there (player report 184z1h4c0v086i62).
+  useEffect(() => {
+    if (!g.view || g.yourTurn || g.gameOver || !client.aiHeld?.() || !client.resumeAI) return;
+    if (huntResultPending(g.view, huntSeen) || battleResultPending(g.view, battleSeen) || noticePending(g.view, noticeSeen)) return;
+    void client.resumeAI().then(() => g.refresh());
+  }, [g.view, g.yourTurn, g.gameOver, huntSeen, battleSeen, noticeSeen]);
   const [logsUploaded, setLogsUploaded] = useState(false); // shared by the Upload button + end-game prompt
   // "Peek the board": temporarily hide a blocking choice modal (combat/hunt decision,
   // move picker) so you can study the board, then click again to return to the choice.

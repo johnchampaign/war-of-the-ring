@@ -57,6 +57,9 @@ async function play(client, n) {
     if (!legal.length) break;
     const before = (await client.fetch()).turn;
     await client.submit(legal[0]);
+    // The page releases an AI held for a result popup once it is clicked through;
+    // headless, release it at once.
+    if (client.aiHeld?.()) await client.resumeAI();
     moved++;
     void before;
   }
@@ -129,6 +132,7 @@ async function play(client, n) {
     const legal = await c.legalActions();
     if (!legal.length) { last = await c.fetch(); continue; }
     last = await c.submit(legal[0]);
+    if (c.aiHeld?.()) last = await c.resumeAI();
   }
   check('the game reached an end', last.gameOver === true, `gameOver=${last.gameOver}`);
   check('slot cleared once the game is over', peekLocalGame(SCHEMA) === null);

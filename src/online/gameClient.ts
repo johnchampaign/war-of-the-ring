@@ -51,6 +51,10 @@ export interface GameClientApi {
   // history; undo() reverts one action and returns the refreshed view.
   undo?(): Promise<ViewResult>;
   undoStatus?(): UndoStatus;
+  // Local vs-AI only: the AI waits while the human still has a result of their own
+  // action on screen (player report 184z1h4c0v086i62); the page releases it.
+  aiHeld?(): boolean;
+  resumeAI?(): Promise<ViewResult>;
   // Online-only (absent on the hotseat client):
   listMessages?(): Promise<ChatMessage[]>;
   postMessage?(body: string): Promise<ChatMessage[]>;

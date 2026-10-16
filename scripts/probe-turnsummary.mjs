@@ -33,6 +33,7 @@ for (let seed = 1; seed <= 12; seed++) {
     if (legal.length === 0) break;
     const before = v.log.length;
     res = await client.submit(legal[0]);
+    if (client.aiHeld?.()) res = await client.resumeAI(); // the page does this after the result popups
     if (res.view.log.length > before) oppActionsSeen++;
   }
 }
