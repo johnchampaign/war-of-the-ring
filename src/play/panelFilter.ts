@@ -35,7 +35,8 @@ export const BOARD_PATH: Record<string, string> = {
   eaglesRefuge: 'click a highlighted Sauron Stronghold to fly the Nazgûl the Eagles spared there',
   cardRetreat: 'click a highlighted region to retreat there (Dead Men of Dunharrow)',
   revealMove: 'click a highlighted region to place the revealed Ring-bearers',
-  separateMove: 'click a highlighted region to place the separated Companion(s)',
+  separateMove: 'click a highlighted region to place the separated Companion(s); who travels in the group is picked up front, in the Fellowship region\'s "Separate Companions…" picker',
+  separateCompanion: 'click the Fellowship\'s region and choose "Separate Companions…" (or "Separate {name}" when one is left) in its menu',
   eventTarget: 'card-driven: recruits via the muster menu of the highlighted Settlement, Army moves and attacks via click-Army-then-destination (both open the Army-move picker), a card assault via the besieged region and "⚔ Assault", companion placements via the highlighted region, a card move of Companions already on the map via their region\'s menu; a card\'s bare region pick (the Army it strikes, Cruel Weather\'s region) by clicking the highlighted region; the decision modal for simple picks; the rest (done / assault / deck picks) stay buttons',
   useElvenRing: 'the Elven Rings pill in the status bar',
   playEvent: 'click the card in your hand (the Ents Awake\'s free Character card too — the big button declines it)',
@@ -54,9 +55,11 @@ export function panelShowsAction(a: WotrAction, legal: WotrAction[], _view: Game
     // it to go "for consistency with regular attacks" — every other attack is a map
     // click (report 6y3j4u31164n1c5r). Click the besieged region itself.
     && !isDecisionAction(a) && a.kind !== 'moveCharacter'
-    // separateMove PLACEMENT (has a target) is a board click; the "also separate X"
-    // group-add option (companion, no target) is a list button.
-    && !(a.kind === 'separateMove' && !!a.target)
+    // Separating Companions is a map flow (player report 4w0o3y281u2h5355): the
+    // Fellowship's region menu opens the picker for who leaves, which also sends the
+    // "also separate X" group-adds, and the placement is a board click. A Hunt's
+    // "Take Them Alive!" placement offers no adds, only the board click.
+    && a.kind !== 'separateCompanion' && a.kind !== 'separateMove'
     // Fellowship-figure placement (declare / revealed-move) is done by clicking the
     // board (banner + highlighted regions), NOT a button — and revealMove has no
     // readable label, so it would otherwise show as raw JSON in the list.

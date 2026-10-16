@@ -175,10 +175,13 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [minionPick, setMinionPick] = useState<string | null>(null);
   const minionAutoDie = useRef(false); // the pick selected the paying die itself
   // Choosing WHO travels in a Companion group, before its destination (CompanionPicker).
-  const [compPick, setCompPick] = useState<{ from: RegionId; candidates: string[]; card?: string } | null>(null);
+  const [compPick, setCompPick] = useState<{ from: RegionId; candidates: string[]; card?: string; separate?: boolean } | null>(null);
+  // The rest of a group being separated from the Fellowship: the first Companion goes
+  // with the die, these join him in the separation step that follows (p.39).
+  const sepQueue = useRef<string[]>([]);
   // When a clicked region offers more than one thing to move (e.g. the army AND its
   // Nazgûl), let the player choose which.
-  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined; chars?: undefined } | { kind: 'assault'; char?: undefined; chars?: undefined } | { kind: 'muster'; char?: undefined; chars?: undefined } | { kind: 'chargroup'; chars: string[]; char?: undefined } | { kind: 'char'; char: string; chars?: undefined } | { kind: 'cardchar'; act: WotrAction; label: string; char?: undefined; chars?: undefined } | { kind: 'cardgroup'; acts: WotrAction[]; char?: undefined; chars?: undefined } | { kind: 'cardcomps'; chars: string[]; card: string; char?: undefined }> } | null>(null);
+  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined; chars?: undefined } | { kind: 'assault'; char?: undefined; chars?: undefined } | { kind: 'muster'; char?: undefined; chars?: undefined } | { kind: 'chargroup'; chars: string[]; char?: undefined } | { kind: 'char'; char: string; chars?: undefined } | { kind: 'cardchar'; act: WotrAction; label: string; char?: undefined; chars?: undefined } | { kind: 'cardgroup'; acts: WotrAction[]; char?: undefined; chars?: undefined } | { kind: 'cardcomps'; chars: string[]; card: string; char?: undefined } | { kind: 'separate'; chars: string[]; char?: undefined }> } | null>(null);
   const [musterMenu, setMusterMenu] = useState<RegionId | null>(null); // board-click muster: the chosen Settlement
   // Choosing HOW MANY Nazgûl to move from a stack (RAW: move any number, not the whole group).
   // `card` set = this came from a Nazgûl-moving EVENT CARD, so confirming submits an
@@ -414,6 +417,24 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const declareTargets = useMemo(() => new Set([...placeActs.map((a) => a.target).filter((t): t is RegionId => !!t), ...gandalfActs.map((a) => a.region), ...retreatActs.map((a) => a.region)]), [placeActs, gandalfActs, retreatActs]);
   const isReveal = g.view?.pendingChoice?.kind === 'revealMove';
   const isSeparateMove = g.view?.pendingChoice?.kind === 'separateMove';
+  // Separating Companions with a Character die is a map click like moving them: the
+  // Fellowship's region offers "Separate Companions…" in its menu, instead of one panel
+  // button per Companion (player report 4w0o3y281u2h5355).
+  const sepActs = useMemo(() => (g.yourTurn && g.view && !g.view.pendingChoice
+    ? g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'separateCompanion' }> => a.kind === 'separateCompanion'
+      && (!activeDie || !g.you || dieAllowsAction(a, g.view!, g.you as Side, activeDie)))
+    : []), [g.legalActions, g.yourTurn, g.view, g.you, activeDie]);
+  const sepSource: RegionId | null = sepActs.length && g.view ? g.view.fellowship.location : null;
+  // Add the rest of a picked separating group, one Companion per step, once the die's
+  // separation is waiting for its destination. Only what the engine offers is sent, so a
+  // queue left behind by a cancelled die pick can never fire somewhere else.
+  useEffect(() => {
+    if (!isSeparateMove || busy || !g.yourTurn || !sepQueue.current.length) return;
+    const next = sepQueue.current.shift()!;
+    const act = g.legalActions.find((a) => a.kind === 'separateMove' && a.companion === next && !a.target);
+    if (act) void submit(act);
+    else sepQueue.current = [];
+  }, [isSeparateMove, busy, g.yourTurn, g.legalActions, submit]);
   // Continuing a Character-die move (RAW: one die moves all eligible characters).
   // `charMoved` lists what has already moved this die, so those figures drop out.
   const isCharMove2 = g.view?.pendingChoice?.kind === 'charMove2';
@@ -556,7 +577,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const minionPickTargets = useMemo(() => new Set(minionPickActs.map((a) => a.region)), [minionPickActs]);
   // While a Minion is being placed only his entry regions (orange) are live, as when
   // Gandalf the White enters play (player report 450z6f2h0t4p3c1c).
-  const sources = useMemo(() => minionPick ? new Set<RegionId>() : new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets, ...cardCharSources, ...cardCompSources]), [minionPick, boardArmyActs, cardMoveActs, cardCharSources, cardCompSources, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets]);
+  const sources = useMemo(() => minionPick ? new Set<RegionId>() : new Set<RegionId>([...boardArmyActs.map((a) => a.from!), ...cardMoveActs.map((a) => a.from!), ...assaultSources, ...musterTargets, ...declareTargets, ...charSources, ...cardSepTargets, ...cardCharSources, ...cardCompSources, ...(sepSource ? [sepSource] : [])]), [minionPick, boardArmyActs, cardMoveActs, cardCharSources, cardCompSources, assaultSources, musterTargets, declareTargets, charSources, cardSepTargets, sepSource]);
   // The generic "why can't I do that?" hints (moveBlockReason / musterBlockReason)
   // belong to the BASIC Move / Muster actions during Action Resolution, and nowhere
   // else. Every other map click is a different question — placing the Ring-bearers on
@@ -630,6 +651,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const verbs: string[] = [];
     if ((boardArmyActs.length || charSources.size) && g.view?.pendingChoice?.kind !== 'charMove2') verbs.push('move', 'attack');
     if (musterTargets.size) verbs.push('Muster');
+    if (sepActs.length) verbs.push('separate Companions');
     // No line for declaring the Fellowship: the floating map banner already says it, and
     // the green panel hints are for the green-highlighted die moves (player report
     // 4r24352g3k5o144u; the line came from 414d1l3969347125, before the banner named it).
@@ -656,7 +678,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       out.push(`${EVENT_BY_ID[card]?.name ?? 'The card'}: ${what}.`);
     }
     return out;
-  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves, cardRegionActs, g.view, g.yourTurn, cardSepActs, isCardSep, cardCharPicks, cardAssaultActs, isCardMove, isCardRecruit, sources]);
+  }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves, cardRegionActs, g.view, g.yourTurn, cardSepActs, isCardSep, cardCharPicks, cardAssaultActs, isCardMove, isCardRecruit, sources, sepActs]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -702,8 +724,17 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Begin moving whatever was chosen from a region: an army (select for the picker)
   // or a specific independent character (Nazgûl/Minion/Companion).
   const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }
-    | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] } | { kind: 'cardcomps'; chars: string[]; card: string }) => {
+    | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] } | { kind: 'cardcomps'; chars: string[]; card: string } | { kind: 'separate'; chars: string[] }) => {
     setMoveMenu(null);
+    // Separating from the Fellowship: one Companion left goes straight to the map;
+    // several open the picker to choose who leaves together.
+    if (opt.kind === 'separate') {
+      sepQueue.current = [];
+      setSelected(null); setCharPick(null);
+      if (opt.chars.length === 1) { setCompPick(null); void submit({ kind: 'separateCompanion', companion: opt.chars[0]! }); }
+      else setCompPick({ from: region, candidates: opt.chars, separate: true });
+      return;
+    }
     // A card's Companion move: one Companion goes straight to the map, several open the
     // group picker — exactly as a Character die does.
     if (opt.kind === 'cardcomps') {
@@ -730,7 +761,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       setSelected(null); setCharPick(null); setCompPick({ from: region, candidates: opt.chars });
     }
     else { setSelected(null); setCharPick({ from: region, char: opt.char }); }
-  }, [cardAssaultActs]); // the card assault on offer changes once the card is played
+  }, [cardAssaultActs, submit]); // the card assault on offer changes once the card is played
 
   const onRegionClick = useCallback((id: RegionId) => {
     setBlockMsg(null); setMoveMenu(null);
@@ -883,7 +914,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const cardHere = cardCharPicks.filter((a) => a.from === id);
     const cardCompsHere = [...new Set(cardCompMoves.filter((a) => a.from === id).map((a) => a.companion!))];
     const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }
-      | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] } | { kind: 'cardcomps'; chars: string[]; card: string }> = [
+      | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] } | { kind: 'cardcomps'; chars: string[]; card: string } | { kind: 'separate'; chars: string[] }> = [
       // The Army comes first, ahead of any figures a card moves on their own (player
       // report 6u1k505o3m1k2i1r).
       ...(armyHere ? [{ kind: 'army' as const }] : []),
@@ -895,6 +926,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       ...(assaultHere ? [{ kind: 'assault' as const }] : []),
       ...(compsHere.length >= 2 ? [{ kind: 'chargroup' as const, chars: compsHere }] : []),
       ...soloHere.map((c) => ({ kind: 'char' as const, char: c })),
+      // The Fellowship's Companions, after the figures already on the map.
+      ...(id === sepSource ? [{ kind: 'separate' as const, chars: sepActs.map((a) => a.companion) }] : []),
       // Muster goes LAST, below the figures — everything above it moves something, so
       // the list reads as one group of movers and then the odd one out (player report
       // 182f552y4v5r6f1n).
@@ -956,7 +989,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
     }
     clearMove();
-  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets, activeDie, isCharMove2, minionPick, minionPickActs, isReveal, isSeparateMove]);
+  }, [selected, charPick, destinations, charDestinations, boardArmyActs, declareTargets, placeActs, cardSepTargets, cardSepActs, submit, beginMove, canMoveChars, charMoveOk, charMoved, g.view, g.you, g.legalActions, musterTargets, basicMoveWindow, assaultActs, isArmyMove2, isCardMove, cardMoveActs, cardCompMoves, isRetreatPick, cardRegionActs, cardRegionTargets, activeDie, isCharMove2, minionPick, minionPickActs, isReveal, isSeparateMove, sepSource, sepActs]);
   // Stable highlight object so a memoized Board ignores hover-only re-renders.
   // THE TWO COLOURS (docs/ui-conventions.md): GREEN is "pick what to act with" — an
   // Army to move, a Settlement to muster in, a Character to move; ORANGE is "pick where
@@ -1244,7 +1277,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                       ? 'Moving the Nazgûl — click a highlighted region to fly them there.'
                       : `${charName(cardSepActs[0]!.companion!)} — click a highlighted region to place them there.${activateTargets.size ? ' A gold ★ region activates that Nation.' : ''}`)
                     : isSeparateMove
-                    ? `Separating Companions — click a highlighted region to place the group there (up to Progress + the highest Level in the group). You can first add more Companions to travel together using the buttons on the right.${activateTargets.size ? ' A gold ★ region activates that Nation.' : ''}`
+                    ? `Separating Companions — click a highlighted region to place the group there (up to Progress + the highest Level in the group).${activateTargets.size ? ' A gold ★ region activates that Nation.' : ''}`
                     : isReveal
                     ? `Revealed! The Fellowship was caught — click a highlighted region to move the Ring-bearers there (up to ${g.view.fellowship.progress}; not into your own City/Stronghold). Passing through a Shadow Stronghold draws an extra Hunt tile.`
                     // Retreats and Gandalf's entry are board clicks too, and they share
@@ -1324,7 +1357,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                       and the question on a line of its own, so the dice always start the next
                       one whatever the card's name (1y5y1g696w5s3x3u). */}
                   {/* No quotation marks, and a card is named by itself (report 3q2j1c3z2v3h100g). */}
-                  <span style={{ flexBasis: '100%' }}>Which die pays for {diePick.kind === 'playEvent' ? cardName(diePick.cardId) : describeAction(diePick, g.view)}?</span>
+                  <span style={{ flexBasis: '100%' }}>Which die pays for {diePick.kind === 'playEvent' ? cardName(diePick.cardId)
+                    // a picked separating group: name everyone leaving, not just the first
+                    : diePick.kind === 'separateCompanion' && sepQueue.current.length ? `Separate ${[diePick.companion, ...sepQueue.current].map(charName).join(', ')}`
+                    : describeAction(diePick, g.view)}?</span>
                   {dieOptions(diePick, g.view, g.you as Side).map((f) => (
                     <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
                       style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>
@@ -1426,6 +1462,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   : o.kind === 'cardgroup' ? `All of them together (${o.acts.map((a) => charName((a as Extract<WotrAction, { kind: 'eventTarget' }>).companion!)).join(', ')})`
                   : o.kind === 'chargroup' || (o.kind === 'cardcomps' && o.chars.length > 1) ? 'Move Companions…' // the names are on the map already (player report 4v4x3j59451y4y4z)
                   : o.kind === 'cardcomps' ? charName(o.chars[0]!)
+                  : o.kind === 'separate' ? (o.chars.length === 1 ? `Separate ${charName(o.chars[0]!)}` : 'Separate Companions…')
                   : o.char === 'nazgul' ? 'The Nazgûl' : charName(o.char)}
               </button>
             ))}
@@ -1436,9 +1473,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       {/* How many Nazgûl to move from a stack (RAW: move any number, not the whole group). */}
       {compPick && g.view && g.you && (
         <CompanionPicker from={compPick.from} candidates={compPick.candidates} view={g.view} you={g.you as Side}
-          opts={compPick.card ? CARD_COMPANION_MOVE_OPTS[compPick.card] : undefined}
+          opts={compPick.card ? CARD_COMPANION_MOVE_OPTS[compPick.card] : undefined} separate={compPick.separate}
           onConfirm={(group) => {
             const { from, card } = compPick; setCompPick(null);
+            if (compPick.separate) {
+              // The first Companion leaves on the die; the others join him in the
+              // separation step (the effect below), then the map takes the destination.
+              sepQueue.current = group.slice(1);
+              void submit({ kind: 'separateCompanion', companion: group[0]! });
+              return;
+            }
             const pick = group.length === 1 ? { from, char: group[0]! } : { from, char: companionGroupLeader(g.view!, from, group, card ? CARD_COMPANION_MOVE_OPTS[card] : {}), group };
             setCharPick(card ? { ...pick, card } : pick);
           }}

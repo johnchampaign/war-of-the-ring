@@ -13,35 +13,43 @@
 import { useState } from 'react';
 import type { GameState, RegionId, Side } from '../engine/types';
 import { companionGroupDestinations, companionGroupRange, type RangeOpts } from '../engine/charMove';
+import { separationDestinations } from '../engine/fellowship';
 import { levelOf } from '../engine/data';
 import { charName } from './charInfo';
 import mapData from '../../assets/map.json';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 
-export function CompanionPicker({ from, candidates, view, you, opts, title, onConfirm, onCancel }: {
+export function CompanionPicker({ from, candidates, view, you, opts, title, separate, onConfirm, onCancel }: {
   from: RegionId; candidates: string[]; view: GameState; you: Side;
   /** A card's range terms (We Prove the Swifter, Gwaihir); none for a Character die. */
   opts?: RangeOpts;
   /** Heading override, e.g. the card being played. */
   title?: string;
+  /** Separating from the Fellowship (p.39) rather than moving figures already on the
+   *  map: the group goes up to Progress + its highest Level, and nobody is on the map
+   *  yet (player report 4w0o3y281u2h5355). */
+  separate?: boolean;
   onConfirm: (group: string[]) => void; onCancel: () => void;
 }) {
-  const [picked, setPicked] = useState<Set<string>>(() => new Set(candidates));
+  // Separating starts with nobody ticked: taking the whole Fellowship away is rarely meant.
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(separate ? [] : candidates));
   const group = candidates.filter((c) => picked.has(c));
-  const range = companionGroupRange(view, from, group, opts);
-  const dests = companionGroupDestinations(view, you, from, group, opts);
+  const top = Math.max(0, ...group.map((c) => levelOf(c)));
+  const range = separate ? view.fellowship.progress + top : companionGroupRange(view, from, group, opts);
+  const dests = separate ? (group.length ? separationDestinations(view, from, range) : []) : companionGroupDestinations(view, you, from, group, opts);
   const error = !group.length ? 'Choose at least one Companion'
     : !dests.length ? 'This group has nowhere it may go from here'
     : null;
-  const top = Math.max(0, ...group.map((c) => levelOf(c)));
-  const shadowfax = group.includes('gandalf-white') && range > top;
+  const shadowfax = !separate && group.includes('gandalf-white') && range > top;
   return (
     <div style={backdrop} onClick={onCancel}>
       <div style={card} onClick={(e) => e.stopPropagation()} data-testid="companion-picker">
-        <h3 style={{ margin: '0 0 6px' }}>{title ?? 'Move Companions'} — from {rName(from)}</h3>
+        <h3 style={{ margin: '0 0 6px' }}>{title ?? (separate ? 'Separate Companions' : 'Move Companions')} — from {rName(from)}</h3>
         <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
-          Choose who travels together. A group moves as far as its highest Level (p.24); then click its destination on the map.
+          {separate
+            ? 'Choose who leaves the Fellowship together. The group goes as far as the Fellowship’s Progress plus its highest Level (p.39); then click its destination on the map.'
+            : 'Choose who travels together. A group moves as far as its highest Level (p.24); then click its destination on the map.'}
         </div>
         {candidates.map((c) => (
           <label key={c} style={row}>
@@ -53,7 +61,7 @@ export function CompanionPicker({ from, candidates, view, you, opts, title, onCo
         ))}
         {group.length > 0 && (
           <div style={{ fontSize: 12, color: '#d8cfa8', marginTop: 8 }} data-testid="companion-picker-range">
-            {group.length === 1 ? `${charName(group[0]!)} moves` : 'This group moves'} up to {range} region{range === 1 ? '' : 's'}
+            {group.length === 1 ? `${charName(group[0]!)} ${separate ? 'goes' : 'moves'}` : `This group ${separate ? 'goes' : 'moves'}`} up to {range} region{range === 1 ? '' : 's'}
             {shadowfax ? ' — Shadowfax carries Gandalf the White further alone or with one Hobbit' : ''}.
           </div>
         )}
