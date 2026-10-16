@@ -630,8 +630,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const verbs: string[] = [];
     if ((boardArmyActs.length || charSources.size) && g.view?.pendingChoice?.kind !== 'charMove2') verbs.push('move', 'attack');
     if (musterTargets.size) verbs.push('Muster');
-    // The Fellowship phase is board-driven too (player report 414d1l3969347125).
-    if (g.legalActions.some((a) => a.kind === 'declareFellowship')) verbs.push('declare the Fellowship');
+    // No line for declaring the Fellowship: the floating map banner already says it, and
+    // the green panel hints are for the green-highlighted die moves (player report
+    // 4r24352g3k5o144u; the line came from 414d1l3969347125, before the banner named it).
     if (verbs.length) {
       const list = verbs.length === 1 ? verbs[0]!
         : verbs.length === 2 ? `${verbs[0]} or ${verbs[1]}`

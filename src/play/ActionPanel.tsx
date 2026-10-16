@@ -206,7 +206,9 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       {chainNote && (
         <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', margin: '4px 0', fontSize: 13 }}>⚑ {chainNote}</div>
       )}
-      {live.length === 0 && skips.length === 0 && boardHints.length === 0 && !chainNote && (
+      {/* Not when the big button is the move (e.g. "End the Fellowship phase" while the
+          map banner asks for a declaration): "No actions." would be wrong. */}
+      {live.length === 0 && skips.length === 0 && boardHints.length === 0 && !chainNote && (!finish || !!boardPending) && (
         boardPending
           ? <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', fontSize: 13 }}>⚑ {boardPending}</div>
           : <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>

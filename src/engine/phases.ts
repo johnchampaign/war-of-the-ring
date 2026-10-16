@@ -243,7 +243,7 @@ export function advance(state: GameState): void {
         // Mordor Track: if the Fellowship is on the Track and the FP didn't move or hide
         // it this turn, the Ring-bearers take 1 Corruption (rules p.43).
         if (state.fellowship.mordor !== null && !state.flags.fellowshipDeclaredOrMovedThisTurn) {
-          sufferCorruption(state, 1, 'on the Mordor Track — the Fellowship neither moved nor hid this turn');
+          sufferCorruption(state, 1, 'for lingering in Mordor'); // wording: player report 723v3j423n3z0b5h
           checkRingVictory(state);
         }
         if (!state.winner) checkMilitaryVictory(state);

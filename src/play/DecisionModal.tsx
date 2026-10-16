@@ -447,8 +447,11 @@ function DecisionButton({ action, disabled, onClick, onHover, guide, label }: { 
   return (
     <button onClick={onClick} disabled={disabled} style={dbtn} {...hov}>
       {art && <img src={art} alt="" style={{ height: 56, borderRadius: 3, display: 'block', marginBottom: 4 }} />}
-      {/* Name the Guide being sacrificed (player report 6u2f1h4c6n5e6l5w). */}
-      {action.kind === 'huntDamage' && action.mode === 'guide' && guide ? `Sacrifice ${charName(guide)}` : label ?? describeAction(action)}
+      {/* Name the Guide being sacrificed (player report 6u2f1h4c6n5e6l5w) or
+          separated (player report 2k0h2q5l57145k3y). */}
+      {action.kind === 'huntDamage' && action.mode === 'guide' && guide ? `Sacrifice ${charName(guide)}`
+        : action.kind === 'huntDamage' && action.mode === 'reduceSeparate' && guide ? `Separate ${charName(guide)} (−1 damage)`
+        : label ?? describeAction(action)}
     </button>
   );
 }
