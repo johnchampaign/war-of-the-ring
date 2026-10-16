@@ -5,6 +5,8 @@
 //  - 2i1u3w2d3x5g1j3z: no Character-die Nazgûl move onto a Fellowship at a Mordor entrance.
 //  - 3g4w2o173k4h3061: pressing a revealed Fellowship takes ONE Nazgûl, not the stack.
 //  - 1z006a1e11730v2p: Dreadful Spells waits for three or more Nazgûl.
+//  - 474g716s1p4e6j4l: while Saruman waits for the Free Peoples' Will die, the Shadow
+//    keeps its last Muster-capable die for him.
 import { Rng } from 'digital-boardgame-framework';
 import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
@@ -71,6 +73,21 @@ console.log('\n=== Dreadful Spells ===');
   const offered = legal.some((x) => x.kind === 'playEvent' && x.cardId === 'sh-char-19');
   const a = decide(s);
   check('one Nazgûl: Dreadful Spells waits', offered && !(a.kind === 'playEvent' && a.cardId === 'sh-char-19'), JSON.stringify(a).slice(0, 110));
+}
+
+console.log('\n=== Saruman keeps his die ===');
+{
+  const s = shadowTurn(2);
+  s.nations.isengard.step = 0;
+  s.fellowship.companions = s.fellowship.companions.filter((c) => c !== 'gandalf-grey');
+  if (!s.characters.eliminated.includes('gandalf-grey')) s.characters.eliminated.push('gandalf-grey');
+  s.dice.shadow = ['muster', 'army']; s.dice.fp = ['will', 'character'];
+  const a = decide(s);
+  const usesMuster = ['recruitUnit', 'diplomaticAction', 'bringMinion', 'sarumanMuster'].includes(a.kind);
+  check('a Will die in Free Peoples hands: the Muster die is kept (the Army die acts)', !usesMuster, JSON.stringify(a).slice(0, 110));
+  s.dice.fp = [];
+  const b = decide(s);
+  check('…their dice spent: Saruman comes', b.kind === 'bringMinion' && b.minion === 'saruman', JSON.stringify(b).slice(0, 110));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

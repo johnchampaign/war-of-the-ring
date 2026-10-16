@@ -573,7 +573,7 @@ export function dist(from: RegionId, to: RegionId): number {
 function fellowshipStalled(state: GameState): boolean {
   const fs = state.fellowship;
   if (fs.mordor !== null) return false;            // on the Track the Ring clock runs fast
-  if (fs.progress >= 2) return false;              // it is travelling, not resting
+  if (fs.progress >= 1) return false;              // it is travelling, not resting (report 0q4n45606d4j6x01)
   const d = REGIONS[fs.location];
   return !!d && (d.settlement === 'City' || d.settlement === 'Stronghold')
     && !!d.nation && FP.has(d.nation) && settlementCtrl(state, fs.location) !== 'shadow';
@@ -755,8 +755,33 @@ export function campaignTarget(state: GameState, actor: Side): RegionId | null {
   return best;
 }
 
+/** Saruman would be the first Minion, Gandalf the Grey is out of the Fellowship and the
+ *  White not yet come, and the Free Peoples still hold an unused Will of the West: bring
+ *  Saruman now and they bring the White straight in. */
+function whiteCouldAnswerSaruman(state: GameState): boolean {
+  const firstMinion = !['witch-king', 'mouth-of-sauron'].some((m) => state.characters.entered.includes(m));
+  return firstMinion && state.dice.fp.includes('will') && !state.characters.entered.includes('gandalf-white')
+    && !state.fellowship.companions.includes('gandalf-grey');
+}
+
+/** While Saruman waits for the Free Peoples' Will die to be spent, the Shadow keeps its
+ *  LAST Muster-capable die for him — spending it elsewhere left nothing to bring him with
+ *  once they ran out (report 474g716s1p4e6j4l: "should have saved their last Army/Muster
+ *  die to bring Saruman into play on their final Action"). */
+function spendsSarumansDie(state: GameState, a: WotrAction): boolean {
+  if (!whiteCouldAnswerSaruman(state)) return false;
+  if (state.characters.entered.includes('saruman') || state.characters.eliminated.includes('saruman') || state.nations.isengard.step !== 0) return false;
+  const dice = state.dice.shadow;
+  if (dice.filter((f) => f === 'muster' || f === 'armyMuster').length !== 1) return false;
+  if (a.kind === 'recruitUnit' || a.kind === 'diplomaticAction' || a.kind === 'sarumanMuster') return true;
+  if (a.kind === 'bringMinion') return a.minion !== 'saruman';
+  if (a.kind === 'moveArmy' || a.kind === 'attack') return a.die === 'armyMuster' || (!a.die && !dice.includes('army') && !dice.includes('character'));
+  return false;
+}
+
 function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | null): number {
   const fs = state.fellowship;
+  if (actor === 'shadow' && spendsSarumansDie(state, a)) return -20;
   switch (a.kind) {
     case 'moveFellowship':
       // On the Mordor Track, NOT moving costs +1 Corruption/turn — push every turn.
@@ -905,12 +930,7 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // 1q112f1z0d6x262j). But the first Minion in play is what lets Gandalf the White
       // come — so while the Free Peoples hold an unused Will of the West and the White
       // could come this turn, hold him back (he waits for their last die).
-      if (a.minion === 'saruman') {
-        const firstMinion = !['witch-king', 'mouth-of-sauron'].some((m) => state.characters.entered.includes(m));
-        const whiteCanCome = firstMinion && state.dice.fp.includes('will') && !state.characters.entered.includes('gandalf-white')
-          && !state.fellowship.companions.includes('gandalf-grey');
-        v += whiteCanCome ? -30 : 25;
-      }
+      if (a.minion === 'saruman') v += whiteCouldAnswerSaruman(state) ? -30 : 25;
       return v;
     }
     case 'recruitUnit': return recruitScore(state, actor, a, target); // build the war stacks WHERE THEY MATTER
