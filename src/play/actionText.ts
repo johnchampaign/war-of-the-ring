@@ -52,7 +52,7 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     case 'moveFellowship': return 'Move the Fellowship';
     case 'hideFellowship': return 'Hide the Fellowship';
     case 'separateCompanion': return `Separate ${charName(a.companion)}`;
-    case 'changeGuide': return `Make ${charName(a.companion)} the Guide and end the phase`; // p.38: the Guide changes at the phase's end
+    case 'changeGuide': return `Make ${charName(a.companion)} the Guide`; // ends the phase (p.38) — the label stays short (report 3k3v3o6w0v1l2x6l)
     // The die chip / picker already says which dice can pay (player report 5d682g3j3s4i221d).
     // Named after the Companion's ABILITY, the way the Voice of Saruman action already
     // is — "High Warden of the White Tower: advance Gondor", not "Boromir: advance
@@ -69,11 +69,11 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     case 'forceDiscardCard': return a.via === 'cards'
       // "Remove", not a second "Discard" — the log says the Shadow removes the card, and
       // two discards in one line read awkwardly (player report 0h190y6n5t302e4r).
-      ? `Remove "${cardName(a.cardId)}" (discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
+      ? `Remove ${cardName(a.cardId)} (discard ${cardName(a.discardStrategy!)} and ${cardName(a.discardCharacter!)})`
       // Every way of getting rid of the OPPONENT's table card says "Remove" (player
       // report 03102x0902160c4r).
-      : a.via === 'ring' ? `Remove "${cardName(a.cardId)}" (spend one Elven Ring)`
-      : `Remove "${cardName(a.cardId)}"`;
+      : a.via === 'ring' ? `Remove ${cardName(a.cardId)} (spend one Elven Ring)`
+      : `Remove ${cardName(a.cardId)}`;
     // Both labels used to describe the ability in shorthand that reads as something
     // else: "recruit Isengard" is not a thing you recruit, and "Orthanc Regulars" names
     // a Nation that does not exist (player report 3v6m502j4k3z161y). Say what the card
@@ -93,7 +93,7 @@ export function describeAction(a: WotrAction, view?: GameState): string {
       : view.characters.inPlay['gandalf-grey'] ? 'Reveal Gandalf the White' : 'Awaken Gandalf the White';
     case 'placeGandalf': return `Place Gandalf the White in ${rName(a.region)}`;
     case 'drawEvent': return `Draw a ${cap(a.deck)} Event card`;
-    case 'playEvent': return `Play "${cardName(a.cardId)}"`;
+    case 'playEvent': return `Play ${cardName(a.cardId)}`;
     case 'diplomaticAction': return `Diplomacy: advance ${a.nation === 'north' ? 'the North' : nationName(a.nation)}`; // reports 526e0k1q1q1r2p45, 71051h5x4j6a2l21
     case 'recruitUnit': {
       const fig = a.nazgul ? 'Nazgûl' : a.leader ? 'Leader' : a.elite ? 'Elite' : 'Regular';
@@ -132,7 +132,7 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     // must not promise "the whole Army forward" — that reads as a decision already
     // made, and the picker it opens then looked like a stray second pop-up.
     case 'advanceHoldBack': return a.back ? 'Keep some figures back' : 'Choose who stays forward…';
-    case 'nazgulStrike': return a.discard ? `Discard "${cardName(a.discard)}" from the table` : 'Roll for the Hunt';
+    case 'nazgulStrike': return a.discard ? `Discard ${cardName(a.discard)} from the table` : 'Roll for the Hunt';
     case 'advanceChoice': return !a.advance ? 'Hold position (no capture)' : a.move ? 'Advance the chosen forces' : 'Advance… (choose forces)';
     case 'chooseCasualties': return a.plan === 'regularsFirst' ? 'Lose Regulars first' : 'Reduce Elites first';
     case 'casualtyStep': {
@@ -184,8 +184,8 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     case 'lureChoice': return a.mode === 'corruption' ? 'Use the Ring' : 'Eliminate the Companion';
     case 'stormcrowLoss': return `Lose ${nationName(a.nation)} ${a.figure === 'leader' ? 'Leader' : a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
     case 'breakingSep': return `Separate ${charName(a.companion)} from the Fellowship`;
-    case 'wornDiscard': return a.card ? `Discard "${cardName(a.card)}" from the table` : 'Discard a random Character card from their hand';
-    case 'discardCard': return `Discard "${cardName(a.card)}"`;
+    case 'wornDiscard': return a.card ? `Discard ${cardName(a.card)} from the table` : 'Discard a random Character card from their hand';
+    case 'discardCard': return `Discard ${cardName(a.card)}`;
     case 'huntPreventDraw': return a.prevent ? 'Discard Wizard’s Staff — no Hunt tile' : 'Let the Shadow draw';
     case 'huntRedraw': return a.redraw ? 'Discard Mithril Coat — redraw the tile' : 'Keep the drawn tile';
     // The Ents Awake's decline had no label, so the button showed raw action data

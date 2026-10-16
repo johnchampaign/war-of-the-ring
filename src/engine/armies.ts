@@ -242,23 +242,6 @@ export function eventRecruitTarget(state: GameState, id: RegionId, side: Side): 
 }
 
 export const SIEGE_LIMIT = 5;
-/** Enforce the 5-Army-unit Stronghold siege cap (rulebook p.31): when a Stronghold
- *  comes under siege, units beyond five are removed immediately (Regulars first,
- *  then Elites), recycled to reinforcements. Leaders are unlimited. */
-export function enforceSiegeCap(state: GameState, id: RegionId): void {
-  const r = state.regions[id]!;
-  let excess = unitCount(state, id) - SIEGE_LIMIT;
-  if (excess <= 0) return;
-  const nations = Object.keys(r.units) as Nation[];
-  for (const kind of ['regular', 'elite'] as const) {
-    for (const n of nations) {
-      const u = r.units[n]; if (!u) continue;
-      while (excess > 0 && u[kind] > 0) { u[kind] -= 1; state.reinforcements[n][kind] += 1; excess -= 1; }
-    }
-    if (excess <= 0) break;
-  }
-}
-
 /** Muster a single Nazgûl into a Sauron Stronghold (the Shadow's "Leader/Nazgûl"
  *  muster figure). Returns false if illegal. */
 export function recruitNazgul(state: GameState, id: RegionId): boolean {
@@ -936,7 +919,7 @@ function forceHasFpUnits(f: Force | undefined): boolean {
  *  be removed by the controlling player after a move/muster (rulebook p.26). */
 export function overStack(state: GameState, id: RegionId): number {
   // A besieged region has TWO stacks and they are capped separately: the boxed
-  // GARRISON by the 5-unit siege limit (enforceSiegeCap), and the BESIEGER standing in
+  // GARRISON by the 5-unit siege limit (overStackBox), and the BESIEGER standing in
   // the open field by the normal 10 (p.32 — the open field is an ordinary Army). This
   // used to bail out for any besieged region, exempting the besieger entirely, so a
   // besieging stack could grow past 10 and attack with 11+ units (player report: "the

@@ -15,7 +15,7 @@ import type { GameState, RegionId, Side, DieFace, Nation } from '../engine/types
 import type { WotrAction } from '../adapter/wotrAction';
 import { Board } from './Board';
 import { ActionPanel, DieTag } from './ActionPanel';
-import { regionName } from './names';
+import { regionName, cardName } from './names';
 import { StatusBar } from './StatusBar';
 import { HandStrip, TabledStrip, CardZoom, OpponentHand } from './HandStrip';
 import { PoliticsPanel } from './PoliticsPanel';
@@ -617,10 +617,19 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // Not mid Character-move chain: the panel's own "Character move in progress" note
     // already says it, and two pointers in one place was overkill (player report
     // 2z056o2o6n4d136b).
-    if ((boardArmyActs.length || charSources.size) && g.view?.pendingChoice?.kind !== 'charMove2') out.push('Move or attack — click a highlighted region.');
-    if (musterTargets.size) out.push('Muster — click a highlighted region.');
+    // One hint line for everything the map offers, not one per die kind (player report
+    // 1a210u1c3k5m3q6m: "Move, attack, or Muster — click a highlighted region.").
+    const verbs: string[] = [];
+    if ((boardArmyActs.length || charSources.size) && g.view?.pendingChoice?.kind !== 'charMove2') verbs.push('move', 'attack');
+    if (musterTargets.size) verbs.push('Muster');
     // The Fellowship phase is board-driven too (player report 414d1l3969347125).
-    if (g.legalActions.some((a) => a.kind === 'declareFellowship')) out.push('Declare the Fellowship — click a highlighted region.');
+    if (g.legalActions.some((a) => a.kind === 'declareFellowship')) verbs.push('declare the Fellowship');
+    if (verbs.length) {
+      const list = verbs.length === 1 ? verbs[0]!
+        : verbs.length === 2 ? `${verbs[0]} or ${verbs[1]}`
+        : `${verbs.slice(0, -1).join(', ')}, or ${verbs[verbs.length - 1]}`;
+      out.push(`${list.charAt(0).toUpperCase()}${list.slice(1)} — click a highlighted region.`);
+    }
     // A card moving Companions already on the map points at the map like a Character
     // die does (player report 231u2i4l5p19426w).
     if (cardCompMoves.length) {
@@ -1287,7 +1296,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   {/* One quick pulse (three slow ones dragged — player report 032k395g2c07105p),
                       and the question on a line of its own, so the dice always start the next
                       one whatever the card's name (1y5y1g696w5s3x3u). */}
-                  <span style={{ flexBasis: '100%' }}>Which die pays for “{describeAction(diePick, g.view)}”?</span>
+                  {/* No quotation marks, and a card is named by itself (report 3q2j1c3z2v3h100g). */}
+                  <span style={{ flexBasis: '100%' }}>Which die pays for {diePick.kind === 'playEvent' ? cardName(diePick.cardId) : describeAction(diePick, g.view)}?</span>
                   {dieOptions(diePick, g.view, g.you as Side).map((f) => (
                     <button key={f} disabled={busy} onClick={() => { const a = { ...diePick, die: f } as WotrAction; setDiePick(null); void submit(a); }}
                       style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}><DieTag face={f} /></button>

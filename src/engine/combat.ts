@@ -424,7 +424,9 @@ function absorbForced(state: GameState, f: Force, side: Side, hits: number, nati
   // log didn't say that' on an Elite reduction — were both this silence.
   // One line per unit, the same as a chosen casualty — forced losses used to share one
   // line while chosen ones each had their own (player report 692l2005000t3z4m).
-  for (const what of taken) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties (forced): ${what}`);
+  // No "(forced)" tag: whether a loss was forced or chosen does not matter in the log
+  // (player report 016j5h5h2f1v1t21).
+  for (const what of taken) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties: ${what}`);
   return left;
 }
 const cap1 = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
@@ -844,19 +846,6 @@ function atkForce(state: GameState, pc: PendingCombat): Force {
 }
 const atkCount = (state: GameState, pc: PendingCombat): number => forceUnitCount(atkForce(state, pc));
 const defCount = (state: GameState, pc: PendingCombat): number => forceUnitCount(defForce(state, pc));
-/** Cap a region's siege box at the 5-unit garrison limit (excess recycled). */
-function capSiegeBox(state: GameState, id: RegionId): void {
-  const box = state.regions[id]!.siegeBox; if (!box) return;
-  let excess = forceUnitCount(box) - 5;
-  if (excess <= 0) return;
-  for (const kind of ['regular', 'elite'] as const) {
-    for (const n of Object.keys(box.units) as Nation[]) {
-      const u = box.units[n]; if (!u) continue;
-      while (excess > 0 && u[kind] > 0) { u[kind] -= 1; state.reinforcements[n][kind] += 1; excess -= 1; }
-    }
-    if (excess <= 0) break;
-  }
-}
 
 /** How much a side could actually pay for its variable-cost card right now: the card's
  *  own cap, limited by what that side has to spend. Self-hits cannot exceed the units
@@ -2227,7 +2216,11 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean, move?
     return;
   }
   {
-    capSiegeBox(state, pc.to); // NOW it comes under siege — garrison capped at 5 (p.31)
+    // NOW it comes under siege, and the garrison is capped at 5 units (p.31). The excess
+    // is the OWNER's to pick — p.26: "the excess units must be removed from the game by
+    // the controlling player" — so nothing is trimmed here: the adapter's end-of-action
+    // sweep raises the boxed removeExcess prompt. This used to drop Regulars silently
+    // (player report 1a734v6p0b484w16: "I wasn't prompted how to disband").
     // The besieger occupies the open field (NO capture — the boxed garrison holds the
     // Settlement). "All or part" of the Army, like every advance (report 405e1k232p3h3j4m).
     if (move) advanceSelected(state, pc.attacker, pc.from, pc.to, move, pc.rearguard ?? null, { capture: false, verb: 'advance', lift: false });

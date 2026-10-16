@@ -349,12 +349,12 @@ function RemoveWithCardsButton({ acts, disabled, onClick, onHover, options, forc
       {!open && (
         <button disabled={disabled} onClick={() => setOpen(true)} style={{ ...base, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={DIE_COL}>{options.length === 1 ? <DieTag face={options[0]!} /> : CHOOSE_DIE}</span>
-          <span style={{ minWidth: 0 }}>Remove "{name}" (discard an Army card and a Character card)</span>
+          <span style={{ minWidth: 0 }}>Remove {name} (discard an Army card and a Character card)</span>
         </button>
       )}
       {open && (
         <div style={{ border: '1px solid #554', borderRadius: 5, padding: '6px 8px', margin: '3px 0', background: '#2a2419' }}>
-          <div style={{ fontSize: 12, marginBottom: 4 }}>Remove "{name}" — choose the two cards to discard:</div>
+          <div style={{ fontSize: 12, marginBottom: 4 }}>Remove {name} — choose the two cards to discard:</div>
           {cardRow('Army card:', armies, army, setArmy)}
           {cardRow('Character card:', chars, char, setChar)}
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>

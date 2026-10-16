@@ -64,7 +64,7 @@ const rec = describeAction({ kind: 'eventTarget', card: 'sh-str-17', mode: 'recr
 check('no card-name prefix', !/Many Kings/.test(rec) && /^Recruit /.test(rec), rec);
 check('Done', describeAction({ kind: 'eventTarget', card: 'sh-str-17', done: true }) === 'Done');
 const den = describeAction({ kind: 'forceDiscardCard', cardId: 'sh-str-03', via: 'die' });
-check('Remove Denethor\'s Folly', /^Remove "/.test(den), den);
+check('Remove Denethor\'s Folly', /^Remove Denethor/.test(den), den);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);
