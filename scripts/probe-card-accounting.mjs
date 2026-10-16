@@ -37,9 +37,12 @@ const allCards = (s, side) => {
   const p = s.cards[side];
   const ids = [...p.hand, ...p.draw.character, ...p.draw.strategy,
     ...p.discard.character, ...p.discard.strategy, ...(p.discardFaceDown ?? []), ...p.table];
-  // An interactive Event is held out of every pile while its target choice is pending.
-  const pc = s.pendingChoice;
-  if (pc?.owner === side && pc.kind === 'eventTarget' && pc.data?.card) ids.push(pc.data.card);
+  // An interactive Event is held out of every pile while its target choice is pending —
+  // also when that choice is parked as the `thenChoice` of a choice it raised (the
+  // OTHER side's casualty pick after Faramir's Rangers strikes, say), to resume after.
+  for (let pc = s.pendingChoice; pc; pc = pc.data?.thenChoice) {
+    if (pc.owner === side && pc.kind === 'eventTarget' && pc.data?.card) ids.push(pc.data.card);
+  }
   return ids;
 };
 

@@ -18,7 +18,7 @@ import { unitCount, forceUnitCount, forceLeadership, STACKING_LIMIT, splitBlockR
 import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
 import { characterDestinations } from '../engine/charMove';
-import { cardSplitBlockReason } from '../engine/handlers/index';
+import { cardSplitBlockReason, dreadfulSpellsBestDice } from '../engine/handlers/index';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
 
@@ -87,7 +87,9 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // human-like yardstick 640->737 and 689->731; corruption wins up in all four.
     const approach = fs.mordor === null && fs.progress < 4 && fs.hidden
       && !isHealSettlement(state, fs.location) && dist(fs.location, 'morannon') <= 6;
-    const raw = (fs.mordor !== null || fs.progress >= 4) ? hi : approach ? 2 : 0;
+    // Off the Track only the first success of a Hunt roll counts (Eyes aside), so past
+    // three dice the returns collapse (report 4d4w4o4f2h310z5l: 5 dice before Mordor).
+    const raw = fs.mordor !== null ? hi : fs.progress >= 4 ? Math.min(hi, 3) : approach ? 2 : 0;
     // On the Mordor Track the Ring is the clock, so max out — but only to what a
     // roll can USE. A Hunt roll rolls `Math.min(5, hunt.box)` dice (hunt.ts), so a
     // 6th/7th die is STRICTLY wasted: it cannot help the Hunt, it only disarms us
@@ -229,7 +231,7 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     const s = score(state, actor, a, target) + rng.next() * 0.5; // tiny noise for tie-breaks
     if (s > bestScore) { bestScore = s; best = a; }
   }
-  return payWithEventDie(state, actor, maybeAttackRearguard(state, actor, maybeFitStack(state, actor, maybeSplitGarrison(state, actor, best)))); // hold a threatened origin; don't overstack
+  return oneWraith(state, actor, payWithEventDie(state, actor, maybeAttackRearguard(state, actor, maybeFitStack(state, actor, maybeSplitGarrison(state, actor, best))))); // hold a threatened origin; don't overstack
 }
 
 /** Is `from` a VP Settlement of ours that a departing Army must not simply abandon?
@@ -258,6 +260,17 @@ function garrisonWorthy(state: GameState, actor: Side, from: RegionId): boolean 
  *  is always legal where the whole move was (it moves a strict subset to the same
  *  region). Leaders/Nazgûl/Characters advance with the army; a Regular (else an
  *  Elite) holds. */
+/** Pressing a revealed Fellowship takes ONE Nazgûl: the Hunt re-roll is presence-gated,
+ *  so a second wraith adds nothing there (report 3g4w2o173k4h3061: "2 Nazgûl move North
+ *  Ithilien → Eastern Brown Lands … One Nazgul is enough"). A whole-stack move keeps
+ *  the rest where they are. */
+function oneWraith(state: GameState, actor: Side, action: WotrAction): WotrAction {
+  if (actor !== 'shadow' || action.kind !== 'moveCharacter' || action.char !== 'nazgul' || action.count != null) return action;
+  const fs = state.fellowship;
+  if (fs.hidden || action.to !== fellowshipRegion(state) || state.regions[action.from]!.nazgul < 2) return action;
+  return { ...action, count: 1 };
+}
+
 /** Play an Event card with an EVENT die when one is left. Left to itself the engine
  *  pays with the card's own icon die (Army, Muster, Character) — but that die can still
  *  move, attack or muster, while an Event die can only play or draw cards; and only an
@@ -923,6 +936,16 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
         return fs.corruption >= 6 ? 95 : 25;
       }
       if (actor === 'shadow' && CORRUPT_EVENTS.has(a.cardId)) return 70;
+      // NOT held back while the Fellowship is revealed: the Hunt-tile and Nazgûl-search
+      // cards (Orc Patrol, Isildur's Bane, Foul Thing from the Deep, Nazgûl Search, The
+      // Nazgûl Strike!) can reveal it, so report 5x6y452a4o4s210z asked for them to wait
+      // until it hides. Tried 2026-10-15 (score 8 while revealed): Shadow wins against
+      // bdd9558 499->491, 508->494 (heuristic FP), 616->604, 604->583 (human-like), -55.
+      // A tile drawn now still deals its damage; the AI holding the card loses more than
+      // the reveal it might later buy.
+      // Dreadful Spells rolls one die per Nazgûl: with one or two it is a fraction of the
+      // card, so it waits for a gathering of three or more (report 1z006a1e11730v2p).
+      if (a.cardId === 'sh-char-19' && dreadfulSpellsBestDice(state) < 3) return 8;
       // Wormtongue only LOCKS Rohan's activation — once Rohan is already active
       // (let alone At War) the table effect is moot, and the card's combat half
       // (Foul Stench: cancels the FP Leader re-roll) is its remaining value. Don't
@@ -1017,7 +1040,12 @@ function diplomaticScore(state: GameState, actor: Side, nation: Nation): number 
     // Shadow attacks rose 572 -> 714 per 100 games, but wins against 8292a8f did not:
     // heuristic FP 835->860, 883->893, 909->857; human-like 915->958, 910->865, 933->921
     // (-31 over 12000 games, noise). Reverted.
-    return proximity + army * 2;
+    // Isengard's War is also the door for Saruman (his Action die, his abilities, the
+    // cards that need him), so it goes first while he is still to come — Sauron's bigger
+    // Army otherwise always won the die, and the "Saruman sooner" bonus never got its
+    // chance (report 412b503z4a554d3w: Sauron to War, then an Elite in Angmar).
+    const saruman = nation === 'isengard' && !state.characters.entered.includes('saruman') && !state.characters.eliminated.includes('saruman') ? 25 : 0;
+    return proximity + army * 2 + saruman;
   }
   if (!ns.active) return 8;                                             // FP advances toward War reactively
   // Finish one Nation before starting the next: a step only pays once the Nation is At
@@ -1186,7 +1214,10 @@ function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction
   if (actor === 'shadow') {
     const staging = nazgulStagingBonus(state, a.char, a.to, target);
     if (staging > 0) return staging;
-    if (a.char === 'nazgul') return (!fs.hidden && a.to === fellowshipRegion(state)) ? 42 : 6; // never on the Mordor Track
+    // Not onto a Fellowship standing at a Mordor entrance: it goes onto the Track next,
+    // where no Hunt is rolled and a Nazgûl's presence buys nothing (report
+    // 2i1u3w2d3x5g1j3z). The Nazgûl cards' own moves are a different matter.
+    if (a.char === 'nazgul') return (!fs.hidden && a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location)) ? 42 : 6; // never on the Mordor Track
     return 4; // Minions: situational
   }
   // A separated Companion used to score a flat 4 for every destination, so it never
@@ -1801,7 +1832,7 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
   const fs = state.fellowship;
   const scoreMove = (a: Extract<WotrAction, { kind: 'moveCharacter' }>): number => {
     let s = 0;
-    if (owner === 'shadow' && a.char === 'nazgul' && !fs.hidden && a.to === fellowshipRegion(state)) {
+    if (owner === 'shadow' && a.char === 'nazgul' && !fs.hidden && a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location)) {
       // Press a revealed Fellowship — with ONE Ringwraith. The Hunt re-roll is
       // presence-gated, so the second wraith adds nothing; the die-driven chain
       // used to pile all five on (player report: 'spent [C] to move 5(!) Nazgul
@@ -1821,7 +1852,7 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
   };
   let best: WotrAction | null = null, bestS = 0; // only move when strictly positive; otherwise stop
   for (const m of moves) { const s = scoreMove(m); if (s > bestS) { bestS = s; best = m; } }
-  return best ?? legal.find((a) => a.kind === 'charMove2' && a.done) ?? legal[0]!;
+  return best ? oneWraith(state, owner, best) : (legal.find((a) => a.kind === 'charMove2' && a.done) ?? legal[0]!);
 }
 
 /** Pick an interactive event-card target: prefer an attack/move toward the campaign

@@ -1760,6 +1760,10 @@ const dreadfulSpellsCaster = (state: GameState, fp: string): { region: string; n
       return { region: sh, nazgul: force.nazgul + (wk ? 1 : 0), wk };
     })
     .sort((a, b) => b.nazgul - a.nazgul)[0] ?? null;
+/** The most Nazgûl (the Witch-king counting) any Dreadful Spells target would roll for
+ *  — for the AI, which holds the card while that is small. */
+export const dreadfulSpellsBestDice = (state: GameState): number =>
+  Math.max(0, ...dreadfulSpellsTargets(state).map((fp) => Math.min(5, dreadfulSpellsCaster(state, fp)?.nazgul ?? 0)));
 register('sh-char-19', {
   canPlay: (state) => dreadfulSpellsTargets(state).length > 0,
   targets: (state) => dreadfulSpellsTargets(state).map((region) => ({ region })),
