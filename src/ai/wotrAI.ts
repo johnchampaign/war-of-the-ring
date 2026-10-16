@@ -946,11 +946,6 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // Dreadful Spells rolls one die per Nazgûl: with one or two it is a fraction of the
       // card, so it waits for a gathering of three or more (report 1z006a1e11730v2p).
       if (a.cardId === 'sh-char-19' && dreadfulSpellsBestDice(state) < 3) return 8;
-      // Wormtongue only LOCKS Rohan's activation — once Rohan is already active
-      // (let alone At War) the table effect is moot, and the card's combat half
-      // (Foul Stench: cancels the FP Leader re-roll) is its remaining value. Don't
-      // burn it as a dead event (player report: "should have kept it for Combat").
-      if (a.cardId === 'sh-char-22' && state.nations.rohan.active) return 1;
       // Flocks of Crebain buys +1 on a Hunt ROLL, and on the Mordor Track no Hunt roll
       // ever happens (p.43: the tile is drawn automatically) — so on the table there it
       // is simply dead. Keep it for its combat half instead (player report: "SP played

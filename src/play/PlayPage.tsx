@@ -847,6 +847,24 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
       return;
     }
+    // Something is already picked — its destinations lit orange — and this is not one of
+    // them: no click-through to whatever this region would offer on its own. A Companion
+    // move from Osgiliath, a click on Minas Tirith, opened the Sortie menu (player report
+    // 5m2o1t5s5n2q2m16). Say why in the picked piece's terms, or do nothing; clicking the
+    // piece again still cancels it (below).
+    if (charPick && id !== charPick.from) {
+      const reason = g.view && g.you ? characterMoveBlockReason(g.view, g.you as Side, charPick.char, charPick.from, id, charPick.group) : null;
+      if (reason) setBlockMsg(reason);
+      return;
+    }
+    if (selected && id !== selected) {
+      if (g.view && REGIONS[selected]?.adjacency.includes(id)) {
+        const moveOnly = isArmyMove2 || (isCardMove && !cardMoveActs.some((a) => a.mode === 'attack'));
+        const reason = moveBlockReason(g.view, selected, id, g.you as Side, { moveOnly });
+        if (reason) setBlockMsg(reason);
+      }
+      return;
+    }
     // Clicking a region that has something to do: move an army, assault, muster,
     // move character(s) — or several (menu).
     const armyHere = boardArmyActs.some((a) => a.from === id) || cardMoveActs.some((a) => a.from === id);

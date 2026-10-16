@@ -29,7 +29,9 @@ export function RollRow({ label, roll, color }: { label: string; roll?: Roll; co
       <span style={{ width: 64, fontSize: 12, color }}>{label}</span>
       <span style={{ fontSize: 11, color: '#887', marginRight: 4 }}>(hits {roll.target}+)</span>
       {roll.dice.map((n, i) => <CDie key={i} n={n} target={roll.target} />)}
-      {roll.rerolls.length > 0 && <span style={{ color: '#887', margin: '0 4px', fontSize: 11 }}>re-roll{rt !== roll.target ? ` (${rt}+)` : ''}</span>}
+      {/* The re-roll's threshold always shows, so the attacker's and defender's dice line
+          up (player report 4v3z1s6a6e5a5234). */}
+      {roll.rerolls.length > 0 && <span style={{ color: '#887', margin: '0 4px', fontSize: 11 }}>re-roll ({rt}+)</span>}
       {roll.rerolls.map((n, i) => <CDie key={`r${i}`} n={n} target={rt} />)}
     </div>
   );

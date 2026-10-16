@@ -76,12 +76,12 @@ function NationRow({ n, ns, reinf }: { n: Nation; ns: GameState['nations'][Natio
   // Nation's reinforcement pool is never hidden (player report).
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, margin: '2px 0' }}>
-      <span style={{ width: 9, height: 9, borderRadius: 2, background: NATION_COLOR[n], flexShrink: 0,
+      <span title={ns.active ? 'Active' : 'Passive'} style={{ width: 9, height: 9, borderRadius: 2, background: NATION_COLOR[n], flexShrink: 0,
         border: ns.active ? '1px solid #fff' : '1px solid #665', opacity: ns.active ? 1 : 0.5 }} />
       {/* flexShrink:0 keeps every label exactly 52px wide. Without it, rows that carry a
-          "passive" tag flex-shrink the label ~3px narrower than active rows (e.g. Elves),
+          trailing tag flex-shrink the label ~3px narrower than active rows (e.g. Elves),
           so the progress tracks start at different x and the rows look misaligned. */}
-      <span title={NATION_FULL[n]} style={{ width: 52, flexShrink: 0, fontSize: 11, color: atWar ? '#ffd23f' : '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{NATION_LABEL[n]}</span>
+      <span title={ns.active ? NATION_FULL[n] : `${NATION_FULL[n]} (passive)`} style={{ width: 52, flexShrink: 0, fontSize: 11, color: atWar ? '#ffd23f' : '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{NATION_LABEL[n]}</span>
       {/* Left-anchored progress bar toward War: filled cells = steps mobilized, so a
           nation advancing reads as "more progress", never as a row knocked out of
           alignment (the old single-moving-dot design). The rightmost cell is War. */}
@@ -102,7 +102,8 @@ function NationRow({ n, ns, reinf }: { n: Nation; ns: GameState['nations'][Natio
           );
         })}
       </div>
-      {!ns.active && <span style={{ fontSize: 9, color: '#887' }}>passive</span>}
+      {/* No "passive" word: the dimmed swatch says it, and the word pushed a passive row
+          past one line at 1080p (player report 3w0c6f5r421o3a3r). The hover still names it. */}
       <ReinfPips r={reinf} />
     </div>
   );
