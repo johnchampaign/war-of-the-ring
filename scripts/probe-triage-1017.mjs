@@ -5,10 +5,13 @@
 //    game at once, not on the next player's action.
 //  - 542d4c6j3o1z5o3n: The White Rider is logged, and Sudden Strike's Leadership dice
 //    leave out the Leadership Gandalf forfeited for it.
+//  - 4l46195y4i6u6x73: a Shadow Army cannot retreat into a region warded by The Power
+//    of Tom Bombadil / A Power too Great (Almanac: "moving (or retreating) from The
+//    Shire to Buckland is not permitted").
 import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
 import { STANDARD_TILE_LIST } from '../src/engine/data.ts';
-import { startBattle, combatStep, resolvePlayCombatCard, resolveWhiteRider } from '../src/engine/combat.ts';
+import { startBattle, combatStep, resolvePlayCombatCard, resolveWhiteRider, retreatDestinations, retreatBlockReason } from '../src/engine/combat.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -67,6 +70,23 @@ function suddenStrike(forfeit) {
   const gone = suddenStrike(true);
   check('with the forfeit: 2 Leadership dice', gone.dice === 2, gone.line);
   check('The White Rider is logged', gone.rode);
+}
+
+{
+  console.log('\n=== a Shadow retreat out of Cardolan with Tom Bombadil on the table ===');
+  const s = startGame(createGame({ seed: 12 }));
+  s.phase = 'actionResolution';
+  s.regions['cardolan'].units = { isengard: { regular: 1, elite: 0 } };
+  s.regions['south-ered-luin'].units = { elves: { regular: 1, elite: 0 } };
+  s.regions['old-forest'].units = {};
+  s.pendingCombat = { attacker: 'fp', defender: 'shadow', from: 'south-ered-luin', to: 'cardolan', round: 1 };
+  s.pendingChoice = { owner: 'shadow', kind: 'retreatTo' };
+  check('without the card, Old Forest is a retreat', retreatDestinations(s).includes('old-forest'), retreatDestinations(s).join(','));
+  s.cards.fp.table.push('fp-str-03');
+  const dests = retreatDestinations(s);
+  check('with it, Old Forest is not offered', !dests.includes('old-forest'), dests.join(','));
+  check('...and the click says which card wards it', /Tom Bombadil/.test(retreatBlockReason(s, 'old-forest') ?? ''), retreatBlockReason(s, 'old-forest'));
+  check('a Free Peoples retreat is unaffected', (() => { const t = structuredClone(s); t.pendingCombat.defender = 'fp'; return retreatBlockReason(t, 'old-forest') === null || !/Tom Bombadil/.test(retreatBlockReason(t, 'old-forest')); })());
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

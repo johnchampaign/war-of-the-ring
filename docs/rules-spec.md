@@ -270,7 +270,9 @@ die already showing an Eye.
   reads the table at the seam it governs — *The Last Battle* (FP move die skips the
   Hunt Box, hunt.ts), *A Power too Great* / *The Power of Tom Bombadil* (Shadow barred
   from moving into / attacking listed regions, armies.ts `canMoveArmy` + combat.ts
-  `attackTargets`), *Threats and Promises* (FP can't advance a passive Nation via a
+  `attackTargets`; nor may a Shadow Army retreat into one — Almanac, Tom Bombadil:
+  "moving (or retreating) from The Shire to Buckland is not permitted" — combat.ts
+  `freeAdjacentRegions` + the Dead Men retreat), *Threats and Promises* (FP can't advance a passive Nation via a
   Muster die, politics.ts `advanceableNations`), *Denethor's Folly* (FP can't use
   Combat cards in a Minas Tirith battle, combat.ts `playableCombatCards`). The handler
   applies only the immediate part (e.g. advancing the Nation, eliminating the Leader)

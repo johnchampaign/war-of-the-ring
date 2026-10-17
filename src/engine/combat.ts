@@ -11,7 +11,7 @@ import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS
 import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, fellowshipRegion, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
-import { shadowBarredFromRegion, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
+import { shadowBarredFromRegion, shadowBarringCard, fpCombatCardsBarredAt, wormtongueRousedByAttackAt } from './persistent';
 import { combatModsFor, variableCostFor, hasCombatEffect, EMPTY_MODS, COMPANION_SET, type CombatMods, type VariableCost } from './combatCards';
 import { log, sideDoes, andList } from './log';
 import { getHandler } from './handlers/registry';
@@ -58,9 +58,12 @@ function withinRegions(from: RegionId, target: RegionId, n: number): boolean {
  *  enemy-controlled Settlement is out even when empty (Almanac, "Appendix: Moving and
  *  Retreating"; player report 5u4q1y0m5o1y6l4m offered Westemnet). The Almanac says the
  *  same examples "apply to the 'Scouts' Combat card", so the pre-combat retreat uses
- *  this too. */
+ *  this too. A Shadow Army also cannot retreat into a region warded by A Power too Great
+ *  or The Power of Tom Bombadil (Almanac, Tom Bombadil: "moving (or retreating) from The
+ *  Shire to Buckland is not permitted"; player report 4l46195y4i6u6x73). */
 function freeAdjacentRegions(state: GameState, regionId: RegionId, side: Side): RegionId[] {
-  return REGIONS[regionId]!.adjacency.filter((adj) => freeRegion(state, adj, side));
+  return REGIONS[regionId]!.adjacency.filter((adj) => freeRegion(state, adj, side)
+    && !(side === 'shadow' && shadowBarredFromRegion(state, adj)));
 }
 /** The first such region, or null (used for "can retreat?" / pre-combat retreats). */
 const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
@@ -2315,6 +2318,7 @@ export function retreatBlockReason(state: GameState, region: RegionId): string |
   if (!freeForMovement(state, region, side)) return `There is an enemy Army in ${name(region)} — a retreat needs a free region (p.31).`;
   const ctrl = settlementController(state, region);
   if (ctrl && ctrl !== side) return `${name(region)} is a Settlement controlled by the enemy — a retreat can't enter it, even when it is empty (p.31).`;
+  if (side === 'shadow' && shadowBarredFromRegion(state, region)) return `${shadowBarringCard(state, region)} wards ${name(region)} — a Shadow Army can't retreat into it either.`;
   return null;
 }
 

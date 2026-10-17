@@ -1226,7 +1226,8 @@ register('fp-char-22', {
     // "As per normal rules, an Army may not retreat into Settlement regions that are
     // enemy controlled (even if empty)" (Almanac) — a FREE region, not merely one free
     // for movement. WHERE is the Shadow's choice when there is more than one.
-    const dests = REGIONS[region]!.adjacency.filter((a) => freeRegion(state, a as RegionId, 'shadow')) as RegionId[];
+    // Nor into a region A Power too Great / The Power of Tom Bombadil wards (Almanac).
+    const dests = REGIONS[region]!.adjacency.filter((a) => freeRegion(state, a as RegionId, 'shadow') && !shadowBarredFromRegion(state, a as RegionId)) as RegionId[];
     if (unitCount(state, region) > 0 && dests.length > 1) {
       state.pendingChoice = { owner: 'shadow', kind: 'cardRetreat', data: { from: region, dests, card: 'fp-char-22' } };
       return;
