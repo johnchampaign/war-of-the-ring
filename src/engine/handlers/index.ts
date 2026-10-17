@@ -896,7 +896,9 @@ function seSettlements(s: GameState): string[] {
 // --- Interactive movement cards (the player picks a target after playing) -----
 // Cruel Weather: the Shadow moves the Fellowship to an adjacent region.
 register('sh-char-10', {
-  // "Cannot be played on the Mordor Track" (Almanac) — the Fellowship is on no region there.
+  // "Cannot be played on the Mordor Track" (Almanac) — the Fellowship is on no region
+  // there. Progress is always 0 on the Track, so the Progress check already enforces
+  // it; the Mordor check is kept to say so out loud, as on the two Nazgûl cards.
   canPlay: (state) => state.fellowship.mordor === null && state.fellowship.progress >= 1 && (REGIONS[state.fellowship.location]?.adjacency.length ?? 0) > 0,
   targets: (state) => (REGIONS[state.fellowship.location]?.adjacency ?? []).map((region) => ({ region })),
   applyTarget(state, _side, t) { state.fellowship.location = t.region!; log(state, null, 'event', `Cruel Weather moves the Fellowship to ${t.region}`); },
@@ -2545,7 +2547,10 @@ register('sh-char-09', {
       beginReveal(state);
     }
   }),
-  canPlay: (state) => state.fellowship.progress >= 1 && nazgulOnMap(state),
+  // Progress is always 0 on the Mordor Track, so the Mordor check only says out loud
+  // what the Progress check already enforces — spelled the same on all three
+  // Progress-gated cards (player report 270p173z086z1i3d).
+  canPlay: (state) => state.fellowship.mordor === null && state.fellowship.progress >= 1 && nazgulOnMap(state),
 });
 // The Nazgûl Strike! — move any/all Nazgûl; then, if one is with the Fellowship,
 // the card offers its printed CHOICE: "discard one Free Peoples Character Event
@@ -2565,7 +2570,7 @@ register('sh-char-08b', {
       extraHunt(state, { source: 'The Nazgûl Strike!' });
     }
   }),
-  canPlay: (state) => state.fellowship.progress >= 1 && nazgulOnMap(state),
+  canPlay: (state) => state.fellowship.mordor === null && state.fellowship.progress >= 1 && nazgulOnMap(state),
 });
 /** Resolve the Nazgûl Strike choice: discard the named FP Character table card, or
  *  (discard omitted) roll for the Hunt. Public either way — table cards are open. */

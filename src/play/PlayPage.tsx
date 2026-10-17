@@ -47,6 +47,12 @@ import { REGIONS, levelOf, sideOfNation, EVENT_BY_ID } from '../engine/data';
 import { threatsAndPromisesActive } from '../engine/persistent';
 import { charName } from './charInfo';
 
+/** What to click for an Event card whose next step is ONE region on the map (a card
+ *  striking an Army, Cruel Weather's region). Named by the map banner. */
+const REGION_PICK_WHAT: Record<string, string> = {
+  'sh-char-19': 'click the Free Peoples Army to strike', 'fp-str-06': 'click the Shadow Army to strike', 'fp-str-05': 'click the Shadow Army to strike',
+  'fp-char-18': 'click the Nazgûl the Eagles strike', 'sh-char-10': 'click the region the Fellowship is driven into',
+};
 const seatLabel = (s: string) => (s === 'fp' ? 'Free Peoples' : s === 'shadow' ? 'Shadow' : s);
 
 
@@ -626,11 +632,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       ? (g.view.pendingChoice.data as { card?: string } | undefined)?.card : undefined;
     if (resolving) {
       const name = EVENT_BY_ID[resolving]?.name ?? 'The card';
-      const regionWhat = ({ 'sh-char-19': 'click the Free Peoples Army to strike', 'fp-str-06': 'click the Shadow Army to strike', 'fp-str-05': 'click the Shadow Army to strike',
-        'fp-char-18': 'click the Nazgûl the Eagles strike', 'sh-char-10': 'click the region the Fellowship is driven into' } as Record<string, string>)[resolving];
+      // A card striking ONE region is named by the map banner instead, like declaring
+      // the Fellowship (player report 5u216m0a0x3v0362); the panel shows a brown note.
+      if (cardRegionActs.length) return out;
       const nazgul = cardSepActs.some((a) => a.companion === 'nazgul');
-      const what = cardRegionActs.length ? (regionWhat ?? 'click a highlighted region')
-        : cardCompMoves.length ? 'move Companions — click a highlighted region, then where they go'
+      const what = cardCompMoves.length ? 'move Companions — click a highlighted region, then where they go'
         : nazgul ? 'move the Nazgûl — click a highlighted region to fly them there'
         : isCardSep ? `place ${charName(cardSepActs[0]!.companion!)} — click a highlighted region`
         : cardCharPicks.length ? (cardCharPicks.every((a) => a.companion === 'nazgul') ? 'click a region with Nazgûl, then where they fly' : 'click the region of the figure to move, then where it goes')
@@ -671,14 +677,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (g.view?.pendingChoice?.kind === 'freeCharEvent' && g.yourTurn) out.push('The Ents Awake: you may play a Character Event card from your hand now, without a die — click it in your hand, or "Done" to play none.');
     // No hint for bringing a Character into play: that is a side-panel action with nothing
     // to do on the map first (player report 5b1q2u530o1u6u6a).
-    if (cardRegionActs.length) {
-      const card = cardRegionActs[0]!.card;
-      const what = ({ 'sh-char-19': 'click the Free Peoples Army to strike', 'fp-str-06': 'click the Shadow Army to strike', 'fp-str-05': 'click the Shadow Army to strike',
-        'fp-char-18': 'click the Nazgûl the Eagles strike', 'sh-char-10': 'click the region the Fellowship is driven into' } as Record<string, string>)[card] ?? 'click a highlighted region';
-      out.push(`${EVENT_BY_ID[card]?.name ?? 'The card'}: ${what}.`);
-    }
+    // (A card striking one region is named by the map banner — see cardRegionBanner.)
     return out;
   }, [boardArmyActs, assaultSources, musterTargets, charSources, g.legalActions, cardCompMoves, cardRegionActs, g.view, g.yourTurn, cardSepActs, isCardSep, cardCharPicks, cardAssaultActs, isCardMove, isCardRecruit, sources, sepActs]);
+  // An Event card waiting on ONE region click (a strike, Cruel Weather) names itself in
+  // the map banner, not the side panel (player report 5u216m0a0x3v0362).
+  const cardRegionBanner = useMemo(() => {
+    if (!cardRegionActs.length) return null;
+    const card = cardRegionActs[0]!.card;
+    return `${EVENT_BY_ID[card]?.name ?? 'The card'}: ${REGION_PICK_WHAT[card] ?? 'click a highlighted region'}.`;
+  }, [cardRegionActs]);
   // The Companion currently being separated (Character-die or card), if any.
   const sepCompanion = useMemo(() => {
     if (isSeparateMove) return (g.view?.pendingChoice?.data as { companions?: string[] } | undefined)?.companions?.[0] ?? null;
@@ -1268,9 +1276,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               {/* The ONE banner for a pick the board is waiting on, here at the foot of the
                   map — Minions and retreats used to have a second, brown one at the top
                   of the screen (player report 20735e000s6b3s1d). */}
-              {(sources.size > 0 || !!minionPick) && (!!minionPick || isCardSep || isSeparateMove || isReveal || isRetreatPick || isPlaceGandalf || placeActs.length > 0 || !!charPick || !!selected || isArmyMove2) && (
+              {(!!cardRegionBanner || (sources.size > 0 || !!minionPick) && (!!minionPick || isCardSep || isSeparateMove || isReveal || isRetreatPick || isPlaceGandalf || placeActs.length > 0 || !!charPick || !!selected || isArmyMove2)) && (
                 <div style={{ color: '#bfe6bf', background: 'rgba(18,26,18,0.92)', border: '1px solid #2f4a2f', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
-                  {minionPick
+                  {cardRegionBanner
+                    ? cardRegionBanner
+                    : minionPick
                     ? `Bringing ${charName(minionPick)} into play — click a highlighted region to place him there (Undo to change your mind).`
                     : isCardSep
                     ? (cardSepActs[0]!.companion === 'nazgul'
@@ -1336,6 +1346,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               <div style={{ flex: '1 1 auto', minHeight: 60, overflow: 'auto', scrollbarGutter: 'stable' }}>
                 <ActionPanel actions={minionPick ? [] : panelActions} onAction={onPanelAction} onHover={setHover} yourTurn={g.yourTurn} gameOver={g.gameOver} view={g.view} you={g.you as Side | null}
                   boardHints={minionPick ? [`Bring ${charName(minionPick)} into play — click a highlighted region (Undo to change your mind).`] : boardHints}
+                  boardNote={cardRegionBanner ? 'Finish the card first — click its target on the map.' : undefined}
                   blocked={minionPick ? [] : blockedPanel} selectedDie={activeDie} />
               </div>
               {chatClient && g.you && (

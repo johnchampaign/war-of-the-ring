@@ -55,3 +55,7 @@ Ringwraiths Are Abroad: click a region with Nazgûl, then where they fly."). It 
 card. Steps the card asks for in the panel (a Nation, a yes/no) stay panel buttons.
 Player report 675k70191l1c724t: The Ringwraiths Are Abroad showed "No actions" while
 other cards showed the die's "Move or attack".
+A card whose next step is ONE region click — striking an Army (The Spirit of Mordor,
+the Eagles…) or Cruel Weather's region — is named by the **map banner** instead, like
+declaring the Fellowship, and the panel shows only a brown ⚑ "Finish the card first"
+note (player report 5u216m0a0x3v0362).

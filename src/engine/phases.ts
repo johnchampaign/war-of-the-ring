@@ -11,7 +11,7 @@ import type { GameState, Side, DieFace, Deck } from './types';
 import { poolSize, rollPool } from './dice';
 import { checkMilitaryVictory, checkRingVictory } from './victory';
 import { combatStep } from './combat';
-import { extraHunt, wornWithSorrowOptions, resolveWornWithSorrow } from './hunt';
+import { extraHunt, wornWithSorrowOptions, resolveWornWithSorrow, huntResolutionPending } from './hunt';
 import { pruneTableCards, palantirActive, wornWithSorrowActive } from './persistent';
 import { sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
@@ -142,6 +142,10 @@ export function advance(state: GameState): void {
       const r = state.flags.owedStrongholdTiles.shift()!;
       if (!state.flags.owedStrongholdTiles.length) delete state.flags.owedStrongholdTiles;
       extraHunt(state, { source: `revealed through ${REGIONS[r]?.name ?? r}` });
+      // This tile lands AFTER the action's own end-of-dispatch Ring check, so check
+      // here too: a 12th Corruption from it must end the game at once, not on the
+      // next player's action (player report 39286h4r3n566t01).
+      if (!huntResolutionPending(state)) checkRingVictory(state);
       continue;
     }
     // Worn with Sorrow and Toil: the Shadow picks the card each Companion casualty

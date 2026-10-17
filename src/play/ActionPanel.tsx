@@ -35,13 +35,16 @@ function actionHover(a: WotrAction): Hover {
   return null;
 }
 
-export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardHints = [], blocked = [], selectedDie, compact }: {
+export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, view, you, boardHints = [], boardNote, blocked = [], selectedDie, compact }: {
   actions: WotrAction[]; onAction: (a: WotrAction) => void; onHover?: (h: Hover) => void; yourTurn: boolean; gameOver: boolean; view: GameState; you: Side | null;
   /** One line per thing the MAP offers that this list doesn't (army moves, siege
    *  assaults, musters and Minion entries, character moves). Rendered as pointers, and
    *  counted by the "nothing to do" check below — so stripping a board-driven action
    *  from the list can never make the panel claim there is nothing to do. */
   boardHints?: string[];
+  /** A brown ⚑ note for a board click the map banner already spells out (a card's
+   *  target to strike), shown when the panel has nothing else — like a reveal's. */
+  boardNote?: string;
   /** Actions the player would normally have, that a card or rule is barring right now.
    *  They are LISTED, greyed, with the reason on hover — removing them outright made
    *  it look as though the game had forgotten the action existed (player report
@@ -131,7 +134,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
     separateMove: 'Finish separating the Companions first — click a highlighted region on the map.',
     declareFellowship: 'Declare the Fellowship first — click a highlighted region on the map.',
   };
-  const boardPending = view.pendingChoice ? pendingHint[view.pendingChoice.kind] : undefined;
+  const boardPending = boardNote ?? (view.pendingChoice ? pendingHint[view.pendingChoice.kind] : undefined);
   // The character-move chain (one Character die moves all eligible figures, p.24)
   // parks EVERY other action until it's answered; its own note (below) says how to end
   // it — the big button reads "Done" meanwhile — so it has no line in pendingHint. Without this line a player who just did what they wanted

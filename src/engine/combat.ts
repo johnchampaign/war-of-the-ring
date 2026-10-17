@@ -1070,7 +1070,7 @@ function outrunByPreCombatRetreat(state: GameState, pc: PendingCombat, side: Sid
  *  A retreat empties the owner's region; a pre-attack damages the enemy. Fully
  *  automatic (auto-picked retreat + auto casualties), like the sub-machine's
  *  other non-choice steps. */
-function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods, dMods: CombatMods): boolean {
+function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods, dMods: CombatMods, whiteRider = false): boolean {
   const effects: Array<{ side: Side; ini: number; mods: CombatMods }> = [];
   if (pc.attackerCard && (aMods.retreatBeforeCombat || aMods.preCombatAttackDice || aMods.preCombatAttackFrom)) effects.push({ side: pc.attacker, ini: cardInitiative(pc.attackerCard), mods: aMods });
   if (pc.defenderCard && (dMods.retreatBeforeCombat || dMods.preCombatAttackDice || dMods.preCombatAttackFrom)) effects.push({ side: pc.defender, ini: cardInitiative(pc.defenderCard), mods: dMods });
@@ -1127,8 +1127,12 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       // Companion's Leadership is already gone when these dice are counted (Almanac).
       const foeMods = ef.side === pc.attacker ? dMods : aMods;
       const silenced = silencedCompanion(ownForce, ef.side, foeMods);
+      // The White Rider's forfeit counts here too, as in the Combat roll: Gandalf's
+      // Leadership is gone for the FP, every Nazgûl's for the Shadow (player report
+      // 542d4c6j3o1z5o3n: three dice were rolled for a two-Leadership Army).
+      const forfeited = whiteRider ? (ef.side === 'shadow' ? nazgulLeadership(ownForce) : 1) : 0;
       const dice = Math.min(5, ef.mods.preCombatAttackFrom === 'leadership'
-        ? Math.max(0, forceLeadership(state, ownForce, ef.side) - (silenced ? characterDef(silenced)?.leadership ?? 0 : 0)) : ownElites);
+        ? Math.max(0, forceLeadership(state, ownForce, ef.side) - (silenced ? characterDef(silenced)?.leadership ?? 0 : 0) - forfeited) : ownElites);
       if (dice <= 0) continue;
       const target = ef.side === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
       const faces: number[] = [];
@@ -1773,7 +1777,7 @@ export function combatStep(state: GameState): void {
         // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
         // resolve in initiative order before the normal roll; either can end the
         // battle (a retreat empties a region, a pre-attack can wipe one).
-        if (resolvePreCombat(state, pc, aMods, dMods)) return; // paused: owner is choosing the pre-combat retreat destination
+        if (resolvePreCombat(state, pc, aMods, dMods, whiteRider)) return; // paused: owner is choosing the pre-combat retreat destination
         if (atkCount(state, pc) === 0 || defCount(state, pc) === 0) { finishCombat(state, true); return; }
         // Stronghold gives the attacker a 6-to-hit: the first round of a field
         // battle, and EVERY round of a siege assault. A sortie forfeits the
@@ -2470,6 +2474,9 @@ const logWordsOfPower = (state: GameState, companion: string): void =>
 /** Resolve the White Rider battle-start choice (combat resumes via advance). */
 export function resolveWhiteRider(state: GameState, forfeit: boolean): void {
   state.pendingCombat!.whiteRiderForfeit = forfeit;
+  // Logged, so the battle record says why the Nazgûl lost their Leadership (player
+  // report 542d4c6j3o1z5o3n).
+  if (forfeit) log(state, null, 'combat', 'Gandalf the White rides forth as The White Rider', { side: 'fp' });
   state.pendingChoice = null;
 }
 
