@@ -73,9 +73,11 @@ export function DiceStats({ view }: { view: GameState }) {
     <div style={{ textAlign: 'left', fontSize: 12, color: '#e9e1cc' }} data-testid="dice-stats">
       <div style={sub}>Action dice rolled</div>
       {/* A table: the faces head fixed columns and each side's counts sit under them
-          (player report 6t5m4u2z340v390k: the variable-width chips looked ragged). */}
+          (player report 6t5m4u2z340v390k: the variable-width chips looked ragged). No
+          negative margin: it made the table 8px wider than its scroll box, so a scrollbar
+          showed on every screen (player report 4h3z5x076d3u1a5x). */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'separate', borderSpacing: '4px 3px', margin: '0 -4px' }}>
+        <table style={{ borderCollapse: 'separate', borderSpacing: '4px 3px' }}>
           <thead>
             <tr>
               <td />

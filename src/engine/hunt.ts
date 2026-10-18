@@ -574,7 +574,7 @@ function logHuntResolved(state: GameState, damage: number): void {
  *  revealMove, or in place), mirroring the declaration line. */
 export function logRevealed(state: GameState): void {
   const fs = state.fellowship;
-  log(state, null, 'fellowship', fs.mordor !== null ? 'The Fellowship is revealed on the Mordor Track' : `The Fellowship is revealed in ${fs.location}`);
+  log(state, null, 'fellowship', fs.mordor !== null ? 'The Fellowship is revealed in Mordor' : `The Fellowship is revealed in ${fs.location}`);
 }
 /** Log one −1 step of a Hunt-damage reduction, so the running total is legible. */
 function logReduce(state: GameState, from: number, why: string): void {

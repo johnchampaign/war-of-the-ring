@@ -282,6 +282,10 @@ export interface PendingCombat {
   /** Set while a pre-combat retreat (Scouts) is paused for the owner to CHOOSE the
    *  destination — the region the retreating Army is leaving. */
   preCombatRetreatFrom?: RegionId;
+  /** How many of this round's pre-combat effects (Durin's Bane, Sudden Strike, Charge)
+   *  have resolved, while one is paused for the hit side to choose its casualties.
+   *  Re-entering 'beginRound' resumes after them without re-announcing the cards. */
+  preCombatDone?: number;
   /** True for a siege assault (attacking a besieged Stronghold): round-capped, the
    *  attacker hits on 6 every round, and the defender cannot retreat. */
   siege?: boolean;

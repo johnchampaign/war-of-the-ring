@@ -1070,16 +1070,32 @@ function outrunByPreCombatRetreat(state: GameState, pc: PendingCombat, side: Sid
 
 /** Resolve pre-combat-timing card effects (Scouts retreat, Durin's Bane special
  *  attack) in initiative order — lower first, defender wins ties (rules p.29).
- *  A retreat empties the owner's region; a pre-attack damages the enemy. Fully
- *  automatic (auto-picked retreat + auto casualties), like the sub-machine's
- *  other non-choice steps. */
+ *  A retreat empties the owner's region; a pre-attack damages the enemy. Returns
+ *  true when paused for a choice (the retreat destination, or the casualties the
+ *  hit side picks); 'beginRound' re-enters and `pc.preCombatDone` skips what ran. */
 function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods, dMods: CombatMods, whiteRider = false): boolean {
   const effects: Array<{ side: Side; ini: number; mods: CombatMods }> = [];
   if (pc.attackerCard && (aMods.retreatBeforeCombat || aMods.preCombatAttackDice || aMods.preCombatAttackFrom)) effects.push({ side: pc.attacker, ini: cardInitiative(pc.attackerCard), mods: aMods });
   if (pc.defenderCard && (dMods.retreatBeforeCombat || dMods.preCombatAttackDice || dMods.preCombatAttackFrom)) effects.push({ side: pc.defender, ini: cardInitiative(pc.defenderCard), mods: dMods });
   if (!effects.length) return false;
   effects.sort((x, y) => x.ini - y.ini || (x.side === pc.defender ? -1 : 1)); // lower first; tie -> defender
-  for (const ef of effects) {
+  // The side taking a pre-combat attack's hits chooses its casualties, as with any
+  // other hits (p.30; player report jxel9rth2n7t2ll3: Sudden Strike "just
+  // automatically kills regs"). That pauses here; 'beginRound' re-enters and resumes
+  // after the effects already resolved.
+  const askCasualties = (foe: Force, foeSide: Side, hits: number): boolean => {
+    const left = absorbForced(state, foe, foeSide, hits);
+    if (meaningfulForceCasualty(state, foe, foeSide, left)) {
+      state.pendingChoice = { owner: foeSide, kind: 'combatCasualties',
+        data: { region: foeSide === pc.attacker ? pc.from : pc.to, side: foeSide, hits: left, next: 'beginRound', boxed: pc.boxed === foeSide } };
+      return true;
+    }
+    finishForceCasualties(state, foe, foeSide);
+    return false;
+  };
+  for (let i = pc.preCombatDone ?? 0; i < effects.length; i++) {
+    const ef = effects[i]!;
+    pc.preCombatDone = i + 1;
     const own = ef.side === pc.attacker ? pc.from : pc.to;
     // The OWNER's force is likewise the box when the owner is the boxed side.
     const ownForce = ef.side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
@@ -1111,7 +1127,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       const faces: number[] = [];
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= 4) h++; } return h; });
       log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on 4+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
-      if (hits > 0) applyForceCasualties(state, foe, foeSide, hits, 'regularsFirst');
+      if (hits > 0 && askCasualties(foe, foeSide, hits)) return true;
     } else if (ef.mods.preCombatAttackFrom) {
       // Sudden Strike / Charge: "BEFORE the Combat roll, roll an additional attack
       // using [Leadership | Elite] dice (max 5) and apply the result immediately."
@@ -1141,11 +1157,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       const faces: number[] = [];
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= target) h++; } return h; });
       log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
-      if (hits > 0) {
-        const left = absorbForced(state, foe, foeSide, hits);
-        if (left > 0) applyForceCasualties(state, foe, foeSide, left, 'regularsFirst'); // residual: pre-combat leftovers auto-resolve (same as Durin's Bane)
-        finishForceCasualties(state, foe, foeSide);
-      }
+      if (hits > 0 && askCasualties(foe, foeSide, hits)) return true;
     }
   }
   return false;
@@ -1770,17 +1782,21 @@ export function combatStep(state: GameState): void {
           // everything twice (player reports 722j600u2v6q3062, 311c6j09002y6b2v).
           return cardName(card);
         };
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.attacker)} (attacker) ${pc.attacker === 'fp' ? 'play' : 'plays'} ${played(pc.attackerCard, aCancelled, aOutrun)}`);
-        if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
-        log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.defender)} (defender) ${pc.defender === 'fp' ? 'play' : 'plays'} ${played(pc.defenderCard, dCancelled, dOutrun)}`);
-        if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
-        const title = (id: string) => `'${EVENT_BY_ID[id]?.combat?.title ?? EVENT_BY_ID[id]?.name ?? id}'`;
-        if (dCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.defenderCard!)} is cancelled by ${title(pc.attackerCard!)}`);
-        if (aCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.attackerCard!)} is cancelled by ${title(pc.defenderCard!)}`);
+        // Already announced when resuming after a pre-combat attack's casualty choice.
+        if (pc.preCombatDone === undefined) {
+          log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.attacker)} (attacker) ${pc.attacker === 'fp' ? 'play' : 'plays'} ${played(pc.attackerCard, aCancelled, aOutrun)}`);
+          if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
+          log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.defender)} (defender) ${pc.defender === 'fp' ? 'play' : 'plays'} ${played(pc.defenderCard, dCancelled, dOutrun)}`);
+          if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
+          const title = (id: string) => `'${EVENT_BY_ID[id]?.combat?.title ?? EVENT_BY_ID[id]?.name ?? id}'`;
+          if (dCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.defenderCard!)} is cancelled by ${title(pc.attackerCard!)}`);
+          if (aCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.attackerCard!)} is cancelled by ${title(pc.defenderCard!)}`);
+        }
         // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
         // resolve in initiative order before the normal roll; either can end the
         // battle (a retreat empties a region, a pre-attack can wipe one).
-        if (resolvePreCombat(state, pc, aMods, dMods, whiteRider)) return; // paused: owner is choosing the pre-combat retreat destination
+        if (resolvePreCombat(state, pc, aMods, dMods, whiteRider)) return; // paused: a retreat destination or pre-combat casualties to choose
+        delete pc.preCombatDone;
         if (atkCount(state, pc) === 0 || defCount(state, pc) === 0) { finishCombat(state, true); return; }
         // Stronghold gives the attacker a 6-to-hit: the first round of a field
         // battle, and EVERY round of a siege assault. A sortie forfeits the

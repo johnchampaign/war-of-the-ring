@@ -286,7 +286,12 @@ export function consumeDie(state: GameState, side: Side, face: DieFace): boolean
 export function huntAllocationBounds(state: GameState): { min: number; max: number } {
   const companions = state.fellowship.companions.length;
   const min = state.flags.huntMin1ThisTurn ? 1 : 0;
-  const max = Math.min(poolSize(state, 'shadow'), Math.max(1, companions));
+  // Off the Mordor Track a Hunt Level above five adds nothing (p.41), and the
+  // Fellowship can only enter Mordor in the Fellowship phase, before this one (p.43)
+  // — so a 6th or 7th die is never worth offering (the Dread and Despair precedent;
+  // player report 694h681d0924366i). On the Track every die counts for an Eye tile.
+  const cap = state.fellowship.mordor === null ? 5 : Infinity;
+  const max = Math.min(poolSize(state, 'shadow'), Math.max(1, companions), cap);
   return { min, max };
 }
 
