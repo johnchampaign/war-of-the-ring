@@ -49,6 +49,15 @@ export function fellowshipPlan(state: GameState): FellowshipPlan {
 
 const HEAL_EVENTS = new Set(['fp-char-09', 'fp-char-10', 'fp-char-12', 'fp-char-13']);
 const CORRUPT_EVENTS = new Set(['sh-char-08', 'sh-char-12']);
+const HUNT_TILE_CARDS = new Set(['sh-char-05', 'sh-char-06', 'sh-char-07', 'sh-char-08b', 'sh-char-09']);
+/** The Fellowship stands in, or its road within the Progress banked runs through, an
+ *  unconquered Shadow Stronghold (Moria, Minas Morgul, the Morannon). */
+function revealHitsShadowStronghold(state: GameState): boolean {
+  const fs = state.fellowship;
+  const exit = MORDOR_ENTRANCES.reduce((b, e) => (dist(fs.location, e) < dist(fs.location, b) ? e : b), MORDOR_ENTRANCES[0]!);
+  return (['moria', 'minas-morgul', 'morannon'] as RegionId[]).some((x) => settlementCtrl(state, x) === 'shadow'
+    && dist(fs.location, x) <= fs.progress && dist(fs.location, x) + dist(x, exit) === dist(fs.location, exit));
+}
 const SHADOW_CHARS = new Set(['witch-king', 'saruman', 'mouth-of-sauron']); // the rest are FP Companions
 
 export function chooseAction(state: GameState, actor: Side, legal: WotrAction[], rng: Rng): WotrAction {
@@ -182,7 +191,11 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // (player report: Progress 3, sat in a region with a Shadow Army and Nazgûl,
     // "should've declared somewhere empty so it could move without hunt re-rolls").
     if (!noRerolls(state.fellowship.location) && state.fellowship.progress >= 1) {
-      const here = toMordor(state.fellowship.location);
+      // …and only where it costs no ground. Declaring spends the Progress banked, so the
+      // hidden Fellowship already stands, in effect, `progress` regions nearer Mordor than
+      // its figure: a sideways declare from Hollin into North Dunland threw a move away
+      // (report 2y286d0n141g4q45).
+      const here = toMordor(state.fellowship.location) - state.fellowship.progress;
       const clean = declares.filter((a) => a.target !== state.fellowship.location && noRerolls(a.target) && toMordor(a.target) <= here);
       if (clean.length) return closestToMordor(clean);
     }
@@ -260,14 +273,26 @@ function garrisonWorthy(state: GameState, actor: Side, from: RegionId): boolean 
  *  is always legal where the whole move was (it moves a strict subset to the same
  *  region). Leaders/Nazgûl/Characters advance with the army; a Regular (else an
  *  Elite) holds. */
-/** Pressing a revealed Fellowship takes ONE Nazgûl: the Hunt re-roll is presence-gated,
+/** Would this move take the last Nazgûl (or the Witch-king) off the Fellowship's
+ *  region? One there gives every Hunt roll its re-roll, hidden or not. Seen in a probe
+ *  for report 4w6d6l484k5v0f5d: the pressing Nazgûl flew home to Minas Morgul. */
+function unpressesFellowship(state: GameState, a: Extract<WotrAction, { kind: 'moveCharacter' }>): boolean {
+  const fs = state.fellowship;
+  if (fs.mordor !== null || MORDOR_ENTRANCES.includes(fs.location) || a.from !== fellowshipRegion(state)) return false;
+  const src = state.regions[a.from]!;
+  const wk = src.characters.includes('witch-king');
+  if (a.char === 'nazgul') return !wk && src.nazgul - (a.count ?? src.nazgul) <= 0;
+  if (a.char === 'witch-king') return src.nazgul === 0;
+  return false;
+}
+
+/** Pressing the Fellowship, hidden or not, takes ONE Nazgûl: the Hunt re-roll is presence-gated,
  *  so a second wraith adds nothing there (report 3g4w2o173k4h3061: "2 Nazgûl move North
  *  Ithilien → Eastern Brown Lands … One Nazgul is enough"). A whole-stack move keeps
  *  the rest where they are. */
 function oneWraith(state: GameState, actor: Side, action: WotrAction): WotrAction {
   if (actor !== 'shadow' || action.kind !== 'moveCharacter' || action.char !== 'nazgul' || action.count != null) return action;
-  const fs = state.fellowship;
-  if (fs.hidden || action.to !== fellowshipRegion(state) || state.regions[action.from]!.nazgul < 2) return action;
+  if (action.to !== fellowshipRegion(state) || state.regions[action.from]!.nazgul < 2) return action;
   return { ...action, count: 1 };
 }
 
@@ -473,6 +498,21 @@ const lexLess = (a: number[], b: number[]): boolean => {
 
 /** Is an enemy Army within `n` regions of `id`? Bounded outward walk rather than a
  *  dist() call per region — this runs inside the per-action scoring loop. */
+function enemyNearOpen(state: GameState, id: RegionId, enemy: Side, own: Side, n: number): boolean {
+  const seen = new Set<RegionId>([id]);
+  let layer: RegionId[] = [id];
+  for (let d = 0; d < n; d++) {
+    const next: RegionId[] = [];
+    for (const r of layer) for (const a of REGIONS[r]?.adjacency ?? []) {
+      if (seen.has(a)) continue;
+      seen.add(a);
+      if (armyHere(state, a, enemy)) return true;
+      if (!armyHere(state, a, own)) next.push(a); // our own Army bars the road
+    }
+    layer = next;
+  }
+  return false;
+}
 function enemyNear(state: GameState, id: RegionId, enemy: Side, n: number): boolean {
   const seen = new Set<RegionId>([id]);
   let layer: RegionId[] = [id];
@@ -513,7 +553,11 @@ function garrisonGap(state: GameState, id: RegionId, actor: Side, reach = 2): nu
   if (settlementCtrl(state, id) !== actor) return 0;
   const n = unitCount(state, id);
   const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
-  if (n === 0) return enemyNear(state, id, enemy, reach) ? 1 : 0;
+  // The threat needs an open road: an enemy whose only way in runs through a region our
+  // own Army holds is not a walk-in (report 2y283y1v616g0j3b: an FP Army in Westemnet
+  // pulled the Shadow back into Orthanc though the Fords of Isen, held by a Shadow
+  // Army, was its only road).
+  if (n === 0) return enemyNearOpen(state, id, enemy, actor, reach) ? 1 : 0;
   if (n > 1) return 0;
   const stormer = (REGIONS[id]!.adjacency ?? []).some((a) => armyHere(state, a, enemy) && unitCount(state, a) >= 3);
   return stormer ? 0.5 : 0;
@@ -963,6 +1007,11 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
         return fs.corruption >= 6 ? 95 : 25;
       }
       if (actor === 'shadow' && CORRUPT_EVENTS.has(a.cardId)) return 70;
+      // The Hunt-tile and Nazgûl-search cards are at their best while the Fellowship is
+      // hidden and a reveal would land it in, or drag it through, a Shadow Stronghold on
+      // its road — Moria, Minas Morgul, the Morannon — for the extra tile it draws there
+      // (report 3i6v0h5m4a4t0b3v, the narrower version of 5x6y452a4o4s210z).
+      if (actor === 'shadow' && HUNT_TILE_CARDS.has(a.cardId) && fs.hidden && fs.mordor === null && revealHitsShadowStronghold(state)) return 72;
       // NOT held back while the Fellowship is revealed: the Hunt-tile and Nazgûl-search
       // cards (Orc Patrol, Isildur's Bane, Foul Thing from the Deep, Nazgûl Search, The
       // Nazgûl Strike!) can reveal it, so report 5x6y452a4o4s210z asked for them to wait
@@ -1244,6 +1293,7 @@ function nazgulStagingBonus(state: GameState, char: string, to: RegionId, target
 function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction, { kind: 'moveCharacter' }>, target: RegionId | null): number {
   const fs = state.fellowship;
   if (actor === 'shadow') {
+    if (unpressesFellowship(state, a)) return -5;
     const staging = nazgulStagingBonus(state, a.char, a.to, target);
     if (staging > 0) return staging;
     // Not onto a Fellowship standing at a Mordor entrance: it goes onto the Track next,
@@ -1251,8 +1301,10 @@ function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction
     // 2i1u3w2d3x5g1j3z). The Nazgûl cards' own moves are a different matter.
     // …and only if no Nazgûl stands there yet: one gives the Hunt its re-roll, a second
     // adds nothing (report 4w6d6l484k5v0f5d: six Nazgûl stacked onto Osgiliath).
+    // Hidden or revealed: the re-roll comes from a Nazgûl in the Fellowship's region,
+    // the figure's last-known spot (report 5d063j1g3f6s2w6x).
     const pressed = state.regions[a.to]!.nazgul > 0 || state.regions[a.to]!.characters.includes('witch-king');
-    if (a.char === 'nazgul') return (!fs.hidden && a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location) && !pressed) ? 42 : 6; // never on the Mordor Track
+    if (a.char === 'nazgul') return (a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location) && !pressed) ? 42 : 6; // never on the Mordor Track
     return 4; // Minions: situational
   }
   // A separated Companion used to score a flat 4 for every destination, so it never
@@ -1867,8 +1919,8 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
   const fs = state.fellowship;
   const scoreMove = (a: Extract<WotrAction, { kind: 'moveCharacter' }>): number => {
     let s = 0;
-    if (owner === 'shadow' && a.char === 'nazgul' && !fs.hidden && a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location)) {
-      // Press a revealed Fellowship — with ONE Ringwraith. The Hunt re-roll is
+    if (owner === 'shadow' && a.char === 'nazgul' && a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location)) {
+      // Press the Fellowship, hidden or not — with ONE Ringwraith. The Hunt re-roll is
       // presence-gated, so the second wraith adds nothing; the die-driven chain
       // used to pile all five on (player report: 'spent [C] to move 5(!) Nazgul
       // to F&S (including the 1 besieging WR)'). Same gate the card path got.
@@ -1881,6 +1933,7 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
       const src = state.regions[a.from]!;
       if (src.siegeBox && armyHere(state, a.from, 'shadow')) s -= 25;
     }
+    if (owner === 'shadow' && unpressesFellowship(state, a)) s -= 30;                             // keep the Hunt's re-roll
     if (owner === 'shadow') s += nazgulStagingBonus(state, a.char, a.to, target);                 // join the army staged on the target
     // No drifting onto a Fellowship already pressed: the Hunt re-roll needs ONE Nazgûl
     // (report 4w6d6l484k5v0f5d).
@@ -1936,7 +1989,12 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
       if (loc && !occupied) {
         const exit = MORDOR_ENTRANCES.reduce((b, e) => (dist(loc, e) < dist(loc, b) ? e : b), MORDOR_ENTRANCES[0]!);
         const d = dist(loc, a.region);
-        if (d <= 2 && d + dist(a.region, exit) === dist(loc, exit)) return 40 - d * 10;
+        // Where the Fellowship can END its next declare or reveal: on its road, no
+        // farther out than the Progress it has banked — and the farther along, the
+        // likelier. From Rivendell with Progress 3 that is Moria, not the Fords of
+        // Bruinen behind it (report 6p6o0b22046d346i).
+        const reach = Math.max(1, state.fellowship.hidden ? state.fellowship.progress : 1);
+        if (d >= 1 && d <= reach && d + dist(a.region, exit) === dist(loc, exit)) return 20 + d * 10;
       }
       const staging = nazgulStagingBonus(state, 'nazgul', a.region as RegionId, target);
       if (staging > 0) return staging / 2;

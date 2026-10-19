@@ -7,6 +7,12 @@
 //  - 4w6d6l484k5v0f5d: no second Nazgûl onto a Fellowship one already presses.
 //  - 1b6t691n0q3m360v: a Free Peoples Army whose Nation is not At War stays home.
 //  - 04291r2i296h5w1n: no Elven Ring just to re-hide a revealed Fellowship.
+//  - 5d063j1g3f6s2w6x: a hidden Fellowship is pressed too (the re-roll needs only a
+//    Nazgûl in its region) — with one Nazgûl — and the one there stays.
+//  - 2y286d0n141g4q45: no "escape" declare that throws away Progress banked (Hollin
+//    into North Dunland).
+//  - 3i6v0h5m4a4t0b3v: a Hunt-tile card while a reveal would drag the hidden
+//    Fellowship through Moria.
 import { Rng } from 'digital-boardgame-framework';
 import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
@@ -64,6 +70,38 @@ console.log('\n=== One Nazgûl presses the Fellowship ===');
   check('a Nazgûl already there: no second one flies in', onto && !(a.kind === 'moveCharacter' && a.to === 'eastern-brown-lands'), show(a));
 }
 
+console.log('\n=== A hidden Fellowship is pressed too ===');
+{
+  const s = turn('shadow');
+  s.dice.shadow = ['character']; s.dice.fp = [];
+  for (const r of Object.values(s.regions)) r.nazgul = 0;
+  s.fellowship.location = 'eastern-brown-lands'; s.fellowship.hidden = true; s.fellowship.progress = 0;
+  s.regions['north-ithilien'].nazgul = 2;
+  const a = decide(s, 'shadow');
+  check('hidden: one Nazgûl flies onto its region', a.kind === 'moveCharacter' && a.char === 'nazgul' && a.to === 'eastern-brown-lands' && a.count === 1, show(a));
+}
+{
+  const s = turn('shadow');
+  s.dice.shadow = ['character']; s.dice.fp = [];
+  for (const r of Object.values(s.regions)) r.nazgul = 0;
+  s.fellowship.location = 'eastern-brown-lands'; s.fellowship.hidden = true; s.fellowship.progress = 0;
+  s.regions['eastern-brown-lands'].nazgul = 1;
+  const a = decide(s, 'shadow');
+  check('hidden: the one pressing Nazgûl stays', !(a.kind === 'moveCharacter' && a.from === 'eastern-brown-lands'), show(a));
+}
+
+console.log('\n=== Hunt-tile cards on the road through Moria ===');
+{
+  const s = turn('shadow');
+  s.dice.shadow = ['event']; s.dice.fp = [];
+  s.fellowship.location = 'hollin'; s.fellowship.hidden = true; s.fellowship.progress = 2;
+  s.cards.shadow.hand = ['sh-char-05'];
+  const legal = wotrAdapter.legalActions(s, 'shadow');
+  const offered = legal.some((x) => x.kind === 'playEvent' && x.cardId === 'sh-char-05');
+  const a = decide(s, 'shadow');
+  check('Hollin, Progress 2: the card is played', offered && a.kind === 'playEvent' && a.cardId === 'sh-char-05', show(a));
+}
+
 console.log('\n=== A Nation not At War stays home ===');
 {
   // Only the Dwarves' Erebor Army on the Free Peoples side, so it is the one to move.
@@ -75,6 +113,20 @@ console.log('\n=== A Nation not At War stays home ===');
   const a = decide(s, 'fp');
   const outOfErebor = legal.some((x) => x.kind === 'moveArmy' && x.from === 'erebor');
   check('Erebor (Dwarves passive): its Army does not walk out', outOfErebor && !(a.kind === 'moveArmy' && a.from === 'erebor'), show(a));
+}
+
+console.log('\n=== No sideways declare ===');
+{
+  const s = turn('fp');
+  s.phase = 'fellowship';
+  s.dice.fp = []; s.dice.shadow = [];
+  s.fellowship.location = 'hollin'; s.fellowship.hidden = true; s.fellowship.progress = 1;
+  s.regions['hollin'].nazgul = 1;
+  s.regions['north-dunland'].units = {}; // clean, so it tempts the escape declare
+  const legal = wotrAdapter.legalActions(s, 'fp');
+  const sideways = legal.find((x) => x.kind === 'declareFellowship' && x.target === 'north-dunland');
+  const a = decide(s, 'fp');
+  check('Hollin, Progress 1: not declared into North Dunland', !!sideways && !(a.kind === 'declareFellowship' && a.target === 'north-dunland'), show(a));
 }
 
 console.log('\n=== No Elven Ring just to hide ===');
