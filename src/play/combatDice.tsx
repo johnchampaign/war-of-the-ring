@@ -14,13 +14,16 @@ export function CDie({ n, target }: { n: number; target: number }) {
   const hit = n === 6 || (n !== 1 && n >= target);
   return (
     <span style={{
-      display: 'inline-grid', placeItems: 'center', width: 22, height: 22, margin: '0 2px',
+      display: 'inline-grid', placeItems: 'center', width: 22, height: 22, margin: '0 1px',
       borderRadius: 4, fontSize: 13, fontWeight: 700,
       background: hit ? '#caa84b' : '#2a2418', color: hit ? '#1a1408' : '#b9b09a',
       border: `1px solid ${hit ? '#e6c869' : '#4a4332'}`,
     }}>{n}</span>
   );
 }
+
+/** The side/card label column, shared so every row's dice start in the same place. */
+const LABEL_W = 64;
 
 export function RollRow({ label, roll, color }: { label: string; roll?: Roll; color: string }) {
   if (!roll || (roll.dice.length === 0 && roll.rerolls.length === 0)) return null;
@@ -29,7 +32,7 @@ export function RollRow({ label, roll, color }: { label: string; roll?: Roll; co
   const rt = roll.rerollTarget ?? roll.target;
   return (
     <div style={{ margin: '3px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-      <span style={{ width: 64, fontSize: 12, color }}>{label}</span>
+      <span style={{ width: LABEL_W, fontSize: 12, color }}>{label}</span>
       <span style={{ fontSize: 11, color: '#887', marginRight: 4 }}>(hits {roll.target}+)</span>
       {roll.dice.map((n, i) => <CDie key={i} n={n} target={roll.target} />)}
       {/* The re-roll's threshold always shows, so the attacker's and defender's dice line
@@ -52,19 +55,23 @@ export function CardRollRows({ rolls, round }: { rolls?: CardRoll[]; round?: num
       {rolls.map((r, i) => {
         const title = CARD_TITLE.get(r.card) ?? 'Combat card';
         const color = r.side === 'fp' ? '#7fb6e6' : '#e6857f';
-        // The round is named only when it differs from the roll shown above it (a
-        // pre-combat attack in the next round, before that round's dice are thrown).
-        const when = `${r.when === 'before' ? 'before the Combat roll' : 'after casualties'}${round !== undefined && r.round !== round ? `, round ${r.round + 1}` : ''}`;
+        // When it struck goes AFTER the dice, so the dice start where the Combat
+        // roll's do — a leading "(before the Combat roll, hits 5+)" pushed them out of
+        // line (player report 1o4z3i2i5f1p6k66). "Before" is the usual case and goes
+        // unsaid; the round is named only when it differs from the roll shown above it
+        // (a pre-combat attack in the next round, before that round's dice are thrown).
+        const notes = [r.when === 'after' ? 'after casualties' : '', round !== undefined && r.round !== round ? `round ${r.round + 1}` : ''].filter(Boolean);
         return (
           <div key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }} data-testid="card-roll">
-            <span style={{ fontSize: 12, color, marginRight: 4 }}>{title}</span>
-            <span style={{ fontSize: 11, color: '#887', marginRight: 4 }}>({when}{r.dice.length ? `, hits ${r.target}+` : ''})</span>
+            <span style={{ minWidth: LABEL_W, fontSize: 12, color }}>{title}</span>
+            {r.dice.length ? <span style={{ fontSize: 11, color: '#887', marginRight: 4 }}>(hits {r.target}+)</span> : null}
             {r.dice.length
               ? r.dice.map((n, j) => <CDie key={j} n={n} target={r.target} />)
               : null}
             <span style={{ fontSize: 12, color: r.hits ? '#e6c869' : '#998', marginLeft: 4 }}>
               {r.dice.length ? `→ ${r.hits} hit${r.hits === 1 ? '' : 's'}` : `${r.hits} automatic hit${r.hits === 1 ? '' : 's'}`}
             </span>
+            {notes.length > 0 && <span style={{ fontSize: 11, color: '#887', marginLeft: 4 }}>({notes.join(', ')})</span>}
           </div>
         );
       })}

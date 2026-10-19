@@ -123,7 +123,7 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
   // redraw, the Balrog, …), that card — they used to show "Hover a card to read its
   // effect" (player report 0o085z6c5s484q6r).
   const CHOICE_CARD: Record<string, string> = { bonusDraw: 'sh-char-21', balrog: 'sh-char-17', crebain: 'sh-char-16', huntPreventDraw: 'fp-char-08',
-    huntRedraw: 'fp-char-05', wornDiscard: 'sh-char-15', lureChoice: 'sh-char-13', nazgulStrike: 'sh-char-08b' };
+    huntRedraw: 'fp-char-05', wornDiscard: 'sh-char-15', lureChoice: 'sh-char-13', nazgulStrike: 'sh-char-08b', stormcrowLoss: 'sh-str-06' };
   const eventCard = choice?.kind === 'eventTarget' ? (choice.data as { card?: string } | undefined)?.card
     : choice ? ((choice.data as { card?: string } | undefined)?.card ?? CHOICE_CARD[choice.kind]) : undefined;
   // A retreat DESTINATION is picked on the map (the highlighted regions), not from a
