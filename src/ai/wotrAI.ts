@@ -775,7 +775,9 @@ function spendsSarumansDie(state: GameState, a: WotrAction): boolean {
   if (dice.filter((f) => f === 'muster' || f === 'armyMuster').length !== 1) return false;
   if (a.kind === 'recruitUnit' || a.kind === 'diplomaticAction' || a.kind === 'sarumanMuster') return true;
   if (a.kind === 'bringMinion') return a.minion !== 'saruman';
-  if (a.kind === 'moveArmy' || a.kind === 'attack') return a.die === 'armyMuster' || (!a.die && !dice.includes('army') && !dice.includes('character'));
+  // With no plain Army die the engine pays an Army move with the Army/Muster die even
+  // when a Character die is in hand (report 6r6u185y1f516i25: the reserve leaked here).
+  if (a.kind === 'moveArmy' || a.kind === 'attack') return a.die === 'armyMuster' || (!a.die && !dice.includes('army'));
   return false;
 }
 
@@ -940,10 +942,15 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
     case 'companionMuster': // a Companion advances its Nation toward War (any die) — mobilization
       return state.nations[a.nation].step > 0 ? 28 : 6;                // worth it only while the Nation isn't yet At War
     case 'sarumanMuster': {                                              // Voice of Saruman: a big Isengard build / Elite upgrade
-      if (a.mode !== 'recruit') return 30;
+      // Worth more than a plain muster with the same die: three Regulars (one in each
+      // Isengard Settlement) against two, or two Orthanc Regulars made Elites — each a
+      // Leader too while Saruman stands (reports 504m0n0r2o0m4h4w, 5i2d2w166c672j1p:
+      // the Shadow kept mustering in North Dunland and Orthanc instead).
+      if (a.mode !== 'recruit') return (state.regions['orthanc']!.units.isengard?.regular ?? 0) >= 2 ? 62 : 30;
       // A Regular in EVERY Isengard Settlement — one landing on a full stack is lost (report 3t5w710l563l4s4t).
-      const full = ISENGARD_SETTLEMENTS.filter((r) => settlementCtrl(state, r) === 'shadow' && unitCount(state, r) >= STACKING_LIMIT).length;
-      return 45 - full * 12;
+      const held = ISENGARD_SETTLEMENTS.filter((r) => settlementCtrl(state, r) === 'shadow');
+      const full = held.filter((r) => unitCount(state, r) >= STACKING_LIMIT).length;
+      return 40 + (held.length - full) * 9 - full * 12;
     }
     case 'useElvenRing': return elvenRingScore(state, actor, a);       // change a die's face (conservatively)
     case 'playEvent': {
@@ -1154,6 +1161,15 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
     && enemyNear(state, from, 'shadow', 2) && !armyHere(state, to, 'shadow')) {
     s -= 45;
   }
+  // A Free Peoples Army whose Nation is not yet At War stays home in its Stronghold or
+  // City: it cannot attack anything, and walking it out only thins the garrison (report
+  // 1b6t691n0q3m360v: Erebor's Army wandered to the Vale of the Carnen with the Dwarves
+  // passive; Minas Tirith to Osgiliath with Gondor not At War).
+  if (actor === 'fp' && (REGIONS[from]!.settlement === 'Stronghold' || REGIONS[from]!.settlement === 'City')
+    && settlementCtrl(state, from) === 'fp' && !armyHere(state, to, 'shadow')) {
+    const nations = (Object.keys(state.regions[from]!.units) as Nation[]).filter((n) => FP.has(n) && (state.regions[from]!.units[n]!.regular + state.regions[from]!.units[n]!.elite) > 0);
+    if (nations.length && nations.every((n) => state.nations[n].step > 0)) s -= 60;
+  }
   // Walking the field Army out of a siege we hold LIFTS it: the garrison is free again
   // and the next action is spent besieging it back. The Shadow did exactly that, in and
   // out of an FP-held Orthanc, never assaulting (player report q0vopcx9p3bcejso).
@@ -1195,7 +1211,8 @@ function elvenRingScore(state: GameState, actor: Side, a: Extract<WotrAction, { 
     const faces = state.dice.fp;
     if (faces.includes('character') || faces.includes('will')) return -5; // already have one — don't pass a Ring to Shadow for free
     if (fs.mordor !== null) return 90;                                // Mordor Track: MUST keep moving
-    if (!fs.hidden) return 55;                                        // revealed: convert so we can hide
+    // Not merely to hide: re-hiding after a reveal buys little (the Shadow has acted by
+    // then) and a hidden Fellowship feeds its tile cards (report 04291r2i296h5w1n).
     return -5;
   }
   return (a.to === 'eye' && fs.mordor !== null) ? 35 : -5;            // Shadow: an Eye only when the Hunt is decisive
@@ -1232,7 +1249,10 @@ function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction
     // Not onto a Fellowship standing at a Mordor entrance: it goes onto the Track next,
     // where no Hunt is rolled and a Nazgûl's presence buys nothing (report
     // 2i1u3w2d3x5g1j3z). The Nazgûl cards' own moves are a different matter.
-    if (a.char === 'nazgul') return (!fs.hidden && a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location)) ? 42 : 6; // never on the Mordor Track
+    // …and only if no Nazgûl stands there yet: one gives the Hunt its re-roll, a second
+    // adds nothing (report 4w6d6l484k5v0f5d: six Nazgûl stacked onto Osgiliath).
+    const pressed = state.regions[a.to]!.nazgul > 0 || state.regions[a.to]!.characters.includes('witch-king');
+    if (a.char === 'nazgul') return (!fs.hidden && a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location) && !pressed) ? 42 : 6; // never on the Mordor Track
     return 4; // Minions: situational
   }
   // A separated Companion used to score a flat 4 for every destination, so it never
@@ -1862,7 +1882,11 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
       if (src.siegeBox && armyHere(state, a.from, 'shadow')) s -= 25;
     }
     if (owner === 'shadow') s += nazgulStagingBonus(state, a.char, a.to, target);                 // join the army staged on the target
-    if (target) s += -(dist(a.to, target) - dist(a.from, target)) * 4;                            // drift toward the target
+    // No drifting onto a Fellowship already pressed: the Hunt re-roll needs ONE Nazgûl
+    // (report 4w6d6l484k5v0f5d).
+    const piled = owner === 'shadow' && (a.char === 'nazgul' || a.char === 'witch-king') && a.to === fellowshipRegion(state)
+      && (state.regions[a.to]!.nazgul > 0 || state.regions[a.to]!.characters.includes('witch-king'));
+    if (target && !piled) s += -(dist(a.to, target) - dist(a.from, target)) * 4;                 // drift toward the target
     return s;
   };
   let best: WotrAction | null = null, bestS = 0; // only move when strictly positive; otherwise stop
@@ -1926,6 +1950,15 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     if (a.companion && a.region) {
       const rouse = owner === 'fp' && a.companion !== 'nazgul' && separationActivates(state, a.companion as never, a.region)
         && settlementCtrl(state, a.region) !== 'shadow' ? 40 : 0;
+      // A Free Peoples Companion goes where he DOES something — wakes a Nation, joins an
+      // Army he wasn't with — never toward the Shadow Stronghold the Armies aim at: a
+      // card flew Gandalf the White from Fangorn into Dol Guldur, and into Moria (reports
+      // 0y5m180z6t5y3u5c, 5k6k235w6a1d1v70). Same purposes as a Character-die move.
+      if (owner === 'fp' && a.companion !== 'nazgul') {
+        const join = armyHere(state, a.region, 'fp') && !(a.from && armyHere(state, a.from, 'fp')) ? 18 : 0;
+        const danger = settlementCtrl(state, a.region) === 'shadow' || armyHere(state, a.region, 'shadow') ? 40 : 0;
+        return 110 + rouse + join - danger;
+      }
       return 110 + rouse - (target ? dist(a.region, target) : 0);
     }
     // Cruel Weather blows the Fellowship one region: AWAY from Mordor, so its next
@@ -1965,6 +1998,11 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
       const fit = cardMoveFit(state, a, owner);
       return 30 - (target ? dist(a.to, target) : 0) - fit.excess * 12 - fit.left * 0.5;
     }
+    // A card move is a move like any other: walking the Free Peoples out of a Settlement
+    // they hold, with a Shadow Army within two, hands it over (report 4n5m5v425p1x445v:
+    // Through a Day and a Night left Moria empty beside the North Dunland Army).
+    if (a.to && a.from && owner === 'fp' && a.mode !== 'attack' && REGIONS[a.from]!.settlement
+      && settlementCtrl(state, a.from) === 'fp' && enemyNear(state, a.from, 'shadow', 2)) return 5 - (target ? dist(a.to, target) : 0);
     if (a.to) return 30 - (target ? dist(a.to, target) : 0);          // move toward the target
     // Recruit placements: same region, Regular-or-Elite — take the Elite (two
     // player reports: Riders of Rohan / Dain's Ironfoot Guard mustered Regulars).
