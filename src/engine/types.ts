@@ -263,6 +263,12 @@ export interface PendingCombat {
    *  them — so the label has to name the round they came from, not the round the
    *  battle has since moved on to (player report 1u171v5e2e3m0n1k). */
   rollRound?: number;
+  /** This round's Combat-card extra attacks (Sudden Strike, Charge, Durin's Bane, We
+   *  Come to Kill, Onslaught) and Great Host's automatic hit, so the battle modal and
+   *  the end-of-battle popup draw them as dice like the Combat roll. They used to show
+   *  only as a log line, so the extra hits seemed to come from nowhere (player report
+   *  562h455s6y5o363v). Cleared with the cards when the next round starts. */
+  cardRolls?: CardRoll[];
   /** Unit counts at battle start, to report each side's losses when it ends. */
   atkUnits0?: number;
   defUnits0?: number;
@@ -454,8 +460,15 @@ export interface GameState {
     victor?: Side | null;
     atkRoll?: { dice: number[]; rerolls: number[]; target: number };
     defRoll?: { dice: number[]; rerolls: number[]; target: number };
+    /** The final round's Combat-card extra attacks (see PendingCombat.cardRolls). */
+    cardRolls?: CardRoll[];
   };
 }
+
+/** One Combat-card extra attack: whose, which card, before the Combat roll or after
+ *  casualties, the dice and what they hit on. `dice` is empty for an automatic hit
+ *  (Great Host), with `hits` saying how many. */
+export interface CardRoll { side: Side; card: string; when: 'before' | 'after'; round: number; dice: number[]; target: number; hits: number }
 
 /** Framework log-format v2 (GameLogEntry) plus WotR extras. `seq` is stamped by
  *  appendGameLog and survives capping; old snapshots are migrated (schemaVersion 2). */

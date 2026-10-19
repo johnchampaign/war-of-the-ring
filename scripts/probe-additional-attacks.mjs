@@ -33,7 +33,9 @@ function fight({ atkUnits, defUnits, defLeaders = 0, shadowCard = null, fpCard =
     break; // any other choice: round 1 is fully resolved, that's all we need
   }
   const msgs = s.log.map((e) => e.msg ?? '');
-  return { s, msgs,
+  // The battle modal / popup draw these as dice (player report 562h455s6y5o363v).
+  const cardRolls = s.pendingCombat?.cardRolls ?? s.lastBattle?.cardRolls ?? [];
+  return { s, msgs, cardRolls,
     preIdx: msgs.findIndex((m) => m.includes('additional attack (before the Combat roll)')),
     postIdx: msgs.findIndex((m) => m.includes('additional attack (after casualties)')),
     rollIdx: msgs.findIndex((m) => m.startsWith('Round 1 dice')) };
@@ -42,18 +44,23 @@ function fight({ atkUnits, defUnits, defLeaders = 0, shadowCard = null, fpCard =
 {
   console.log('\n=== Sudden Strike strikes BEFORE the Combat roll ===');
   // FP defender with 2 Leaders plays Sudden Strike (Leadership dice).
-  const { msgs, preIdx, rollIdx } = fight({ atkUnits: { regular: 5, elite: 0 }, defUnits: { regular: 3, elite: 0 }, defLeaders: 2, fpCard: 'fp-char-14' });
+  const { msgs, preIdx, rollIdx, cardRolls } = fight({ atkUnits: { regular: 5, elite: 0 }, defUnits: { regular: 3, elite: 0 }, defLeaders: 2, fpCard: 'fp-char-14' });
   check('the additional attack is logged', preIdx >= 0, msgs.filter((m) => m.includes('additional')).join(' | ') || 'none');
   check('...and it resolves BEFORE the Round 1 dice', preIdx >= 0 && rollIdx > preIdx, `pre@${preIdx}, roll@${rollIdx}`);
   const rollLine = msgs[rollIdx] ?? '';
+  const cr = cardRolls[0];
+  check('...and is kept for the battle modal as dice', cr?.when === 'before' && cr.card === 'fp-char-14' && cr.side === 'fp' && cr.dice.length === 2, JSON.stringify(cardRolls));
   check('the round roll shows NO in-round extra attack any more', !rollLine.includes('extra attack'), rollLine.slice(0, 90));
 }
 
 {
   console.log('\n=== We Come to Kill strikes AFTER casualties ===');
-  const { msgs, postIdx, rollIdx } = fight({ atkUnits: { regular: 3, elite: 3 }, defUnits: { regular: 5, elite: 0 }, shadowCard: 'sh-str-13', seed: 9 });
+  const { msgs, postIdx, rollIdx, cardRolls } = fight({ atkUnits: { regular: 3, elite: 3 }, defUnits: { regular: 5, elite: 0 }, shadowCard: 'sh-str-13', seed: 9 });
   check('the additional attack is logged', postIdx >= 0, msgs.filter((m) => m.includes('additional')).join(' | ') || 'none');
   check('...and it resolves AFTER the Round 1 dice', postIdx >= 0 && rollIdx >= 0 && postIdx > rollIdx, `roll@${rollIdx}, post@${postIdx}`);
+  const cr = cardRolls.find((r) => r.card === 'sh-str-13');
+  check('...and is kept for the battle modal as dice', cr?.when === 'after' && cr.side === 'shadow' && cr.dice.length > 0
+    && cr.hits === cr.dice.filter((d) => d >= cr.target).length, JSON.stringify(cardRolls));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

@@ -4,6 +4,9 @@
 // the other had "super tiny text": "How about if we replace the existing Combat roll
 // info in the modal with the (superior) Battle summary one".
 
+import type { CardRoll } from '../engine/types';
+import eventCards from '../../assets/event-cards.json';
+
 export type Roll = { dice: number[]; rerolls: number[]; target: number; rerollTarget?: number };
 
 // A combat die: a hit is a 6, or ≥ the to-hit target (never a 1).
@@ -37,3 +40,37 @@ export function RollRow({ label, roll, color }: { label: string; roll?: Roll; co
   );
 }
 
+
+/** A Combat card's extra attack — Sudden Strike, Charge, Durin's Bane before the
+ *  Combat roll; We Come to Kill, Onslaught after casualties — drawn as dice like the
+ *  roll itself, and Great Host's automatic hit as a line. They used to show only in
+ *  the log, so their hits seemed to come from nowhere (player report 562h455s6y5o363v). */
+export function CardRollRows({ rolls, round }: { rolls?: CardRoll[]; round?: number }) {
+  if (!rolls?.length) return null;
+  return (
+    <>
+      {rolls.map((r, i) => {
+        const title = CARD_TITLE.get(r.card) ?? 'Combat card';
+        const color = r.side === 'fp' ? '#7fb6e6' : '#e6857f';
+        // The round is named only when it differs from the roll shown above it (a
+        // pre-combat attack in the next round, before that round's dice are thrown).
+        const when = `${r.when === 'before' ? 'before the Combat roll' : 'after casualties'}${round !== undefined && r.round !== round ? `, round ${r.round + 1}` : ''}`;
+        return (
+          <div key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }} data-testid="card-roll">
+            <span style={{ fontSize: 12, color, marginRight: 4 }}>{title}</span>
+            <span style={{ fontSize: 11, color: '#887', marginRight: 4 }}>({when}{r.dice.length ? `, hits ${r.target}+` : ''})</span>
+            {r.dice.length
+              ? r.dice.map((n, j) => <CDie key={j} n={n} target={r.target} />)
+              : null}
+            <span style={{ fontSize: 12, color: r.hits ? '#e6c869' : '#998', marginLeft: 4 }}>
+              {r.dice.length ? `→ ${r.hits} hit${r.hits === 1 ? '' : 's'}` : `${r.hits} automatic hit${r.hits === 1 ? '' : 's'}`}
+            </span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+const CARD_TITLE = new Map<string, string>((eventCards as { cards: { id: string; name: string; combat?: { title?: string } }[] }).cards
+  .map((c) => [c.id, c.combat?.title ?? c.name]));

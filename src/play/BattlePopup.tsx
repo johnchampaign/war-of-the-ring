@@ -3,7 +3,7 @@
 // showing the final round's dice for each side (hits in gold), each side's losses,
 // and the result. Combat is public info, so it shows for both players.
 import type { GameState, Side } from '../engine/types';
-import { RollRow } from './combatDice';
+import { RollRow, CardRollRows } from './combatDice';
 import mapData from '../../assets/map.json';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
@@ -34,11 +34,12 @@ export function BattlePopup({ view, seen, onSeen, you }: { view: GameState; seen
         {/* The final round's dice. Earlier rounds show in the battle modal while a
             decision is open, but a round that needed no decision went by unseen — the
             battle simply ended (player reports 4m615j1m2h4p3r6b, 120y1m0p3h6f5h01). */}
-        {(b.atkRoll || b.defRoll) && (
+        {(b.atkRoll || b.defRoll || b.cardRolls?.length) && (
           <div style={{ margin: '6px 0' }} data-testid="battle-final-roll">
             <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Round {b.rounds} roll</div>
             <RollRow label="Attacker" roll={b.atkRoll} color={b.attacker === 'fp' ? '#7fb6e6' : '#e6857f'} />
             <RollRow label="Defender" roll={b.defRoll} color={b.attacker === 'fp' ? '#e6857f' : '#7fb6e6'} />
+            <CardRollRows rolls={b.cardRolls} round={b.atkRoll || b.defRoll ? b.rounds - 1 : undefined} />
           </div>
         )}
         <div style={{ fontSize: 13, margin: '8px 0', color: '#cbbf9a' }}>

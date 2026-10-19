@@ -6,7 +6,7 @@
 // decision. Still deferred: initiative-ordered resolution of competing effects
 // (a card's initiative only matters when both sides' effects collide — see D5)
 // and a few intricate per-effect cards (e.g. Mûmakil's two timings).
-import type { GameState, Nation, RegionId, Side, PendingCombat } from './types';
+import type { GameState, Nation, RegionId, Side, PendingCombat, CardRoll } from './types';
 import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName } from './data';
 import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, fellowshipRegion, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
@@ -1127,6 +1127,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       const faces: number[] = [];
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= 4) h++; } return h; });
       log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on 4+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
+      noteCardRoll(pc, ef.side, 'before', faces, 4, hits);
       if (hits > 0 && askCasualties(foe, foeSide, hits)) return true;
     } else if (ef.mods.preCombatAttackFrom) {
       // Sudden Strike / Charge: "BEFORE the Combat roll, roll an additional attack
@@ -1157,6 +1158,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       const faces: number[] = [];
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= target) h++; } return h; });
       log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
+      noteCardRoll(pc, ef.side, 'before', faces, target, hits);
       if (hits > 0 && askCasualties(foe, foeSide, hits)) return true;
     }
   }
@@ -1342,6 +1344,7 @@ function finishCombat(state: GameState, advance: boolean): void {
     seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
     atkLosses: Math.max(0, (pc.atkUnits0 ?? atkAlive) - atkAlive), defLosses: Math.max(0, (pc.defUnits0 ?? defAlive) - defAlive),
     captured, siege: !!pc.siege, outcome, victor, atkRoll: pc.atkRoll, defRoll: pc.defRoll,
+    ...(pc.cardRolls?.length ? { cardRolls: pc.cardRolls } : {}),
   };
   const opp = other(pc.attacker);
   state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;
@@ -1619,6 +1622,7 @@ export function combatStep(state: GameState): void {
         pc.atkCardCost = undefined; pc.defCardCost = undefined;
         pc.wordsOfPowerTarget = undefined;
         pc.greatHostDone = false; pc.postAtkDone = false; // fresh cards -> fresh post-casualty evaluation
+        pc.cardRolls = undefined;
         pc.atkCardVoid = undefined; pc.defCardVoid = undefined;
         if (pc.siegeWithdrawAsked !== pc.round && strongholdWithdrawAvailable(state, pc)) {
           pc.step = 'siegeWithdraw'; continue;
@@ -1997,6 +2001,7 @@ export function combatStep(state: GameState): void {
           const enemy = other(oSide);
           const target = oSide === pc.attacker ? defForce(state, pc) : atkForce(state, pc);
           log(state, null, 'combat', `Onslaught counter-attack: [${dice.join(' ')}] on 4+ → ${oHits} hit${oHits === 1 ? '' : 's'}`);
+          noteCardRoll(pc, oSide, 'after', dice, 4, oHits);
           if (oHits > 0) {
             const left = absorbForced(state, target, enemy, oHits);
             if (meaningfulForceCasualty(state, target, enemy, left)) {
@@ -2054,6 +2059,7 @@ export function combatStep(state: GameState): void {
             const faces: number[] = [];
             const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= target) h++; } return h; });
             log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (after casualties): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`);
+            noteCardRoll(pc, side, 'after', faces, target, hits);
             if (hits > 0) {
               const left = absorbForced(state, foe, foeSide, hits);
               if (meaningfulForceCasualty(state, foe, foeSide, left)) {
@@ -2079,6 +2085,7 @@ export function combatStep(state: GameState): void {
             if (forceUnitCount(foe) === 0) continue;
             if (forceUnitCount(own) >= 2 * Math.max(1, forceUnitCount(foe))) {
               log(state, null, 'combat', `Great Host: outnumbering 2:1 after casualties — one automatic hit`);
+              noteCardRoll(pc, side, 'after', [], 0, mods.bonusHitsIfOutnumber!);
               const left = absorbForced(state, foe, foeSide, mods.bonusHitsIfOutnumber!);
               if (meaningfulForceCasualty(state, foe, foeSide, left)) {
                 const boxedFoe = pc.boxed === foeSide;
@@ -2160,6 +2167,13 @@ export function resolveSiegeExtend(state: GameState, extend: boolean): void {
   pc.round += 1;
   pc.step = 'attackerCard'; // advance() re-drives the battle sub-machine
 }
+/** Record a Combat card's extra attack (or Great Host's automatic hit) for the battle
+ *  modal and popup to draw as dice — the card is the side's card this round. */
+function noteCardRoll(pc: PendingCombat, side: Side, when: CardRoll['when'], dice: number[], target: number, hits: number): void {
+  const card = (side === pc.attacker ? pc.attackerCard : pc.defenderCard) ?? '';
+  (pc.cardRolls ??= []).push({ side, card, when, round: pc.round, dice, target, hits });
+}
+
 /** Resolve a variable-size combat card's cost: charge it, and for Onslaught roll the
  *  counter-attack it buys (one die per self-inflicted hit, a hit on 4+) and apply those
  *  hits to the enemy. The casualty allocation for BOTH sides of this exchange is

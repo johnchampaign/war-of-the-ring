@@ -9,7 +9,7 @@ import { describeAction, isDecisionAction, eventChoiceInModal } from './actionTe
 import { RollLine, CorruptionLine, describeDraw, HuntTileFace, strongholdRevealLine, type Draw } from './huntView';
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt, backId } from './artCache';
-import { RollRow } from './combatDice';
+import { RollRow, CardRollRows } from './combatDice';
 import { NoticeText } from './NoticePopup';
 import { CardZoom } from './HandStrip';
 import type { GameState, Side, Nation } from '../engine/types';
@@ -228,21 +228,22 @@ function CombatHeader({ pc, view, onHover }: { pc: NonNullable<GameState['pendin
       {/* The round's dice, as DICE. This used to be two numbers in small text while
           the end-of-battle popup had the good display — the reporter of
           2p2w0k6c5m2p6z4n asked for them to trade places, and they were right. */}
-      {(pc.atkRoll || pc.defRoll) ? (
+      {(pc.atkRoll || pc.defRoll || pc.cardRolls?.length) ? (
         <div style={{ background: '#15110b', border: '1px solid #2a2418', borderRadius: 8, padding: '6px 9px', marginTop: 6 }}>
           {/* Name the round the DICE came from. A side that is never prompted mid-round
               (a siege defender, who gets no retreat, cease-attack or casualty choice)
               first sees the dice when the NEXT round's card prompt opens — and they
               were labelled with that next round, so round 1's roll read "Round 2"
               (player report 1u171v5e2e3m0n1k). */}
-          <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
+          {(pc.atkRoll || pc.defRoll) && <div style={{ fontSize: 11, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
             Round {(pc.rollRound ?? pc.round) + 1} roll{(pc.rollRound ?? pc.round) < pc.round ? ' (previous round)' : ''}
-          </div>
+          </div>}
           {/* Each side in its own colour — blue Free Peoples, red Shadow — whichever
               attacks (player report 5v2k4i3f045o731f: an attacking Free Peoples roll
               was shown in red). */}
           <RollRow label="Attacker" roll={pc.atkRoll} color={pc.attacker === 'fp' ? '#7fb6e6' : '#e6857f'} />
           <RollRow label="Defender" roll={pc.defRoll} color={pc.defender === 'fp' ? '#7fb6e6' : '#e6857f'} />
+          <CardRollRows rolls={pc.cardRolls} round={pc.atkRoll || pc.defRoll ? pc.rollRound ?? pc.round : undefined} />
           <div style={{ display: 'flex', gap: 16, marginTop: 2 }}>
             <Hits label="Attacker hits" n={pc.atkHits} />
             <Hits label="Defender hits" n={pc.defHits} />
