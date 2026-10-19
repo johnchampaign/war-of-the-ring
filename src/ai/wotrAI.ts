@@ -14,7 +14,7 @@ import type { GameState, Side, RegionId, Nation } from '../engine/types';
 import type { WotrAction, MoveSel } from '../adapter/wotrAction';
 import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf, characterDef, sideOfNation, characterSide } from '../engine/data';
-import { unitCount, forceUnitCount, forceLeadership, STACKING_LIMIT, splitBlockReason, fellowshipRegion, armySide, type Force } from '../engine/armies';
+import { unitCount, forceUnitCount, forceLeadership, STACKING_LIMIT, splitBlockReason, fellowshipRegion, armySide, ownNationsIn, type Force } from '../engine/armies';
 import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
 import { characterDestinations } from '../engine/charMove';
@@ -498,6 +498,15 @@ const lexLess = (a: number[], b: number[]): boolean => {
 
 /** Is an enemy Army within `n` regions of `id`? Bounded outward walk rather than a
  *  dist() call per region — this runs inside the per-action scoring loop. */
+/** Could the enemy Army in `from` take `id` at all? An Army none of whose Nations is
+ *  At War cannot cross into another Nation's borders, nor attack (report
+ *  1t050h581v614b73: the Elves at Rivendell, not At War, kept an empty Angmar
+ *  "threatened", so the Shadow garrisoned it instead of bringing Saruman). */
+function armyThreatens(state: GameState, from: RegionId, enemy: Side, id: RegionId, attack: boolean): boolean {
+  if (!armyHere(state, from, enemy)) return false;
+  const dn = REGIONS[id]?.nation;
+  return ownNationsIn(state, from, enemy).some((n) => state.nations[n].step === 0 || (!attack && (!dn || dn === n)));
+}
 function enemyNearOpen(state: GameState, id: RegionId, enemy: Side, own: Side, n: number): boolean {
   const seen = new Set<RegionId>([id]);
   let layer: RegionId[] = [id];
@@ -506,7 +515,7 @@ function enemyNearOpen(state: GameState, id: RegionId, enemy: Side, own: Side, n
     for (const r of layer) for (const a of REGIONS[r]?.adjacency ?? []) {
       if (seen.has(a)) continue;
       seen.add(a);
-      if (armyHere(state, a, enemy)) return true;
+      if (armyThreatens(state, a, enemy, id, false)) return true;
       if (!armyHere(state, a, own)) next.push(a); // our own Army bars the road
     }
     layer = next;
@@ -559,7 +568,7 @@ function garrisonGap(state: GameState, id: RegionId, actor: Side, reach = 2): nu
   // Army, was its only road).
   if (n === 0) return enemyNearOpen(state, id, enemy, actor, reach) ? 1 : 0;
   if (n > 1) return 0;
-  const stormer = (REGIONS[id]!.adjacency ?? []).some((a) => armyHere(state, a, enemy) && unitCount(state, a) >= 3);
+  const stormer = (REGIONS[id]!.adjacency ?? []).some((a) => armyThreatens(state, a, enemy, id, true) && unitCount(state, a) >= 3);
   return stormer ? 0.5 : 0;
 }
 

@@ -23,6 +23,9 @@ const setup = (dgUnits) => {
   // A Free Peoples stack next door: the human's Lórien/Woodland army on its way in.
   s.regions['narrows-of-the-forest'].units = { elves: { regular: 4, elite: 2 } };
   s.regions['narrows-of-the-forest'].leaders = 1;
+  // …At War: an Army of a Nation not At War can neither cross into Sauron's borders nor
+  // attack, so it threatens nothing there (report 1t050h581v614b73).
+  s.nations.elves.step = 0;
   return s;
 };
 const legal = [
@@ -41,6 +44,13 @@ console.log('\n=== empty Dol Guldur (the case the term was introduced for) still
 {
   const pick = chooseAction(setup(0), 'shadow', legal, new Rng(4));
   check('empty garrison gets the recruit', pick.kind === 'recruitUnit' && pick.region === 'dol-guldur', JSON.stringify(pick));
+}
+console.log('\n=== empty Dol Guldur, the Elves next door NOT At War: no threat ===');
+{
+  const a = setup(0); a.nations.elves.step = 2;
+  const b = setup(0); b.nations.elves.step = 2; b.regions['narrows-of-the-forest'].units = {}; b.regions['narrows-of-the-forest'].leaders = 0;
+  const pa = chooseAction(a, 'shadow', legal, new Rng(4)), pb = chooseAction(b, 'shadow', legal, new Rng(4));
+  check('same pick with and without the neighbouring army', JSON.stringify(pa) === JSON.stringify(pb), `${JSON.stringify(pa)} vs ${JSON.stringify(pb)}`);
 }
 console.log('\n=== with three units already inside, the garrison term is silent ===');
 {

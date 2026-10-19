@@ -11,6 +11,8 @@
 //    Nazgûl in its region) — with one Nazgûl — and the one there stays.
 //  - 2y286d0n141g4q45: no "escape" declare that throws away Progress banked (Hollin
 //    into North Dunland).
+//  - 1t050h581v614b73: an empty Angmar is not "threatened" by Elves not At War, so the
+//    Army/Muster die brings Saruman rather than garrisoning it.
 //  - 3i6v0h5m4a4t0b3v: a Hunt-tile card while a reveal would drag the hidden
 //    Fellowship through Moria.
 import { Rng } from 'digital-boardgame-framework';
@@ -42,6 +44,19 @@ for (const seed of [1, 2, 3]) {
   const after = wotrAdapter.applyAction(s, a, 'shadow');
   const forSaruman = a.kind === 'bringMinion' && a.minion === 'saruman';
   check(`seed ${seed}: the Army/Muster die is kept, or brings Saruman`, forSaruman || after.dice.shadow.includes('armyMuster'), show(a));
+}
+
+console.log('\n=== Saruman over a phantom threat ===');
+for (const seed of [1, 2, 3]) {
+  const s = turn('shadow', seed);
+  s.nations.isengard.step = 0; s.nations.sauron.step = 0;
+  const angmar = s.regions['angmar'].units.sauron;
+  if (angmar) { s.reinforcements.sauron.regular += angmar.regular; s.reinforcements.sauron.elite += angmar.elite; }
+  s.regions['angmar'].units = {};
+  s.dice.shadow = ['armyMuster']; s.dice.fp = [];
+  const elvesAtWar = s.nations.elves.step === 0;
+  const a = decide(s, 'shadow');
+  check(`seed ${seed}: empty Angmar, Elves not At War — Saruman comes`, !elvesAtWar && a.kind === 'bringMinion' && a.minion === 'saruman', show(a));
 }
 
 console.log('\n=== The Voice of Saruman ===');
