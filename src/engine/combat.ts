@@ -1102,10 +1102,11 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
     if (forceUnitCount(ownForce) === 0) continue; // owner already left/wiped by an earlier pre-effect
     if (ef.mods.retreatBeforeCombat) {
       const dests = freeAdjacentRegions(state, own, ef.side);
-      // Let the owner CHOOSE the destination when there's more than one (rulebook:
-      // retreat is the retreating player's choice). Only the simple single-effect case
-      // is interactive; a rare retreat+pre-attack combo keeps the auto-pick.
-      if (dests.length > 1 && effects.length === 1) {
+      // Let the owner CHOOSE the destination (rulebook: retreat is the retreating
+      // player's choice) — a click even for a single one (report 364t5b2j0o3h3h16).
+      // Only the simple single-effect case is interactive; a rare retreat+pre-attack
+      // combo keeps the auto-pick.
+      if (dests.length > 0 && effects.length === 1) {
         pc.preCombatRetreatFrom = own;
         state.pendingChoice = { owner: ef.side, kind: 'preCombatRetreat' };
         return true; // pause; resolvePreCombatRetreat resumes
@@ -2291,8 +2292,9 @@ export function resolveRetreat(state: GameState, retreat: boolean): void {
   state.pendingChoice = null;
   if (retreat) {
     const dests = retreatOptions(state, pc);
-    if (dests.length === 1) { noteWithdrawal(state, pc, pc.defender); pc.defRetreatTo = dests[0]!; moveStack(state, pc.to, dests[0]!, pc.defender, true, true); finishCombat(state, true); return; }
-    if (dests.length > 1) { state.pendingChoice = { owner: pc.defender, kind: 'retreatTo' }; return; } // defender picks where
+    // The defender clicks the destination even when there is only one, like every
+    // other map pick (player report 364t5b2j0o3h3h16).
+    if (dests.length > 0) { state.pendingChoice = { owner: pc.defender, kind: 'retreatTo' }; return; } // defender picks where
     // none available -> stand
   }
   // Next round re-opens combat-card play (cards are per-round now).

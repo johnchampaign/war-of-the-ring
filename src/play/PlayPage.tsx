@@ -43,7 +43,7 @@ import { panelShowsAction, isSpatial, isCardCompanionMove } from './panelFilter'
 import { movableCharsAt, characterDestinations, characterMoveBlockReason, companionGroupLeader, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS } from '../engine/charMove';
 import { CompanionPicker } from './CompanionPicker';
 import { separationActivates, separationBlockReason, revealMoveBlockReason } from '../engine/fellowship';
-import { REGIONS, levelOf, sideOfNation, EVENT_BY_ID } from '../engine/data';
+import { REGIONS, levelOf, sideOfNation, nationName, EVENT_BY_ID } from '../engine/data';
 import { threatsAndPromisesActive } from '../engine/persistent';
 import { charName } from './charInfo';
 
@@ -1103,18 +1103,26 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Only on the plain action menu: mid-Action (a pending choice such as adding more
   // Companions to a separating group) the die advances aren't on offer anyway, so
   // greyed ones there are noise (player report 0m2j2c251s154y2h).
-  if (g.yourTurn && g.you === 'fp' && g.view.phase === 'actionResolution' && !g.view.pendingChoice && threatsAndPromisesActive(g.view)) {
+  // A passive Nation already on the step above "At War" can't be advanced by a die
+  // either (it must be activated first); its Diplomacy button is greyed the same way
+  // rather than vanishing from the list (player report 5w4e580k462e5a1r).
+  if (g.yourTurn && g.you && g.view.phase === 'actionResolution' && !g.view.pendingChoice) {
+    const you = g.you as Side;
+    const tap = you === 'fp' && threatsAndPromisesActive(g.view);
     for (const n of Object.keys(g.view.nations) as Nation[]) {
       const ns = g.view.nations[n];
-      // Only a Nation the die COULD otherwise advance: ours, still passive, and not
-      // already sitting on the step above "At War" that passive Nations may not pass.
-      if (sideOfNation(n) !== 'fp' || ns.active || ns.step <= 1) continue;
+      // Only a passive Nation of ours that the die can't advance.
+      if (sideOfNation(n) !== you || ns.active) continue;
+      const atThreshold = ns.step <= 1;
+      if (!atThreshold && !tap) continue;
       const action: WotrAction = { kind: 'diplomaticAction', nation: n };
       // Only while a die that could advance it is left — with no Muster or Will die
-      // there is nothing the card is barring (report 2z4h2h0f6w732o4s).
-      if (dieOptions(action, g.view, 'fp').length === 0) continue;
-      if (activeDie && !dieAllowsAction(action, g.view, 'fp', activeDie)) continue;
-      blockedPanel.push({ action, reason: 'Threats and Promises is in play — the Free Peoples cannot advance a passive Nation' });
+      // there is nothing being barred (report 2z4h2h0f6w732o4s).
+      if (dieOptions(action, g.view, you).length === 0) continue;
+      if (activeDie && !dieAllowsAction(action, g.view, you, activeDie)) continue;
+      blockedPanel.push({ action, reason: atThreshold
+        ? `${n === 'north' ? 'The North' : nationName(n)} is one step from War — a passive Nation can't advance further until it is activated`
+        : 'Threats and Promises is in play — the Free Peoples cannot advance a passive Nation' });
     }
   }
   // The optional SECOND army move (Army die) is offered as panel buttons; route it
