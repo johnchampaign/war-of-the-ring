@@ -254,8 +254,17 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const t = setTimeout(res, 80);
     requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(t); res(); }));
   });
+  // What the result popups had been clicked through to just before each action, so an
+  // Undo restores exactly that (see the undo re-prime below). Refs, because the seen
+  // markers themselves are declared further down.
+  const seenNow = useRef({ hunt: 0, battle: 0, notice: 0 });
+  const seenBefore = useRef<Array<{ hunt: number; battle: number; notice: number }>>([]);
+  const undoRestore = useRef<{ hunt: number; battle: number; notice: number } | null>(null);
   const submit = useCallback(async (a: WotrAction) => {
     if (inFlight.current) return;
+    // Taken first, before anything renders: a roll shown with its question is marked
+    // seen on answering, and undoing that answer should bring the roll back with it.
+    const seenAtAction = { ...seenNow.current };
     // Any action reaching this funnel SUPERSEDES an open "which die pays?" prompt.
     // The prompt used to sit there while the player did something else entirely, and
     // its buttons still submitted the abandoned action — clicking one later replayed
@@ -288,6 +297,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     // banner shows it) and then rethrows. Every caller fires and forgets, so letting
     // that rethrow escape only put an "Uncaught (in promise)" in the console (player
     // report 2b2u0a575e5u3a70). Resolve false instead so a chained caller can stop.
+    // One entry per action the local client records for Undo (it records rejected
+    // actions too, so this pushes whatever the outcome).
+    if (client.undo) { seenBefore.current.push(seenAtAction); if (seenBefore.current.length > 300) seenBefore.current.shift(); }
     try { await g.submit(withDie); setDie(null); return true; }
     catch { return false; }
     finally { inFlight.current = false; setBusy(false); }
@@ -306,6 +318,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [huntSeen, setHuntSeen] = useState(0);
   const [battleSeen, setBattleSeen] = useState(0);
   const [noticeSeen, setNoticeSeen] = useState(0);
+  seenNow.current = { hunt: huntSeen, battle: battleSeen, notice: noticeSeen };
   // These markers live in component state, so a RELOAD resets them to 0 while the
   // engine still carries its retained history (hunt.draws keeps the last 16). Every
   // old entry then counted as unseen and the popups replayed the whole backlog at
@@ -334,15 +347,23 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // next Hunt draw, battle or notice reused a number already marked seen, and its popup
   // never appeared (player reports 6z0a4u2v0d5z5e05 — an Orc Patrol Eye with no popup —
   // and 6r582a470b1r6l6n). Re-prime them to the restored game once it arrives.
+  // The markers go back to what they were just before the undone action — not to
+  // "everything in the restored game": undoing an answer given in the middle of a
+  // Shadow card (Orc Patrol's Hunt tile, already drawn but its popup still waiting on
+  // the answer) marked that tile seen, so re-answering never showed it (player report
+  // 0i3b3b5m6z2q372r). With no record (after a reload) everything restored counts as seen.
   const [undoTick, setUndoTick] = useState(0);
   const primedUndo = useRef(0);
   useEffect(() => {
     if (!g.view || undoTick === primedUndo.current) return;
     primedUndo.current = undoTick;
     const maxSeq = (xs: Array<{ seq: number }> | undefined) => (xs ?? []).reduce((m, x) => Math.max(m, x.seq), 0);
-    setHuntSeen(maxSeq(g.view.hunt?.draws));
-    setBattleSeen(g.view.lastBattle?.seq ?? 0);
-    setNoticeSeen(maxSeq(g.view.notices));
+    const was = undoRestore.current;
+    undoRestore.current = null;
+    const top = { hunt: maxSeq(g.view.hunt?.draws), battle: g.view.lastBattle?.seq ?? 0, notice: maxSeq(g.view.notices) };
+    setHuntSeen(was ? Math.min(was.hunt, top.hunt) : top.hunt);
+    setBattleSeen(was ? Math.min(was.battle, top.battle) : top.battle);
+    setNoticeSeen(was ? Math.min(was.notice, top.notice) : top.notice);
   }, [g.view, undoTick]);
   // Local play against the AI: the AI waits while a result of the human's own action is
   // still on screen (localClient aiHeld) and moves once it is clicked through — the same
@@ -367,7 +388,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     inFlight.current = true;
     setBusy(true);
     await paint();
-    try { await client.undo?.(); await g.refresh(); setSelected(null); setCharPick(null); setMoveMenu(null); setMoveDraft(null); setBlockMsg(null); setDie(null); setUndoTick((t) => t + 1); }
+    try { undoRestore.current = seenBefore.current.pop() ?? null; await client.undo?.(); await g.refresh(); setSelected(null); setCharPick(null); setMoveMenu(null); setMoveDraft(null); setBlockMsg(null); setDie(null); setUndoTick((t) => t + 1); }
     finally { inFlight.current = false; setBusy(false); }
   }, [client, g]);
 

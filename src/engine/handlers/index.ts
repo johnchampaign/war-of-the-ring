@@ -1287,7 +1287,7 @@ register('fp-char-22', {
       log(state, null, 'event', `The Dead Men score ${die} hit${die === 1 ? '' : 's'} on the Shadow Army in ${region} [${die}]`);
       notify(state, `Rolled [${die}]: ${die} hit${die === 1 ? '' : 's'} on the Shadow Army in ${rName(region)}, which must then retreat — or is destroyed, with its Nazgûl and Minions, if it cannot.`, 'Dead Men of Dunharrow');
       activateOnCompanionLand(state, 'fp', moving, region);
-      queueOrApplyEventCasualties(state, 'shadow', region, die, { kind: 'card', card: 'fp-char-22', data: { region } });
+      queueOrApplyEventCasualties(state, 'shadow', region, die, { kind: 'card', card: 'fp-char-22', data: { region } }, { card: 'fp-char-22' });
       return;
     }
     // A Companion ending his move in a friendly City wakes its Nation, as on any move.
@@ -1638,7 +1638,7 @@ for (const id of ['fp-char-19', 'fp-char-20', 'fp-char-21']) {
       freeChar();
       // Shadow chooses how the Orthanc Army absorbs the hits (Regulars vs Elites);
       // if the Army is wiped, its Nazgûl recycle and its Minions are eliminated.
-      queueOrApplyEventCasualties(state, 'shadow', 'orthanc', hits, { kind: 'entsAwake', region: 'orthanc', naz0, minions: minionsHere, boxed });
+      queueOrApplyEventCasualties(state, 'shadow', 'orthanc', hits, { kind: 'entsAwake', region: 'orthanc', naz0, minions: minionsHere, boxed }, { card: id });
     },
   });
 }
@@ -1694,7 +1694,7 @@ register('fp-str-06', {
     // The Shadow chooses which units absorb the hits, as with Dreadful Spells (report
     // 29395e6o1y6r4y5e). Not an "attack": the Nazgûl and Minions with the Army are
     // untouched even if every unit falls (Almanac). No siege case here.
-    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits, undefined, { spare: true });
+    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits, undefined, { spare: true, card: 'fp-str-06' });
   },
   // Leader-only case: nothing to strike and no Gondor unit placeable leaves no target to
   // choose. That used to skip `finalize` entirely (it only ran off the eventTarget path)
@@ -1783,7 +1783,7 @@ register('sh-char-19', {
     // is wiped out — in the open field or inside the Stronghold, which then falls to
     // the besiegers with the Companions stepping out (the shared `spare` strike).
     // The Free Peoples choose which units absorb the hits.
-    queueOrApplyEventCasualties(state, 'fp', fp, hits, undefined, { spare: true });
+    queueOrApplyEventCasualties(state, 'fp', fp, hits, undefined, { spare: true, card: 'sh-char-19' });
   },
 });
 
@@ -2619,7 +2619,7 @@ register('sh-str-01', {
       const u = state.regions[id]!.units.elves!;
       const roll = rollDiceFaces(state, Math.min(u.regular + u.elite, 5), 6); // card: max 5 dice
       const hits = roll.hits;
-      if (hits > 0) strikes.push({ side: 'fp', region: id, hits, nation: 'elves', spare: true });
+      if (hits > 0) strikes.push({ side: 'fp', region: id, hits, nation: 'elves', spare: true, card: 'sh-str-01' });
       // No card prefix (report 2d5o6e2472160r5w): the losses may be anywhere in the Stronghold's Army.
       log(state, null, 'event', `${hits === 0 ? 'No' : hits} Elven unit${hits === 1 ? '' : 's'} ${hits === 1 ? 'departs' : 'depart'} from ${id} and ${hits === 1 ? 'sails' : 'sail'} for Valinor [${roll.dice.join(' ')}]`);
       lines.push(`${rName(id)}: rolled [${roll.dice.join(' ')}], ${hits === 0 ? 'no hits' : `${hits} hit${hits === 1 ? '' : 's'}`}`);
@@ -2749,7 +2749,7 @@ register('fp-str-05', {
     // 29395e6o1y6r4y5e). Not an "attack": it "cannot affect or eliminate any Nazgûl or
     // Minions in the targeted region" (Almanac). A besieged garrison wiped out leaves
     // its Stronghold to the besieger (the shared `spare` strike handles both).
-    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits, undefined, { spare: true });
+    queueOrApplyEventCasualties(state, 'shadow', t.region!, roll.hits, undefined, { spare: true, card: 'fp-str-05' });
   },
 });
 

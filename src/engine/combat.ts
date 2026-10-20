@@ -614,8 +614,9 @@ export type CasualtyThen =
  *  at an Army (Dreadful Spells, Faramir's Rangers, The Spirit of Mordor, Return to
  *  Valinor, The Ents Awake, Dead Men of Dunharrow). `spare`: the card is not an
  *  "attack", so the Army's Characters and Nazgûl survive it (Almanac). `nation`: only
- *  that Nation's units may be lost. */
-export interface EventStrike { side: Side; region: RegionId; hits: number; nation?: Nation; spare?: boolean }
+ *  that Nation's units may be lost. `card`: the Event card dealing the hits, carried
+ *  on the casualty question so the prompt can show it (player report 5n6s1s281a4k4g65). */
+export interface EventStrike { side: Side; region: RegionId; hits: number; nation?: Nation; spare?: boolean; card?: string }
 
 /** Take several strikes in turn (each may stop to ask the owner which units fall). */
 export function runEventStrikes(state: GameState, list: EventStrike[]): void {
@@ -687,7 +688,7 @@ export function garrisonFalls(state: GameState, region: RegionId, besieger: Side
 /** Apply event-inflicted `hits` to a region's Army, prompting the owner for the
  *  absorption plan when the choice is meaningful; otherwise auto-resolve and run
  *  the follow-up immediately. */
-export function queueOrApplyEventCasualties(state: GameState, side: Side, region: RegionId, hits: number, then?: CasualtyThen, opts: { nation?: Nation; spare?: boolean } = {}): void {
+export function queueOrApplyEventCasualties(state: GameState, side: Side, region: RegionId, hits: number, then?: CasualtyThen, opts: { nation?: Nation; spare?: boolean; card?: string } = {}): void {
   if (hits <= 0) { runCasualtyThen(state, then); return; }
   // The target Army may be a garrison in the Stronghold Box, not the open field —
   // the besieger holds the field there, and hitting it would have wounded the WRONG
@@ -697,7 +698,7 @@ export function queueOrApplyEventCasualties(state: GameState, side: Side, region
   const left = absorbForced(state, f, side, hits, opts.nation); // forced losses need no prompt
   if (meaningfulForceCasualty(state, f, side, left, opts.nation)) {
     state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits: left, boxed, then: then ?? null,
-      ...(opts.nation ? { nation: opts.nation } : {}), ...(opts.spare ? { spare: true } : {}) } };
+      ...(opts.nation ? { nation: opts.nation } : {}), ...(opts.spare ? { spare: true } : {}), ...(opts.card ? { card: opts.card } : {}) } };
     return;
   }
   finishForceCasualties(state, f, side, !!opts.spare);
