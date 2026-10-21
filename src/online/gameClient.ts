@@ -56,6 +56,8 @@ export interface GameClientApi {
   aiHeld?(): boolean;
   resumeAI?(): Promise<ViewResult>;
   // Online-only (absent on the hotseat client):
+  /** The seats the server AI plays (an online game against the AI has no one to chat with). */
+  aiSeats?(): Promise<string[]>;
   listMessages?(): Promise<ChatMessage[]>;
   postMessage?(body: string): Promise<ChatMessage[]>;
   /** Realtime "a move happened" subscription (for useGame). */
@@ -139,6 +141,7 @@ export function makeGameClient(
     // error / non-OK status / unparseable body / missing id (framework helper).
     report: (body) => submitReportViaHttp(`${base}/report${q}`, body),
     logTimes: () => fetch(`${base}/log-times${q}`).then((r) => r.json()).then((r) => r.times ?? []),
+    aiSeats: () => fetch(`${base}/seats${q}`).then((r) => r.json()).then((r) => (Array.isArray(r?.ai) ? r.ai : [])),
     listMessages: () => fetch(`${base}/chat${q}`).then((r) => r.json()),
     postMessage: (body: string) => post('/chat', { message: body }),
     subscribeMoves: realtime ? realtime('moved') : undefined,

@@ -393,12 +393,22 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   }, [client, g]);
 
   // Chat is online-only (a remote opponent to talk to); the hotseat client omits
-  // the messaging methods, so it's hidden in that mode.
+  // the messaging methods, so it's hidden in that mode. An online game against the
+  // server AI has no one to talk to either, so the box goes there too once the
+  // server says the other seat is the AI (player report m8vhquj86iw9bt71).
+  const [oppIsAi, setOppIsAi] = useState(false);
+  useEffect(() => {
+    if (!client.aiSeats || !g.you) return;
+    let live = true;
+    const you = g.you;
+    client.aiSeats().then((seats) => { if (live) setOppIsAi(seats.some((s) => s !== you)); }).catch(() => {});
+    return () => { live = false; };
+  }, [client, g.you]);
   const chatClient = useMemo(
-    () => (client.listMessages && client.postMessage
+    () => (client.listMessages && client.postMessage && !oppIsAi
       ? { listMessages: client.listMessages.bind(client), postMessage: client.postMessage.bind(client) }
       : null),
-    [client],
+    [client, oppIsAi],
   );
 
   const armyActs = useMemo(() => {

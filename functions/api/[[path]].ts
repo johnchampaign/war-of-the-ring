@@ -230,6 +230,16 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
       if (sub === 'log-times' && method === 'GET') {
         return json({ times: await fetchLogTimes(env, gameId) });
       }
+      // GET /api/games/:id/seats — which seats the server AI plays ({ ai: ['shadow'] }),
+      // so the page can leave out the table-talk box when there's no one to talk to
+      // (player report m8vhquj86iw9bt71). Seat-gated like the view itself.
+      if (sub === 'seats' && method === 'GET') {
+        const meta = await makeStore(env).getGameMeta(gameId);
+        if (!meta) throw new Error('Game not found');
+        if (!Object.values(meta.tokens).includes(token)) throw new Error('Invalid token');
+        const ai = Object.entries(meta.identities ?? {}).filter(([, id]) => id.startsWith('ai:')).map(([seat]) => seat);
+        return json({ ai });
+      }
       // POST /api/games/:id/claim — attach a hub identity to this seat on join.
       if (sub === 'claim' && method === 'POST') {
         const body = await safeJson(request);
