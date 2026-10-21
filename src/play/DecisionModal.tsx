@@ -18,7 +18,7 @@ import type { WotrAction } from '../adapter/wotrAction';
 import mapData from '../../assets/map.json';
 import { characterSide, nationName } from '../engine/data';
 import { forceLeadership } from '../engine/armies';
-import { charName } from './charInfo';
+import { charName, charDef } from './charInfo';
 import { cardSideLine, inNationOrder } from './names';
 import eventCards from '../../assets/event-cards.json';
 import { RevealedDot } from './RingIcon';
@@ -180,7 +180,12 @@ export function DecisionModal({ view, you, actions, onAction, yourTurn, undo, co
                 shows by default: hovering either revealed Combat card above (or a card
                 button) previews it here, as elsewhere — defaulting to one card left the
                 other side's unreadable (player report 4z0v2o4v2b3g4930). */}
-            <CardBlurb id={hoverCard ?? eventCard ?? null} />
+            {/* A Character's own ability raising the question (Gandalf the Grey's Guide
+                draw, the Witch-king's Sorcery) shows that Character's card, as an Event
+                card's question shows the card (player report 153j5t4p65586a4j). */}
+            {!hoverCard && !eventCard && choice && CHOICE_CHARACTER[choice.kind]
+              ? <CharacterBlurb id={CHOICE_CHARACTER[choice.kind]!} />
+              : <CardBlurb id={hoverCard ?? eventCard ?? null} />}
           </>
         ) : (
           <div style={{ color: '#cc9', marginTop: 12 }}>Waiting for {sideName(pc ? (choice?.owner ?? pc.attacker) : you)} to decide…</div>
@@ -462,6 +467,28 @@ function DecisionButton({ action, disabled, onClick, onHover, guide, label }: { 
 // While an Event card resolves, this shows THE CARD (art + text) rather than
 // "Hover a card to read its effect" with nothing to hover (player report
 // 1w0z61380p6d094e); hovering another card in the modal still previews that one.
+/** The questions a Character's own ability raises, and that Character. */
+const CHOICE_CHARACTER: Record<string, string> = { guideDraw: 'gandalf-grey', sorcererDraw: 'witch-king' };
+
+/** A Character card as text (name, title, Level, abilities), in the card blurb's frame;
+ *  the card art beside it when downloaded, as for Event cards. */
+function CharacterBlurb({ id }: { id: string }) {
+  const d = charDef(id);
+  const art = useCardArt(id);
+  if (!d) return <CardBlurb id={null} />;
+  return (
+    <div style={{ ...blurb, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      {art && <img src={art} alt="" style={{ height: 120, borderRadius: 4, flexShrink: 0 }} />}
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>{d.name}{d.title && <span style={{ color: '#aa9', fontWeight: 400, fontStyle: 'italic' }}> · {d.title}</span>}</div>
+        <div style={{ fontSize: 12, color: '#d9c98a', margin: '3px 0' }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</div>
+        {d.guide && <div style={{ fontSize: 12, margin: '3px 0' }}><b>Guide:</b> {d.guide}</div>}
+        {d.abilities?.map((a, i) => <div key={i} style={{ fontSize: 12, color: '#c9c2ad', margin: '3px 0' }}><b>{a.name}:</b> {a.text}</div>)}
+      </div>
+    </div>
+  );
+}
+
 function CardBlurb({ id }: { id: string | null }) {
   const def = id ? CARD.get(id) : null;
   const art = useCardArt(id);

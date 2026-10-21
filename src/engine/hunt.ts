@@ -157,9 +157,22 @@ function specialOf(tile: HuntTileDef): { special?: 'fp' | 'shadow'; specialCard?
 /** A tile named the way players name it, for log lines ("an Eye tile", "the Shelob's
  *  Lair tile") — a discarded draw used to be logged only as "Eye / Free Peoples
  *  special", without saying which (player report 4s2j2m6m4n3k192l). */
-function tileLabel(tile: HuntTileDef): string {
+/** The tile as the draw line names it: "an Eye", "a 2 (reveal)", "a die tile". */
+function drawnLabel(tile: HuntTileDef): string {
   if (tile.card) return `the “${tile.card}” tile`;
-  return tile.value === 'eye' ? 'an Eye tile' : tile.value === 'die' ? 'a die tile' : `a “${tile.value}” tile`;
+  if (tile.value === 'eye') return 'an Eye';
+  if (tile.value === 'die') return 'a die tile';
+  return `a ${tile.value}${tile.reveal ? ' (reveal)' : ''}`;
+}
+/** Where a no-roll draw came from, as the draw line's parenthetical: the Stronghold
+ *  for a reveal ("revealed through Moria" → "Moria"), else the card's name. */
+const drawSource = (source?: string): string =>
+  source ? ` (${source.replace(/^revealed (through|in) /, '')})` : '';
+/** Every Hunt tile drawn gets its own line, before its effects (player report
+ *  0i384x5e5e3j6m2v: only the damage used to show). */
+function logDraw(state: GameState, tile: HuntTileDef, damage: number, source?: string, tail = ''): void {
+  const dmg = tile.value === 'eye' || tile.value === 'die' ? ` — Hunt damage ${damage}` : '';
+  log(state, null, 'hunt', `Shadow draws ${drawnLabel(tile)}${drawSource(source)}${tail || dmg}`);
 }
 
 /** Apply a drawn tile. Damage>0 with Companions present sets a PendingChoice;
@@ -177,6 +190,7 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   if (typeof tile.value === 'number') damage = tile.value;
   else if (tile.value === 'eye') damage = successes;
   else if (tile.value === 'die') damage = withRng(state, (rng) => rng.rollDie(6));
+  logDraw(state, tile, damage, extra ? opts.source : undefined);
 
   // Gollum's Guide ability (passive): a standard NUMBERED tile's Reveal icon does
   // not reveal the Fellowship. Evaluated HERE only for the draw record and for the
@@ -242,8 +256,9 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   if (fs.companions.length > 0 || huntReductionAvailable(state, reveal)) {
     state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, revealIcon, numbered, ...(opts.source ? { source: opts.source } : {}) } };
   } else {
+    const before = fs.corruption;
     fs.corruption = Math.min(12, fs.corruption + damage);
-    logHuntResolved(state, damage);
+    logHuntResolved(state, damage, before);
     if (reveal) beginReveal(state);
   }
 }
@@ -400,7 +415,7 @@ const extraTileDiscarded = (tile: HuntTileDef, ref: TileRef): boolean =>
   tile.value === 'eye' || ('spec' in ref && ref.spec.startsWith('fp-'));
 function applyExtraTile(state: GameState, tile: HuntTileDef, ref: TileRef, opts: HuntOpts): void {
   if (extraTileDiscarded(tile, ref)) {
-    log(state, null, 'hunt', `${opts.source ?? 'Extra Hunt'}: drew ${tileLabel(tile)}, discarded without effect`);
+    logDraw(state, tile, 0, opts.source ?? 'Extra Hunt', ', discarded without effect');
     // Record the draw anyway, so the Hunt popup shows what came up and why nothing
     // happened (player report 1g6i3l5t05293p4q).
     const prev = state.hunt.draws ?? [];
@@ -555,20 +570,22 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
   // revealed on purpose), so record what actually happened.
   const draws = state.hunt.draws;
   if (draws?.length) draws[draws.length - 1]!.reveal = reveal;
+  const before = fs.corruption;
   if (damage > 0) fs.corruption = Math.min(12, fs.corruption + damage);
-  logHuntResolved(state, damage);
+  logHuntResolved(state, damage, before);
   if (reveal) beginReveal(state); // may set the revealMove choice — after clearing this one
 }
-/** The closing line of every Hunt. Says what the remaining damage actually cost and
- *  the running total — a long Hunt (redraw → sacrifice → Guide ability) used to end
- *  on a bare "corruption N", so the player couldn't check the arithmetic (report) —
- *  in the shared Corruption voice (player report 5540322n1d113g2o). A reveal is no
- *  longer a clause here: it gets its own "The Fellowship is revealed in X" line once
- *  the figure has actually moved (player report 1o362m1a3w0e5658), so this is logged
- *  BEFORE beginReveal. */
-function logHuntResolved(state: GameState, damage: number): void {
-  const taken = damage > 0 ? `The Ring-bearers suffer ${damage} Corruption` : 'no Corruption';
-  log(state, null, 'hunt', `Hunt resolved — ${taken} (Total: ${state.fellowship.corruption})`);
+/** The closing line of every Hunt: what the remaining damage cost, with the track
+ *  before and after so the arithmetic can be checked (player reports 5540322n1d113g2o,
+ *  0i384x5e5e3j6m2v). Not "Hunt resolved": a reveal's placement and any Stronghold tiles
+ *  still follow. A reveal gets its own "The Fellowship is revealed in X" line once the
+ *  figure has moved (player report 1o362m1a3w0e5658), so this is logged BEFORE
+ *  beginReveal. `before` is the Corruption before this damage was added. */
+function logHuntResolved(state: GameState, damage: number, before = state.fellowship.corruption): void {
+  const now = state.fellowship.corruption;
+  log(state, null, 'hunt', damage > 0 && now > before
+    ? `The Ring-bearers suffer ${now - before} Corruption for using the Ring (${before} → ${now})`
+    : `The Ring-bearers suffer no Corruption (${now})`);
 }
 /** "The Fellowship is revealed in X" — logged where the figure ends up (after the
  *  revealMove, or in place), mirroring the declaration line. */

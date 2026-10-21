@@ -3,7 +3,7 @@
 // redacted `view` and submits actions; it never owns rules and never drives the
 // opponent. Also exposes the standard-kit messaging (chat) + realtime subscribe
 // factories; the local hotseat client omits them (no remote opponent to push to).
-import { subscribeSupabaseRealtime } from 'digital-boardgame-framework/client/realtime';
+import { createClient } from '@supabase/supabase-js';
 import { submitReportViaHttp } from 'digital-boardgame-framework/client';
 import type { ChatMessage } from 'digital-boardgame-framework/client';
 import type { GameState, Side } from '../engine/types';
@@ -69,6 +69,26 @@ export interface GameClientApi {
 const SB_URL = import.meta.env.VITE_SUPABASE_URL;
 const SB_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+/** The framework's realtime subscriber (`subscribeSupabaseRealtime`), with one change:
+ *  each subscription's Supabase client gets its own auth storage key. A game holds two
+ *  (moves + chat) and remounts re-subscribe, and clients sharing the default key made
+ *  supabase-js print "Multiple GoTrueClient instances detected" in the console (player
+ *  report obsbmrb07sbro6a9). The channel carries only a nudge to re-fetch the redacted
+ *  view, never game state, and no session is kept, so the key is purely a label. */
+let realtimeClients = 0;
+function subscribeRealtime(url: string, anonKey: string, gameId: string, event: 'moved' | 'message') {
+  return (onChange: () => void) => {
+    const client = createClient(url, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `wotr-realtime-${++realtimeClients}` },
+    });
+    const channel = client.channel(`game:${gameId}`).on('broadcast', { event }, () => onChange()).subscribe();
+    return () => {
+      try { channel.unsubscribe(); } catch { /* ignore */ }
+      try { client.removeAllChannels(); } catch { /* ignore */ }
+    };
+  };
+}
+
 export function makeGameClient(
   gameId: string, token: string, getIdentityToken?: () => string | undefined,
 ): GameClientApi {
@@ -97,7 +117,7 @@ export function makeGameClient(
     }).then((r) => r.json());
 
   const realtime = SB_URL && SB_ANON
-    ? (event: 'moved' | 'message') => subscribeSupabaseRealtime({ supabaseUrl: SB_URL, anonKey: SB_ANON, gameId, event })
+    ? (event: 'moved' | 'message') => subscribeRealtime(SB_URL, SB_ANON, gameId, event)
     : null;
 
   return {

@@ -1925,8 +1925,11 @@ export function combatStep(state: GameState): void {
         const defSeg: Seg = { roll: dRoll, rolled: defHits, hits: def, card: pc.defenderCard, mods: dMods, foeCard: pc.attackerCard, foeMods: aMods,
           extra: dMum, cancelled: aCancel, foeBackfire: aRoll.backfire ?? 0,
           diceCap: pc.defDicePenalty ? `${pc.defDicePenalty} fewer ${pc.defDicePenalty === 1 ? 'die' : 'dice'}: ${t(DEF_DICE_PENALTY_CARD)}` : undefined };
-        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(atkSeg)}; defender ${fmt(defSeg)}`,
+        // One line per side (player report tkcy5pileap30bhk); the round's dice record
+        // rides on the attacker's line only, so the dice statistics count it once.
+        log(state, null, 'combat', `Round ${pc.round + 1} dice — attacker ${fmt(atkSeg)}`,
           { round: pc.round + 1, region: pc.to, attackerSide: pc.attacker, attacker: { ...aRoll, hits: atk, rolled: atkHits }, defender: { ...dRoll, hits: def, rolled: defHits } });
+        log(state, null, 'combat', `Round ${pc.round + 1} dice — defender ${fmt(defSeg)}`);
         for (const k of kills) {
           log(state, null, 'combat', k.line);
           if (k.card) state.log[state.log.length - 1]!.card = k.card;
@@ -2513,7 +2516,7 @@ export function resolveWhiteRider(state: GameState, forfeit: boolean): void {
   state.pendingCombat!.whiteRiderForfeit = forfeit;
   // Logged, so the battle record says why the Nazgûl lost their Leadership (player
   // report 542d4c6j3o1z5o3n).
-  if (forfeit) log(state, null, 'combat', 'Gandalf the White rides forth as The White Rider', { side: 'fp' });
+  if (forfeit) log(state, null, 'combat', 'Gandalf the White rides forth as the White Rider', { side: 'fp' });
   state.pendingChoice = null;
 }
 

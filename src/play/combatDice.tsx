@@ -32,7 +32,7 @@ export function RollRow({ label, roll, color }: { label: string; roll?: Roll; co
   const rt = roll.rerollTarget ?? roll.target;
   return (
     <div style={{ margin: '3px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-      <span style={{ width: LABEL_W, fontSize: 12, color }}>{label}</span>
+      <span style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, color }}>{label}</span>
       <span style={{ fontSize: 11, color: '#887', marginRight: 4 }}>(hits {roll.target}+)</span>
       {roll.dice.map((n, i) => <CDie key={i} n={n} target={roll.target} />)}
       {/* The re-roll's threshold always shows, so the attacker's and defender's dice line
@@ -61,9 +61,15 @@ export function CardRollRows({ rolls, round }: { rolls?: CardRoll[]; round?: num
         // unsaid; the round is named only when it differs from the roll shown above it
         // (a pre-combat attack in the next round, before that round's dice are thrown).
         const notes = [r.when === 'after' ? 'after casualties' : '', round !== undefined && r.round !== round ? `round ${r.round + 1}` : ''].filter(Boolean);
+        // A card's name is wider than the label column ("Sudden Strike"), so with dice
+        // it sits on its own line above them and the dice row keeps the column empty —
+        // the dice then start exactly where the Combat roll's do (player report
+        // 34l2c5vhcd81r7fk). An automatic hit has no dice to line up and stays on one line.
         return (
-          <div key={i} style={{ margin: '3px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }} data-testid="card-roll">
-            <span style={{ minWidth: LABEL_W, fontSize: 12, color }}>{title}</span>
+          <div key={i} data-testid="card-roll">
+            {r.dice.length > 0 && <div style={{ fontSize: 12, color, marginTop: 3 }}>{title}</div>}
+          <div style={{ margin: '3px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+            <span style={{ width: r.dice.length ? LABEL_W : undefined, minWidth: LABEL_W, flexShrink: 0, fontSize: 12, color }}>{r.dice.length ? '' : title}</span>
             {r.dice.length ? <span style={{ fontSize: 11, color: '#887', marginRight: 4 }}>(hits {r.target}+)</span> : null}
             {r.dice.length
               ? r.dice.map((n, j) => <CDie key={j} n={n} target={r.target} />)
@@ -72,6 +78,7 @@ export function CardRollRows({ rolls, round }: { rolls?: CardRoll[]; round?: num
               {r.dice.length ? `→ ${r.hits} hit${r.hits === 1 ? '' : 's'}` : `${r.hits} automatic hit${r.hits === 1 ? '' : 's'}`}
             </span>
             {notes.length > 0 && <span style={{ fontSize: 11, color: '#887', marginLeft: 4 }}>({notes.join(', ')})</span>}
+          </div>
           </div>
         );
       })}

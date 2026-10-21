@@ -220,7 +220,7 @@ export function moveFellowship(state: GameState, byEvent = false): void {
     // step the Fellowship was LEAVING — the first move in Mordor read "step 0" while the
     // track, the Hunt Box and the status area all correctly showed 1 (player report).
     // `applyDrawnTile` logs the step the Fellowship actually ends on.
-    log(state, null, 'fellowship', 'The Fellowship moves on the Mordor Track');
+    log(state, null, 'fellowship', 'The Fellowship moves'); // the step it reaches is logged by the tile (report 2a103h3x601k4v2l)
     resolveMordorStep(state, !byEvent); // adds the FP die to the Hunt Box internally
   } else {
     fs.progress += 1;

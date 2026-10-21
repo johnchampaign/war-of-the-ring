@@ -28,7 +28,7 @@ function win(state: GameState, side: Side, reason: string): void {
 export function checkRingVictory(state: GameState): boolean {
   if (state.winner) return true;
   const fs = state.fellowship;
-  if (fs.corruption >= 12) { win(state, 'shadow', 'The Ring-bearers are corrupted (12)'); return true; }
+  if (fs.corruption >= 12) { win(state, 'shadow', 'The Ring-bearers succumb to the Ring (12 Corruption)'); return true; }
   if (fs.mordor === 5 && fs.corruption < 12) { win(state, 'fp', 'The Ring is destroyed at the Crack of Doom'); return true; }
   return false;
 }
@@ -44,7 +44,7 @@ export function checkMilitaryVictory(state: GameState): boolean {
   // simultaneous pair is won by the SHADOW. This read used to be inverted, handing
   // the game to the FP when both thresholds were met on the same Victory Check
   // (player report: Shadow hit 11 VP the turn the FP reached 4 and still lost).
-  if (state.victoryPoints.shadow >= 10) { win(state, 'shadow', `Military victory (${state.victoryPoints.shadow} VP)`); return true; }
-  if (state.victoryPoints.fp >= 4) { win(state, 'fp', `Military victory (${state.victoryPoints.fp} VP)`); return true; }
+  if (state.victoryPoints.shadow >= 10) { win(state, 'shadow', `The Shadow conquers Middle-earth (${state.victoryPoints.shadow} Victory Points)`); return true; }
+  if (state.victoryPoints.fp >= 4) { win(state, 'fp', `Sauron is banished from Middle-earth (${state.victoryPoints.fp} Victory Points)`); return true; }
   return false;
 }

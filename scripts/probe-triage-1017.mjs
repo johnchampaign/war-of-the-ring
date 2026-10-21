@@ -59,7 +59,7 @@ function suddenStrike(forfeit) {
   const msgs = s.log.map((e) => e.msg ?? '');
   const line = msgs.find((m) => m.includes('additional attack (before the Combat roll)')) ?? '';
   const dice = (line.match(/\[([^\]]*)\]/)?.[1] ?? '').split(' ').filter(Boolean).length;
-  return { asked, dice, line, rode: msgs.some((m) => m.includes('rides forth as The White Rider')) };
+  return { asked, dice, line, rode: msgs.some((m) => m.includes('rides forth as the White Rider')) };
 }
 {
   console.log('\n=== Sudden Strike with Gandalf the White and 2 Leaders ===');

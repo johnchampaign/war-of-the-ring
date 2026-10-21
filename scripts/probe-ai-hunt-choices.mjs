@@ -104,8 +104,8 @@ const mordorHit = (damage, corruption, companions, guide) => {
   // Read the Hunt's own log line: resolving the choice also ends the action, and this
   // stripped-down state then rolls the turn over (which bills the Mordor Track's own
   // +1 for a turn with no Fellowship move) — that Corruption is not the tile's.
-  const line = after.log.map((e) => e.msg).find((m) => m.startsWith('Hunt resolved')) ?? '';
-  check('the tile cost no Corruption — the Level-3 casualty covered all 3', line.includes('— no Corruption (Total:'), line);
+  const line = after.log.map((e) => e.msg).find((m) => / Corruption for using the Ring | no Corruption \(/.test(m)) ?? '';
+  check('the tile cost no Corruption — the Level-3 casualty covered all 3', line.includes('suffer no Corruption ('), line);
 }
 {
   // A small hit spends a body too — but not necessarily the Guide, who is the only one
@@ -129,10 +129,10 @@ const mordorHit = (damage, corruption, companions, guide) => {
   while (after.pendingChoice?.kind === 'huntDamage') {
     after = wotrAdapter.applyAction(after, decide(after), 'fp');
   }
-  const line = after.log.map((e) => e.msg).find((m) => m.startsWith('Hunt resolved')) ?? '';
+  const line = after.log.map((e) => e.msg).find((m) => / Corruption for using the Ring | no Corruption \(/.test(m)) ?? '';
   // 10 at most: Strider absorbs 3 of the 6; since 2026-10-13 the Hobbit Guides who
   // follow him step out of the Fellowship to take 1 each as well (report 5w0j532f3c4x4p6w).
-  const total = Number(/\(Total: (\d+)\)/.exec(line)?.[1] ?? 99);
+  const total = Number(/(?:→ |no Corruption \()(\d+)\)/.exec(line)?.[1] ?? 99);
   check('the Ring-bearers survive it — Strider absorbed 3 of the 6, so 10 or less, not 13', total <= 10, line);
 }
 {
@@ -194,7 +194,7 @@ console.log('\n=== a lethal hit spends the free reductions before conceding ==='
   // "you neither moved nor hid" Corruption lands on top — the Hunt itself resolved at
   // 11, which is the reduction being tested.)
   check('the Fellowship is revealed and the Hunt resolves at 11, not 12',
-    !after.fellowship.hidden && after.log.some((e) => e.msg.includes('(Total: 11)')),
+    !after.fellowship.hidden && after.log.some((e) => e.msg.includes('for using the Ring (9 → 11)')),
     after.log.filter((e) => e.kind === 'hunt').slice(-1)[0]?.msg ?? '');
 }
 {

@@ -47,14 +47,15 @@ export function activateNation(state: GameState, n: Nation, trigger: { region?: 
 /** Advance a nation toward At War. Passive nations stop one short of At War.
  *  `trigger` carries the advance's SOURCE so a persistent card can react to it
  *  (Threats and Promises discards itself on an attack- or Companion-driven advance). */
-export function advancePolitical(state: GameState, n: Nation, steps = 1, trigger: { viaAttack?: boolean; viaCompanion?: boolean } = {}): void {
+export function advancePolitical(state: GameState, n: Nation, steps = 1, trigger: { viaAttack?: boolean; viaCompanion?: boolean; ability?: string } = {}): void {
   const ns = state.nations[n];
   const floor = ns.active ? 0 : 1;
   const newStep = Math.max(floor, ns.step - steps);
   if (newStep !== ns.step) {
     ns.step = newStep;
     const s = nationSubject(n);
-    log(state, null, 'politics', `${s.name} ${s.plural ? 'advance' : 'advances'} to step ${ns.step}${ns.step === 0 ? ' (At War)' : ''}`);
+    // A Character ability names itself in parentheses (player report 2n372n3f3i4f4a24).
+    log(state, null, 'politics', `${s.name} ${s.plural ? 'advance' : 'advances'} to step ${ns.step}${ns.step === 0 ? ' (At War)' : ''}${trigger.ability ? ` (${trigger.ability})` : ''}`);
     if (sideOfNation(n) === 'fp' && (trigger.viaAttack || trigger.viaCompanion)) discardThreatsAndPromises(state, !!trigger.viaAttack);
   }
 }

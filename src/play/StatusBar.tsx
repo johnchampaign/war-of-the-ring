@@ -138,7 +138,7 @@ function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; c
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help', background: isGuide ? '#2c2616' : 'transparent' }}>
                 <span style={{ ...charNameCell, color: isGuide ? '#ffd86a' : '#e9e1cc' }}>{isGuide ? '★ ' : ''}{charName(id)}</span>
-                {d && <span style={{ ...statsCell, color: '#b9b29c' }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
+                {d && <span style={{ ...statsCell, color: '#b9b29c' }}>Level <LevelNum level={d.level} />{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
               </div>
             );
           })}
@@ -163,16 +163,24 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
   // (player report v0uv08bixzih45ey).
   const gone = new Set([...(view.characters?.entered ?? []), ...(view.characters?.eliminated ?? [])]);
   const waiting = OFF_MAP_CHARS.filter((id) => !gone.has(id) && !(id in (view.characters?.inPlay ?? {})));
+  // The fallen live here too, as the last section: one "Characters" chip for every
+  // Character not in the Fellowship (player report a741xzwjnybkyjjd — the chip was
+  // called "On the map" yet listed those off it, and Fallen was a chip of its own).
+  // Casualties are open information on the tabletop: the figure comes off the board
+  // where both players can see it.
+  const fallen = view.characters?.eliminated ?? [];
+  const section = (first: boolean): React.CSSProperties => ({ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: first ? 0 : 6, padding: '0 6px' });
   // Always shown, at 0 when empty: a chip appearing mid-game shoved its neighbours along
   // (player report 6k120d701i4b1e52).
   return (
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
-        title="Characters on the map (Companions and Minions), and those not yet in play with what brings them in — hover a name for its card">
-        <Reserve sample="On the map 99 ▾">On the map {entries.length} {open ? '▴' : '▾'}</Reserve>
+        title="Characters outside the Fellowship: on the map (Companions and Minions), not yet in play (with what brings them in), and fallen — hover a name for its card">
+        <Reserve sample="Characters 99 ▾">Characters {entries.length} {open ? '▴' : '▾'}</Reserve>
       </button>
       {open && (
         <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
+          {entries.length > 0 && <div style={section(true)}>On the map</div>}
           {entries.map(([id, region]) => {
             const d = charDef(id);
             const shadow = isMinion(id);
@@ -184,7 +192,7 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
                 <span style={{ ...sideTagCell, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SA' : 'FP'}</span>
                 <span style={charNameCell}>{charName(id)}</span>
-                <span style={{ ...statsCell, color: '#b9b29c' }}>{d ? `Level ${d.level === 'inf' ? '∞' : d.level}${d.leadership ? ` · Leadership ${d.leadership}` : ''}` : ''}</span>
+                <span style={{ ...statsCell, color: '#b9b29c' }}>{d ? <>Level <LevelNum level={d.level} />{d.leadership ? ` · Leadership ${d.leadership}` : ''}</> : ''}</span>
                 {/* The region is an engine id here; the player should read its NAME
                     ("Western Emyn Muil", not western-emyn-muil — player report
                     5l706l6q120i354l). */}
@@ -193,7 +201,7 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
             );
           })}
           {waiting.length > 0 && <>
-            <div style={{ fontSize: 10, color: '#887', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: entries.length ? 6 : 0, padding: '0 6px' }}>Off the map — not yet in play</div>
+            <div style={section(!entries.length)}>Not yet in play</div>
             {waiting.map((id) => (
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ padding: '3px 6px', borderRadius: 5, cursor: 'help', maxWidth: 380, whiteSpace: 'normal' }}>
@@ -205,42 +213,22 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
               </div>
             ))}
           </>}
+          {fallen.length > 0 && <>
+            <div style={section(!entries.length && !waiting.length)}>☠ Fallen — never return</div>
+            {fallen.map((id) => {
+              const d = charDef(id);
+              const shadow = isMinion(id);
+              return (
+                <div key={id} onMouseEnter={() => onHoverChar?.(id)}
+                  style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
+                  <span style={{ ...sideTagCell, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SA' : 'FP'}</span>
+                  <span style={{ ...charNameCell, color: '#c9bfae', textDecoration: 'line-through' }}>{charName(id)}</span>
+                  {d && <span style={{ ...statsCell, color: '#8d8677' }}>Level <LevelNum level={d.level} />{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
+                </div>
+              );
+            })}
+          </>}
           <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Hover a name for its Character card</div>
-        </div>
-      )}
-    </span>
-  );
-}
-
-// Characters removed from play — eliminated Companions and Minions (player report,
-// twice: "would it be possible for lost companions/minions to be listed somewhere for
-// confirmation/reference purposes?"). Casualties are open information on the tabletop:
-// the figure comes off the board where both players can see it.
-function FallenRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id: string | null) => void }) {
-  const [open, setOpen] = useState(false);
-  const { ref, flipStyle } = useEdgeFlip(open);
-  const ids = view.characters?.eliminated ?? [];
-  return (
-    <span style={{ position: 'relative' }}>
-      <button onClick={() => ids.length && setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: ids.length ? 'pointer' : 'default', font: 'inherit', color: '#e9b0a8' }}
-        title="Companions and Minions eliminated so far (out of the game) — hover a name for its card">
-        <Reserve sample="☠ Fallen 99 ▾">☠ Fallen {ids.length} {ids.length ? (open ? '▴' : '▾') : ''}</Reserve>
-      </button>
-      {open && (
-        <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
-          {ids.map((id) => {
-            const d = charDef(id);
-            const shadow = isMinion(id);
-            return (
-              <div key={id} onMouseEnter={() => onHoverChar?.(id)}
-                style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help' }}>
-                <span style={{ ...sideTagCell, color: shadow ? '#e6857f' : '#7fa8e6' }}>{shadow ? 'SA' : 'FP'}</span>
-                <span style={{ ...charNameCell, color: '#c9bfae', textDecoration: 'line-through' }}>{charName(id)}</span>
-                {d && <span style={{ ...statsCell, color: '#8d8677' }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
-              </div>
-            );
-          })}
-          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Eliminated figures never return · hover a name for its card</div>
         </div>
       )}
     </span>
@@ -324,8 +312,8 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elven
   const fs = view.fellowship;
   // Fixed rows, each holding the same chips for the whole game, so nothing reflows from
   // one row into the next as the game goes on (player reports 6k120d701i4b1e52,
-  // 311n5k0z624a275e): the game; the score and the Hunt bag; the Guide with the
-  // Fellowship; the Characters on the map and fallen, and the discards; the Elven Rings
+  // 311n5k0z624a275e): the game; the score; the Guide with the Fellowship; the
+  // Characters, the discards and the Hunt bag (report a741xzwjnybkyjjd); the Elven Rings
   // on their own; then the controls. Each row fits the side column's width.
   return (
     <div style={bar}>
@@ -337,7 +325,6 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elven
       <div style={barRow}>
         <span style={{ ...pill, background: '#2f4f9e' }}><Reserve sample="Free Peoples VP 99">Free Peoples VP {view.victoryPoints.fp}</Reserve></span>
         <span style={{ ...pill, background: '#a83232' }}><Reserve sample="Shadow VP 99">Shadow VP {view.victoryPoints.shadow}</Reserve></span>
-        <HuntTilesBrowser view={view} />
       </div>
       {/* The Hunt Box, Corruption, Progress / Mordor step and Hidden / Revealed live in
           the Hunt overlay on the board, grouped with the Hunt they belong to, not here
@@ -352,8 +339,8 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elven
           above the actions (player report 0e4z5e1m4z4p3t32). */}
       <div style={barRow}>
         <OnMapRoster view={view} onHoverChar={onHoverChar} />
-        <FallenRoster view={view} onHoverChar={onHoverChar} />
         <DiscardBrowser view={view} onHoverCard={onHoverCard} />
+        <HuntTilesBrowser view={view} />
       </div>
       <div style={barRow}>
         <ElvenRingsPill view={view} actions={elvenActions} onAction={onAction} />
@@ -420,6 +407,17 @@ const charNameCell: React.CSSProperties = { fontWeight: 600, flexShrink: 0, whit
 // floors so every row's columns start at the same x, and never wrapped ("Leadership /
 // 1" on its own line — player report 0q171e05196c6t53).
 const sideTagCell: React.CSSProperties = { flexShrink: 0, fontSize: 10, fontWeight: 700, minWidth: 16 };
+/** A Character's Level, in a slot as wide as the widest value ("∞", Gollum's), so the
+ *  "· Leadership" after it lines up down the roster (player report 726z3m6t5q666v3h).
+ *  The hidden "∞" shares the grid cell and sets the width in whatever font is used. */
+function LevelNum({ level }: { level: number | string }) {
+  return (
+    <span style={{ display: 'inline-grid' }}>
+      <span style={{ gridArea: '1 / 1' }}>{level === 'inf' ? '∞' : level}</span>
+      <span aria-hidden style={{ gridArea: '1 / 1', visibility: 'hidden' }}>∞</span>
+    </span>
+  );
+}
 const statsCell: React.CSSProperties = { fontSize: 11, flexShrink: 0, whiteSpace: 'nowrap', minWidth: 130 };
 // Panels wrap their text (they used to be `nowrap`, so a long row overflowed the
 // panel sideways and grew it a horizontal scrollbar of its own — report 2r2g) and

@@ -12,7 +12,7 @@ import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef, theNation, nationsArePlural } from '../data';
-import { moveFellowship, findCharacterRegion, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
+import { moveFellowship, hideFellowship, findCharacterRegion, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS, type RangeOpts } from '../charMove';
 import { log, logCardDraw, notify, sideDoes, sideName, sufferCorruption, shedCorruption, andList } from '../log';
 
@@ -520,7 +520,10 @@ register('fp-char-10', {
     return state.fellowship.hidden ? [{ mode: 'move' }, { mode: 'none' }] : [{ mode: 'hide' }, { mode: 'none' }];
   },
   applyTarget: (state, _side, t) => {
-    if (t.mode === 'hide') { state.fellowship.hidden = true; log(state, null, 'fellowship', 'There Is Another Way: Fellowship hidden (Gollum)'); }
+    // Through hideFellowship, like every other hide: it also marks the turn as one the
+    // Fellowship acted in, which the Mordor Track's end-of-turn Corruption reads (player
+    // reports 2h071a3f5o12180m, 1n731y0v682u2d3v).
+    if (t.mode === 'hide') hideFellowship(state);
     // 'move' is deferred to finalize (it raises a Hunt choice); 'none' does nothing.
   },
   finalize: (state, _side, applied) => { if (applied.some((t) => t.mode === 'move')) moveFellowship(state, true); },

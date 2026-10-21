@@ -1587,7 +1587,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       <NoticePopup view={g.view} seen={noticeSeen} onSeen={setNoticeSeen} />
       {settings.recap === 'show' && <TurnSummary view={g.view} yourTurn={g.yourTurn} you={g.you as Side | null} onOpenLog={() => setLogOpen(true)} hold={resultPending} />}
       {g.gameOver && g.ranked && (
-        <p style={{ margin: '8px 12px', fontSize: 14, color: g.ranked.recorded ? '#6c6' : '#caa' }}>
+        // Floats over the board rather than taking a row of the layout, which shrank the
+        // map when it appeared (player report x98udjmo181kgion).
+        <p style={{ position: 'fixed', left: 12, bottom: 12, zIndex: 60, margin: 0, padding: '6px 12px', borderRadius: 8, background: '#1c1710ee', border: '1px solid #5a4a2a', pointerEvents: 'none', fontSize: 14, color: g.ranked.recorded ? '#6c6' : '#caa' }}>
           {g.ranked.recorded
             ? '✓ Recorded to the leaderboard.'
             : g.ranked.reason === 'one-player'

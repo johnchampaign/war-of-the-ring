@@ -95,10 +95,10 @@ function drawStrongholdHunts(state: GameState, strongholds: RegionId[]): void {
 // Companion political abilities (High Warden / Prince of Mirkwood / Dwarf of Erebor):
 // while the Companion stands in their own unconquered Settlement, any Action die may
 // advance their Nation one step. Returns the legal companionMuster actions.
-const COMPANION_POLITICS: { companion: string; nation: Nation; at: (r: RegionId) => boolean }[] = [
-  { companion: 'boromir', nation: 'gondor', at: (r) => REGIONS[r]!.nation === 'gondor' && (REGIONS[r]!.settlement === 'City' || REGIONS[r]!.settlement === 'Stronghold') },
-  { companion: 'legolas', nation: 'elves', at: (r) => REGIONS[r]!.nation === 'elves' && REGIONS[r]!.settlement === 'Stronghold' },
-  { companion: 'gimli', nation: 'dwarves', at: (r) => r === 'erebor' },
+const COMPANION_POLITICS: { companion: string; nation: Nation; ability: string; at: (r: RegionId) => boolean }[] = [
+  { companion: 'boromir', nation: 'gondor', ability: 'High Warden of the White Tower', at: (r) => REGIONS[r]!.nation === 'gondor' && (REGIONS[r]!.settlement === 'City' || REGIONS[r]!.settlement === 'Stronghold') },
+  { companion: 'legolas', nation: 'elves', ability: 'Prince of Mirkwood', at: (r) => REGIONS[r]!.nation === 'elves' && REGIONS[r]!.settlement === 'Stronghold' },
+  { companion: 'gimli', nation: 'dwarves', ability: 'Dwarf of Erebor', at: (r) => r === 'erebor' },
 ];
 // Voice of Saruman: while Orthanc is Shadow-held + unbesieged and Saruman is in play, a
 // Muster die may EITHER recruit one Isengard Regular in every Isengard Settlement, OR
@@ -1044,7 +1044,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const r = pa && findCharacterRegion(state, pa.companion);
       if (!pa || !r || !pa.at(r) || settlementController(state, r) !== 'fp') throw new Error('Companion ability condition not met');
       if (!consumePreferred(state, 'fp', [...new Set(state.dice.fp)], action.die)) throw new Error('No Action die');
-      advancePolitical(state, pa.nation, 1, { viaCompanion: true }); passResolutionTurn(state, actor); break;
+      advancePolitical(state, pa.nation, 1, { viaCompanion: true, ability: pa.ability }); passResolutionTurn(state, actor); break;
     }
     case 'useElvenRing': {
       requirePhase(state, 'actionResolution');
@@ -1128,12 +1128,15 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       if (actor !== 'shadow' || !voiceOfSarumanActive(state)) throw new Error('Voice of Saruman not available');
       if (action.mode === 'upgrade' ? !canSarumanUpgrade(state) : !canSarumanRecruit(state)) throw new Error('Voice of Saruman option not available');
       if (!consumePreferred(state, 'shadow', ['muster', 'armyMuster', 'will'], action.die)) throw new Error('No Muster die');
+      // The ability announces itself on its own line, like the White Rider (player
+      // report 2n372n3f3i4f4a24); the recruits / upgrade follow.
+      log(state, null, 'muster', 'The Voice of Saruman echoes from Orthanc');
       if (action.mode === 'upgrade') {
         const n = sarumanUpgradeCount(state); // 2 when both are there, else as many as can be done
         const u = state.regions['orthanc']!.units.isengard!; // ≥1 Regular (checked above)
         u.regular -= n; u.elite += n;
         state.reinforcements.isengard.regular += n; state.reinforcements.isengard.elite -= n;
-        log(state, null, 'muster', `The Voice of Saruman: ${n} Isengard Regular${n === 1 ? '' : 's'} in Orthanc replaced with Elite${n === 1 ? '' : 's'}`);
+        log(state, null, 'muster', `Shadow replaces ${n === 1 ? 'an Isengard Regular' : `${n} Isengard Regulars`} in Orthanc with ${n === 1 ? 'an Elite' : 'Elites'}`);
       } else {
         for (const id of isengardSettlements()) {
           if (settlementController(state, id) === 'shadow') recruit(state, 'isengard', id, 1, 0, { ignoreAtWar: true });
