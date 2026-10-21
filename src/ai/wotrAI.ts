@@ -556,6 +556,9 @@ function enemyNear(state: GameState, id: RegionId, enemy: Side, n: number): bool
  *  Army wandered within reach, and both the military and the Hunt game paid for
  *  it. Hence the narrow trigger: an Army that can attack NEXT action, and only a
  *  lone defender. */
+// Tried 2026-10-20: an empty Settlement threatened only by an ADJACENT enemy (reach 1) —
+// an Army two away needs two actions to arrive (report 1m2g470z0a5k6k45). Shadow −17
+// (heuristic) and −27 (human-like) per 4000: the early garrison pays. Kept at 2.
 function garrisonGap(state: GameState, id: RegionId, actor: Side, reach = 2): number {
   const def = REGIONS[id];
   if (!def || (def.vp ?? 0) <= 0) return 0;
@@ -813,8 +816,15 @@ export function campaignTarget(state: GameState, actor: Side): RegionId | null {
  *  Saruman now and they bring the White straight in. */
 function whiteCouldAnswerSaruman(state: GameState): boolean {
   const firstMinion = !['witch-king', 'mouth-of-sauron'].some((m) => state.characters.entered.includes(m));
-  return firstMinion && state.dice.fp.includes('will') && !state.characters.entered.includes('gandalf-white')
-    && !state.fellowship.companions.includes('gandalf-grey');
+  const fp = state.dice.fp;
+  if (!firstMinion || !fp.includes('will') || state.characters.entered.includes('gandalf-white')) return false;
+  if (!state.fellowship.companions.includes('gandalf-grey')) return true;
+  // Still in the Fellowship, Gandalf can leave it THIS turn — separated, or lost to the
+  // Hunt as the Fellowship moves — given a Character die: a second Will die, a Character
+  // die, or one an Elven Ring makes. The Will die then brings the White (report
+  // 0o284w65081k1l24).
+  const ring = state.elvenRings.includes('fp') && !state.flags.fpUsedElvenRingThisTurn;
+  return fp.filter((f) => f === 'will').length >= 2 || fp.includes('character') || (ring && fp.length >= 2);
 }
 
 /** While Saruman waits for the Free Peoples' Will die to be spent, the Shadow keeps its
@@ -1293,9 +1303,12 @@ function nazgulStagingBonus(state: GameState, char: string, to: RegionId, target
   // itself) or standing adjacent, ready to attack into it.
   const atDoor = to === target ? !!state.regions[to]!.siegeBox : (REGIONS[to]!.adjacency as RegionId[]).includes(target);
   if (!atDoor) return 0;
-  const r = state.regions[to]!;
-  const lead = r.nazgul + (r.characters.includes('witch-king') ? 2 : 0);
-  if (lead >= 5) return 0;                        // the re-roll cap is met — more adds nothing
+  // The re-roll cap is the Army's Combat dice (at most five), and its own Leadership
+  // counts toward it — Isengard Elites under Saruman, Nazgûl and Minions already there.
+  // Counting only the wraiths sent every Nazgûl to an 8-unit siege of one Regular at
+  // Helm's Deep, and none to the hidden Fellowship beside two of them (report
+  // 0z730r2v731u1k3a).
+  if (forceLeadership(state, state.regions[to]!, 'shadow') >= Math.min(5, unitCount(state, to))) return 0;
   return char === 'witch-king' ? 62 : 56;         // WK: Leadership 2 + his card strength
 }
 
