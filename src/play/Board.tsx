@@ -6,7 +6,7 @@
 // nation-coloured polygons; fully playable either way.
 import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
-import { useBoardArt } from './artCache';
+import { useBoardArt, useCardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage } from '../data/geometry';
 
 // Board crop rectangle (map-image pixel space) — see the note at its use site for
@@ -15,6 +15,11 @@ const BOARD_CROP = { x: 240, y: 2, w: 1511, h: 1318 };
 /** The printed Mordor Track's six steps on the board art (map pixels, measured off the
  *  board image): steps 0–4, then the Crack of Doom (5). The Ring-bearers' token stands
  *  on its step, as the figure does at the table (player report 0h2028003x3v361w). */
+/** The printed "The Guide of the Fellowship" box at the board's top right (map pixels,
+ *  measured off the board image): the Guide's Character card stands in it, as it does at
+ *  the table (player report 6a3h1i0i3c6b6c22). Sized to a Character card's proportions
+ *  and centred in the box's inner frame (x 1756–1888, y 26–262). */
+const GUIDE_CARD = { x: 1759, y: 56, w: 126, h: 176 };
 const MORDOR_STEPS: readonly { x: number; y: number }[] = [
   { x: 1558, y: 897 }, { x: 1583, y: 928 }, { x: 1624, y: 942 }, { x: 1667, y: 936 }, { x: 1661, y: 894 }, { x: 1618, y: 894 },
 ];
@@ -34,7 +39,7 @@ import type { GameState, RegionId, Nation, Side } from '../engine/types';
 import { HuntIndicator } from './HuntIndicator';
 import { RingGlyph } from './RingIcon';
 import { useSettings } from './settings';
-import { charName, charMark } from './charInfo';
+import { charName, charMark, charDef } from './charInfo';
 import { regionOccupants, fellowshipMarkerPoint } from './tokenPlacement';
 
 // Characters render as small labelled discs near the region anchor so they're
@@ -93,8 +98,9 @@ export interface BoardHighlights {
   activate?: Set<RegionId>;      // separation destinations that ROUSE a nation (gold ★ banner)
 }
 
-export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, highlights }: {
-  view: GameState; onPickRegion?: (id: RegionId) => void; onHoverRegion?: (id: RegionId | null) => void; highlights?: BoardHighlights;
+export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, onHoverChar, highlights }: {
+  view: GameState; onPickRegion?: (id: RegionId) => void; onHoverRegion?: (id: RegionId | null) => void;
+  onHoverChar?: (id: string | null) => void; highlights?: BoardHighlights;
 }) {
   const W = mapImage.width, H = mapImage.height;
   const hl = highlights ?? {};
@@ -262,6 +268,9 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
           is how everyone is used to seeing the board"), so nothing masks the art now.
           They are still authored in assets/blocked-areas.json for the Board Crop entry
           and the #blocked dev tab; the play board simply doesn't draw them. */}
+      {/* The Guide's card in the printed Guide box. Drawn BELOW the regions: no region
+          reaches the box, so its hover still lands, and it can never eat a region's click. */}
+      <GuideCard guide={view.fellowship.guide} onHover={onHoverChar} />
       {regionEls.map((e) => e && (
         <g key={e.id} onClick={() => pickRegion(e.id)}
           onMouseEnter={() => { onHoverRegion?.(e.id); setHoverId(e.id); }}
@@ -482,6 +491,33 @@ function ArmyBadge({ x, y, scale, army, titleSuffix = '' }: { x: number; y: numb
           <text x={W / 2 - 1} y={-H / 2 + 4} fontSize={9} fontWeight="bold" fill={nazgul > 0 ? '#fff' : '#222'} textAnchor="middle">{special}</text>
         </g>
       )}
+    </g>
+  );
+}
+
+/** The Guide's Character card, in the printed Guide box. Without the downloaded card art
+ *  it is a plain card with the Guide's name and Level, so the box still reads. Hovering
+ *  it shows the card in the inspector, as the old "Guide:" chip did. */
+function GuideCard({ guide, onHover }: { guide: string; onHover?: (id: string | null) => void }) {
+  const art = useCardArt(guide);
+  const { x, y, w, h } = GUIDE_CARD;
+  const d = charDef(guide);
+  const [first, ...more] = charName(guide).split(' ');
+  const rest = more.join(' ');
+  return (
+    <g data-testid="guide-card" onMouseEnter={() => onHover?.(guide)} onMouseLeave={() => onHover?.(null)} style={{ cursor: 'help' }}>
+      <title>{`The Guide of the Fellowship: ${charName(guide)}`}</title>
+      {art
+        ? <image href={art} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid meet" />
+        : <>
+          <rect x={x} y={y} width={w} height={h} rx={8} fill="#f2e6c2" stroke="#7a5a1e" strokeWidth={2} />
+          <text x={x + w / 2} y={y + 22} fontSize={11} fill="#5a4a2a" textAnchor="middle">Guide</text>
+          {/* "Gandalf / the Grey", "Meriadoc / Brandybuck": the first word, then the rest. */}
+          {[first, rest].filter(Boolean).map((line, i) => (
+            <text key={i} x={x + w / 2} y={y + h / 2 + i * 18} fontSize={i ? 13 : 15} fontWeight="bold" fill="#2a2016" textAnchor="middle">{line}</text>
+          ))}
+          {d && <text x={x + w / 2} y={y + h - 16} fontSize={11} fill="#5a4a2a" textAnchor="middle">Level {d.level === 'inf' ? '∞' : d.level}</text>}
+        </>}
     </g>
   );
 }

@@ -112,51 +112,20 @@ function HuntTilesBrowser({ view }: { view: GameState }) {
   );
 }
 
-// A browsable roster of everyone currently in the Fellowship (Ira #4): click the
-// companion pill to open it; hover a name to show that character's card in the
-// inspector. The Guide is marked. Gollum (when Guide) is included even if not in the
-// companions array.
-function FellowshipRoster({ guide, companions, onHoverChar }: { guide: string; companions: string[]; onHoverChar?: (id: string | null) => void }) {
-  const [open, setOpen] = useState(false);
-  const { ref, flipStyle } = useEdgeFlip(open);
-  const ids = companions.includes(guide) ? companions : [guide, ...companions];
-  return (
-    <span style={{ position: 'relative' }}>
-      <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
-        title="Browse the Fellowship — hover a name to see the card">
-        <Reserve sample="Fellowship 9 ▾">Fellowship {companions.length} {open ? '▴' : '▾'}</Reserve>
-      </button>
-      {open && (
-        // One line per row, like the On the map and Fallen rosters (player report
-        // 2v0i4t423i723x3z: "★ Strider Level 3 · Leadership 1" wrapped).
-        <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
-          {ids.length === 0 && <div style={{ color: '#998', fontSize: 12 }}>No Companions remain.</div>}
-          {ids.map((id) => {
-            const d = charDef(id);
-            const isGuide = id === guide;
-            return (
-              <div key={id} onMouseEnter={() => onHoverChar?.(id)}
-                style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help', background: isGuide ? '#2c2616' : 'transparent' }}>
-                <span style={{ ...charNameCell, color: isGuide ? '#ffd86a' : '#e9e1cc' }}>{isGuide ? '★ ' : ''}{charName(id)}</span>
-                {d && <span style={{ ...statsCell, color: '#b9b29c' }}>Level <LevelNum level={d.level} />{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
-              </div>
-            );
-          })}
-          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>★ = Guide · hover a name for its card</div>
-        </div>
-      )}
-    </span>
-  );
-}
-
-// Characters on the map (both sides' separated Companions + Minions — public info).
-// Hover a name to read that character's card (player report: "is there a way to
-// display Minion cards when you're the FP?").
+// Every Character, in one chip: the Fellowship first (the Guide starred — Gollum is
+// listed when he guides, even though he is not a Companion), then those on the map
+// (both sides' separated Companions + Minions — public info), those not yet in play,
+// and the fallen. Hover a name to read that character's card (player report: "is there
+// a way to display Minion cards when you're the FP?"). The Fellowship had a chip of its
+// own and the Guide another until the Guide's card went onto the board's printed Guide
+// box (player report 6a3h1i0i3c6b6c22), which saved the status bar a row.
 /** Characters that enter play during the game (not at setup). */
 const OFF_MAP_CHARS = ['aragorn', 'gandalf-white', 'saruman', 'witch-king', 'mouth-of-sauron'];
-function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id: string | null) => void }) {
+function CharactersRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id: string | null) => void }) {
   const [open, setOpen] = useState(false);
   const { ref, flipStyle } = useEdgeFlip(open);
+  const { guide, companions } = view.fellowship;
+  const fellowship = companions.includes(guide) ? companions : [guide, ...companions];
   const entries = Object.entries(view.characters?.inPlay ?? {});
   // The Characters still to come — Aragorn, Gandalf the White and the Minions — each
   // with what it takes to bring them in, so nobody has to look it up in the rules
@@ -175,12 +144,25 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
   return (
     <span style={{ position: 'relative' }}>
       <button onClick={() => setOpen((o) => !o)} style={{ ...pill, border: 'none', cursor: 'pointer', font: 'inherit', color: '#e9e1cc' }}
-        title="Characters outside the Fellowship: on the map (Companions and Minions), not yet in play (with what brings them in), and fallen — hover a name for its card">
-        <Reserve sample="Characters 99 ▾">Characters {entries.length} {open ? '▴' : '▾'}</Reserve>
+        title="Every Character: in the Fellowship (★ the Guide), on the map (Companions and Minions), not yet in play (with what brings them in), and fallen — hover a name for its card">
+        <Reserve sample="Characters ▾">Characters {open ? '▴' : '▾'}</Reserve>
       </button>
       {open && (
         <div ref={ref} style={{ ...roster, ...oneLineRoster, ...flipStyle }} onMouseLeave={() => onHoverChar?.(null)}>
-          {entries.length > 0 && <div style={section(true)}>On the map</div>}
+          <div style={section(true)}>In the Fellowship ({companions.length} {companions.length === 1 ? 'Companion' : 'Companions'})</div>
+          {fellowship.map((id) => {
+            const d = charDef(id);
+            const isGuide = id === guide;
+            return (
+              <div key={id} onMouseEnter={() => onHoverChar?.(id)}
+                style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 6px', borderRadius: 5, cursor: 'help', background: isGuide ? '#2c2616' : 'transparent' }}>
+                <span style={{ ...sideTagCell, color: '#7fa8e6' }}>FP</span>
+                <span style={{ ...charNameCell, color: isGuide ? '#ffd86a' : '#e9e1cc' }}>{isGuide ? '★ ' : ''}{charName(id)}</span>
+                {d && <span style={{ ...statsCell, color: '#b9b29c' }}>Level <LevelNum level={d.level} />{d.leadership ? ` · Leadership ${d.leadership}` : ''}</span>}
+              </div>
+            );
+          })}
+          {entries.length > 0 && <div style={section(false)}>On the map</div>}
           {entries.map(([id, region]) => {
             const d = charDef(id);
             const shadow = isMinion(id);
@@ -201,7 +183,7 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
             );
           })}
           {waiting.length > 0 && <>
-            <div style={section(!entries.length)}>Not yet in play</div>
+            <div style={section(false)}>Not yet in play</div>
             {waiting.map((id) => (
               <div key={id} onMouseEnter={() => onHoverChar?.(id)}
                 style={{ padding: '3px 6px', borderRadius: 5, cursor: 'help', maxWidth: 380, whiteSpace: 'normal' }}>
@@ -214,7 +196,7 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
             ))}
           </>}
           {fallen.length > 0 && <>
-            <div style={section(!entries.length && !waiting.length)}>☠ Fallen — never return</div>
+            <div style={section(false)}>☠ Fallen — never return</div>
             {fallen.map((id) => {
               const d = charDef(id);
               const shadow = isMinion(id);
@@ -228,7 +210,7 @@ function OnMapRoster({ view, onHoverChar }: { view: GameState; onHoverChar?: (id
               );
             })}
           </>}
-          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>Hover a name for its Character card</div>
+          <div style={{ color: '#776', fontSize: 10, marginTop: 4, borderTop: '1px solid #2a2418', paddingTop: 4 }}>★ = Guide (its card stands in the Guide box on the board) · hover a name for its Character card</div>
         </div>
       )}
     </span>
@@ -309,11 +291,11 @@ function Reserve({ sample, children }: { sample: string; children: React.ReactNo
 }
 
 export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elvenActions = [], onAction }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void; onHoverCard?: (id: string | null) => void; elvenActions?: WotrAction[]; onAction?: (a: WotrAction) => void; trailing?: React.ReactNode }) {
-  const fs = view.fellowship;
   // Fixed rows, each holding the same chips for the whole game, so nothing reflows from
   // one row into the next as the game goes on (player reports 6k120d701i4b1e52,
-  // 311n5k0z624a275e): the game; the score; the Guide with the Fellowship; the
-  // Characters, the discards and the Hunt bag (report a741xzwjnybkyjjd); the Elven Rings
+  // 311n5k0z624a275e): the game; the score; the Characters (Fellowship included — the
+  // Guide is on the board), the discards and the Hunt bag (reports a741xzwjnybkyjjd,
+  // 6a3h1i0i3c6b6c22); the Elven Rings
   // on their own; then the controls. Each row fits the side column's width.
   return (
     <div style={bar}>
@@ -329,16 +311,10 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elven
       {/* The Hunt Box, Corruption, Progress / Mordor step and Hidden / Revealed live in
           the Hunt overlay on the board, grouped with the Hunt they belong to, not here
           (player report 205g5s252m4n2f5t). */}
-      <div style={barRow}>
-        <span style={pill}><Reserve sample="Guide: Meriadoc Brandybuck">Guide: <span
-          onMouseEnter={() => onHoverChar?.(fs.guide)} onMouseLeave={() => onHoverChar?.(null)}
-          style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{charName(fs.guide)}</span></Reserve></span>
-        <FellowshipRoster guide={fs.guide} companions={fs.companions} onHoverChar={onHoverChar} />
-      </div>
       {/* The 🂠 hand-count chip is gone: the opponent's hand is shown as card backs
           above the actions (player report 0e4z5e1m4z4p3t32). */}
       <div style={barRow}>
-        <OnMapRoster view={view} onHoverChar={onHoverChar} />
+        <CharactersRoster view={view} onHoverChar={onHoverChar} />
         <DiscardBrowser view={view} onHoverCard={onHoverCard} />
         <HuntTilesBrowser view={view} />
       </div>

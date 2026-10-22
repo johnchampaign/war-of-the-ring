@@ -1254,7 +1254,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               column (561d44030f1l3m6s). Nothing that appears and disappears may live in
               this column's flow — put it in the overlay stack instead. */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
-            <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} highlights={highlights} />
+            <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} onHoverChar={onHoverChar} highlights={highlights} />
             <ResolvingCard view={g.view} onHoverCard={onHoverCard} />
             {/* The Ents Awake rider: one Character Event playable without a die. Surface
                 it — a player couldn't tell why a card was suddenly playable ("I didn't
