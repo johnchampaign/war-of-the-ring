@@ -1385,6 +1385,51 @@ function sharedBonusEdge(state: GameState, side: Side, mods: CombatMods): number
   const b = mods.rollBonus ?? 0, foe: Side = side === 'fp' ? 'shadow' : 'fp';
   return (landed(side, b) - landed(side, 0)) - (landed(foe, b) - landed(foe, 0));
 }
+/** Dice-arithmetic Combat cards — those whose whole effect is a change to how many dice
+ *  each side rolls and what they hit on. Valued by the hits they actually swing in THIS
+ *  round, not by a flat score (report 2dmygxizop2powe2: Devilry of Orthanc played on a
+ *  single die is a fifth of the card; +1 doubles an attacker's hits in a siege, where it
+ *  hits on 6s, but adds half again in the field). */
+const DICE_MATH_KEYS = new Set(['rollBonus', 'rerollBonus', 'enemyRollPenalty', 'maxDiceEnemy', 'enemyDiceReduction', 'ownLeadershipPenalty']);
+function isDiceMathCard(m: CombatMods | null): m is CombatMods {
+  return !!m && !m.symmetricBonus && Object.keys(m).length > 0 && Object.keys(m).every((k) => DICE_MATH_KEYS.has(k));
+}
+/** Expected hits a side lands, capped by what the target can absorb. */
+function expectedHits(n: number, t: number, lead: number, rt: number, cap: number): number {
+  return hitDistribution(n, t, Math.min(n, Math.max(0, lead)), rt).reduce((e, ph, h) => e + ph * Math.min(h, cap), 0);
+}
+/** Hits a dice-arithmetic card swings this round: the extra hits `side` lands plus the
+ *  enemy hits it prevents; and the same card's swing at its best (five dice on each side,
+ *  the card's owner hitting on 6s as a siege attacker), for the reserve test. */
+function diceCardSwing(state: GameState, side: Side, m: CombatMods): { now: number; best: number } {
+  const pc = state.pendingCombat!;
+  const force = (s: Side): Force => {
+    const region = s === pc.attacker ? pc.from : pc.to;
+    return pc.boxed === s ? state.regions[region]!.siegeBox! : state.regions[region]!;
+  };
+  const hp = (f: Force) => Object.values(f.units).reduce((t, u) => t + u!.regular + 2 * u!.elite, 0);
+  const dice = (s: Side) => {
+    const f = force(s);
+    const captains = s === 'fp' ? f.characters.filter((c) => SHARED_BONUS_CAPTAINS.has(c)).length : 0;
+    return Math.min(5, forceUnitCount(f) + captains);
+  };
+  const target = (s: Side) => (s === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5);
+  const foe: Side = side === 'fp' ? 'shadow' : 'fp';
+  const swing = (n: number, t: number, lead: number, cap: number, en: number, et: number, elead: number, ecap: number) => {
+    const mine = expectedHits(n, t - (m.rollBonus ?? 0), lead - (m.ownLeadershipPenalty ?? 0), t - (m.rerollBonus ?? 0), cap)
+      - expectedHits(n, t, lead, t, cap);
+    let en2 = en;
+    if (m.maxDiceEnemy != null) en2 = Math.min(en2, m.maxDiceEnemy);
+    if (m.enemyDiceReduction) en2 = Math.max(1, en2 - m.enemyDiceReduction);
+    const theirs = expectedHits(en, et, elead, et, ecap) - expectedHits(en2, et + (m.enemyRollPenalty ?? 0), elead, et, ecap);
+    return mine + theirs;
+  };
+  const me = force(side), them = force(foe);
+  const now = swing(dice(side), target(side), forceLeadership(state, me, side), hp(them),
+    dice(foe), target(foe), forceLeadership(state, them, foe), hp(me));
+  const best = Math.max(swing(5, 6, 0, 10, 5, 5, 0, 10), swing(5, 5, 0, 10, 5, 5, 0, 10));
+  return { now, best };
+}
 const FP_COMPANIONS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc', 'peregrin', 'aragorn', 'gandalf-white']);
 // "Captain of the West" Companions add a Combat die to a Free Peoples Army (combat.ts).
 const SHARED_BONUS_CAPTAINS = new Set(['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'aragorn']);
@@ -1453,6 +1498,12 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         const mods = combatModsFor(a.cardId);
         if (owner === 'shadow' && pc && mods?.symmetricBonus && sharedBonusEdge(state, owner, mods) <= 0) continue;
         let v = combatCardValue(mods);
+        if (pc && isDiceMathCard(mods)) {
+          // Held back for a better battle unless it does at least half what it could.
+          const { now, best: top } = diceCardSwing(state, owner, mods);
+          if (now < top * 0.5) continue;
+          v = now * 2.4;
+        }
         // A to-hit penalty is wasted on an enemy who already hits only on 6s (an attacker
         // in a siege, or in a City/Fortification's first round): a 6 still hits
         // (report 591g3k3a234p0321, Advantageous Position).
