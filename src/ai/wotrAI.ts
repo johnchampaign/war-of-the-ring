@@ -1634,6 +1634,15 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'combatContinue' && a.cont === cont) ?? legal[0]!;
     }
     case 'combatRetreat': {
+      // Never walk out of our own unbesieged Stronghold: standing lets the next round
+      // open with the offer to withdraw into it (p.31), which keeps the Stronghold and
+      // its VP. Retreating hands both over (report uf3c8hviij917ygq: the Shadow left Dol
+      // Guldur for the Eastern Brown Lands).
+      const me: Side = state.pendingChoice!.owner;
+      if (pc && !pc.boxed && !pc.siege && REGIONS[pc.to]!.settlement === 'Stronghold' && settlementCtrl(state, pc.to) === me
+        && !state.regions[pc.to]!.besieged && !state.regions[pc.to]!.siegeBox) {
+        return legal.find((a) => a.kind === 'combatRetreat' && !a.retreat) ?? legal[0]!;
+      }
       const losing = !!pc && unitCount(state, pc.to) < unitCount(state, pc.from);
       const want = legal.find((a) => a.kind === 'combatRetreat' && a.retreat === losing);
       return want ?? legal[0]!;
