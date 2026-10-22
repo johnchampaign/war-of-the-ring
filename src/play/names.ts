@@ -131,7 +131,10 @@ function presentTense(msg: string, actor?: string | null): string {
     msg = msg.replace(/^Moved army /, `${does('move')} an Army `)
       .replace(/^Moved /, `${does('move')} `)
       .replace(/^(Recruited|Mustered) /, `${does('muster')} `)
-      .replace(/^Removed an over-stacked /, `${does('remove')} an over-stacked `);
+      .replace(/^Removed an over-stacked /, `${does('remove')} an over-stacked `)
+      // Older private lines said "You discard …", which read as addressed to the
+      // opponent once the end of the game reveals them (player report 1kmnp4us7hqcv2so).
+      .replace(/^You discard /, `${does('discard')} `);
   }
   // Moves name what moved as the subject, with a → arrow: "Boromir moves A → B",
   // "1 Nazgûl moves …", "Shadow Army moves …" — not "Free Peoples move Boromir A -> B",
@@ -151,7 +154,7 @@ function presentTense(msg: string, actor?: string | null): string {
     .replace(/^(Free Peoples|Shadow) rolled /, (_m, s: string) => `${s} roll${s === 'Shadow' ? 's' : ''} `)
     .replace(/^The Fellowship moved \(/, 'The Fellowship moves (')
     .replace(/^The Fellowship is hidden\b/, 'The Fellowship hides')
-    .replace(/^The Fellowship declared in /, 'The Fellowship is declared in ')
+    .replace(/^The Fellowship (?:is )?declared in /, 'The Fellowship declares its position in ')
     .replace(/^Fellowship entered Mordor$/, 'The Fellowship enters Mordor')
     .replace(/ separated from the Fellowship and moved to /, /^[^;]*, [^;]* separated /.test(msg)
       ? ' separate from the Fellowship and move to ' : ' separates from the Fellowship and moves to ')

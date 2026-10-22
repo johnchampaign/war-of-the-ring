@@ -176,13 +176,13 @@ function CardPreview({ id, bottom }: { id: string; bottom?: boolean }) {
     </div>
   );
   if (bottom) {
-    // Enlarged area: the card image as large as fits, with the transcribed text
-    // (conditions first) beside it in the otherwise-empty width — the art alone is
-    // too small here to read the "Play if…" line off.
+    // Enlarged area: just the card image, as large as fits, like a Character card;
+    // the transcribed text only when the art isn't downloaded. Art and text side by
+    // side shrank the card to half the width (player report 6b08026m2g4l031o). The
+    // decision popups still pair the two, where the card is too small to read alone.
     return art
-      ? <div style={{ height: '100%', padding: 8, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src={art} alt={def?.name ?? id} style={{ maxHeight: '100%', maxWidth: '55%', borderRadius: 8, flexShrink: 0 }} />
-          <div style={{ ...info, maxHeight: '100%', overflowY: 'auto', flex: 1, minWidth: 0 }}>{text}</div>
+      ? <div style={{ height: '100%', padding: 8, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src={art} alt={def?.name ?? id} style={{ maxHeight: '100%', maxWidth: '100%', borderRadius: 8 }} />
         </div>
       : <div style={{ height: '100%', overflowY: 'auto', padding: 8, boxSizing: 'border-box' }}>{text}</div>;
   }

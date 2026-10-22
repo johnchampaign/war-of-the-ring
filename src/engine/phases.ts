@@ -91,7 +91,9 @@ function runActionRoll(state: GameState): void {
   // Present tense, with the faces rolled (player report 5y072z2l0v0p1w70).
   const faces = (d: readonly string[]) => (d.length ? ` [${d.map((f) => ROLL_FACE[f] ?? f).join(', ')}]` : '');
   log(state, null, 'roll', `Free Peoples roll ${state.dice.fp.length} ${state.dice.fp.length === 1 ? 'die' : 'dice'}${faces(state.dice.fp)}`, { fp: [...state.dice.fp] });
-  log(state, null, 'roll', `Shadow rolls ${state.dice.shadow.length} ${state.dice.shadow.length === 1 ? 'die' : 'dice'}${faces(state.dice.shadow)}${eyes ? ` (+${eyes} ${eyes === 1 ? 'Eye' : 'Eyes'})` : ''}`,
+  // Eyes listed in roll order among the other faces, counted in the dice rolled,
+  // rather than tacked on as "(+2 Eyes)" (player report swsibybfdavhv8pk).
+  log(state, null, 'roll', `Shadow rolls ${shadowRoll.length} ${shadowRoll.length === 1 ? 'die' : 'dice'}${faces(shadowRoll)}`,
     { shadow: [...state.dice.shadow], eyes, huntBox: state.hunt.box });
 }
 

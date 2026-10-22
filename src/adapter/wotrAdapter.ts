@@ -982,7 +982,10 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // from the opponent; only the deck type is public (the card back).
         (p.discardFaceDown ??= []).push(action.card);
         const deckName = EVENT_BY_ID[action.card]?.deck ?? 'Event';
-        log(state, actor, 'event', `You discard ${EVENT_BY_ID[action.card]?.name ?? action.card} (over the hand limit)`);
+        // Third person like every other line: once the game ends the whole log is
+        // revealed, and "You discard" then read as addressed to the opponent (player
+        // report 1kmnp4us7hqcv2so).
+        log(state, actor, 'event', `${sideDoes(actor, 'discard')} ${EVENT_BY_ID[action.card]?.name ?? action.card} (over the hand limit)`);
         log(state, null, 'event', `${sideDoes(actor, 'discard')} a ${deckName} card (over the hand limit)`);
       }
       state.pendingChoice = null; break; // advance() re-checks and re-prompts if still over 6
@@ -1085,7 +1088,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         hand.splice(hand.indexOf(action.discardStrategy!), 1);
         hand.splice(hand.indexOf(action.discardCharacter!), 1);
         (state.cards.shadow.discardFaceDown ??= []).push(action.discardStrategy!, action.discardCharacter!);
-        log(state, 'shadow', 'event', `You discard ${EVENT_BY_ID[action.discardStrategy!]?.name ?? action.discardStrategy} and ${EVENT_BY_ID[action.discardCharacter!]?.name ?? action.discardCharacter} (to remove ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId})`);
+        log(state, 'shadow', 'event', `${sideDoes('shadow', 'discard')} ${EVENT_BY_ID[action.discardStrategy!]?.name ?? action.discardStrategy} and ${EVENT_BY_ID[action.discardCharacter!]?.name ?? action.discardCharacter} (to remove ${EVENT_BY_ID[action.cardId]?.name ?? action.cardId})`);
         // The FP table card goes to the FP discard.
         const ft = state.cards.fp.table;
         ft.splice(ft.indexOf(action.cardId), 1);

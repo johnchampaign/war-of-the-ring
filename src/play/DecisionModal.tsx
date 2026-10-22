@@ -5,7 +5,7 @@
 // the mid-resolution decisions legible. The modal only shows for the player who
 // owns the choice; the opponent sees a passive "resolving battle…" note.
 import { useState } from 'react';
-import { describeAction, isDecisionAction, eventChoiceInModal } from './actionText';
+import { describeAction, isDecisionAction, eventChoiceInModal, combatTitle } from './actionText';
 import { RollLine, CorruptionLine, describeDraw, HuntTileFace, strongholdRevealLine, type Draw } from './huntView';
 import { HuntInfoModal } from './HuntInfoModal';
 import { useCardArt, backId } from './artCache';
@@ -309,7 +309,9 @@ function PlayedCard({ id, who, side, onHover }: { id: string; who: string; side:
   const hov = !hidden && onHover ? { onMouseEnter: () => onHover(id), onMouseLeave: () => onHover(null) } : {};
   return (
     <div style={{ fontSize: 11, color: '#aa9', textAlign: 'center', cursor: hov.onMouseEnter ? 'help' : undefined }} {...hov}>
-      <div>{who}: {hidden ? 'a Combat card (face down)' : cardName(id)}</div>
+      {/* The card's Combat title, not its Event title — "Mighty Attack", not "Horn of
+          Gondor" (player report uydyp7bc0nmj3pym). */}
+      <div>{who}: {hidden ? 'a Combat card (face down)' : combatTitle(id)}</div>
       {hidden && back
         ? <img src={back} alt="A face-down Combat card" style={{ height: 80, borderRadius: 3, marginTop: 2 }} />
         : hidden

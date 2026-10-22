@@ -83,8 +83,8 @@ console.log('\n=== Removing a table card names the cards paid ===');
   s.cards.fp.table = ['fp-str-03'];
   s.currentPlayer = 'shadow'; s.dice.shadow = ['muster'];
   const t = wotrAdapter.applyAction(s, { kind: 'forceDiscardCard', cardId: 'fp-str-03', via: 'cards', discardStrategy: strat, discardCharacter: char, die: 'muster' }, 'shadow');
-  const own = t.log.find((e) => e.side === 'shadow' && /^You discard/.test(e.msg))?.msg ?? '';
-  check('private line names both cards and why', own === 'You discard Return to Valinor and Lure of the Ring (to remove The Power of Tom Bombadil)', own);
+  const own = t.log.find((e) => e.side === 'shadow' && /^Shadow discards/.test(e.msg))?.msg ?? '';
+  check('private line names both cards and why', own === 'Shadow discards Return to Valinor and Lure of the Ring (to remove The Power of Tom Bombadil)', own);
 }
 
 console.log('\n=== The defender may retreat before every round ===');

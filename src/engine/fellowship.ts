@@ -263,7 +263,8 @@ export function declareFellowship(state: GameState, target: RegionId): void {
   // the declaration, so they read after it (player report 1l3f1j5i4f445h2h). No
   // Corruption figure here: declaring doesn't change it (the heal is its own step), and
   // "(corruption 5)" read as a cost (player report 710l4b504o1m236l).
-  log(state, null, 'fellowship', `The Fellowship is declared in ${fs.location}`);
+  // "declares its position" (player report 1y4e3g16646o6j5k).
+  log(state, null, 'fellowship', `The Fellowship declares its position in ${fs.location}`);
   // Heal in an unconquered FP City/Stronghold.
   const def = REGIONS[fs.location]!;
   if ((def.settlement === 'City' || def.settlement === 'Stronghold')

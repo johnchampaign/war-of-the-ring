@@ -17,7 +17,7 @@ const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 const cardName = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.name ?? id;
 // The card's COMBAT half is what a Combat-card button plays — 'Scouts', not the
 // Event name 'The Spirit of Mordor' printed on the same card (report 4j520o4i46450w25).
-const combatTitle = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.combat?.title ?? cardName(id);
+export const combatTitle = (id: string): string => (eventCards as any).cards.find((c: any) => c.id === id)?.combat?.title ?? cardName(id);
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 /** The named special ability behind a Companion's political action — "High Warden of
  *  the White Tower" (Boromir), "Prince of Mirkwood" (Legolas), "Dwarf of Erebor"

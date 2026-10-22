@@ -985,6 +985,8 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
     if (def.vp > 0) {
       state.victoryPoints[enemy] = Math.max(0, state.victoryPoints[enemy] - def.vp);
       log(state, null, 'army', `${sideDoes(side, 'recapture')} ${id} (−${def.vp} VP from the ${sideLabel(enemy)}, total ${state.victoryPoints[enemy]})`);
+    } else {
+      log(state, null, 'army', `${sideDoes(side, 'recapture')} ${id}`);
     }
     return;
   }
@@ -993,6 +995,10 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
   if (def.vp > 0) {
     state.victoryPoints[side] += def.vp;
     log(state, null, 'army', `${sideDoes(side, 'capture')} ${id} (+${def.vp} VP, total ${state.victoryPoints[side]})`);
+  } else {
+    // A Town is worth no VP but its capture is still news: it is what moves the
+    // Nation's Political Track in the next line (player report 1x5btcxv7nzjpj4x).
+    log(state, null, 'army', `${sideDoes(side, 'capture')} ${id}`);
   }
   // (A Fortification never reaches here — it is not a Settlement and returns above —
   // so capturing one still never advances the owning Nation's track, rulebook p.36.)

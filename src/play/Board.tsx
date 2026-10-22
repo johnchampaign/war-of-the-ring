@@ -356,9 +356,16 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
             if (e.r.characters.length > 0) rows.push({ ids: e.r.characters, dy: -18, boxed: false });
             const inBox = e.r.siegeBox?.characters ?? [];
             if (inBox.length > 0) rows.push({ ids: inBox, dy: 20, boxed: true });
-            return rows.flatMap(({ ids, dy, boxed }) => ids.map((id, i) => {
+            return rows.flatMap(({ ids, dy, boxed }) => {
+              // Clamp the ROW, then fan it: clamping each disc on its own piled every
+              // Character of a region that runs off the crop (Gorgoroth) onto one spot,
+              // so three looked like one (player report q8bcenpw09rcz13x).
+              const half = ((ids.length - 1) / 2) * 15;
+              const mid = clampToCrop({ x: ax, y: ay + dy });
+              const cx = Math.min(Math.max(mid.x, BOARD_CROP.x + TOKEN_PAD + half), BOARD_CROP.x + BOARD_CROP.w - TOKEN_PAD - half);
+              return ids.map((id, i) => {
               const t = charToken(id);
-              const c = clampToCrop({ x: ax + (i - (ids.length - 1) / 2) * 15, y: ay + dy });
+              const c = { x: cx + (i - (ids.length - 1) / 2) * 15, y: mid.y };
               return (
                 <g key={`${boxed ? 'box-' : ''}${id}`}>
                   <title>{boxed ? `${t.title} — inside the besieged Stronghold` : t.title}</title>
@@ -370,7 +377,8 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, hi
                     fontWeight="bold" fill={t.ink} textAnchor="middle" style={{ userSelect: 'none' }}>{t.label}</text>
                 </g>
               );
-            }));
+              });
+            });
           })()}
         </g>
       ))}
