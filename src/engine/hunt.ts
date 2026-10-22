@@ -165,9 +165,13 @@ function drawnLabel(tile: HuntTileDef): string {
   return `a ${tile.value}${tile.reveal ? ' (reveal)' : ''}`;
 }
 /** Where a no-roll draw came from, as the draw line's parenthetical: the Stronghold
- *  for a reveal ("revealed through Moria" → "Moria"), else the card's name. */
-const drawSource = (source?: string): string =>
-  source ? ` (${source.replace(/^revealed (through|in) /, '')})` : '';
+ *  for a reveal ("revealed through Moria" → "Moria"). An Event card's draw names no
+ *  source — the line just above is "Shadow plays Orc Patrol", so "(Orc Patrol)"
+ *  repeated it (player report 390h4x2m1f2i3917). */
+const drawSource = (source?: string): string => {
+  const m = source?.match(/^revealed (?:through|in) (.+)$/);
+  return m ? ` (${m[1]})` : '';
+};
 /** Every Hunt tile drawn gets its own line, before its effects (player report
  *  0i384x5e5e3j6m2v: only the damage used to show). */
 function logDraw(state: GameState, tile: HuntTileDef, damage: number, source?: string, tail = ''): void {
@@ -735,7 +739,10 @@ function eliminateCompanionInline(state: GameState, id: string, damage: number, 
   // left (Gandalf's 3 against 1 damage absorbs 1; player report 604i1v5z0e41414o).
   // Say HOW he was chosen — the Guide taken as the casualty, or a random Companion —
   // the two read the same (player report 6u3b0u4u5v5u156z).
-  log(state, null, 'hunt', `${how === 'guide' ? `The Guide, ${charLabel(id)},` : `${charLabel(id)}, chosen at random,`} ${takenAlive ? 'is taken alive' : 'is eliminated'} to absorb ${Math.min(level, damage)} Corruption`
+  // The Companion is the subject, in the active voice: "Strider sacrifices himself",
+  // "Strider, drawn at random, sacrifices himself" — no "drawn at random" means the
+  // Guide stepped forward (player report 384y5h3c5c1d3m0l).
+  log(state, null, 'hunt', `${charLabel(id)}${how === 'guide' ? '' : ', drawn at random,'} ${takenAlive ? 'is taken alive' : 'sacrifices himself'} to absorb ${Math.min(level, damage)} Corruption`
     + (fs.guide !== oldGuide ? ` — ${charLabel(fs.guide)} becomes the Guide` : ''));
   // Horn of Gondor / Axe and Bow / Wizard's Staff leave with their Companion — the
   // Hunt casualty skipped this, so Horn of Gondor stayed on the table after Boromir

@@ -47,7 +47,7 @@ console.log('\n=== 1. hand AND table: the Shadow chooses ===');
   check('the tabled card is discarded', !u.cards.fp.table.includes(B) && u.cards.fp.discard.character.includes(B));
   check('the hand card is kept', u.cards.fp.hand.includes(A));
   const msgs = u.log.map((e) => e.msg);
-  const iElim = msgs.findIndex((m) => m.includes('Gandalf the Grey') && m.includes('eliminated'));
+  const iElim = msgs.findIndex((m) => m.includes('Gandalf the Grey') && m.includes('sacrifices himself'));
   const iStaff = msgs.findIndex((m) => m.startsWith("Wizard's Staff is discarded"));
   const iWorn = msgs.findIndex((m) => m.startsWith('Worn with Sorrow and Toil'));
   check('log order: casualty, then Wizard\'s Staff, then the Worn discard', iElim >= 0 && iElim < iStaff && iStaff < iWorn, `${iElim} ${iStaff} ${iWorn}`);
@@ -62,7 +62,7 @@ console.log('\n=== 2. no real choice: resolved at once, in order ===');
   check('no prompt', t.pendingChoice?.kind !== 'wornDiscard', t.pendingChoice?.kind ?? 'none');
   check('one hand card went', t.cards.fp.hand.filter((id) => id === A || id === C).length === 1);
   const msgs = t.log.map((e) => e.msg);
-  check('the Worn line follows the elimination', msgs.findIndex((m) => m.includes('eliminated')) < msgs.findIndex((m) => m.startsWith('Worn with Sorrow')));
+  check('the Worn line follows the elimination', (() => { const i = msgs.findIndex((m) => m.includes('sacrifices himself')); return i >= 0 && i < msgs.findIndex((m) => m.startsWith('Worn with Sorrow')); })());
 }
 {
   const s = board({ hand: [], table: [B] });

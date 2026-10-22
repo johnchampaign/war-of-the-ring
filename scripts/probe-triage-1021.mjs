@@ -7,10 +7,14 @@
 //  0i384x5e5e3j6m2v: every Hunt tile drawn gets its own line, and the closing line
 //    says what the Ring cost ("for using the Ring (3 → 4)"), not "Hunt resolved".
 //  681z6z1d0a3b4l26: victory lines in the rulebook's words (p.44).
+//  390h4x2m1f2i3917: an Event card's Hunt draw no longer repeats the card's name —
+//    the line above already says "Shadow plays Orc Patrol"; a Stronghold reveal keeps it.
+//  384y5h3c5c1d3m0l: the Companion is the subject of his own casualty line, in the
+//    active voice ("Strider sacrifices himself …", "…, drawn at random, …").
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
 import { getHandler } from '../src/engine/handlers/registry.ts';
-import { extraHunt, resolveMordorStep } from '../src/engine/hunt.ts';
+import { extraHunt, resolveMordorStep, resolveHuntDamage } from '../src/engine/hunt.ts';
 import { checkRingVictory, checkMilitaryVictory } from '../src/engine/victory.ts';
 import { STANDARD_TILE_LIST } from '../src/engine/data.ts';
 
@@ -57,6 +61,22 @@ console.log('\n=== Hunt tiles get their own line ===');
   check('the drawn tile is named', m.includes('Shadow draws a 1'), m.slice(-4).join(' | '));
   check('the cost names the Ring and the track', m.includes('The Ring-bearers suffer 1 Corruption for using the Ring (3 → 4)'), m.slice(-4).join(' | '));
   check('no "Hunt resolved"', !m.some((x) => x.startsWith('Hunt resolved')));
+}
+
+console.log('\n=== an Event card\'s draw does not repeat the card ===');
+for (const mode of ['guide', 'random']) {
+  const s = fresh();
+  s.fellowship.hidden = false;
+  onlyTile(s, (t) => t.value === 2 && !t.reveal);
+  extraHunt(s, { source: 'Orc Patrol' });
+  check('the draw line names no source', msgs(s).includes('Shadow draws a 2'), msgs(s).slice(-2).join(' | '));
+  check('the damage prompt still names the card', s.pendingChoice?.data?.source === 'Orc Patrol');
+  const guide = s.fellowship.guide;
+  resolveHuntDamage(s, mode);
+  const line = msgs(s).find((m) => m.includes('to absorb'));
+  check(`${mode} casualty in the active voice`, mode === 'guide'
+    ? /^Gandalf the Grey sacrifices himself to absorb 2 Corruption — .+ becomes the Guide$/.test(line ?? '') && guide === 'gandalf-grey'
+    : /^\S.*, drawn at random, (sacrifices himself|is taken alive) to absorb \d Corruption/.test(line ?? ''), line);
 }
 
 console.log('\n=== victory lines in the rulebook\'s words ===');

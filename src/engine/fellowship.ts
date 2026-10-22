@@ -77,7 +77,7 @@ export function resolveLureChoice(state: GameState, mode: 'corruption' | 'elimin
     const oldGuide = state.fellowship.guide;
     eliminateCompanion(state, d.companion);
     const g = state.fellowship.guide;
-    log(state, null, 'event', `${name} is eliminated to absorb ${d.level} Corruption` + (g !== oldGuide ? ` — ${characterDef(g)?.name ?? g} becomes the Guide` : ''));
+    log(state, null, 'event', `${name} sacrifices himself to absorb ${d.level} Corruption` + (g !== oldGuide ? ` — ${characterDef(g)?.name ?? g} becomes the Guide` : ''));
   }
   state.pendingChoice = null;
 }

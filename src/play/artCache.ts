@@ -43,9 +43,30 @@ export const backId = (side: 'fp' | 'shadow', deck: string): string =>
   side === 'fp' ? (deck === 'Character' ? BACK_IDS.fpCharacter : BACK_IDS.fpStrategy)
     : (deck === 'Character' ? BACK_IDS.shadowCharacter : BACK_IDS.shadowStrategy);
 
+/** The base game's Character cards, cached under the Character's own id so the
+ *  Character previews (map hover, the Gandalf / Witch-king draw prompts) show the card
+ *  as Event cards do — they asked for art that was never downloaded (player report
+ *  535o0p3o1j515n39). The TTS mod's sheet also holds the expansion versions (tagged
+ *  LoME/WoME), so each base card is named by its TTS card id; its crop comes from the
+ *  manifest like every other card. */
+const CHARACTER_TTS_IDS: Record<string, string> = {
+  'gandalf-grey': '2075:5', strider: '2083:24', boromir: '2086:1', legolas: '2084:13',
+  gimli: '2085:7', meriadoc: '2088:15', peregrin: '2087:19', gollum: '2065:9',
+  aragorn: '2074:0', 'gandalf-white': '2063:4',
+  'witch-king': '2058:28', 'mouth-of-sauron': '2060:17', saruman: '2104:21',
+};
+const TTS_CARDS = new Map((assetUrlsJson as { cards: { id: string; sheetId: string; region: number[] }[] }).cards.map((c) => [c.id, c]));
+const CHARACTER_CARDS: CardMeta[] = Object.entries(CHARACTER_TTS_IDS).flatMap(([id, tts]) => {
+  const c = TTS_CARDS.get(tts);
+  return c ? [{ id, sheetId: String(c.sheetId), region: c.region as RegionRect }] : [];
+});
+/** Every card the full download slices: the Event cards, then the Character cards. */
+const ALL_CARDS: CardMeta[] = [...CARDS, ...CHARACTER_CARDS];
+
 export const TOTAL_CARD_COUNT = CARDS.length;
+export const CHARACTER_CARD_COUNT = CHARACTER_CARDS.length;
 /** Distinct Steam-CDN sheets we'd fetch (deduped). */
-export const SHEET_COUNT = new Set(CARDS.map((c) => c.sheetId)).size;
+export const SHEET_COUNT = new Set(ALL_CARDS.map((c) => c.sheetId)).size;
 
 // The Middle-earth board image is NOT in the TTS card dump. We fetch it from the
 // public SirMartin/WarOfRingMap repo, whose map_en.jpg (1920x1324) is the exact
@@ -135,12 +156,12 @@ function cropToBlob(bmp: ImageBitmap, r: RegionRect): Promise<Blob> {
  *  Throws on a hard failure (network/CORS); partial progress is preserved. */
 export async function downloadAllArt(onProgress?: (p: DownloadProgress) => void): Promise<ArtMeta> {
   const bySheet = new Map<string, CardMeta[]>();
-  for (const c of CARDS) (bySheet.get(c.sheetId) ?? bySheet.set(c.sheetId, []).get(c.sheetId)!).push(c);
+  for (const c of ALL_CARDS) (bySheet.get(c.sheetId) ?? bySheet.set(c.sheetId, []).get(c.sheetId)!).push(c);
   const sheetIds = [...bySheet.keys()];
 
   let sheetsDone = 0, cardsDone = 0, totalBytes = 0;
   const report = (phase: DownloadProgress['phase']) =>
-    onProgress?.({ phase, sheetsDone, sheetsTotal: sheetIds.length, cardsDone, cardsTotal: CARDS.length });
+    onProgress?.({ phase, sheetsDone, sheetsTotal: sheetIds.length, cardsDone, cardsTotal: ALL_CARDS.length });
 
   for (const sheetId of sheetIds) {
     const sheet = SHEETS[sheetId];
@@ -228,6 +249,32 @@ export async function downloadBackArt(): Promise<void> {
   notifyArtChanged();
 }
 
+/** True once the Character cards are cached (added after the first art release). */
+export async function hasCharacterArt(): Promise<boolean> {
+  try { return !!(await dbGet<Blob>('strider')) && !!(await dbGet<Blob>('witch-king')); } catch { return false; }
+}
+
+/** Fetch the Character cards' sheet and cache just those cards. */
+export async function downloadCharacterArt(): Promise<void> {
+  let added = 0, count = 0;
+  for (const sheetId of new Set(CHARACTER_CARDS.map((c) => c.sheetId))) {
+    const sheet = SHEETS[sheetId];
+    if (!sheet) continue;
+    const resp = await fetch(sheet.url, { headers: { Accept: 'image/*' } });
+    if (!resp.ok) throw new Error(`Sheet ${sheetId} fetch failed: HTTP ${resp.status}`);
+    const bmp = await createImageBitmap(await resp.blob());
+    for (const card of CHARACTER_CARDS.filter((c) => c.sheetId === sheetId)) {
+      const out = await cropToBlob(bmp, card.region);
+      await dbPut(card.id, out);
+      added += out.size; count++;
+    }
+    bmp.close();
+  }
+  const meta = await dbGet<ArtMeta>(META_KEY);
+  if (meta) await dbPut(META_KEY, { ...meta, cardCount: meta.cardCount + count, totalBytes: meta.totalBytes + added });
+  notifyArtChanged();
+}
+
 export async function getArtMeta(): Promise<ArtMeta | null> {
   try {
     const m = await dbGet<ArtMeta>(META_KEY);
@@ -302,7 +349,7 @@ export function useBoardArt(): string | null { return useCardArt(BOARD_ID); }
 const ART_EVENT = 'wotr-art-changed';
 export function notifyArtChanged(): void { window.dispatchEvent(new CustomEvent(ART_EVENT)); }
 
-export interface ArtState { loaded: boolean; meta: ArtMeta | null; hasBoard: boolean; hasBacks?: boolean; ready: boolean }
+export interface ArtState { loaded: boolean; meta: ArtMeta | null; hasBoard: boolean; hasBacks?: boolean; hasCharacters?: boolean; ready: boolean }
 
 /** Mirror of the last settled cache state, in localStorage. Reading IndexedDB is
  *  async, so the very first paint knows nothing; without this the art panel drew
@@ -341,9 +388,10 @@ export function useArtLoaded(): ArtState {
       if (meta) await preloadAllArt();
       const hasBoard = await hasBoardArt();
       const hasBacks = await hasBackArt();
+      const hasCharacters = await hasCharacterArt();
       if (cancelled) return;
       writeArtHint({ loaded: !!meta, meta, hasBoard });
-      setS({ loaded: !!meta, meta, hasBoard, hasBacks, ready: true });
+      setS({ loaded: !!meta, meta, hasBoard, hasBacks, hasCharacters, ready: true });
     };
     refresh();
     const h = () => refresh();

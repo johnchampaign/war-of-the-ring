@@ -5,12 +5,12 @@
 // load-art flow in the Rebellion / Tyrants / A&A ports.
 import { useState } from 'react';
 import {
-  downloadAllArt, downloadBoardArt, downloadBackArt, clearArt, useArtLoaded, ART_SOURCE_NOTE,
-  TOTAL_CARD_COUNT, SHEET_COUNT, type DownloadProgress,
+  downloadAllArt, downloadBoardArt, downloadBackArt, downloadCharacterArt, clearArt, useArtLoaded, ART_SOURCE_NOTE,
+  TOTAL_CARD_COUNT, CHARACTER_CARD_COUNT, SHEET_COUNT, type DownloadProgress,
 } from './artCache';
 
 export function LoadArtPanel() {
-  const { loaded, meta, hasBoard, hasBacks, ready } = useArtLoaded();
+  const { loaded, meta, hasBoard, hasBacks, hasCharacters, ready } = useArtLoaded();
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState<DownloadProgress | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -30,6 +30,12 @@ export function LoadArtPanel() {
   const addBacks = async () => {
     setBusy(true); setErr(null);
     try { await downloadBackArt(); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  };
+  const addCharacters = async () => {
+    setBusy(true); setErr(null);
+    try { await downloadCharacterArt(); }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   };
@@ -59,6 +65,11 @@ export function LoadArtPanel() {
               {busy ? 'Adding card backs…' : "Add card backs for the opponent's hand (new)"}
             </button>
           )}
+          {ready && !hasCharacters && (
+            <button onClick={addCharacters} disabled={busy} style={primary}>
+              {busy ? 'Adding Character cards…' : 'Add the Character cards (new)'}
+            </button>
+          )}
           <button onClick={drop} disabled={busy} style={ghost}>Remove cached art</button>
         </>
       ) : busy ? (
@@ -72,7 +83,7 @@ export function LoadArtPanel() {
       ) : (
         <>
           <div style={{ fontSize: 13, color: '#bba' }}>
-            Optional: load the real Middle-earth board map plus the {TOTAL_CARD_COUNT} event cards
+            Optional: load the real Middle-earth board map plus the {TOTAL_CARD_COUNT} event cards and {CHARACTER_CARD_COUNT} Character cards
             ({SHEET_COUNT} card sheets + 1 map, public hosts, one-time). Otherwise the game uses
             the placeholder board and text cards.
           </div>
