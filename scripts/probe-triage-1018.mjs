@@ -61,7 +61,7 @@ function suddenStrike(seed) {
     const pre = msgs.findIndex((m) => m.includes('additional attack (before the Combat roll)'));
     const roll = msgs.findIndex((m) => m.startsWith('Round 1 dice'));
     check('the Combat roll still follows the strike', pre >= 0 && roll > pre, `pre@${pre} roll@${roll}`);
-    check('the chosen casualty is an Elite reduced, not a Regular removed', msgs.slice(pre, roll).some((m) => /casualties:.*Elite/i.test(m)), msgs.slice(pre, roll).filter((m) => m.includes('casualties')).join(' | '));
+    check('the chosen casualty is an Elite reduced, not a Regular removed', msgs.slice(pre, roll).some((m) => /Elite (falls|is reduced)/.test(m)), msgs.slice(pre, roll).filter((m) => /Regular falls|Elite (falls|is reduced)/.test(m)).join(' | '));
     const announce = msgs.filter((m) => /^Round 1: Free Peoples \(defender\)/.test(m)).length;
     check('the cards are announced once, not again on resuming', announce === 1, `${announce} announcements`);
     const strikes = msgs.filter((m) => m.includes('additional attack (before the Combat roll)')).length;

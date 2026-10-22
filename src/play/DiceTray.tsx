@@ -5,6 +5,8 @@
 import { useState } from 'react';
 import type { GameState, Side, DieFace } from '../engine/types';
 import { poolSize } from '../engine/dice';
+import type { WotrAction } from '../adapter/wotrAction';
+import { ElvenRings } from './StatusBar';
 
 export const FACE: Record<string, { label: string; bg: string }> = {
   character: { label: 'Char', bg: '#3a6ea5' },
@@ -66,7 +68,9 @@ function Pool({ title, dice, used, mine, selectedDie, onSelectDie, toRoll, inAct
   );
 }
 
-export function DiceTray({ view, you, selectedDie, onSelectDie, inActionDie, only }: { view: GameState; you: Side | null; selectedDie?: DieFace | null; onSelectDie?: (f: DieFace | null) => void;
+export function DiceTray({ view, you, selectedDie, onSelectDie, inActionDie, only, ringActions, onAction }: { view: GameState; you: Side | null; selectedDie?: DieFace | null; onSelectDie?: (f: DieFace | null) => void;
+  /** Your Elven Ring uses, offered behind your Rings (beside your dice). */
+  ringActions?: WotrAction[]; onAction?: (a: WotrAction) => void;
   /** The die spent on your Action that is still being resolved. */
   inActionDie?: DieFace | null;
   /** One pool alone: the opponent's sits with their hand above the actions, yours with
@@ -91,8 +95,12 @@ export function DiceTray({ view, you, selectedDie, onSelectDie, inActionDie, onl
   };
   return (
     <div style={only ? { ...panel, borderBottom: 'none' } : panel}>
+      {/* Each side's Elven Rings sit with its dice: yours above your dice, the
+          opponent's below theirs (player report 3f0y4s3x0z1a4b3n). */}
+      {only !== 'opp' && <div style={{ marginBottom: 6 }}><ElvenRings view={view} side={me} actions={ringActions} onAction={onAction} dropUp /></div>}
       {only !== 'opp' && <Pool title={`Your dice (${name(me)})`} dice={view.dice[me]} used={used[me]} mine selectedDie={selectedDie} onSelectDie={onSelectDie} toRoll={toRoll(me)} inAction={inActionDie} />}
       {only !== 'mine' && <Pool title={`${name(opp)} dice`} dice={view.dice[opp]} used={used[opp]} mine={false} toRoll={toRoll(opp)} />}
+      {only !== 'mine' && <div style={{ marginTop: 6 }}><ElvenRings view={view} side={opp} /></div>}
     </div>
   );
 }

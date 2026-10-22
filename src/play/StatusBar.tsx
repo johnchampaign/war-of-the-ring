@@ -3,7 +3,7 @@ import type { WotrAction } from '../adapter/wotrAction';
 import { describeAction } from './actionText';
 import { phaseLabel, regionName } from './names';
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { GameState } from '../engine/types';
+import type { GameState, Side } from '../engine/types';
 import { charName, charDef, isMinion } from './charInfo';
 import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, EVENT_BY_ID, type HuntTileDef } from '../engine/data';
 import eventCards from '../../assets/event-cards.json';
@@ -290,13 +290,13 @@ function Reserve({ sample, children }: { sample: string; children: React.ReactNo
   );
 }
 
-export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elvenActions = [], onAction }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void; onHoverCard?: (id: string | null) => void; elvenActions?: WotrAction[]; onAction?: (a: WotrAction) => void; trailing?: React.ReactNode }) {
+export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing }: { view: GameState; you: string | null; onHoverChar?: (id: string | null) => void; onHoverCard?: (id: string | null) => void; trailing?: React.ReactNode }) {
   // Fixed rows, each holding the same chips for the whole game, so nothing reflows from
   // one row into the next as the game goes on (player reports 6k120d701i4b1e52,
   // 311n5k0z624a275e): the game; the score; the Characters (Fellowship included — the
   // Guide is on the board), the discards and the Hunt bag (reports a741xzwjnybkyjjd,
-  // 6a3h1i0i3c6b6c22); the Elven Rings
-  // on their own; then the controls. Each row fits the side column's width.
+  // 6a3h1i0i3c6b6c22); then the controls. The Elven Rings sit with each side's dice
+  // (report 3f0y4s3x0z1a4b3n). Each row fits the side column's width.
   return (
     <div style={bar}>
       <div style={barRow}>
@@ -318,23 +318,23 @@ export function StatusBar({ view, you, onHoverChar, onHoverCard, trailing, elven
         <DiscardBrowser view={view} onHoverCard={onHoverCard} />
         <HuntTilesBrowser view={view} />
       </div>
-      <div style={barRow}>
-        <ElvenRingsPill view={view} actions={elvenActions} onAction={onAction} />
-      </div>
       {/* Dice are shown in the DiceTray (right column) — not duplicated here. */}
       {trailing && <div style={barRow}>{trailing}</div>}
     </div>
   );
 }
 
-// The Elven Rings pill. Using a Ring is not an Action — it costs no die and precedes
-// the action — so its uses live here, behind the pill, instead of padding out the
-// action list (player report 5f1r022l2q5t0p0b: "a giant list in the Action panel").
-function ElvenRingsPill({ view, actions, onAction }: { view: GameState; actions: WotrAction[]; onAction?: (a: WotrAction) => void }) {
+// A side's Elven Rings, beside that side's dice (player report 3f0y4s3x0z1a4b3n): the
+// Free Peoples' three start blue and go grey as they are used; the Shadow's start grey,
+// turn red when a used Ring flips to them, and go grey again once they spend it. Using
+// a Ring is not an Action — it costs no die and precedes the action — so its uses live
+// behind the row, instead of padding out the action list (player report 5f1r022l2q5t0p0b).
+export function ElvenRings({ view, side, actions = [], onAction, dropUp }: { view: GameState; side: Side; actions?: WotrAction[]; onAction?: (a: WotrAction) => void; dropUp?: boolean }) {
   const [open, setOpen] = useState(false);
   const { ref, flipStyle } = useEdgeFlip(open);
   const usable = actions.length > 0 && !!onAction;
-  const counts = { fp: view.elvenRings.filter((r) => r === 'fp').length, shadow: view.elvenRings.filter((r) => r === 'shadow').length, used: view.elvenRings.filter((r) => r === 'used').length };
+  const lit = side === 'fp' ? '#7fd0ff' : '#e6857f';
+  const held = view.elvenRings.filter((r) => r === side).length;
   return (
     <span style={{ position: 'relative' }}>
       <button onClick={() => usable && setOpen((o) => !o)}
@@ -342,20 +342,21 @@ function ElvenRingsPill({ view, actions, onAction }: { view: GameState; actions:
         // below it by a couple of pixels the moment a Ring is spent (player report
         // 5f6y1g5s2c4q4710). An inset shadow draws the same ring inside the existing
         // box, so the chit's size never changes.
-        style={{ ...pill, border: 'none', boxShadow: usable ? 'inset 0 0 0 1px #7fd0ff' : undefined, cursor: usable ? 'pointer' : 'default', font: 'inherit', color: '#e9e1cc' }}
-        title={usable ? 'You may use an Elven Ring before your action — click to choose' : 'The three Elven Rings. Held by the Free Peoples; when they use one it flips to the Shadow (who may then use it once), after which it is spent.'}>
+        style={{ ...pill, border: 'none', boxShadow: usable ? 'inset 0 0 0 1px #7fd0ff' : undefined, cursor: usable ? 'pointer' : 'default', font: 'inherit', fontSize: 12, color: '#e9e1cc' }}
+        title={usable ? 'You may use an Elven Ring before your action — click to choose'
+          : side === 'fp' ? `The Free Peoples hold ${held} of the three Elven Rings. A Ring they use flips to the Shadow.`
+            : `The Shadow may use ${held} Elven Ring${held === 1 ? '' : 's'}: each Ring the Free Peoples use flips to them, once.`}>
         Elven Rings:{' '}
         {view.elvenRings.map((r, i) => (
-          <span key={i} style={{ fontSize: 14, margin: '0 1px', color: r === 'fp' ? '#7fd0ff' : r === 'shadow' ? '#e6857f' : '#6a6458' }}
-            title={r === 'fp' ? 'Free Peoples' : r === 'shadow' ? 'flipped to Shadow' : 'used (spent)'}>
-            {r === 'used' ? '◇' : '◈'}
+          <span key={i} style={{ fontSize: 14, margin: '0 1px', color: r === side ? lit : '#6a6458' }}
+            title={r === 'fp' ? 'held by the Free Peoples' : r === 'shadow' ? 'flipped to the Shadow' : 'used (spent)'}>
+            {r === side ? '◈' : '◇'}
           </span>
         ))}
-        <span style={{ color: '#998', marginLeft: 4 }}>({counts.fp} Free Peoples · {counts.shadow} Shadow · {counts.used} used)</span>
-        {usable && <span style={{ marginLeft: 4 }}>{open ? '▴' : '▾'}</span>}
+        {usable && <span style={{ marginLeft: 4 }}>{open ? (dropUp ? '▾' : '▴') : (dropUp ? '▴' : '▾')}</span>}
       </button>
       {open && usable && (
-        <div ref={ref} style={{ ...roster, ...flipStyle }}>
+        <div ref={ref} style={{ ...roster, ...(dropUp ? { top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 4 } : {}), ...flipStyle }}>
           <div style={{ color: '#b9b29c', fontSize: 11, marginBottom: 4 }}>Use a Ring (before your action, no die spent):</div>
           {actions.map((a, i) => (
             <button key={i} onClick={() => { setOpen(false); onAction?.(a); }}

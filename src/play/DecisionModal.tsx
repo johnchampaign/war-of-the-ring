@@ -16,7 +16,7 @@ import type { GameState, Side, Nation } from '../engine/types';
 import { eliteHasReplacement } from '../engine/combat';
 import type { WotrAction } from '../adapter/wotrAction';
 import mapData from '../../assets/map.json';
-import { characterSide, nationName } from '../engine/data';
+import { characterSide, nationName, sideOfNation } from '../engine/data';
 import { forceLeadership } from '../engine/armies';
 import { charName, charDef } from './charInfo';
 import { cardSideLine, inNationOrder } from './names';
@@ -214,8 +214,15 @@ function CombatHeader({ pc, view, onHover }: { pc: NonNullable<GameState['pendin
   // Shadow was attacking itself. Same rule the dice use (engine atkForce/defForce).
   const atkBoxed = pc.boxed === pc.attacker ? view.regions[pc.from]?.siegeBox : undefined;
   const defBoxed = pc.boxed === pc.defender ? view.regions[pc.to]?.siegeBox : undefined;
+  // A defender that has just retreated into the Stronghold stands in the siege box
+  // while the attacker decides whether to advance, before any siege (pc.boxed) exists —
+  // the open field read "Defender: 0 units" (player report 0c8nmk2mx611wj4z).
+  const box = view.regions[pc.to]?.siegeBox;
+  const defWithdrew = !defBoxed && !pc.boxed && box
+    && (Object.keys(box.units) as Nation[]).some((n) => sideOfNation(n) === pc.defender && (box.units[n]!.regular + box.units[n]!.elite) > 0)
+    ? box : undefined;
   const atk = atkBoxed ?? view.regions[pc.from];
-  const def = defBoxed ?? view.regions[pc.to];
+  const def = defBoxed ?? defWithdrew ?? view.regions[pc.to];
   return (
     <div style={{ borderBottom: '1px solid #443', paddingBottom: 8 }}>
       <div style={{ fontSize: 13, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1 }}>
@@ -228,7 +235,7 @@ function CombatHeader({ pc, view, onHover }: { pc: NonNullable<GameState['pendin
       {/* Army sizes — so the player can size up the fight without closing the modal (report). */}
       <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
         <ArmySize label={atkBoxed ? 'Attacker (sortie, from the Stronghold)' : 'Attacker'} force={atk} side={pc.attacker} view={view} />
-        <ArmySize label={defBoxed ? 'Defender (in siege)' : atkBoxed ? 'Defender (besieging)' : 'Defender'} force={def} side={pc.defender} view={view} />
+        <ArmySize label={defBoxed ? 'Defender (in siege)' : defWithdrew ? 'Defender (retreated into the Stronghold)' : atkBoxed ? 'Defender (besieging)' : 'Defender'} force={def} side={pc.defender} view={view} />
       </div>
       {/* The round's dice, as DICE. This used to be two numbers in small text while
           the end-of-battle popup had the good display — the reporter of

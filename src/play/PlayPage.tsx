@@ -1074,7 +1074,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (!s?.canUndo) return;
     if (s.foreknowledge) setUndoConfirm(true); else void runUndo();
   };
-  // Undo button lives inline in the status bar (to the right of the Elven Rings).
+  // Undo button lives inline in the status bar.
   const undoButton = undoCap ? (
     <button onClick={onUndoClick} disabled={!undoCap.canUndo}
       title={undoCap.reason ?? (undoCap.canUndo ? (undoCap.foreknowledge ? 'Undo back past a random outcome you have seen (recorded)' : 'Undo your last action') : 'Nothing to undo')}
@@ -1360,7 +1360,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               much room the actions had left (player report 3i2j21042q3v2g36). */}
           <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid #2a2418' }}>
             <div style={{ flex: politicsUp ? '0 0 430px' : '1 1 auto', minWidth: 0 }}>
-              <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} onHoverCard={onHoverCard} trailing={statusTrailing} elvenActions={elvenActions} onAction={(a) => void submit(a)} />
+              <StatusBar view={g.view} you={g.you} onHoverChar={onHoverChar} onHoverCard={onHoverCard} trailing={statusTrailing} />
             </div>
             {politicsUp && (
               <div style={{ flex: '1 1 0', minWidth: 0, borderLeft: '1px solid #2a2418', background: '#15110b' }}>
@@ -1418,7 +1418,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                   <button onClick={() => setDiePick(null)} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #6a531f', color: '#cb8', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: 11 }}>cancel</button>
                 </div>
               )}
-                <DiceTray view={g.view} you={g.you as Side} only="mine" selectedDie={activeDie} onSelectDie={g.yourTurn && !g.view.pendingChoice && !inActionDie ? setDie : undefined} inActionDie={inActionDie} />
+                <DiceTray view={g.view} you={g.you as Side} only="mine" selectedDie={activeDie} onSelectDie={g.yourTurn && !g.view.pendingChoice && !inActionDie ? setDie : undefined} inActionDie={inActionDie}
+                  ringActions={elvenActions} onAction={(a) => void submit(a)} />
                 <HandStrip view={g.view} you={g.you as Side} onHoverCard={onHoverCard} playable={playableCards} onPlay={(a) => { if (minionPick) cancelMinionPick(); clearMove(); void submit(a); }} busy={busy} />
               </div>
             </div>

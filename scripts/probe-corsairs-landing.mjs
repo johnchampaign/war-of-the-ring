@@ -138,5 +138,25 @@ console.log('\n=== a landing that picks no units sends the whole Army (the card 
   check('the battle still happens with every unit', !!t && t.pendingCombat?.atkUnits0 === 8, String(t?.pendingCombat?.atkUnits0));
 }
 
+console.log('\n=== the defenders fall back into Dol Amroth: the landing besieges, nobody is asked who advances ===');
+{
+  const s = base();
+  s.regions['dol-amroth'].units = { gondor: { regular: 2, elite: 0 } };
+  let t = playSplit(s, 'dol-amroth', { units: { southrons: { regular: 4, elite: 0 } } });
+  check('the card attacks Dol Amroth', !!t && !!t.pendingCombat, t ? (t.pendingCombat ? 'yes' : 'no battle') : 'no target');
+  for (let i = 0; t && i < 20 && t.pendingChoice && t.pendingChoice.kind !== 'siegeWithdraw'; i++) {
+    const who = wotrAdapter.currentActor(t); const legal = who ? wotrAdapter.legalActions(t, who) : [];
+    if (!legal.length) break;
+    t = wotrAdapter.applyAction(t, legal[0], who);
+  }
+  check('Gondor is offered the Stronghold', t?.pendingChoice?.kind === 'siegeWithdraw', t?.pendingChoice?.kind ?? 'none');
+  if (t?.pendingChoice?.kind === 'siegeWithdraw') {
+    t = wotrAdapter.applyAction(t, { kind: 'siegeWithdraw', withdraw: true }, 'fp');
+    check('no "advance, and with whom?" question follows', t.pendingChoice?.kind !== 'besiegerAdvance', t.pendingChoice?.kind ?? 'none');
+    check('Dol Amroth is besieged by the landing', t.regions['dol-amroth'].besieged && (t.regions['dol-amroth'].units.southrons?.regular ?? 0) === 4, JSON.stringify(t.regions['dol-amroth'].units));
+    check('the four who stayed are still in Umbar', (t.regions['umbar'].units.southrons?.regular ?? 0) === 2, JSON.stringify(t.regions['umbar'].units));
+  }
+}
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');
 process.exit(failures ? 1 : 0);

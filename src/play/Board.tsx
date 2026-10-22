@@ -4,7 +4,7 @@
 // miniatures), so armies render as informative tokens — side colour, regular vs
 // elite split, leader/Nazgûl pip. Without the downloaded map it falls back to
 // nation-coloured polygons; fully playable either way.
-import { memo, useMemo, useRef, useState, useCallback } from 'react';
+import { memo, useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { layoutTokensInPolygon } from 'digital-boardgame-framework';
 import { useBoardArt, useCardArt } from './artCache';
 import { regionIds, regionPolygon, mapImage } from '../data/geometry';
@@ -28,9 +28,15 @@ const MORDOR_STEPS: readonly { x: number; y: number }[] = [
 // x=1920 — so their pole-of-inaccessibility anchor lands off-screen and the army
 // tokens vanish (player report). Clamping pulls only those back into view; anchors
 // already inside are untouched (pad < a normal region's inset from the edge).
+// The x-range clamped to is the board actually SHOWN, not the crop: a screen wider than
+// the crop shows printed board past its edges, and clamping to the crop pulled
+// Gorgoroth's Characters in from space that was in plain view (player report
+// ix7hd8yg5z0rxfzf). The crop is the fallback before the map has been measured.
 const TOKEN_PAD = 26;
-const clampToCrop = (p: { x: number; y: number }): { x: number; y: number } => ({
-  x: Math.min(Math.max(p.x, BOARD_CROP.x + TOKEN_PAD), BOARD_CROP.x + BOARD_CROP.w - TOKEN_PAD),
+type XRange = { lo: number; hi: number };
+const CROP_X: XRange = { lo: BOARD_CROP.x, hi: BOARD_CROP.x + BOARD_CROP.w };
+const clampInto = (p: { x: number; y: number }, xs: XRange = CROP_X): { x: number; y: number } => ({
+  x: Math.min(Math.max(p.x, xs.lo + TOKEN_PAD), xs.hi - TOKEN_PAD),
   y: Math.min(Math.max(p.y, BOARD_CROP.y + TOKEN_PAD), BOARD_CROP.y + BOARD_CROP.h - TOKEN_PAD),
 });
 import mapData from '../../assets/map.json';
@@ -104,6 +110,9 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, on
 }) {
   const W = mapImage.width, H = mapImage.height;
   const hl = highlights ?? {};
+  // The board's x-range on screen in the default view (see clampInto), measured below.
+  const [shownX, setShownX] = useState<XRange>(CROP_X);
+  const clampToCrop = useCallback((p: { x: number; y: number }) => clampInto(p, shownX), [shownX]);
   const art = useBoardArt(); // map_en.jpg (1920x1324), aligns 1:1 with the polygons
   // Let the player switch to the clean polygon map even when the art is downloaded.
   const [polyOnly, setPolyOnly] = useState(false);
@@ -174,7 +183,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, on
       }),
     )) : null;
     return { id, poly, fill, def, armies, layout, control, r, boxed, armyPoints, markerPoint };
-  }), [view]);
+  }), [view, clampToCrop]);
 
   // --- Zoom / pan (the whole map is detailed; let the player get close to read it).
   // The playable-area crop, in the map image's pixel space, HARDCODED here on
@@ -193,6 +202,23 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, on
   const setVb = (next: { x: number; y: number; w: number; h: number } | ((cur: { x: number; y: number; w: number; h: number }) => { x: number; y: number; w: number; h: number })) =>
     setOverride((cur) => (typeof next === 'function' ? next(cur ?? CROP) : next));
   const svgRef = useRef<SVGSVGElement>(null);
+  // `meet` letterboxes the crop: a container wider than the crop shows extra board on
+  // both sides (up to the image's own edges), and that is where tokens may stand.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return;
+      const extra = Math.max(0, CROP.h * (r.width / r.height) - CROP.w) / 2;
+      const lo = Math.round(Math.max(0, CROP.x - extra)), hi = Math.round(Math.min(W, CROP.x + CROP.w + extra));
+      setShownX((cur) => (cur.lo === lo && cur.hi === hi ? cur : { lo, hi }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [CROP.h, CROP.w, CROP.x, W]);
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; w: number; h: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
   // Panning gets 15% of a viewport of slack past each crop edge, so a border region
@@ -371,7 +397,7 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, on
               // so three looked like one (player report q8bcenpw09rcz13x).
               const half = ((ids.length - 1) / 2) * 15;
               const mid = clampToCrop({ x: ax, y: ay + dy });
-              const cx = Math.min(Math.max(mid.x, BOARD_CROP.x + TOKEN_PAD + half), BOARD_CROP.x + BOARD_CROP.w - TOKEN_PAD - half);
+              const cx = Math.min(Math.max(mid.x, shownX.lo + TOKEN_PAD + half), shownX.hi - TOKEN_PAD - half);
               return ids.map((id, i) => {
               const t = charToken(id);
               const c = { x: cx + (i - (ids.length - 1) / 2) * 15, y: mid.y };
@@ -508,7 +534,7 @@ function GuideCard({ guide, onHover }: { guide: string; onHover?: (id: string | 
     <g data-testid="guide-card" onMouseEnter={() => onHover?.(guide)} onMouseLeave={() => onHover?.(null)} style={{ cursor: 'help' }}>
       <title>{`The Guide of the Fellowship: ${charName(guide)}`}</title>
       {art
-        ? <image href={art} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid meet" />
+        ? <image href={art} x={x} y={y} width={w} height={h} preserveAspectRatio="none" />
         : <>
           <rect x={x} y={y} width={w} height={h} rx={8} fill="#f2e6c2" stroke="#7a5a1e" strokeWidth={2} />
           <text x={x + w / 2} y={y + 22} fontSize={11} fill="#5a4a2a" textAnchor="middle">Guide</text>
@@ -560,7 +586,7 @@ function FellowshipMarker({ view, onPick, onHover, at }: {
   }
   const poly = regionPolygon(fs.location);
   if (!poly) return null;
-  const anchor = at ?? clampToCrop(layoutTokensInPolygon(poly, 1, { tokenRadius: 9 }).anchor);
+  const anchor = at ?? clampInto(layoutTokensInPolygon(poly, 1, { tokenRadius: 9 }).anchor);
   const x = anchor.x - 12, y = anchor.y - 12;
   return (
     // A click or hover on the marker is a click or hover on its region: the marker sits

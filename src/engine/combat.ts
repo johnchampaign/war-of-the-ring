@@ -429,16 +429,23 @@ function absorbForced(state: GameState, f: Force, side: Side, hits: number, nati
   // line while chosen ones each had their own (player report 692l2005000t3z4m).
   // No "(forced)" tag: whether a loss was forced or chosen does not matter in the log
   // (player report 016j5h5h2f1v1t21).
-  for (const what of taken) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties: ${what}`);
+  for (const what of taken) log(state, null, casualtyLogKind(state), what);
   return left;
 }
-const cap1 = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
 /** "a Sauron Regular is eliminated" — read BEFORE the option is applied (whether an
  *  Elite is reduced or eliminated depends on a Regular being available to replace it). */
 function casualtyPhrase(state: GameState, side: Side, o: CasualtyOption): string {
-  return o.step === 'removeRegular' ? `a ${cap1(o.nation)} Regular is eliminated`
-    : o.step === 'reduceElite' && eliteHasReplacement(state, o.nation, side) ? `a ${cap1(o.nation)} Elite is reduced to a Regular`
-      : `a ${cap1(o.nation)} Elite is eliminated`;
+  // A whole active sentence, "An Isengard Regular falls" — it used to read "Shadow
+  // casualties: a Isengard Regular is eliminated" (player report 2n6w635t62462r1c).
+  const u = unitAdjective(o.nation);
+  return o.step === 'removeRegular' ? `${u} Regular falls`
+    : o.step === 'reduceElite' && eliteHasReplacement(state, o.nation, side) ? `${u} Elite is reduced to a Regular`
+      : `${u} Elite falls`;
+}
+/** "An Elven", "A Southron", "An Isengard" — a unit's Nation as an adjective, with its article. */
+function unitAdjective(n: Nation): string {
+  const adj = ({ elves: 'Elven', dwarves: 'Dwarven', southrons: 'Southron' } as Record<string, string>)[n] ?? nationName(n);
+  return `${/^[AEIOU]/.test(adj) ? 'An' : 'A'} ${adj}`;
 }
 // Casualties dealt by an Event card outside a battle (Dreadful Spells, The Ents
 // Awake, …) were tagged COMBAT in the log (player report 153x114o2d4a0u73).
@@ -482,7 +489,7 @@ function applyForceCasualties(state: GameState, f: Force, side: Side, hits: numb
       else { const n = nations[0]!; taken.push(casualtyPhrase(state, side, { step: 'removeRegular', nation: n, cost: 1 })); f.units[n]!.regular -= 1; if (side === 'shadow') state.reinforcements[n].regular += 1; }
     }
   }
-  for (const what of taken) log(state, null, casualtyLogKind(state), `${sideLabel(side)} casualties: ${what}`);
+  for (const what of taken) log(state, null, casualtyLogKind(state), what);
   finishForceCasualties(state, f, side);
 }
 
@@ -574,7 +581,7 @@ export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, na
     // how many landed but never which units fell (report 3i5z6d36724x115m).
     const what = casualtyPhrase(state, d.side, chosen);
     const spent = applyCasualtyOption(state, f, d.side, chosen);
-    if (spent > 0) { left -= spent; log(state, null, casualtyLogKind(state), `${sideLabel(d.side)} casualties: ${what}`); }
+    if (spent > 0) { left -= spent; log(state, null, casualtyLogKind(state), what); }
   }
   left = absorbForced(state, f, d.side, left, d.nation);
   if (meaningfulForceCasualty(state, f, d.side, left, d.nation)) {
@@ -1013,7 +1020,7 @@ export function startBattle(state: GameState, attacker: Side, from: RegionId, to
   const defDesc = describeForce(state, defForce(state, pc), defender);
   log(state, null, 'combat',
     `${sideDoes(attacker, 'attack')} ${to} from ${from}${pc.siege ? ' (siege assault)' : ''}${sortie ? ' (sortie)' : ''}${pc.rearguard ? ' (rearguard left behind)' : ''}`
-    + ` — attacker ${atkDesc} vs defender ${defDesc}`,
+    + ` — ${atkDesc} vs ${defDesc}`,
     { from, to, attacker, attackerForce: atkDesc, defenderForce: defDesc, siege: !!pc.siege, sortie });
   react();
 }
@@ -1030,11 +1037,13 @@ function retreatRegion(state: GameState, pc: PendingCombat): RegionId | null {
 function describeForce(state: GameState, f: Force, side: Side): string {
   let reg = 0, eli = 0;
   for (const n of Object.keys(f.units) as Nation[]) { const u = f.units[n]!; reg += u.regular; eli += u.elite; }
+  // Spelled out — "5 Regulars, 3 Elites" rather than "5R, 3E" (player report 6c5u0r0v130d1021).
   const parts: string[] = [];
-  if (reg) parts.push(`${reg}R`);
-  if (eli) parts.push(`${eli}E`);
+  const n = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
+  if (reg) parts.push(n(reg, 'Regular', 'Regulars'));
+  if (eli) parts.push(n(eli, 'Elite', 'Elites'));
   const figs = side === 'fp' ? f.leaders : f.nazgul;
-  if (figs) parts.push(`${figs}${side === 'fp' ? 'L' : ' Nazgûl'}`);
+  if (figs) parts.push(side === 'fp' ? n(figs, 'Leader', 'Leaders') : `${figs} Nazgûl`);
   for (const c of f.characters) if (characterSide(c) === side) parts.push(characterDef(c)?.name ?? c);
   if (!parts.length) return 'empty';
   return `${parts.join(', ')} (${Math.min(5, forceUnitCount(f))} dice, Leadership ${forceLeadership(state, f, side)})`;
@@ -2167,7 +2176,7 @@ export function resolveSiegeExtend(state: GameState, extend: boolean): void {
   const n = (Object.keys(r.units) as Nation[]).find((k) => (r.units[k]?.elite ?? 0) > 0);
   if (!n) { finishCombat(state, false); return; } // no Elite left to spend (shouldn't happen — gated on offer)
   reduceElite(state, r, n, pc.attacker); // Elite figure back to the pool (Shadow) / gone (FP), Regular taken from it
-  log(state, null, 'combat', `${sideDoes(pc.attacker, 'press')} the assault: ${/^[AEIOU]/.test(nationName(n)) ? 'an' : 'a'} ${nationName(n)} Elite is reduced to a Regular`);
+  log(state, null, 'combat', `${sideDoes(pc.attacker, 'press')} the assault: ${unitAdjective(n).replace(/^A/, 'a')} Elite is reduced to a Regular`);
   pc.siegeRoundsLeft = 1;
   pc.round += 1;
   pc.step = 'attackerCard'; // advance() re-drives the battle sub-machine
@@ -2222,6 +2231,10 @@ export function resolveSiegeWithdraw(state: GameState, withdraw: boolean): void 
     r.units = {}; r.leaders = 0; r.nazgul = 0; r.characters = r.characters.filter((c) => !inside.includes(c));
     // NB the 5-unit garrison cap is NOT applied yet: it bites when a Stronghold "comes
     // under siege", and no siege exists until the besieger actually advances.
+    // Corsairs of Umbar has already landed the Army (mustAdvance): it is committed, so
+    // there is no "advance, and with whom?" to ask — it besieges with the whole landing
+    // (player report i2jq0rnb9zy3giqv: the troop picker came up after the attack began).
+    if (pc.mustAdvance) { resolveBesiegerAdvance(state, true); return; }
     state.pendingChoice = { owner: pc.attacker, kind: 'besiegerAdvance' };
     return;
   }

@@ -58,7 +58,7 @@ console.log('\n=== 1a. Faramir\'s Rangers: the Shadow chooses, then the recruit 
     asked++;
     check(`seed ${seed}: the SHADOW is asked`, t.pendingChoice.owner === 'shadow' && wotrAdapter.currentActor(t) === 'shadow');
     t = shadowAnswers(t);
-    if (msgs(t, mark).some((m) => /^Shadow casualties: /.test(m))) logged++;
+    if (msgs(t, mark).some((m) => /^An? \S+ (Regular|Elite) (falls|is reduced)/.test(m))) logged++;
     const next = wotrAdapter.legalActions(t, 'fp').filter((a) => a.kind === 'eventTarget' && a.figure);
     check(`seed ${seed}: the Osgiliath recruit comes back to the Free Peoples`, t.pendingChoice?.kind === 'eventTarget' && next.length > 0, t.pendingChoice?.kind);
     if (next.length) {
@@ -117,8 +117,8 @@ console.log('\n=== 3b. batch-plan casualties are named too (Return to Valinor, D
   const mark = s.log.length;
   applyCasualties(s, 'gorgoroth', 'shadow', 2, 'regularsFirst');
   // One line per unit, like a chosen casualty (report 692l2005000t3z4m).
-  const lines = msgs(s, mark).filter((m) => /^Shadow casualties: /.test(m));
-  check('a line naming each loss', lines.length === 2 && lines.every((l) => l === 'Shadow casualties: a Sauron Regular is eliminated'), JSON.stringify(lines));
+  const lines = msgs(s, mark).filter((m) => /^An? \S+ (Regular|Elite) (falls|is reduced)/.test(m));
+  check('a line naming each loss', lines.length === 2 && lines.every((l) => l === 'A Sauron Regular falls'), JSON.stringify(lines));
 }
 
 console.log('\n=== 4. removing a Shadow table card ===');

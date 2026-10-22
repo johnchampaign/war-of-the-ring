@@ -92,9 +92,9 @@ console.log('\n=== card attacks take a rearguard (normal attack rules) ===');
     const ok = wotrAdapter.tryApplyAction(s, { ...atk, rearguard: { units: { sauron: { regular: 1 } } } }, 'shadow');
     // The battle resolves at once (no Combat cards in hand), so read its opening line.
     const opening = (st) => st.log.find((e) => /attacks north-ithilien from dagorlad|attacks North Ithilien from Dagorlad/i.test(e.msg))?.msg ?? '';
-    check('a rearguard of one Regular is accepted and sits out', ok.ok && /attacker 2R/.test(opening(ok.state)), ok.reason ?? opening(ok.state));
+    check('a rearguard of one Regular is accepted and sits out', ok.ok && / — 2 Regulars\b/.test(opening(ok.state)), ok.reason ?? opening(ok.state));
     const bare = wotrAdapter.tryApplyAction(s, atk, 'shadow');
-    check('a plain click still attacks with everyone', bare.ok && /attacker 3R/.test(opening(bare.state)), bare.reason ?? opening(bare.state));
+    check('a plain click still attacks with everyone', bare.ok && / — 3 Regulars\b/.test(opening(bare.state)), bare.reason ?? opening(bare.state));
   }
 }
 
@@ -117,7 +117,7 @@ const siegeBoard = () => {
   if (t) {
     const r = wotrAdapter.tryApplyAction(s, { ...t, rearguard: { units: { sauron: { regular: 1 } }, characters: ['witch-king'] } }, 'shadow');
     const line = r.ok ? r.state.log.find((e) => /siege assault/.test(e.msg))?.msg ?? '' : '';
-    check('the assault holds a rearguard back (it used to fight anyway)', r.ok && /attacker 3R/.test(line) && !/Witch-king/.test(line.split(' vs ')[0]), r.reason ?? line);
+    check('the assault holds a rearguard back (it used to fight anyway)', r.ok && / — 3 Regulars\b/.test(line) && !/Witch-king/.test(line.split(' vs ')[0]), r.reason ?? line);
   }
 }
 {
