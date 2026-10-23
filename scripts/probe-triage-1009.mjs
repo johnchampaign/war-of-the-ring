@@ -49,7 +49,7 @@ console.log('\n=== 1. hand AND table: the Shadow chooses ===');
   const msgs = u.log.map((e) => e.msg);
   const iElim = msgs.findIndex((m) => m.includes('Gandalf the Grey') && m.includes('sacrifices himself'));
   const iStaff = msgs.findIndex((m) => m.startsWith("Wizard's Staff is discarded"));
-  const iWorn = msgs.findIndex((m) => m.startsWith('Worn with Sorrow and Toil'));
+  const iWorn = msgs.findIndex((m) => m.endsWith('(Worn with Sorrow and Toil)'));
   check('log order: casualty, then Wizard\'s Staff, then the Worn discard', iElim >= 0 && iElim < iStaff && iStaff < iWorn, `${iElim} ${iStaff} ${iWorn}`);
   const v = wotrAdapter.applyAction(t, { kind: 'wornDiscard' }, 'shadow');
   check('or: a random hand card is discarded face down', !v.cards.fp.hand.includes(A) && (v.cards.fp.discardFaceDown ?? []).includes(A) && v.cards.fp.table.includes(B));
@@ -62,7 +62,7 @@ console.log('\n=== 2. no real choice: resolved at once, in order ===');
   check('no prompt', t.pendingChoice?.kind !== 'wornDiscard', t.pendingChoice?.kind ?? 'none');
   check('one hand card went', t.cards.fp.hand.filter((id) => id === A || id === C).length === 1);
   const msgs = t.log.map((e) => e.msg);
-  check('the Worn line follows the elimination', (() => { const i = msgs.findIndex((m) => m.includes('sacrifices himself')); return i >= 0 && i < msgs.findIndex((m) => m.startsWith('Worn with Sorrow')); })());
+  check('the Worn line follows the elimination', (() => { const i = msgs.findIndex((m) => m.includes('sacrifices himself')); return i >= 0 && i < msgs.findIndex((m) => m.endsWith('(Worn with Sorrow and Toil)')); })());
 }
 {
   const s = board({ hand: [], table: [B] });

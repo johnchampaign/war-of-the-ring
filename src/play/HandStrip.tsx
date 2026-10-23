@@ -154,11 +154,14 @@ function ZoomDot({ onZoom }: { onZoom: () => void }) {
 export function TabledStrip({ view, onHoverCard }: { view: GameState; onHoverCard?: (id: string | null) => void }) {
   const tabled = [...(view.cards?.fp?.table ?? []), ...(view.cards?.shadow?.table ?? [])];
   const [zoom, setZoom] = useState<string | null>(null);
-  if (tabled.length === 0) return null;
+  // Always there, a card's height even when empty, so the log and the hover preview
+  // above it keep their size as cards come and go (player report 111v6h5h212s0s11).
   return (
     <div style={{ background: '#14110b' }}>
       <div style={wrap}>
         <span style={label}>In play:</span>
+        <div style={{ height: img.height, width: 0, flexShrink: 0 }} />
+        {tabled.length === 0 && <span style={{ ...label, fontStyle: 'italic', color: '#776' }}>none</span>}
         {tabled.map((id, i) => <HandCard key={`t${i}`} id={id} onZoom={() => setZoom(id)} onHover={onHoverCard} />)}
       </div>
       {zoom && <CardZoom id={zoom} onClose={() => setZoom(null)} />}

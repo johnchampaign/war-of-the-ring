@@ -994,7 +994,8 @@ export function captureIfEnemySettlement(state: GameState, id: RegionId, side: S
   state.regions[id]!.control = side;
   if (def.vp > 0) {
     state.victoryPoints[side] += def.vp;
-    log(state, null, 'army', `${sideDoes(side, 'capture')} ${id} (+${def.vp} VP, total ${state.victoryPoints[side]})`);
+    // The track before and after, in the rulebook's words (player report ju2xnzxbx5f5cnr5).
+    log(state, null, 'army', `${sideDoes(side, 'capture')} ${id} (${state.victoryPoints[side] - def.vp} → ${state.victoryPoints[side]} Victory Points)`);
   } else {
     // A Town is worth no VP but its capture is still news: it is what moves the
     // Nation's Political Track in the next line (player report 1x5btcxv7nzjpj4x).

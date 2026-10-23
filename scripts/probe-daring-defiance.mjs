@@ -69,7 +69,7 @@ survey('cancelling Words of Power forfeits Strider + Legolas: 1 re-roll left', W
   // The cancel is its own line; the card lines don't restate it (report 3m5w464l281a6i5o).
   const s = battle(3, WOP);
   const msgs = s.log.map((e) => e.msg ?? '');
-  check('cancel logged on its own line', msgs.some((m) => /: 'Words of Power' is cancelled by 'Daring Defiance'$/.test(m)), msgs.filter((m) => /cancel/i.test(m)).join(' | '));
+  check('cancel logged on its own line', msgs.some((m) => /: 'Daring Defiance' cancels 'Words of Power'$/.test(m)), msgs.filter((m) => /cancel/i.test(m)).join(' | '));
   check('neither card line says "cancel"', !msgs.some((m) => /\((attacker|defender)\) plays? .*cancel/i.test(m)));
 }
 survey('no Shadow card to cancel: nothing forfeited, all 3 re-rolls', null, 3, /Daring Defiance/);

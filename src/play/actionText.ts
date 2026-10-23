@@ -378,7 +378,8 @@ function eventTargetText(a: Extract<WotrAction, { kind: 'eventTarget' }>): strin
     // There Is Another Way offers ONE of hide/move (whichever the Fellowship can do) —
     // a yes/no, under a "Hide the Fellowship?" / "Move the Fellowship?" heading (player
     // report 3q2t3v090r6f6k0v: "Do neither" read as a third choice).
-    return a.mode === 'hide' ? 'Yes — hide the Fellowship' : a.mode === 'move' ? 'Yes — move the Fellowship (triggers a Hunt)' : 'No';
+    // Named actions, not Yes / No, like the other prompts (player report 5l6v2x3z0e0o1s25).
+    return a.mode === 'hide' ? 'Hide the Fellowship' : a.mode === 'move' ? 'Move the Fellowship (triggers a Hunt)' : 'Skip';
   }
   if (a.eye) return a.face ? `turn ${aFace(a.face)} die into an Eye (→ Hunt Box)` : `turn a die into an Eye (→ Hunt Box)`;
   // Dreadful Spells names its victim army and nothing else — say so, or the bare

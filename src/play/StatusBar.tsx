@@ -356,12 +356,14 @@ export function ElvenRings({ view, side, actions = [], onAction, dropUp }: { vie
         {usable && <span style={{ marginLeft: 4 }}>{open ? (dropUp ? '▾' : '▴') : (dropUp ? '▴' : '▾')}</span>}
       </button>
       {open && usable && (
-        <div ref={ref} style={{ ...roster, ...(dropUp ? { top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 4 } : {}), ...flipStyle }}>
+        // As wide as its longest choice, each on one line (player report 643f0013364q5d20).
+        <div ref={ref} style={{ ...roster, width: 'max-content', ...(dropUp ? { top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 4 } : {}), ...flipStyle }}>
           <div style={{ color: '#b9b29c', fontSize: 11, marginBottom: 4 }}>Use a Ring (before your action, no die spent):</div>
           {actions.map((a, i) => (
             <button key={i} onClick={() => { setOpen(false); onAction?.(a); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', margin: '2px 0', padding: '4px 8px', background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', borderRadius: 5, cursor: 'pointer', font: 'inherit', fontSize: 12 }}>
-              {describeAction(a)}
+              style={{ display: 'block', width: '100%', textAlign: 'left', margin: '2px 0', padding: '4px 8px', background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', borderRadius: 5, cursor: 'pointer', font: 'inherit', fontSize: 12, whiteSpace: 'nowrap' }}>
+              {/* The heading already says these are Rings. */}
+              {describeAction(a).replace(/^Elven Ring: /, '')}
             </button>
           ))}
         </div>

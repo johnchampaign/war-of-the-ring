@@ -57,7 +57,9 @@ function Pool({ title, dice, used, mine, selectedDie, onSelectDie, toRoll, inAct
         {clickable && <span style={{ color: '#cb8', marginLeft: 6 }}>{selectedDie ? '· click again to show all' : '· click a die to see its actions'}</span>}
         {spentAt >= 0 && <span style={{ color: '#cb8', marginLeft: 6 }}>· finishing this Action</span>}
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      {/* At least one die's height, so "none yet" holds the row the dice will fill
+          (player report 4e1w466p1k400s36). */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, minHeight: 26, alignItems: 'center' }}>
         {dice.length === 0 && used.length === 0 && <span style={{ color: '#776', fontSize: 12, fontStyle: 'italic' }}>none yet</span>}
         {dice.map((d, i) => clickable
           ? <Chip key={`u${i}`} face={d} selected={i === glowAt} onClick={() => { setPicked(i); onSelectDie!(i === glowAt ? null : d); }} />

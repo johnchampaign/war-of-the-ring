@@ -328,18 +328,22 @@ function PlayedCard({ id, who, side, onHover }: { id: string; who: string; side:
   );
 }
 
-function TileDetail({ tile }: { tile?: { value: number | string; reveal?: boolean; stop?: boolean } }) {
+function TileDetail({ tile }: { tile?: { value: number | string; reveal?: boolean; stop?: boolean; card?: string; introducedBy?: string } }) {
   if (!tile) return null;
-  const dmg = typeof tile.value === 'number' ? `${tile.value} Hunt damage`
+  // A special tile goes by its name, in its own colour (player report 5x6k184c0i623v3j:
+  // Shelob's Lair read "a die — rolled for damage" on a tan tile).
+  const dmg = tile.card ? tile.card
+    : typeof tile.value === 'number' ? `${tile.value} Hunt damage`
     : tile.value === 'eye' ? 'an Eye (Shadow draws Hunt dice for damage)' : 'a die — rolled for damage';
+  const special = tile.introducedBy ? { special: tile.introducedBy.startsWith('fp-') ? 'fp' as const : 'shadow' as const, ...(tile.card ? { specialCard: tile.card } : {}) } : {};
   // The tile itself, drawn like the Hunt popup draws it — not just words (player report
   // 2k4q64023j4j611u: "it should use the Hunt one with the tile displayed graphically").
-  const draw = { seq: 0, damage: typeof tile.value === 'number' ? tile.value : 0, onMordor: false, ...tile, reveal: !!tile.reveal, stop: !!tile.stop } as Draw;
+  const draw = { seq: 0, damage: typeof tile.value === 'number' ? tile.value : 0, onMordor: false, ...tile, ...special, reveal: !!tile.reveal, stop: !!tile.stop } as Draw;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '6px 0 2px' }}>
       <HuntTileFace draw={draw} />
       <div style={{ fontSize: 13, color: '#e9b' }}>
-        You drew: <b>{dmg}</b>{tile.reveal ? ' · Reveal' : ''}{tile.stop ? ' · Stop' : ''}.<br />Redraw it (Mithril Coat), or keep it?
+        You drew: <b>{dmg}</b>{tile.reveal ? ' · Reveal' : ''}{tile.stop ? ' · Stop' : ''}
       </div>
     </div>
   );

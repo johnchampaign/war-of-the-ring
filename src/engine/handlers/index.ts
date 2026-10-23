@@ -825,7 +825,8 @@ register('sh-str-11', {
     dst.units.isengard = du;
     if (src.regular === 0 && src.elite === 0) delete s.regions[t.from]!.units.isengard;
     t.count = takeR + takeE;
-    log(s, null, 'event', `Rage of the Dunlendings moves ${takeR + takeE} Isengard unit${takeR + takeE === 1 ? '' : 's'} from ${REGIONS[t.from]?.name ?? t.from} to ${REGIONS[to]?.name ?? to}`);
+    // The player moves them, not the card (player report 3q264331136q2272).
+    log(s, null, 'event', `Shadow moves ${takeR + takeE} Isengard unit${takeR + takeE === 1 ? '' : 's'} from ${REGIONS[t.from]?.name ?? t.from} to ${REGIONS[to]?.name ?? to}`);
   },
 });
 // Shadows on the Misty Mountains: "Recruit two Sauron units (Regular or Elite) and one

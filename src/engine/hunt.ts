@@ -159,7 +159,8 @@ function specialOf(tile: HuntTileDef): { special?: 'fp' | 'shadow'; specialCard?
  *  special", without saying which (player report 4s2j2m6m4n3k192l). */
 /** The tile as the draw line names it: "an Eye", "a 2 (reveal)", "a die tile". */
 function drawnLabel(tile: HuntTileDef): string {
-  if (tile.card) return `the “${tile.card}” tile`;
+  // Named plainly, like a card (player report 0g0v1k2w0y3h2o5b).
+  if (tile.card) return tile.card;
   if (tile.value === 'eye') return 'an Eye';
   if (tile.value === 'die') return 'a die tile';
   return `a ${tile.value}${tile.reveal ? ' (reveal)' : ''}`;
@@ -364,7 +365,18 @@ function applyDrawnTile(state: GameState, tile: HuntTileDef, successes: number, 
 export function resolveHuntPreventDraw(state: GameState, prevent: boolean): void {
   const d = state.pendingChoice!.data as { successes: number; onMordor: boolean; extra?: HuntOpts };
   state.pendingChoice = null;
-  if (prevent) { discardTableCard(state, WIZARD_STAFF); log(state, null, 'hunt', 'Free Peoples discard Wizard’s Staff to prevent the Hunt tile draw'); return; }
+  if (prevent) {
+    discardTableCard(state, WIZARD_STAFF); log(state, null, 'hunt', 'Free Peoples discard Wizard’s Staff to prevent the Hunt tile draw');
+    // No tile means no Stop, so the Fellowship still takes its step: "Using this card
+    // inside Mordor would result in an effective free move on the Mordor Track"
+    // (Almanac, Wizard's Staff; player report 62274m0f58415m1o).
+    const fs = state.fellowship;
+    if (!d.extra && d.onMordor && fs.mordor !== null) {
+      fs.mordor = Math.min(5, fs.mordor + 1);
+      log(state, null, 'fellowship', `Fellowship advances to Mordor step ${fs.mordor}`);
+    }
+    return;
+  }
   if (d.extra) { doExtraDraw(state, d.extra); return; }
   doHuntDraw(state, d.successes, d.onMordor);
 }
@@ -587,8 +599,10 @@ function finishHunt(state: GameState, damage: number, reveal: boolean): void {
  *  beginReveal. `before` is the Corruption before this damage was added. */
 function logHuntResolved(state: GameState, damage: number, before = state.fellowship.corruption): void {
   const now = state.fellowship.corruption;
+  // The damage itself, not the clamped difference: 5 at 8 Corruption is 5, though the
+  // track stops at 12 (player report 5g2c5e5s721x2r3f).
   log(state, null, 'hunt', damage > 0 && now > before
-    ? `The Ring-bearers suffer ${now - before} Corruption for using the Ring (${before} → ${now})`
+    ? `The Ring-bearers suffer ${damage} Corruption for using the Ring (${before} → ${now})`
     : `The Ring-bearers suffer no Corruption (${now})`);
 }
 /** "The Fellowship is revealed in X" — logged where the figure ends up (after the
@@ -824,15 +838,17 @@ export function resolveWornWithSorrow(state: GameState, pick: 'hand' | string): 
     // cards in my hand disappeared"), the opponent sees only that a Character card
     // did (player report 3i3v4o2a2w5y3e15). Same treatment as hand-limit discards.
     (cards.discardFaceDown ??= []).push(card);
-    log(state, 'fp', 'event', `Worn with Sorrow and Toil: you randomly discard ${EVENT_BY_ID[card]?.name ?? card}`);
+    // The card that forced it in a trailing parenthetical, like every other triggered
+    // effect (player report 2u035b681r620p72).
+    log(state, 'fp', 'event', `Free Peoples randomly discard ${EVENT_BY_ID[card]?.name ?? card} (Worn with Sorrow and Toil)`);
     state.log[state.log.length - 1]!.card = card;
-    log(state, null, 'event', 'Worn with Sorrow and Toil: Free Peoples discard a random Character card');
+    log(state, null, 'event', 'Free Peoples discard a random Character card (Worn with Sorrow and Toil)');
     return;
   }
   const ti = cards.table.indexOf(pick);
   if (ti < 0 || !isChar(pick)) return;
   cards.table.splice(ti, 1);
   cards.discard.character.push(pick);
-  log(state, null, 'event', `Worn with Sorrow and Toil: the Shadow discards ${EVENT_BY_ID[pick]?.name ?? pick} from the Free Peoples' table`);
+  log(state, null, 'event', `Shadow discards ${EVENT_BY_ID[pick]?.name ?? pick} from the Free Peoples' table (Worn with Sorrow and Toil)`);
   state.log[state.log.length - 1]!.card = pick;
 }

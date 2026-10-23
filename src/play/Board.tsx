@@ -534,7 +534,9 @@ function GuideCard({ guide, onHover }: { guide: string; onHover?: (id: string | 
     <g data-testid="guide-card" onMouseEnter={() => onHover?.(guide)} onMouseLeave={() => onHover?.(null)} style={{ cursor: 'help' }}>
       <title>{`The Guide of the Fellowship: ${charName(guide)}`}</title>
       {art
-        ? <image href={art} x={x} y={y} width={w} height={h} preserveAspectRatio="none" />
+        // Scaled to fit, never stretched: the card art is 906×1638 and the printed box
+        // is squatter (player report 0b0j5f5t544u5y63).
+        ? <image href={art} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid meet" />
         : <>
           <rect x={x} y={y} width={w} height={h} rx={8} fill="#f2e6c2" stroke="#7a5a1e" strokeWidth={2} />
           <text x={x + w / 2} y={y + 22} fontSize={11} fill="#5a4a2a" textAnchor="middle">Guide</text>

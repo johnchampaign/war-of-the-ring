@@ -509,7 +509,7 @@ function finishForceCasualties(state: GameState, f: Force, side: Side, spare = f
   // Peoples Leaders still fall — "Leaders cannot be outside of an Army".
   if (spare) {
     if (side === 'fp' && f.leaders > 0) {
-      log(state, null, casualtyLogKind(state), `${f.leaders === 1 ? 'a Free Peoples Leader falls' : `${f.leaders} Free Peoples Leaders fall`} with the destroyed Army`);
+      log(state, null, casualtyLogKind(state), `${f.leaders === 1 ? 'A Free Peoples Leader falls' : `${f.leaders} Free Peoples Leaders fall`} with the destroyed Army`);
       f.leaders = 0;
     }
     return;
@@ -1803,9 +1803,10 @@ export function combatStep(state: GameState): void {
           if (pc.attackerCard) state.log[state.log.length - 1]!.card = pc.attackerCard;
           log(state, null, 'combat', `Round ${pc.round + 1}: ${sideLabel(pc.defender)} (defender) ${pc.defender === 'fp' ? 'play' : 'plays'} ${played(pc.defenderCard, dCancelled, dOutrun)}`);
           if (pc.defenderCard) state.log[state.log.length - 1]!.card = pc.defenderCard;
+          // Active voice, the canceller first (player report 53485w6n0q6q1h0i).
           const title = (id: string) => `'${EVENT_BY_ID[id]?.combat?.title ?? EVENT_BY_ID[id]?.name ?? id}'`;
-          if (dCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.defenderCard!)} is cancelled by ${title(pc.attackerCard!)}`);
-          if (aCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.attackerCard!)} is cancelled by ${title(pc.defenderCard!)}`);
+          if (dCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.attackerCard!)} cancels ${title(pc.defenderCard!)}`);
+          if (aCancelled) log(state, null, 'combat', `Round ${pc.round + 1}: ${title(pc.defenderCard!)} cancels ${title(pc.attackerCard!)}`);
         }
         // Pre-combat timing effects (Scouts retreat / Durin's Bane pre-attack)
         // resolve in initiative order before the normal roll; either can end the
