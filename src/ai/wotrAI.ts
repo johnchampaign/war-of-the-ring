@@ -317,12 +317,16 @@ function payWithEventDie(state: GameState, actor: Side, action: WotrAction): Wot
  *  on arrival, and the AI was throwing away whole Armies' worth of Regulars marching
  *  into a full Helm's Deep or Minas Tirith (report 3t5w710l563l4s4t). Shadow only. */
 function maybeFitStack(state: GameState, actor: Side, action: WotrAction): WotrAction {
-  if (actor !== 'shadow' || (action.kind !== 'moveArmy' && action.kind !== 'armyMove2') || action.move) return action;
+  if (actor !== 'shadow' || (action.kind !== 'moveArmy' && action.kind !== 'armyMove2')) return action;
   const from = action.from, to = action.to;
   if (!from || !to) return action;
   const r = state.regions[from]!;
-  const mineN = (Object.keys(r.units) as Nation[]).filter((n) => sideOfNation(n) === 'shadow' && (r.units[n]!.regular + r.units[n]!.elite) > 0);
-  const moving = mineN.reduce((t, n) => t + r.units[n]!.regular + r.units[n]!.elite, 0);
+  // A split already chosen (maybeSplitGarrison leaves a garrison behind) is trimmed
+  // too: it skipped this step and marched 9 units onto 5 (probe-ai-1023).
+  const chosen = action.move?.units;
+  const avail = (n: Nation, kind: 'regular' | 'elite'): number => (chosen ? (chosen[n]?.[kind] ?? 0) : r.units[n]![kind]);
+  const mineN = (Object.keys(r.units) as Nation[]).filter((n) => sideOfNation(n) === 'shadow' && (avail(n, 'regular') + avail(n, 'elite')) > 0);
+  const moving = mineN.reduce((t, n) => t + avail(n, 'regular') + avail(n, 'elite'), 0);
   const there = unitCount(state, to);
   if (moving + there <= STACKING_LIMIT) return action;
   let room = STACKING_LIMIT - there;
@@ -330,15 +334,16 @@ function maybeFitStack(state: GameState, actor: Side, action: WotrAction): WotrA
   const units: NonNullable<MoveSel['units']> = {};
   for (const kind of ['elite', 'regular'] as const) {
     for (const n of mineN) {
-      const take = Math.min(room, r.units[n]![kind]);
+      const take = Math.min(room, avail(n, kind));
       if (take <= 0) continue;
       units[n] = { ...units[n], [kind]: take };
       room -= take;
     }
   }
   const move: MoveSel = { units };
-  if (r.nazgul) move.nazgul = r.nazgul;
-  const chars = r.characters.filter((c) => SHADOW_CHARS.has(c) && c !== 'saruman');
+  const naz = action.move ? (action.move.nazgul ?? 0) : r.nazgul;
+  if (naz) move.nazgul = naz;
+  const chars = action.move ? (action.move.characters ?? []) : r.characters.filter((c) => SHADOW_CHARS.has(c) && c !== 'saruman');
   if (chars.length) move.characters = chars;
   // A Character die pays when no Army-type die is left (the second move rides the
   // first move's die); the engine's own validator decides, At-War borders included.
@@ -698,7 +703,11 @@ function wakePrice(state: GameState, actor: Side, id: RegionId, attacking = fals
     const ns = state.nations[n];
     if (!ns || ns.step === 0) return 0;
     const p = state.reinforcements[n];
-    return ((p?.regular ?? 0) + (p?.elite ?? 0) + (p?.leader ?? 0)) / ns.step;
+    // An ACTIVE Nation goes to War on the Free Peoples' own dice, one Muster die a step;
+    // the attack only spares them that die. A passive one cannot leave step 1 without
+    // being woken, so waking it costs the whole pool (report 63hl89a35stuc7as: the
+    // Orthanc Army threw its die away rather than attack Fords of Isen).
+    return ((p?.regular ?? 0) + (p?.elite ?? 0) + (p?.leader ?? 0)) / ns.step * (ns.active ? 0.25 : 1);
   };
   const woken = new Set<Nation>();
   const def = REGIONS[id];
@@ -995,7 +1004,9 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // 1q112f1z0d6x262j). But the first Minion in play is what lets Gandalf the White
       // come — so while the Free Peoples hold an unused Will of the West and the White
       // could come this turn, hold him back (he waits for their last die).
-      if (a.minion === 'saruman') v += whiteCouldAnswerSaruman(state) ? -30 : 25;
+      // Held back firmly, not just discounted: at −30 he still came whenever nothing else
+      // scored higher (report k90pu3ftiq97aevx).
+      if (a.minion === 'saruman') v += whiteCouldAnswerSaruman(state) ? -60 : 25;
       return v;
     }
     case 'recruitUnit': return recruitScore(state, actor, a, target); // build the war stacks WHERE THEY MATTER
@@ -1261,7 +1272,13 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // Never march units into a stack that's already full: anything over the 10-unit
   // limit is removed (lost to reinforcements). Penalise per lost unit so the AI
   // would rather not move than over-stack and bleed its own army (player report).
-  const over = Math.max(0, unitCount(state, to) + unitCount(state, from) - STACKING_LIMIT);
+  // …but a Shadow move with room at the far end is trimmed to what fits before it is
+  // sent (maybeFitStack), so nothing is lost: charging it anyway froze the Shadow one
+  // unit short of a Stronghold assault — 5 in Lamedon beside Dol Amroth, 10 in Pelargir
+  // unable to join — and the game never ended (a soak timeout found while measuring
+  // report 63hl89a35stuc7as).
+  const trimmed = actor === 'shadow' && unitCount(state, to) < STACKING_LIMIT;
+  const over = trimmed ? 0 : Math.max(0, unitCount(state, to) + unitCount(state, from) - STACKING_LIMIT);
   if (over > 0) s -= 30 + over * 25;
   return s;
 }
@@ -1497,6 +1514,12 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         if (state.cards.shadow.table.includes(a.cardId) && !state.cards.shadow.hand.includes(a.cardId)) continue;
         const mods = combatModsFor(a.cardId);
         if (owner === 'shadow' && pc && mods?.symmetricBonus && sharedBonusEdge(state, owner, mods) <= 0) continue;
+        // Never from inside a besieged Stronghold: the attacker's 6s become 4s or 3s, and
+        // the card is spent on a fight the garrison has nearly always lost already
+        // (report m60xvxgtri6gz1ux: "eagerly plays Deadly Strife and Desperate Battle when
+        // besieged"). A minimum edge instead also refused the 2-against-6 field battle
+        // the earlier report 3w0r36515c5d2q6w asked for, so it is this narrower rule.
+        if (owner === 'shadow' && pc && mods?.symmetricBonus && pc.boxed === 'shadow') continue;
         let v = combatCardValue(mods);
         if (pc && isDiceMathCard(mods)) {
           // Held back for a better battle unless it does at least half what it could.
