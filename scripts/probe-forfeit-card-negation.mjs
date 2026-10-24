@@ -54,7 +54,7 @@ const diceHits = (roll) => roll.dice.filter((d) => d === 6 || d >= roll.target).
 function converted(s) {
   const r = s.pendingCombat.defRoll;
   const logLine = [...s.log].reverse().find((e) => /Round 1 dice/.test(e.msg ?? ''))?.msg ?? '';
-  const m = /defender .*?→ (\d+) hits? total/.exec(logLine);
+  const m = /defender .*?→ (\d+) hits?\b/.exec(logLine);
   return m ? Number(m[1]) - diceHits(r) : NaN;
 }
 
