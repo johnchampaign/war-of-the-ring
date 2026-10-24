@@ -40,8 +40,12 @@ export function TurnSummary({ view, yourTurn, you, onOpenLog, hold }: { view: Ga
   const oppActions = opp ? items.filter((e) => e.actor === opp) : items;
   // Show only on the viewer's turn, once per new block, never over a live decision,
   // and never on top of a result popup the player hasn't acknowledged yet (`hold`).
-  if (!yourTurn || oppActions.length === 0 || start === dismissed || view.pendingChoice || view.pendingCombat || hold) return null;
-  const dismiss = () => setDismissed(start!);
+  // A block is known by its first entry's `seq`, not by where it starts: once the log
+  // reaches its cap every block starts at much the same index, so a dismissed one hid
+  // all the ones after it.
+  const block = items[0]?.seq ?? -1;
+  if (!yourTurn || oppActions.length === 0 || block === dismissed || view.pendingChoice || view.pendingCombat || hold) return null;
+  const dismiss = () => setDismissed(block);
   const oppName = you === 'fp' ? 'Shadow' : you === 'shadow' ? 'Free Peoples' : 'the opponent';
   // A battle you started can finish without needing you again — the opponent picks
   // their card, the dice fall, casualties are forced — and you next get control after

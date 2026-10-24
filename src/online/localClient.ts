@@ -92,7 +92,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
     if (wotrAdapter.result?.(state)) { clearLocalGame(); return; }
     saveLocalGame({
       schemaVersion: wotrAdapter.schemaVersion ?? 0, state, aiSide,
-      aiRng: aiRng.serialize(), oppLogStart, turn: state.turn, logTimes,
+      aiRng: aiRng.serialize(), oppLogStart: entriesThrough(oppLogSeq), oppLogSeq, turn: state.turn, logTimes,
     });
   };
 
@@ -120,13 +120,21 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
     }
   };
 
-  // Log index where the "what happened while you were away" summary begins — the
-  // first entry the current viewer didn't cause. vs-AI: just after the human's
+  // Where the "what happened while you were away" summary begins — the first entry
+  // the current viewer didn't cause — kept as the `seq` of the last entry BEFORE it.
+  // It used to be a log INDEX, but the in-state log is capped (engine/log.ts): once a
+  // game reaches the cap, appending drops the oldest entry and the length stops
+  // growing, so "the log is longer than where the summary starts" never held again —
+  // late in a long game the summary vanished, and a move the AI made on a refresh was
+  // neither saved nor time-stamped. `seq` survives the cap. vs-AI: just after the human's
   // action (summary = the AI's turn). Hotseat: before the acting player's action (so
   // the NEXT player sees that turn). Surfaced on the view for the TurnSummary UI.
   // On resume, keep the boundary the saved game had and treat the session as already
   // opened, so reloading mid-turn does not wipe a pending "while you were away" summary.
-  let oppLogStart = resume ? resume.oppLogStart : 0;
+  const tailSeq = (): number => state.log[state.log.length - 1]?.seq ?? 0;
+  const entriesThrough = (seq: number): number => state.log.filter((e) => e.seq <= seq).length;
+  // A save from before the switch holds the index; its log is the one it indexed.
+  let oppLogSeq = resume ? (resume.oppLogSeq ?? resume.state.log[resume.oppLogStart - 1]?.seq ?? 0) : 0;
   let opened = !!resume;
 
   // Undo history: a snapshot of the state + its fingerprint taken just BEFORE each
@@ -141,13 +149,12 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
     // hotseat: show whoever is currently up (they control this screen).
     const viewer: Side = aiSide ? human : (actor ?? 'fp');
     const view = wotrAdapter.viewFor(state, viewer) as GameState;
-    // `oppLogStart` is an index into the FULL log, but the view's log is REDACTED
-    // (opponent-side-tagged entries are stripped, same rule as redact.ts). Slicing
-    // the shorter redacted log with a full-log index shows the wrong entries — or,
-    // once enough hidden entries pile up (e.g. the Shadow's combat-card plays by
-    // turn 2), an index PAST the end, so the "while you waited" summary silently
-    // shows nothing. Translate the boundary into the redacted log's index space.
-    const redactedBoundary = state.log.slice(0, oppLogStart).filter((e) => e.side == null || e.side === viewer).length;
+    // The view's log is REDACTED (opponent-side-tagged entries are stripped, same rule
+    // as redact.ts), so the summary's start is counted in the redacted log's index
+    // space: a full-log index there shows the wrong entries — or, once enough hidden
+    // entries pile up (e.g. the Shadow's combat-card plays by turn 2), an index PAST
+    // the end, and the "while you waited" summary silently shows nothing.
+    const redactedBoundary = state.log.filter((e) => e.seq <= oppLogSeq && (e.side == null || e.side === viewer)).length;
     (view as unknown as { oppLogStart: number }).oppLogStart = redactedBoundary;
     return { view, yourTurn: !over && (aiSide ? actor === human : true), turn: state.turn, gameOver: over, you: viewer };
   };
@@ -159,18 +166,18 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
     // (in local play the opponent acts inside submit, so a poll mustn't wipe the
     // pending summary).
     fetch: async () => {
-      const before = state.log.length;
+      const before = tailSeq();
       runAI();
       const firstOpen = !opened;
-      if (firstOpen) { oppLogStart = state.log.length; opened = true; }
+      if (firstOpen) { oppLogSeq = tailSeq(); opened = true; }
       // Persist on the very first open too, not just on a move: a game the player
       // started but has not yet acted in is still a game, and losing it to a reload is
       // the exact complaint this exists to fix.
-      if (firstOpen || state.log.length !== before) { stampNow(); persistNow(); }
+      if (firstOpen || tailSeq() !== before) { stampNow(); persistNow(); }
       return snapshot();
     },
     submit: async (action: WotrAction) => {
-      const before = state.log.length;
+      const before = tailSeq();
       const actor = wotrAdapter.currentActor(state) as Side | null;
       if (actor && (!aiSide || actor === human)) {
         // Snapshot the pre-action state so this step can be undone.
@@ -180,9 +187,9 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
         state = wotrAdapter.applyAction(state, action, actor);
         if (aiSide && resultMarks(state) !== marks && wotrAdapter.currentActor(state) === aiSide) aiHeld = true;
       }
-      const afterHuman = state.log.length;
+      const afterHuman = tailSeq();
       runAI();                                            // then let the AI take its turn(s)
-      oppLogStart = aiSide ? afterHuman : before;         // vs-AI: AI's entries; hotseat: the acting player's turn (for the next viewer)
+      oppLogSeq = aiSide ? afterHuman : before;         // vs-AI: AI's entries; hotseat: the acting player's turn (for the next viewer)
       stampNow();
       persistNow();
       return snapshot();
@@ -193,9 +200,9 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
     resumeAI: async () => {
       if (!aiHeld) return snapshot();
       aiHeld = false;
-      const before = state.log.length;
+      const before = tailSeq();
       runAI();
-      if (state.log.length !== before) { stampNow(); persistNow(); }
+      if (tailSeq() !== before) { stampNow(); persistNow(); }
       return snapshot();
     },
     legalActions: async () => {
@@ -228,7 +235,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
       // from exactly the hotseat opponent it exists to inform. It names no hidden info.
       const undoer: Side = aiSide ? human : ((wotrAdapter.currentActor(state) as Side | null) ?? human);
       if (foreknowledge) log(state, null, 'undo', `${sideName(undoer)} used a foreknowledge undo — re-deciding after seeing a random outcome (dice/cards).`);
-      oppLogStart = state.log.length;
+      oppLogSeq = tailSeq();
       opened = true;
       stampNow(); // also prunes stamps past the restored log's end
       persistNow();
@@ -259,7 +266,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
           mode: aiSide ? 'vs-ai' : 'hotseat',
           humanSide: human, aiSide: aiSide ?? null,
           yourTurn: aiSide ? cur === human : true,
-          oppLogStart, // full-log index the "while you waited" summary keys off
+          oppLogSeq, // log seq the "while you waited" summary starts after
           viewport: w ? { w: w.innerWidth, h: w.innerHeight, dpr: w.devicePixelRatio } : null,
           userAgent: (typeof navigator !== 'undefined' ? navigator.userAgent : '').slice(0, 200),
         };

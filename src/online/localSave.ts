@@ -31,8 +31,12 @@ export interface LocalSave {
   /** The AI's tie-break Rng cursor (Rng.serialize()), so a resumed game plays on
    *  deterministically instead of restarting the sequence. */
   aiRng: number;
-  /** Where the "what happened while you were away" summary starts. */
+  /** Where the "what happened while you were away" summary starts, as a log index. */
   oppLogStart: number;
+  /** The same boundary as the `seq` of the last entry before the summary — the index
+   *  stops meaning anything once the log reaches its cap. Optional: older saves resume
+   *  from `oppLogStart`. */
+  oppLogSeq?: number;
   /** Move-receipt times (client clock, epoch ms), ascending by log seq — the
    *  local mirror of the server's dbf_log_times (feature F). Stamped by the
    *  local CLIENT, never the engine (which stays clock-free). Optional: saves
