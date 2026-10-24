@@ -162,7 +162,23 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
         const bodies = await fetchReportBodies(env, rows.map((r) => r.reportId));
         rows = rows.map((r) => { const b = bodies.get(r.reportId); return b ? { ...r, clientLog: b.clientLog as typeof r.clientLog, reporterView: b.reporterView } : r; });
       }
-      return json({ reports: rows.map((r) => summarizeReport(r, full)), total, truncated: rows.length < total });
+      // Online reports from games against the AI carry the reporter's own redacted view
+      // too: with no human opponent there is no one its hidden information could help
+      // (John, 2026-10-24; player report 2c532l5k5q6i702l — "dozens of reports … from
+      // online games, assuming the game state would be available"). Human-vs-human
+      // games keep it withheld.
+      const vsAi = new Set<string>();
+      if (full) {
+        const store = makeStore(env);
+        const online = [...new Set(rows.filter((r) => r.category === 'wotr' && r.gameId && r.gameId !== 'local' && r.reporterView).map((r) => r.gameId as string))];
+        await Promise.all(online.map(async (g) => {
+          try {
+            const meta = await store.getGameMeta(g);
+            if (meta && Object.values(meta.identities ?? {}).some((id) => String(id).startsWith('ai:'))) vsAi.add(g);
+          } catch { /* no meta: leave it withheld */ }
+        }));
+      }
+      return json({ reports: rows.map((r) => summarizeReport(r, full, vsAi.has(r.gameId ?? ''))), total, truncated: rows.length < total });
     }
     // POST /api/reports/:id/resolve  { note }
     if (seg.length === 3 && seg[0] === 'reports' && seg[2] === 'resolve' && method === 'POST') {
@@ -279,7 +295,7 @@ export const onRequest = async (context: Ctx): Promise<Response> => {
 // Public report summary: triage-relevant fields only. Deliberately omits
 // serverSnapshot / reporterView / clientLog (can carry the reporter's hidden
 // game state) and userAgent (fingerprinting) — those are token-gated reads.
-function summarizeReport(r: BugReportRow, full = false) {
+function summarizeReport(r: BugReportRow, full = false, vsAi = false) {
   const base = {
     reportId: r.reportId, gameId: r.gameId, reporterSide: r.reporterSide,
     turnNumber: r.turnNumber, message: r.message, severity: r.severity,
@@ -293,6 +309,9 @@ function summarizeReport(r: BugReportRow, full = false) {
   // For LOCAL bug reports, ?full=1 also returns the state snapshot (reporterView:
   // the reporter's own redacted view + legalActions) so "option not offered" reports
   // are diagnosable without a repro.
+  // And for an ONLINE report from a game against the AI (`vsAi`, checked by the caller)
+  // the reporter's own redacted view, so its board can be replayed too.
+  if (full && r.category === 'wotr' && vsAi && r.reporterView) return { ...base, snapshot: r.reporterView };
   return full && (r.category === 'wotr-gamelog' || localBug)
     ? { ...base, clientLog: r.clientLog, ...(localBug && r.reporterView ? { snapshot: r.reporterView } : {}) }
     : base;
