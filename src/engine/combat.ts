@@ -650,8 +650,10 @@ function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
     }
     if (then.spareNazgul) r.nazgul += then.spareNazgul;
     if (armySide(state, then.region) === then.besieger) {
+      // The garrison's end first, then the capture line, which already says who took it —
+      // the same two lines as the Ents' ending below (player report 0b2x0l6j1x2k2p1u).
+      log(state, null, 'army', `The garrison of ${then.region} is destroyed`);
       captureIfEnemySettlement(state, then.region, then.besieger); // not an "attack": no attack-activation
-      log(state, null, 'army', `the garrison of ${then.region} is destroyed — the besieging Army takes the Stronghold`);
     }
     return;
   }
@@ -671,10 +673,9 @@ function runCasualtyThen(state: GameState, then?: CasualtyThen | null): void {
       // second capture trigger) — the same ending as `siegeFall`.
       if (then.boxed) {
         delete r.siegeBox; r.besieged = false;
-        if (armySide(state, then.region) === 'fp') {
-          captureIfEnemySettlement(state, then.region, 'fp'); // not an "attack": no attack-activation
-          log(state, null, 'event', `The besieging Army takes ${then.region}`);
-        }
+        // The capture line says who took it; "The besieging Army takes X" repeated it
+        // (player report 0b2x0l6j1x2k2p1u).
+        if (armySide(state, then.region) === 'fp') captureIfEnemySettlement(state, then.region, 'fp'); // not an "attack": no attack-activation
       }
     }
   }
@@ -1103,6 +1104,13 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
     finishForceCasualties(state, foe, foeSide);
     return false;
   };
+  // The extra attack is named by its card — "Sudden Strike: [4 3 4 5 1] on 5+ → 1 hit"
+  // (player report 320u4k1a390g5e1t; it read "Free Peoples additional attack (before
+  // the Combat roll): …").
+  const preCardTitle = (sd: Side): string => {
+    const id = sd === pc.attacker ? pc.attackerCard : pc.defenderCard;
+    return id ? (EVENT_BY_ID[id]?.combat?.title ?? EVENT_BY_ID[id]?.name ?? id) : `${sd === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack`;
+  };
   for (let i = pc.preCombatDone ?? 0; i < effects.length; i++) {
     const ef = effects[i]!;
     pc.preCombatDone = i + 1;
@@ -1123,6 +1131,9 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       }
       const dest = dests[0] ?? null;
       if (dest) { noteWithdrawal(state, pc, ef.side); moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${sideDoes(ef.side, 'retreat')} ${own}→${dest} before combat`); }
+      // Say so when there is nowhere to go, where the retreat line would have been
+      // (player report 1nsn7gf4r95r03t8).
+      else log(state, null, 'combat', `${preCardTitle(ef.side)}: ${sideDoes(ef.side, 'find')} no free region to retreat to — the battle goes on`);
     } else if (ef.mods.preCombatAttackDice) {
       // Aim at the enemy FORCE, not the enemy REGION. In a siege assault (and a
       // sortie) one side stands in the region while the other is in the siege box —
@@ -1137,7 +1148,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       // Logged in the same shape as Sudden Strike / Charge (player report 2t4s0c6p4q2f3f2q).
       const faces: number[] = [];
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= 4) h++; } return h; });
-      log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on 4+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
+      log(state, null, 'combat', `${preCardTitle(ef.side)}: [${faces.join(' ')}] on 4+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
       noteCardRoll(pc, ef.side, 'before', faces, 4, hits);
       if (hits > 0 && askCasualties(foe, foeSide, hits)) return true;
     } else if (ef.mods.preCombatAttackFrom) {
@@ -1168,7 +1179,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
       const target = ef.side === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
       const faces: number[] = [];
       const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= target) h++; } return h; });
-      log(state, null, 'combat', `${ef.side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (before the Combat roll): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
+      log(state, null, 'combat', `${preCardTitle(ef.side)}: [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`, { side: ef.side, dice: faces });
       noteCardRoll(pc, ef.side, 'before', faces, target, hits);
       if (hits > 0 && askCasualties(foe, foeSide, hits)) return true;
     }
@@ -1283,7 +1294,8 @@ function finishCombat(state: GameState, advance: boolean): void {
       // region — p.32's second capture trigger, from the DEFENDER's side of this battle.
       delete r.siegeBox; r.besieged = false;
       captured = true; captureIfEnemySettlement(state, pc.to, pc.defender);
-      outcome = `The sortie from ${name} is destroyed — ${sideDoes(pc.defender, 'take')} the Stronghold`; victor = pc.defender;
+      // The capture logs itself just above (player report a3cmfhu7m8jl39dz).
+      outcome = `The sortie from ${name} is destroyed`; victor = pc.defender;
     } else if (garrison === 0 && defSurv === 0) {
       delete r.siegeBox; r.besieged = false;
       outcome = `Both Armies are destroyed at ${name}`;
@@ -1314,7 +1326,9 @@ function finishCombat(state: GameState, advance: boolean): void {
       outcome = mutualWipe ? `Both Armies are destroyed at ${name} — siege lifted` : `The assault on ${name} is thrown back — siege lifted`;
       victor = mutualWipe ? null : pc.defender;
     }
-    else { outcome = `The siege of ${name} holds`; victor = pc.defender; }
+    // The attacker ceased: no one won, so the battle popup shows it in neutral grey,
+    // not as the defender's victory (player report 656z2m6k333r4o5z).
+    else { outcome = `The siege of ${name} holds`; victor = null; }
   } else if (box && advance && defSurv === 0) { // RELIEF: the besieger (defender here) is wiped → garrison reoccupies
     liftSiege(state, pc.to); outcome = `The siege of ${name} is lifted`; victor = pc.attacker;
     // p.32: a relieving Army "cannot advance into the region containing the Stronghold
@@ -1336,7 +1350,10 @@ function finishCombat(state: GameState, advance: boolean): void {
       : mutualWipe ? `Both Armies are destroyed at ${name}`
       : (pc.atkWithdrew ?? 0) > 0 ? `${sideDoes(pc.attacker, 'withdraw')} from ${name}`
       : pc.siege ? `The siege of ${name} holds` : `The attack on ${name} is repulsed`;
-    victor = won ? pc.attacker : mutualWipe ? null : pc.defender;
+    // An attacker that simply ceased has lost nothing decisive — neutral, like a siege
+    // that holds (player report 656z2m6k333r4o5z).
+    const ceased = !won && !mutualWipe && atkSurv > 0 && !((pc.atkWithdrew ?? 0) > 0);
+    victor = won ? pc.attacker : mutualWipe || ceased ? null : pc.defender;
     if (won) { advanceOffer = { from: pc.from, to: pc.to, owner: pc.attacker }; r.besieged = false; }
     if (pc.siege && atkSurv === 0) r.besieged = false; // attacker gone
   }
@@ -1922,12 +1939,13 @@ export function combatStep(state: GameState): void {
           return `[${roll.dice.join(' ')}] on ${roll.target}+${toHit.length ? ` (${toHit.join(', ')})` : ''}`
             // The re-roll can have its OWN to-hit (cards bonus the two rolls separately).
             + (roll.rerolls.length ? ` re-roll [${roll.rerolls.join(' ')}]${roll.rerollTarget != null && roll.rerollTarget !== roll.target ? ` on ${roll.rerollTarget}+${reToHit.length ? ` (${reToHit.join(', ')})` : ''}` : ''}` : '')
-            + (roll.auto ? ` + ${roll.auto} automatic hit${roll.auto === 1 ? '' : 's'} from ${t(card)}` : '')
+            // "+ 2 hits from 'Nameless Wood' → 6 hits" (player report 2x130m4a00716h3r).
+            + (roll.auto ? ` + ${roll.auto} hit${roll.auto === 1 ? '' : 's'} from ${t(card)}` : '')
             // Confusion's backfire is a hit AGAINST this roller, so it is named on their
             // own segment rather than silently inflating the opponent's total.
             + (roll.backfire ? ` + ${roll.backfire} unmodified '1'${roll.backfire === 1 ? '' : 's'} wounding their own Army (${t(foeCard)}, no re-roll)` : '')
             + (notes.length ? ` · ${notes.join(' · ')}` : '')
-            + ` → ${rolled} hit${rolled === 1 ? '' : 's'} total`
+            + ` → ${rolled} hit${rolled === 1 ? '' : 's'}`
             + (hits !== rolled ? ` (${hits} after ${after.length ? after.join(', ') : 'card effects'})` : '');
         };
         const atkSeg: Seg = { roll: aRoll, rolled: atkHits, hits: atk, card: pc.attackerCard, mods: aMods, foeCard: pc.defenderCard, foeMods: dMods,
@@ -2177,7 +2195,8 @@ export function resolveSiegeExtend(state: GameState, extend: boolean): void {
   const n = (Object.keys(r.units) as Nation[]).find((k) => (r.units[k]?.elite ?? 0) > 0);
   if (!n) { finishCombat(state, false); return; } // no Elite left to spend (shouldn't happen — gated on offer)
   reduceElite(state, r, n, pc.attacker); // Elite figure back to the pool (Shadow) / gone (FP), Regular taken from it
-  log(state, null, 'combat', `${sideDoes(pc.attacker, 'press')} the assault: ${unitAdjective(n).replace(/^A/, 'a')} Elite is reduced to a Regular`);
+  // "…presses the assault by reducing an Isengard Elite to a Regular" (player report 6x430w036961105u).
+  log(state, null, 'combat', `${sideDoes(pc.attacker, 'press')} the assault by reducing ${unitAdjective(n).replace(/^A/, 'a')} Elite to a Regular`);
   pc.siegeRoundsLeft = 1;
   pc.round += 1;
   pc.step = 'attackerCard'; // advance() re-drives the battle sub-machine

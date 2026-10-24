@@ -1551,7 +1551,8 @@ register('sh-str-04', {
     state.dice.fp = kept;
     // Immediate card effects carry no card-name prefix, in the present tense (player
     // report 2p395t5k565r5o61).
-    log(state, null, 'event', `${removed} Free Peoples Will of the West ${removed === 1 ? 'die is' : 'dice are'} discarded`);
+    // The card as the subject (player report dhn5yj4qhap86d26).
+    log(state, null, 'event', `The Day Without Dawn discards ${removed} Free Peoples Will of the West ${removed === 1 ? 'die' : 'dice'}`);
   },
 });
 

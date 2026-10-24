@@ -58,13 +58,13 @@ function suddenStrike(seed) {
     const { preChoice, msgs, seed } = found;
     check('the Shadow owns the casualty choice', preChoice.owner === 'shadow', `seed ${seed}`);
     check('...and the battle resumes at the round start', preChoice.next === 'beginRound');
-    const pre = msgs.findIndex((m) => m.includes('additional attack (before the Combat roll)'));
+    const pre = msgs.findIndex((m) => /^Sudden Strike: \[/.test(m));
     const roll = msgs.findIndex((m) => m.startsWith('Round 1 dice'));
     check('the Combat roll still follows the strike', pre >= 0 && roll > pre, `pre@${pre} roll@${roll}`);
     check('the chosen casualty is an Elite reduced, not a Regular removed', msgs.slice(pre, roll).some((m) => /Elite (falls|is reduced)/.test(m)), msgs.slice(pre, roll).filter((m) => /Regular falls|Elite (falls|is reduced)/.test(m)).join(' | '));
     const announce = msgs.filter((m) => /^Round 1: Free Peoples \(defender\)/.test(m)).length;
     check('the cards are announced once, not again on resuming', announce === 1, `${announce} announcements`);
-    const strikes = msgs.filter((m) => m.includes('additional attack (before the Combat roll)')).length;
+    const strikes = msgs.filter((m) => /^Sudden Strike: \[/.test(m)).length;
     check('the strike is rolled once', strikes === 1, `${strikes}`);
   }
 }

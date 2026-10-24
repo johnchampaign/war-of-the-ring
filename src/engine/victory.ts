@@ -20,7 +20,9 @@ function win(state: GameState, side: Side, reason: string): void {
   state.winReason = reason;
   state.phase = 'gameOver';
   // "the Free Peoples" are plural, "the Shadow" singular (player report 1p2d6j180n0p5s1w).
-  log(state, null, 'victory', `${side === 'fp' ? 'Free Peoples win' : 'Shadow wins'}: ${reason}`);
+  // The event, then who won: "Shadow conquers Middle-earth (10 Victory Points) — Shadow
+  // wins" (player report 2s0c6y2j150x0b4i).
+  log(state, null, 'victory', `${reason.replace(/^The Shadow /, 'Shadow ')} — ${side === 'fp' ? 'Free Peoples win' : 'Shadow wins'}`);
 }
 
 /** Ring-based conditions — checked continuously (after any Corruption/Mordor

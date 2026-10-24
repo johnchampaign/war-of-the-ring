@@ -360,6 +360,14 @@ die already showing an Eye.
   it used to read the control marker, which got both halves backwards *(player report,
   2026-08-28: "Candles of Corpses can't be played while the fellowship are in a
   settlement")*.
+  *Foul Thing from the Deep*'s forced random casualty follows the Almanac's order: Axe
+  and Bow / Horn of Gondor, then Guide abilities, "Then, if damage is still one or more,
+  a random Companion must be picked … Any surplus damage must be taken as direct
+  Corruption." The FP prompt offers only those reductions and the random pick (no
+  straight Corruption, no Guide casualty); with no reduction available the pick is made
+  at once (a forced single option). The pick is the Hunt's one casualty (p.42); the
+  remainder used to re-offer a chosen casualty, so two Companions fell to one tile
+  *(report 8x25qmxylu5j32tr)*.
   "Play if"/"Play on the table if" preconditions gate play (`canPlay`) for *The Last
   Battle*, *Denethor's Folly*, and *The Palantír of Orthanc* like every other
   precondition card — previously they could be played with the condition unmet and

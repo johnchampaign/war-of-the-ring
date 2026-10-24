@@ -230,22 +230,18 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
 
   // Foul Thing from the Deep: "the Free Peoples player must reduce Hunt Damage (if
   // any) by eliminating a random Companion (unless there are no Companions in the
-  // Fellowship) before using the Ring" — the first reduction is FORCED and random,
-  // not the FP's choice (player report: the card resolved as a plain extra Hunt).
-  // Any damage left after the casualty resolves normally.
-  if (opts.forceRandomCasualty && state.fellowship.companions.length > 0) {
-    const victim = withRng(state, (rng) => rng.pick(fs.companions));
-    // No "a random Companion must be eliminated" preamble: the casualty line just below
-    // already says who was chosen at random (player report 704h4d3l6n3r1n0d).
-    const level = eliminateCompanionInline(state, victim, damage, 'random');
-    damage = Math.max(0, damage - level);
-    // The casualty may have made Gollum the Guide — re-ask whether the icon still reveals.
-    if (damage === 0) {
-      const rv = revealIcon && !gollumIgnoresReveal(state, numbered);
-      logHuntResolved(state, 0);
-      if (rv) beginReveal(state);
-      return;
-    }
+  // Fellowship) before using the Ring" — the casualty is FORCED and random, not the
+  // FP's choice (player report: the card resolved as a plain extra Hunt). The Almanac
+  // orders it: Axe and Bow / Horn of Gondor, then Guide abilities, "Then, if damage is
+  // still one or more, a random Companion must be picked … Any surplus damage must be
+  // taken as direct Corruption." So the reductions are offered first, the random pick
+  // follows, and it is this Hunt's ONE casualty (p.42) — it used to leave the FP a
+  // second, chosen casualty for the remainder (player report 8x25qmxylu5j32tr: Merry
+  // and then Boromir both fell to one tile).
+  if (opts.forceRandomCasualty && fs.companions.length > 0) {
+    state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage, reveal, revealIcon, numbered, forceRandom: true, ...(opts.source ? { source: opts.source } : {}) } };
+    forceRandomIfNoChoice(state);
+    return;
   }
 
   // Isildur's Bane: "Hunt damage may not be reduced in any way before using the
@@ -308,7 +304,20 @@ type HuntDamageData = {
   damage: number; reveal: boolean; revealIcon?: boolean; numbered?: boolean;
   /** Gollum has spent his reveal-to-reduce: the reveal is his own, not the tile's. */
   gollumReveal?: boolean; casualty?: boolean; source?: string;
+  /** Foul Thing from the Deep: the casualty is a forced RANDOM pick, after any
+   *  reductions (Almanac). Only meaningful until `casualty` is set. */
+  forceRandom?: boolean;
 };
+/** Foul Thing's forced pick is still owed (damage left, a Companion to take). */
+export const forcedRandomOwed = (state: GameState, d: { damage?: number; forceRandom?: boolean; casualty?: boolean } | undefined): boolean =>
+  !!d?.forceRandom && !d.casualty && (d.damage ?? 0) > 0 && state.fellowship.companions.length > 0;
+/** With no reduction left to choose, Foul Thing's random pick is not a decision —
+ *  make it at once. */
+function forceRandomIfNoChoice(state: GameState): void {
+  const d = state.pendingChoice?.data as HuntDamageData | undefined;
+  if (state.pendingChoice?.kind !== 'huntDamage' || !forcedRandomOwed(state, d)) return;
+  if (!huntReductionAvailable(state, revealDueNow(state, d!))) resolveHuntDamage(state, 'random');
+}
 /** Is a reveal due, given the CURRENT Guide? */
 const revealDueNow = (state: GameState, d: HuntDamageData): boolean =>
   !!d.gollumReveal || (d.revealIcon !== undefined
@@ -634,8 +643,9 @@ function repromptOrFinish(state: GameState, damage: number, casualty = false): v
     state.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: {
       damage, reveal,
       ...(prev.revealIcon !== undefined ? { revealIcon: prev.revealIcon, numbered: !!prev.numbered } : {}),
-      ...(prev.gollumReveal ? { gollumReveal: true } : {}),
+      ...(prev.gollumReveal ? { gollumReveal: true } : {}), ...(prev.forceRandom ? { forceRandom: true } : {}),
       ...(spent ? { casualty: true } : {}), ...(prev.source ? { source: prev.source } : {}) } };
+    forceRandomIfNoChoice(state);
     return;
   }
   finishHunt(state, damage, reveal);
@@ -694,12 +704,16 @@ export function resolveHuntDamage(state: GameState, mode: 'corruption' | 'guide'
   // reduceSeparate is handled in the adapter (needs separateCompanion); it calls
   // reduceHuntDamageBySeparate. It should not reach here.
 
-  if (mode === 'corruption') { finishHunt(state, d.damage, revealDueNow(state, d)); return; } // take it all as Corruption
+  if (mode === 'corruption') {
+    if (forcedRandomOwed(state, d)) throw new Error('Foul Thing from the Deep: a random Companion must be eliminated before the Ring is used.');
+    finishHunt(state, d.damage, revealDueNow(state, d)); return; // take it all as Corruption
+  }
   // guide / random: eliminate exactly ONE Companion for the whole Hunt (p.42 —
   // "he must eliminate one Companion"; "any excess damage must still be taken as
   // Corruption"). A second casualty is not a legal way to soak the remainder
   // (player report: three Companions were spent on one tile).
   if (d.casualty) throw new Error('Only one Companion may be eliminated per Hunt (p.42) — any remaining damage must be taken as Corruption.');
+  if (mode === 'guide' && forcedRandomOwed(state, d)) throw new Error('Foul Thing from the Deep: the casualty must be a random Companion.');
   if (fs.companions.length > 0) {
     const victim = mode === 'guide'
       ? (fs.companions.includes(fs.guide) ? fs.guide : fs.companions[0]!)

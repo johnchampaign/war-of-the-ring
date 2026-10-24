@@ -16,7 +16,7 @@ import {
   recruitNazgul, canRecruitNazgul, overStack, overStackBox, forceSide, removeStackUnit, charDieLeaders, figureForce, forceUnitCount, characterInPlay,
 } from '../engine/armies';
 import { resolveCombatKill, startBattle, attackError, attackTargets, sortieForce, resolveCasualties, applyCasualties, pendingCasualtyOptions, resolveCasualtyStep, resolveAdvanceHoldBack, resolveAdvanceChoice, resolveContinue, resolveRetreat, resolveRetreatTo, resolvePreCombatRetreat, preCombatRetreatDestinations, resolveSiegeWithdraw, resolveSiegeExtend, resolveRelieveAdvance, resolveCombatCardCost, resolveBesiegerAdvance, resolveWhiteRider, resolveWordsOfPower, resolveHeroicDeath, retreatDestinations, canRetreat, playableCombatCards, resolvePlayCombatCard, resolveEventCasualties, garrisonFalls } from '../engine/combat';
-import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending, returnSetAsideHuntTiles } from '../engine/hunt';
+import { resolveHuntDamage, reduceHuntDamageBySeparate, huntReduceCards, forcedRandomOwed, resolveHuntPreventDraw, resolveHuntRedraw, resolveCrebain, huntResolutionPending, returnSetAsideHuntTiles } from '../engine/hunt';
 import { advancePolitical, advanceableNations, isAtWar } from '../engine/politics';
 import { shadowBarredFromRegion, threatsAndPromisesActive, palantirActive, fpForceDiscardMethods, FP_FORCE_DISCARD_CARDS, SH_FORCE_DISCARD_CARDS } from '../engine/persistent';
 import { canBringMinion, entryRegions, bringMinion, MINION_IDS } from '../engine/minions';
@@ -339,13 +339,17 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [...new Set(state.cards[actor].hand)].map((card) => ({ kind: 'discardCard', card }));
       case 'huntDamage': {
         const fs = state.fellowship;
-        const acts: WotrAction[] = [{ kind: 'huntDamage', mode: 'corruption' }];
+        // Foul Thing from the Deep: until its forced random casualty is taken, the only
+        // choices are that pick and the reductions that come before it (Almanac) — no
+        // straight Corruption and no Guide casualty.
+        const forced = forcedRandomOwed(state, state.pendingChoice!.data as { damage?: number; forceRandom?: boolean; casualty?: boolean });
+        const acts: WotrAction[] = forced ? [{ kind: 'huntDamage', mode: 'random' }] : [{ kind: 'huntDamage', mode: 'corruption' }];
         // ONE casualty per Hunt (p.42: "he must eliminate one Companion" — excess damage
         // "must still be taken as Corruption"). Once one has been spent this Hunt, only
         // the reduction abilities below remain (player report: the prompt kept offering
         // the Guide until three Companions were gone).
         const casualtySpent = !!(state.pendingChoice!.data as { casualty?: boolean } | undefined)?.casualty;
-        if (fs.companions.length > 0 && !casualtySpent) {
+        if (fs.companions.length > 0 && !casualtySpent && !forced) {
           acts.push({ kind: 'huntDamage', mode: 'guide' }, { kind: 'huntDamage', mode: 'random' });
         }
         // Guide damage-reduction abilities (−1 each): separate a Hobbit Guide, or

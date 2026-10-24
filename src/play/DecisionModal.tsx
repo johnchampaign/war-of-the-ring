@@ -370,7 +370,7 @@ function RemoveExcessDetail({ view, data }: { view: GameState; data?: { region?:
 // the damage is the tile's value (not the success count) — so the choice isn't
 // made blind to what produced it. A link opens the full "how the Hunt works"
 // dialog with every modifier.
-function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damage?: number; reveal?: boolean; source?: string; noReduce?: boolean }; onExplain: () => void }) {
+function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damage?: number; reveal?: boolean; source?: string; noReduce?: boolean; forceRandom?: boolean; casualty?: boolean }; onExplain: () => void }) {
   if (!data) return null;
   const draws = view.hunt.draws ?? [];
   const last = draws.length ? draws[draws.length - 1] : undefined;
@@ -423,6 +423,18 @@ function HuntDetail({ view, data, onExplain }: { view: GameState; data?: { damag
       <div style={{ fontSize: 13, color: '#e9b', margin: '4px 0 0' }}>
         Hunt damage <b>{data.damage ?? '?'}</b>. Choose how the Ring-bearers absorb it.
       </div>
+      {/* Say why the usual options are missing (player report 8x25qmxylu5j32tr: Foul
+          Thing's forced casualty went unexplained, then a second one was offered). */}
+      {data.forceRandom && !data.casualty && (
+        <div style={{ fontSize: 12.5, color: '#cbbf9a', margin: '4px 0 0' }}>
+          Foul Thing from the Deep: a random Companion must fall before the Ring is used. You may reduce the damage first.
+        </div>
+      )}
+      {data.casualty && (
+        <div style={{ fontSize: 12.5, color: '#cbbf9a', margin: '4px 0 0' }}>
+          A Companion has already fallen to this tile — only one may per Hunt, so what is left goes on the Ring unless you reduce it.
+        </div>
+      )}
       {data.reveal && (
         <div style={{ margin: '6px 0 0', padding: '7px 9px', background: '#5a1f1f', border: '1px solid #a83232', borderRadius: 8, fontSize: 12.5, lineHeight: 1.45 }}>
           <RevealedDot /> This tile <b>reveals</b> the Fellowship.

@@ -51,7 +51,9 @@ export function HuntIndicator({ view }: { view: GameState }) {
             sits with them in their colour, and a hairline separates the Fellowship's state. */}
         {/* Shown with an empty box too (the Fellowship phase), so the lines below don't
             jump when the first Eye arrives (player report 4e1w466p1k400s36). */}
-        {!onMordor && <div style={{ fontSize: 11, color: '#e6b85a' }}>Hunt hits on {hitOn}+</div>}
+        {/* …but hidden while the box is empty: a to-hit with no dice to roll says nothing.
+            Hidden, not removed, so the layout still holds still (player report 3s5x45132k1i1y5v). */}
+        {!onMordor && <div style={{ fontSize: 11, color: '#e6b85a', visibility: box === 0 ? 'hidden' : 'visible' }}>Hunt hits on {hitOn}+</div>}
         <div style={{ borderTop: '1px solid #3a3326', margin: '3px 0 2px' }} />
         {/* Corruption track. */}
         <div style={{ fontSize: 11, color: danger ? '#ff8a8a' : '#cbbf9a', fontWeight: danger ? 700 : 400 }}>

@@ -10,7 +10,7 @@
 //   with the Reveal icon revealed the Fellowship all along (the reporter's game
 //   saw the AI reveal, reposition, then re-hide with a die).
 import { createGame } from '../src/engine/setup.ts';
-import { startGame } from '../src/adapter/wotrAdapter.ts';
+import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
 import { getHandler } from '../src/engine/handlers/registry.ts';
 import { STANDARD_TILE_LIST } from '../src/engine/data.ts';
 
@@ -77,6 +77,39 @@ function rigged(tileMatch) {
   // stands (revealMove); resolving it flips hidden to false.
   check('the reveal raises the revealMove choice', state.pendingChoice?.kind === 'revealMove',
     `pending=${state.pendingChoice?.kind ?? 'none'}`);
+}
+
+
+// --- The forced casualty is the Hunt's ONE casualty; reductions come first ---------
+// Player report 8x25qmxylu5j32tr: Merry fell at random, then the prompt offered a
+// second (chosen) casualty and Boromir fell too. Almanac order: Axe and Bow / Horn of
+// Gondor, then Guide abilities, then the random pick; surplus is direct Corruption.
+{
+  console.log('\n=== Foul Thing: one casualty only, reductions before the random pick ===');
+  const state = rigged((t) => t.value === 3);
+  state.fellowship.companions = ['meriadoc', 'boromir'];
+  state.fellowship.guide = 'boromir';
+  getHandler('sh-char-07').apply(state, 'shadow');
+  const lost = 2 - state.fellowship.companions.length;
+  check('no reduction on offer: the random pick is made at once', lost === 1, `companions left ${state.fellowship.companions.join(',')}`);
+  if (state.pendingChoice?.kind === 'huntDamage') {
+    const modes = wotrAdapter.legalActions(state, 'fp').map((a) => a.mode);
+    check('no second casualty is offered for the remainder', !modes.includes('guide') && !modes.includes('random'), modes.join(','));
+  } else {
+    check('remainder went straight onto the Ring (no reduction left)', state.pendingChoice?.kind !== 'huntDamage');
+  }
+
+  const s2 = rigged((t) => t.value === 3);
+  s2.cards.fp.table.push('fp-char-06'); // Axe and Bow (Gimli and Legolas start in the Fellowship)
+  const n0 = s2.fellowship.companions.length;
+  getHandler('sh-char-07').apply(s2, 'shadow');
+  const modes = wotrAdapter.legalActions(s2, 'fp').map((a) => a.mode);
+  check('with Axe and Bow on the table the FP decides first', s2.pendingChoice?.kind === 'huntDamage' && s2.fellowship.companions.length === n0, `pending=${s2.pendingChoice?.kind}`);
+  check('options: the reduction or the random pick — no Corruption, no Guide', modes.includes('reduceCard') && modes.includes('random') && !modes.includes('corruption') && !modes.includes('guide'), modes.join(','));
+  const s3 = wotrAdapter.applyAction(s2, { kind: 'huntDamage', mode: 'reduceCard', card: 'fp-char-06' }, 'fp');
+  check('after the reduction the random pick follows by itself', s3.fellowship.companions.length === n0 - 1, `companions ${n0} -> ${s3.fellowship.companions.length}`);
+  const left = s3.pendingChoice?.kind === 'huntDamage' ? wotrAdapter.legalActions(s3, 'fp').map((a) => a.mode) : [];
+  check('and still no second casualty', !left.includes('guide') && !left.includes('random'), left.join(',') || 'resolved');
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

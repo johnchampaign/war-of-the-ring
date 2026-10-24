@@ -36,7 +36,7 @@ function fight({ atkUnits, defUnits, defLeaders = 0, shadowCard = null, fpCard =
   // The battle modal / popup draw these as dice (player report 562h455s6y5o363v).
   const cardRolls = s.pendingCombat?.cardRolls ?? s.lastBattle?.cardRolls ?? [];
   return { s, msgs, cardRolls,
-    preIdx: msgs.findIndex((m) => m.includes('additional attack (before the Combat roll)')),
+    preIdx: msgs.findIndex((m) => /^Sudden Strike: \[/.test(m)),
     postIdx: msgs.findIndex((m) => m.includes('additional attack (after casualties)')),
     rollIdx: msgs.findIndex((m) => m.startsWith('Round 1 dice')) };
 }

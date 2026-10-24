@@ -43,7 +43,7 @@ export function HuntTileFace({ draw, size = 58 }: { draw: Draw; size?: number })
   const ink = kind === 'shadow' ? '#2e0b06' : kind === 'fp' ? '#0f2a3e' : blank ? '#2a2418' : '#3a2a0e';
   return (
     <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: `0 ${Math.round(size / 10)}px` }}>
-      <div title={draw.specialCard ? `${draw.specialCard} tile` : undefined} style={{
+      <div title={draw.specialCard ? draw.specialCard : undefined} style={{
         position: 'relative', width: size, height: size, borderRadius: Math.round(size / 9), background: face,
         border: `2px solid ${rim}`, display: 'grid', placeItems: 'center',
         boxShadow: '0 2px 7px #000a, inset 0 1px 2px #fff5, inset 0 -2px 4px #0004',
