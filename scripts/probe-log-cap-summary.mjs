@@ -39,8 +39,10 @@ const check = (label, ok, detail = '') => {
 
 console.log('probe-log-cap-summary');
 // Not every game runs long enough to fill the log; take the first seed that does.
+// Searched widely: a stronger AI ends more games early, and with seeds 1-12 only the
+// probe ran out of long games once the Shadow got sharper (2026-10-25).
 let client, v, seed, reached = false, afterCap = 0, exact = 0;
-for (seed = 1; seed <= 12 && afterCap < 15; seed++) {
+for (seed = 1; seed <= 60 && afterCap < 15; seed++) {
   mem.clear();
   client = makeLocalClient(seed, { aiSide: 'shadow' });
   const rng = new Rng(seed * 31 + 5);

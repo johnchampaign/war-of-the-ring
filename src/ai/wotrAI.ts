@@ -1020,11 +1020,20 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // Isengard Settlement) against two, or two Orthanc Regulars made Elites — each a
       // Leader too while Saruman stands (reports 504m0n0r2o0m4h4w, 5i2d2w166c672j1p:
       // the Shadow kept mustering in North Dunland and Orthanc instead).
-      if (a.mode !== 'recruit') return (state.regions['orthanc']!.units.isengard?.regular ?? 0) >= 2 ? 62 : 30;
+      // Priced by what it actually yields: with a single Elite left in the pool the
+      // upgrade promotes ONE Regular, and with a single Regular left the recruit places
+      // ONE — both worse than a plain muster of an Elite (reports 290o72523h2w0o0g,
+      // 2w4n2f1y1y4o5j59).
+      const pool = state.reinforcements.isengard;
+      if (a.mode !== 'recruit') {
+        const n = Math.min(2, state.regions['orthanc']!.units.isengard?.regular ?? 0, pool.elite);
+        return n >= 2 ? 62 : 10;
+      }
       // A Regular in EVERY Isengard Settlement — one landing on a full stack is lost (report 3t5w710l563l4s4t).
       const held = ISENGARD_SETTLEMENTS.filter((r) => settlementCtrl(state, r) === 'shadow');
       const full = held.filter((r) => unitCount(state, r) >= STACKING_LIMIT).length;
-      return 40 + (held.length - full) * 9 - full * 12;
+      const placed = Math.min(held.length - full, pool.regular);
+      return placed <= 1 ? 10 : 40 + placed * 9 - full * 12;
     }
     case 'useElvenRing': return elvenRingScore(state, actor, a);       // change a die's face (conservatively)
     case 'playEvent': {
@@ -1037,6 +1046,11 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
         return fs.corruption >= 6 ? 95 : 25;
       }
       if (actor === 'shadow' && CORRUPT_EVENTS.has(a.cardId)) return 70;
+      // Tried 2026-10-25: holding the special Hunt-tile cards (Shelob's Lair, The Ring is
+      // Mine!, On, On They Went, Give it to Uss!) while the Fellowship is more than four
+      // regions from Mordor, drawing a card instead and discarding them first at the hand
+      // limit (report 4rkhynhht4wkl4cn). Shadow −102 (heuristic) and −122 (human-like)
+      // per 4000: played early, the tile is waiting when the Fellowship arrives.
       // The Hunt-tile and Nazgûl-search cards are at their best while the Fellowship is
       // hidden and a reveal would land it in, or drag it through, a Shadow Stronghold on
       // its road — Moria, Minas Morgul, the Morannon — for the extra tile it draws there
@@ -1300,7 +1314,14 @@ function elvenRingScore(state: GameState, actor: Side, a: Extract<WotrAction, { 
     // then) and a hidden Fellowship feeds its tile cards (report 04291r2i296h5w1n).
     return -5;
   }
-  return (a.to === 'eye' && fs.mordor !== null) ? 35 : -5;            // Shadow: an Eye only when the Hunt is decisive
+  // …and only while the Free Peoples can still move the Fellowship this turn: a Hunt
+  // Box Eye bites only on a move. Revealed on the Track it must hide first, so it needs
+  // two Character-capable dice (report 214722232j396x52: the Eye after their last one).
+  const fpRing = state.elvenRings.includes('fp') && !state.flags.fpUsedElvenRingThisTurn;
+  const movers = state.dice.fp.filter((f) => f === 'character' || f === 'will').length
+    + (fpRing && state.dice.fp.some((f) => f !== 'character' && f !== 'will') ? 1 : 0);
+  const canMove = movers >= (fs.hidden ? 1 : 2);
+  return (a.to === 'eye' && fs.mordor !== null && canMove) ? 35 : -5;  // Shadow: an Eye only when the Hunt is decisive
 }
 
 /** Initiating an independent-character move with a Character die. The big win is
