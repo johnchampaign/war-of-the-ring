@@ -314,17 +314,6 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, on
             fillOpacity={boardArt ? (hl.selected === e.id ? 0.3 : hl.destinations?.has(e.id) || hl.activate?.has(e.id) || hl.sources?.has(e.id) ? 0.18 : 0) : (hl.selected === e.id ? 0.75 : 0.5)}
             stroke={hl.selected === e.id ? '#fff200' : hl.destinations?.has(e.id) || hl.activate?.has(e.id) ? '#ffd23f' : hl.sources?.has(e.id) ? '#5dff7a' : (boardArt ? 'none' : '#3a3a3a')}
             strokeWidth={hl.selected === e.id || hl.destinations?.has(e.id) || hl.activate?.has(e.id) ? 4 : hl.sources?.has(e.id) ? 3 : 1.2} />
-          {/* A Companion destination (separation or move) that would ROUSE a Free Peoples
-              Nation — a gold ★ banner so the player sees where landing calls it to war. */}
-          {hl.activate?.has(e.id) && (() => {
-            const p = clampToCrop({ x: e.poly[0]!.x, y: e.poly[0]!.y - 16 });
-            return (
-              <g style={{ pointerEvents: 'none' }}>
-                <circle cx={p.x} cy={p.y} r={9} fill="#3a2a00" stroke="#ffae20" strokeWidth={1.5} />
-                <text x={p.x} y={p.y + 4} fontSize={12} fontWeight="bold" fill="#ffd23f" textAnchor="middle">★</text>
-              </g>
-            );
-          })()}
           {/* settlement marker — control-coloured diamond, plus a red dashed ring
               while the Stronghold is under siege (defenders in the box). It used to
               carry the Settlement's VP value as a small superscript; that number sat
@@ -347,6 +336,21 @@ export const Board = memo(function Board({ view, onPickRegion, onHoverRegion, on
                 <rect x={mx - 5} y={my - 5} width={10} height={10}
                   fill={e.control === 'shadow' ? '#a83232' : e.control === 'fp' ? '#2f4f9e' : '#fff'}
                   stroke="#222" strokeWidth={1} transform={`rotate(45 ${mx} ${my})`} />
+              </g>
+            );
+          })()}
+          {/* A Companion destination (separation or move) that would ROUSE a Free Peoples
+              Nation — a gold ★ banner so the player sees where landing calls it to war.
+              Only a City or Stronghold rouses, so it sits ON that Settlement's control
+              diamond, drawn over it; anchored at poly[0], an arbitrary border vertex, it
+              stood lopsided and often outside the region (player report 440s0c6z5l595f6z). */}
+          {hl.activate?.has(e.id) && (() => {
+            const anchor = e.layout?.anchor ?? e.poly[0]!;
+            const p = clampToCrop({ x: anchor.x - 16, y: anchor.y - 14 });
+            return (
+              <g style={{ pointerEvents: 'none' }}>
+                <circle cx={p.x} cy={p.y} r={9} fill="#3a2a00" stroke="#ffae20" strokeWidth={1.5} />
+                <text x={p.x} y={p.y + 4} fontSize={12} fontWeight="bold" fill="#ffd23f" textAnchor="middle">★</text>
               </g>
             );
           })()}

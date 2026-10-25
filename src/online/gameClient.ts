@@ -37,6 +37,9 @@ export type GameMode = 'vs-ai' | 'hotseat' | 'online';
 export interface GameClientApi {
   /** Play mode + which side the AI holds (null/undefined when no local AI). */
   mode?: GameMode;
+  /** A stable name for this game, under which the page keeps the whole log (the state
+   *  holds only its newest 500 entries; src/play/fullLog.ts). */
+  gameKey?: string;
   aiSide?: 'fp' | 'shadow' | null;
   fetch(): Promise<ViewResult>;
   submit(action: WotrAction): Promise<ViewResult>;
@@ -124,6 +127,7 @@ export function makeGameClient(
 
   return {
     mode: 'online', // an online seat may face a server-driven AI; the log's `you` + winner still say who played
+    gameKey: `online:${gameId}`,
     fetch: () => fetch(`${base}${q}`).then((r) => r.json()).then(remember),
     submit: async (action) => {
       const id = getIdentityToken?.();

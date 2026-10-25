@@ -4,7 +4,7 @@
     {
       "name": "wotr-dev",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "npm run dev -- --port ${PORT:-5173} --strictPort"],
+      "runtimeArgs": ["-lc", "systemd-run --user --scope -q -p MemoryMax=2G npm run dev -- --port ${PORT:-5173} --strictPort"],
       "port": 5173,
       "autoPort": true
     },

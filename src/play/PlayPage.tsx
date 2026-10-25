@@ -28,6 +28,7 @@ import { BattlePopup, battleResultPending } from './BattlePopup';
 import { NoticePopup, NoticeText, noticePending, ROLL_QUESTIONS } from './NoticePopup';
 import { TurnSummary } from './TurnSummary';
 import { LogPanel, CopyLogButton } from './LogPanel';
+import { fullLog } from './fullLog';
 import { GameOverUpload, UploadLogButton } from './GameOverUpload';
 import { DiceStats } from './DiceStats';
 import { useSettings } from './settings';
@@ -120,6 +121,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Move-receipt times for the game log (feature F): re-fetched whenever the log
   // grows. Best-effort — a failed fetch just leaves the log undated.
   const [logTimes, setLogTimes] = useState<LogTime[]>([]);
+  // The log panels show the whole game, not just the newest 500 entries the state keeps
+  // (player report jag3mymgg4tqwute; src/play/fullLog.ts).
+  const logView = useMemo(() => (g.view && client.gameKey
+    ? { ...g.view, log: fullLog(`${client.gameKey}:${g.you ?? 'all'}`, g.view.log ?? []) } : g.view), [g.view, g.you, client.gameKey]);
   const logLen = g.view?.log?.length ?? 0;
   useEffect(() => {
     let cancelled = false;
@@ -704,8 +709,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       const name = EVENT_BY_ID[cardCompMoves[0]!.card]?.name ?? 'The card';
       out.push(`${name}: move Companions — click a highlighted region, then where they go.`);
     }
-    // The Ents Awake: one Character card from the hand, free (player report 1q4m361n2s444f4d).
-    if (g.view?.pendingChoice?.kind === 'freeCharEvent' && g.yourTurn) out.push('The Ents Awake: you may play a Character Event card from your hand now, without a die — click it in your hand, or "Done" to play none.');
+    // No line for The Ents Awake's free Character card: it is played from the hand, not
+    // the map, and the decision modal already asks it (player report pfe5j4wxghgvfeam).
     // No hint for bringing a Character into play: that is a side-panel action with nothing
     // to do on the map first (player report 5b1q2u530o1u6u6a).
     // (A card striking one region is named by the map banner — see cardRegionBanner.)
@@ -1241,8 +1246,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             board renders LARGE and fills it with no letterbox bars; the info panel
             (flex:1) takes the rest. 1.1464 = crop aspect (1511/1318); the ~16px is just
             padding — the status bar moved into the right column, so the board now spans
-            the full viewport height (and widens to match, per its aspect). */}
-        <div style={{ width: 'min(74vw, calc((100vh - 16px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
+            the full viewport height (and widens to match, per its aspect). Never wider
+            than the screen less the info panel's 360px minimum and this column's 2px
+            padding each side: at 74vw an iPad (1180 wide) pushed the panel 57px
+            off-screen and the whole page scrolled sideways (player report
+            jzhlm97brwx32j73). */}
+        <div style={{ width: 'min(74vw, calc(100vw - 364px), calc((100vh - 16px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
           {/* THE MAP'S BOX IS THE COLUMN'S ONLY FLOW CHILD. Every banner below is
               absolutely positioned inside it, because each one of them used to be a
               flow sibling that stole height from the board — so the map visibly shrank
@@ -1452,7 +1461,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                       Hover a card, a region, or the Guide to inspect it here.
                     </div>
                     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                      <LogPanel view={g.view} times={logTimes} recentTurns={settings.sideLog === 'all' ? undefined : 2} />
+                      <LogPanel view={logView!} times={logTimes} recentTurns={settings.sideLog === 'all' ? undefined : 2} />
                     </div>
                   </div>
                 )}
@@ -1638,11 +1647,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', width: 520, maxWidth: '92vw' }}>
             <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', borderRadius: 12, border: '1px solid #5a4a2a', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px #000' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '6px 10px', borderBottom: '1px solid #2a2418' }}>
-                <CopyLogButton view={g.view} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }} />
+                <CopyLogButton view={logView!} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }} />
                 <button onClick={() => { setLogOpen(false); setLogHover(null); }} style={{ background: 'none', border: '1px solid #5a4a2a', color: '#cb9', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>Close</button>
               </div>
               <div style={{ height: '60vh', overflowY: 'auto' }}>
-                <LogPanel view={g.view} times={logTimes} onHoverCard={(id) => setLogHover(id ? { kind: 'card', id } : null)} />
+                <LogPanel view={logView!} times={logTimes} onHoverCard={(id) => setLogHover(id ? { kind: 'card', id } : null)} />
               </div>
             </div>
             {logHover?.kind === 'card' && (

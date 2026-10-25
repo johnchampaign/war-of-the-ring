@@ -42,6 +42,9 @@ export interface LocalSave {
    *  local CLIENT, never the engine (which stays clock-free). Optional: saves
    *  from before the feature simply resume with an undated log. */
   logTimes?: { seq: number; at: number }[];
+  /** The name the page keeps this game's whole log under (src/play/fullLog.ts).
+   *  Optional: an older save resumes with only the log its state holds. */
+  logKey?: string;
   /** Denormalised for the lobby label so it needn't parse the whole state. */
   turn: number;
 }

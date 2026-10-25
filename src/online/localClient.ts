@@ -67,6 +67,9 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
   // Restoring the AI's tie-break cursor (rather than re-seeding) keeps a resumed game
   // on the same deterministic track it was already following.
   const aiRng = resume ? Rng.fromState(resume.aiRng) : new Rng(seed * 1000 + 7);
+  // The name this game's whole log is kept under in the browser (src/play/fullLog.ts);
+  // carried in the save so a resumed game finds it again.
+  const logKey = resume?.logKey ?? `local:${seed}:${Date.now().toString(36)}`;
 
   // Move-receipt times (feature F): the local mirror of the server's
   // dbf_log_times. The CLIENT stamps its own clock whenever the log grows —
@@ -92,7 +95,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
     if (wotrAdapter.result?.(state)) { clearLocalGame(); return; }
     saveLocalGame({
       schemaVersion: wotrAdapter.schemaVersion ?? 0, state, aiSide,
-      aiRng: aiRng.serialize(), oppLogStart: entriesThrough(oppLogSeq), oppLogSeq, turn: state.turn, logTimes,
+      aiRng: aiRng.serialize(), oppLogStart: entriesThrough(oppLogSeq), oppLogSeq, turn: state.turn, logTimes, logKey,
     });
   };
 
@@ -162,6 +165,7 @@ export function makeLocalClient(seed: number, opts: { scenario?: 'combat' | 'mor
   return {
     mode: aiSide ? 'vs-ai' : 'hotseat',
     aiSide,
+    gameKey: logKey,
     // Opening sets the marker to "nothing new"; later refreshes must NOT reset it
     // (in local play the opponent acts inside submit, so a poll mustn't wipe the
     // pending summary).
