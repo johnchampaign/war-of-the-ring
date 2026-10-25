@@ -1551,7 +1551,12 @@ turn the FP reached 4 and still lost). Regression-tested in
   used to be unplayable with Aragorn inside a besieged Helm's Deep *(report
   0k5q531m3c4d3x5z)*. Each other Companion standing with him is an optional map pick
   (Almanac: "Any number of Companions with Strider/Aragorn may move along with him");
-  the destination is a map click *(reports 4r2y2p2l2e3g3p1h, 6d31266k0u535r11)*. A
+  the destination is a map click *(reports 4r2y2p2l2e3g3p1h, 6d31266k0u535r11)*. On the
+  map the party is chosen in the same Companion picker as every other Companion move,
+  Strider/Aragorn ticked and locked, and the destination click may name the whole
+  `group` at once. The move is **direct** — no range or route — so the map lights only
+  Erech, Lamedon and Pelargir; it used to light Aragorn's ordinary Level-3 walking range
+  and refuse the far ones *(report m6mk0a18j9oksjwf)*. A
   Shadow Army at the destination is **attacked** (Almanac: "this card is an 'attack'
   and so affects the Political Track"), takes a die of hits and retreats or is destroyed.
   The recruit is a 0–3 choice made after that roll ("may … up to" — the maximum-extent

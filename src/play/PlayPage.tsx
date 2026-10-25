@@ -186,13 +186,15 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const [minionPick, setMinionPick] = useState<string | null>(null);
   const minionAutoDie = useRef(false); // the pick selected the paying die itself
   // Choosing WHO travels in a Companion group, before its destination (CompanionPicker).
-  const [compPick, setCompPick] = useState<{ from: RegionId; candidates: string[]; card?: string; separate?: boolean } | null>(null);
+  // `required`/`fixed`: Dead Men of Dunharrow — Strider/Aragorn must go, and the card
+  // moves the group directly to its named places rather than by Level.
+  const [compPick, setCompPick] = useState<{ from: RegionId; candidates: string[]; card?: string; separate?: boolean; required?: string[]; fixed?: RegionId[] } | null>(null);
   // The rest of a group being separated from the Fellowship: the first Companion goes
   // with the die, these join him in the separation step that follows (p.39).
   const sepQueue = useRef<string[]>([]);
   // When a clicked region offers more than one thing to move (e.g. the army AND its
   // Nazgûl), let the player choose which.
-  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined; chars?: undefined } | { kind: 'assault'; char?: undefined; chars?: undefined } | { kind: 'muster'; char?: undefined; chars?: undefined } | { kind: 'chargroup'; chars: string[]; char?: undefined } | { kind: 'char'; char: string; chars?: undefined } | { kind: 'cardchar'; act: WotrAction; label: string; char?: undefined; chars?: undefined } | { kind: 'cardgroup'; acts: WotrAction[]; char?: undefined; chars?: undefined } | { kind: 'cardcomps'; chars: string[]; card: string; char?: undefined } | { kind: 'separate'; chars: string[]; char?: undefined }> } | null>(null);
+  const [moveMenu, setMoveMenu] = useState<{ region: RegionId; options: Array<{ kind: 'army'; char?: undefined; chars?: undefined } | { kind: 'assault'; char?: undefined; chars?: undefined } | { kind: 'muster'; char?: undefined; chars?: undefined } | { kind: 'chargroup'; chars: string[]; char?: undefined } | { kind: 'char'; char: string; chars?: undefined } | { kind: 'cardchar'; act: WotrAction; label: string; char?: undefined; chars?: undefined } | { kind: 'cardgroup'; acts: WotrAction[]; char?: undefined; chars?: undefined } | { kind: 'cardcomps'; chars: string[]; card: string; required?: string[]; fixed?: RegionId[]; char?: undefined } | { kind: 'separate'; chars: string[]; char?: undefined }> } | null>(null);
   const [musterMenu, setMusterMenu] = useState<RegionId | null>(null); // board-click muster: the chosen Settlement
   // Choosing HOW MANY Nazgûl to move from a stack (RAW: move any number, not the whole group).
   // `card` set = this came from a Nazgûl-moving EVENT CARD, so confirming submits an
@@ -508,6 +510,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // 186w6s0a051h4534, 231u2i4l5p19426w).
   const cardCompMoves = useMemo(() => g.legalActions.filter((a): a is Extract<WotrAction, { kind: 'eventTarget' }> => isCardCompanionMove(a)), [g.legalActions]);
   const cardCompSources = useMemo(() => new Set(cardCompMoves.map((a) => a.from!)), [cardCompMoves]);
+  // A card that moves Companions DIRECTLY to named places — Dead Men of Dunharrow, "to
+  // Erech, Lamedon or Pelargir" — has no range: the places it offers are the whole
+  // answer. Reading them by Level lit Aragorn's ordinary walking range instead and
+  // refused the far ones (player report m6mk0a18j9oksjwf).
+  const directCompDests = useCallback((card: string, from: RegionId, char: string): RegionId[] =>
+    cardCompMoves.filter((a) => a.direct && a.card === card && a.from === from && a.companion === char).map((a) => a.region!), [cardCompMoves]);
   // A card's bare REGION pick — the Army it strikes, the Nazgûl the Eagles fall on, where
   // Cruel Weather blows the Fellowship: a highlighted region to click, not a modal button
   // (player reports 45031a1d013o5x0m, 6z342y5h274r046w).
@@ -736,12 +744,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const charDestinations = useMemo(
     // `group` matters for Gandalf the White: Shadowfax's four regions depend on who
     // rides WITH him, so the highlighted destinations must know the travelling party.
-    () => (g.view && charPick && g.you ? new Set(charPick.card
+    () => (g.view && charPick && g.you ? new Set(charPick.card && directCompDests(charPick.card, charPick.from, charPick.char).length
+      ? directCompDests(charPick.card, charPick.from, charPick.char)
+      : charPick.card
       ? companionGroupDestinations(g.view, g.you as Side, charPick.from, charPick.group ?? [charPick.char], CARD_COMPANION_MOVE_OPTS[charPick.card] ?? {})
       : charPick.group
       ? companionGroupDestinations(g.view, g.you as Side, charPick.from, charPick.group)
       : characterDestinations(g.view, g.you as Side, charPick.char, charPick.from)) : new Set<RegionId>()),
-    [g.view, charPick, g.you],
+    [g.view, charPick, g.you, directCompDests],
   );
   // Among the destinations of a separation OR any Companion move (die or card), the
   // ones that ROUSE a passive Free Peoples Nation — marked ★, the same way everywhere
@@ -768,7 +778,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   // Begin moving whatever was chosen from a region: an army (select for the picker)
   // or a specific independent character (Nazgûl/Minion/Companion).
   const beginMove = useCallback((region: RegionId, opt: { kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }
-    | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] } | { kind: 'cardcomps'; chars: string[]; card: string } | { kind: 'separate'; chars: string[] }) => {
+    | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] } | { kind: 'cardcomps'; chars: string[]; card: string; required?: string[]; fixed?: RegionId[] } | { kind: 'separate'; chars: string[] }) => {
     setMoveMenu(null);
     // Separating from the Fellowship: one Companion left goes straight to the map;
     // several open the picker to choose who leaves together.
@@ -784,7 +794,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (opt.kind === 'cardcomps') {
       setSelected(null);
       if (opt.chars.length === 1) setCharPick({ from: region, char: opt.chars[0]!, card: opt.card });
-      else { setCharPick(null); setCompPick({ from: region, candidates: opt.chars, card: opt.card }); }
+      else { setCharPick(null); setCompPick({ from: region, candidates: opt.chars, card: opt.card, ...(opt.required ? { required: opt.required, fixed: opt.fixed } : {}) }); }
       return;
     }
     // A card's Companion pick: submitting it makes the destinations legal, and those
@@ -883,6 +893,11 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       }
       if (id === charPick.from) { setCharPick(null); return; } // click the piece again to cancel
       // A card's Companion move: say why this region is refused, in the group's terms.
+      if (charPick.card && directCompDests(charPick.card, charPick.from, charPick.char).length) {
+        const names = directCompDests(charPick.card, charPick.from, charPick.char).map((r) => REGIONS[r]?.name ?? r);
+        setBlockMsg(`This card moves them only to ${names.length < 2 ? names[0] : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`}.`);
+        return;
+      }
       if (charPick.card && g.view) {
         const reason = companionGroupBlockReason(g.view, 'fp', charPick.from, id, charPick.group ?? [charPick.char], CARD_COMPANION_MOVE_OPTS[charPick.card] ?? {});
         if (reason) setBlockMsg(reason);
@@ -955,10 +970,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     const compsHere = g.you === 'fp' ? charsHere.filter((c) => c !== 'nazgul') : [];
     const soloHere = compsHere.length >= 2 ? charsHere.filter((c) => !compsHere.includes(c)) : charsHere;
     // A card is asking WHICH Companions travel: offer each, and the group.
-    const cardHere = cardCharPicks.filter((a) => a.from === id);
-    const cardCompsHere = [...new Set(cardCompMoves.filter((a) => a.from === id).map((a) => a.companion!))];
+    // Dead Men of Dunharrow: whoever goes WITH Strider/Aragorn joins him in the same
+    // group picker as every other Companion move, he ticked and locked, rather than
+    // one menu entry per Companion (player report m6mk0a18j9oksjwf).
+    const directHere = cardCompMoves.filter((a) => a.from === id && a.direct);
+    const directLead = [...new Set(directHere.map((a) => a.companion!))];
+    const cardHere = cardCharPicks.filter((a) => a.from === id && !(directHere.length && a.card === directHere[0]!.card));
+    const directWith = directHere.length ? cardCharPicks.filter((a) => a.from === id && a.card === directHere[0]!.card).map((a) => a.companion!) : [];
+    const cardCompsHere = [...new Set([...cardCompMoves.filter((a) => a.from === id).map((a) => a.companion!), ...directWith])];
     const opts: Array<{ kind: 'army' } | { kind: 'assault' } | { kind: 'muster' } | { kind: 'chargroup'; chars: string[] } | { kind: 'char'; char: string }
-      | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] } | { kind: 'cardcomps'; chars: string[]; card: string } | { kind: 'separate'; chars: string[] }> = [
+      | { kind: 'cardchar'; act: WotrAction; label: string } | { kind: 'cardgroup'; acts: WotrAction[] } | { kind: 'cardcomps'; chars: string[]; card: string; required?: string[]; fixed?: RegionId[] } | { kind: 'separate'; chars: string[] }> = [
       // The Army comes first, ahead of any figures a card moves on their own (player
       // report 6u1k505o3m1k2i1r).
       ...(armyHere ? [{ kind: 'army' as const }] : []),
@@ -966,7 +987,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       // Only Companions travel as a group on a card; Nazgûl each fly on their own, so a
       // Nazgûl "group" pick left the second figure un-pickable (player report 2m6j6f1z5w07390y).
       ...(cardHere.length >= 2 && !cardHere.some((a) => a.companion === 'nazgul' || a.companion === 'witch-king') ? [{ kind: 'cardgroup' as const, acts: cardHere as WotrAction[] }] : []),
-      ...(cardCompsHere.length ? [{ kind: 'cardcomps' as const, chars: cardCompsHere, card: cardCompMoves[0]!.card }] : []),
+      ...(cardCompsHere.length ? [{ kind: 'cardcomps' as const, chars: cardCompsHere, card: cardCompMoves[0]!.card,
+        ...(directHere.length ? { required: directLead, fixed: [...new Set(directHere.map((a) => a.region!))] } : {}) }] : []),
       ...(assaultHere ? [{ kind: 'assault' as const }] : []),
       ...(compsHere.length >= 2 ? [{ kind: 'chargroup' as const, chars: compsHere }] : []),
       ...soloHere.map((c) => ({ kind: 'char' as const, char: c })),
@@ -1534,6 +1556,7 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
       {compPick && g.view && g.you && (
         <CompanionPicker from={compPick.from} candidates={compPick.candidates} view={g.view} you={g.you as Side}
           opts={compPick.card ? CARD_COMPANION_MOVE_OPTS[compPick.card] : undefined} separate={compPick.separate}
+          required={compPick.required} fixedDests={compPick.fixed}
           onConfirm={(group) => {
             const { from, card } = compPick; setCompPick(null);
             if (compPick.separate) {
@@ -1543,7 +1566,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               void submit({ kind: 'separateCompanion', companion: group[0]! });
               return;
             }
-            const pick = group.length === 1 ? { from, char: group[0]! } : { from, char: companionGroupLeader(g.view!, from, group, card ? CARD_COMPANION_MOVE_OPTS[card] : {}), group };
+            // A direct move is the required Companion's (the card names him); others ride along.
+            const lead = compPick.required?.[0];
+            const pick = lead ? { from, char: lead, ...(group.length > 1 ? { group } : {}) }
+              : group.length === 1 ? { from, char: group[0]! } : { from, char: companionGroupLeader(g.view!, from, group, card ? CARD_COMPANION_MOVE_OPTS[card] : {}), group };
             setCharPick(card ? { ...pick, card } : pick);
           }}
           onCancel={() => setCompPick(null)} />

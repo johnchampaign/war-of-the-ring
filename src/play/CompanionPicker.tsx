@@ -20,7 +20,7 @@ import mapData from '../../assets/map.json';
 
 const rName = (id: string): string => (mapData as any).regions[id]?.name ?? id;
 
-export function CompanionPicker({ from, candidates, view, you, opts, title, separate, onConfirm, onCancel }: {
+export function CompanionPicker({ from, candidates, view, you, opts, title, separate, required = [], fixedDests, onConfirm, onCancel }: {
   from: RegionId; candidates: string[]; view: GameState; you: Side;
   /** A card's range terms (We Prove the Swifter, Gwaihir); none for a Character die. */
   opts?: RangeOpts;
@@ -30,6 +30,12 @@ export function CompanionPicker({ from, candidates, view, you, opts, title, sepa
    *  map: the group goes up to Progress + its highest Level, and nobody is on the map
    *  yet (player report 4w0o3y281u2h5355). */
   separate?: boolean;
+  /** Members who MUST travel (Dead Men of Dunharrow moves Strider/Aragorn, and "any
+   *  number of Companions" with him): ticked and locked. */
+  required?: string[];
+  /** A card that moves the group DIRECTLY to named places (Dead Men of Dunharrow: "to
+   *  Erech, Lamedon or Pelargir") rather than by Level — no range applies. */
+  fixedDests?: RegionId[];
   onConfirm: (group: string[]) => void; onCancel: () => void;
 }) {
   // Separating starts with nobody ticked: taking the whole Fellowship away is rarely meant.
@@ -37,7 +43,8 @@ export function CompanionPicker({ from, candidates, view, you, opts, title, sepa
   const group = candidates.filter((c) => picked.has(c));
   const top = Math.max(0, ...group.map((c) => levelOf(c)));
   const range = separate ? view.fellowship.progress + top : companionGroupRange(view, from, group, opts);
-  const dests = separate ? (group.length ? separationDestinations(view, from, range) : []) : companionGroupDestinations(view, you, from, group, opts);
+  const dests = fixedDests ? (group.length ? fixedDests : [])
+    : separate ? (group.length ? separationDestinations(view, from, range) : []) : companionGroupDestinations(view, you, from, group, opts);
   const error = !group.length ? 'Choose at least one Companion'
     : !dests.length ? 'This group has nowhere it may go from here'
     : null;
@@ -47,19 +54,21 @@ export function CompanionPicker({ from, candidates, view, you, opts, title, sepa
       <div style={card} onClick={(e) => e.stopPropagation()} data-testid="companion-picker">
         <h3 style={{ margin: '0 0 6px' }}>{title ?? (separate ? 'Separate Companions' : 'Move Companions')} — from {rName(from)}</h3>
         <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>
-          {separate
+          {fixedDests
+            ? `Choose who goes with ${andNames(required)}. The card moves them directly to ${orNames(fixedDests.map(rName))}; then click the destination on the map.`
+            : separate
             ? 'Choose who leaves the Fellowship together. The group goes as far as the Fellowship’s Progress plus its highest Level (p.39); then click its destination on the map.'
             : 'Choose who travels together. A group moves as far as its highest Level (p.24); then click its destination on the map.'}
         </div>
         {candidates.map((c) => (
           <label key={c} style={row}>
-            <input type="checkbox" name={`move-comp-${c}`} checked={picked.has(c)}
+            <input type="checkbox" name={`move-comp-${c}`} checked={picked.has(c)} disabled={required.includes(c)}
               onChange={(e) => { const s = new Set(picked); e.target.checked ? s.add(c) : s.delete(c); setPicked(s); }} />
             <span style={{ flex: 1 }}>{charName(c)}</span>
             <span style={{ fontSize: 11, color: '#998' }}>Level {levelOf(c)}</span>
           </label>
         ))}
-        {group.length > 0 && (
+        {group.length > 0 && !fixedDests && (
           <div style={{ fontSize: 12, color: '#d8cfa8', marginTop: 8 }} data-testid="companion-picker-range">
             {group.length === 1 ? `${charName(group[0]!)} ${separate ? 'goes' : 'moves'}` : `This group ${separate ? 'goes' : 'moves'}`} up to {range} region{range === 1 ? '' : 's'}
             {shadowfax ? ' — Shadowfax carries Gandalf the White further alone or with one Hobbit' : ''}.
@@ -74,6 +83,9 @@ export function CompanionPicker({ from, candidates, view, you, opts, title, sepa
     </div>
   );
 }
+
+const andNames = (cs: string[]): string => cs.map(charName).join(' and ');
+const orNames = (xs: string[]): string => xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
 
 const backdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 };
 const card: React.CSSProperties = { background: '#211c14', color: '#eee', padding: 16, borderRadius: 8, width: 320, maxHeight: '80vh', overflow: 'auto', fontFamily: 'system-ui', border: '1px solid #554' };

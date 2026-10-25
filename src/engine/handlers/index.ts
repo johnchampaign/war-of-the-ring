@@ -1273,8 +1273,13 @@ register('fp-char-22', {
     if (!t.region) return; // a "goes with him" pick: recorded, nothing moves yet
     const o = aragornRohanOrigin(state); if (!o) return;
     const region = t.region, dst = state.regions[region]!;
-    // 1. Move Strider/Aragorn + the Companions chosen to go with him.
-    const chosen = new Set([o.ranger, ...applied.filter((a) => a.companion && !a.region).map((a) => a.companion!)]);
+    // 1. Move Strider/Aragorn + the Companions chosen to go with him — picked one at a
+    //    time beforehand, or named all at once as the move's `group` (the map's
+    //    Companion picker, player report m6mk0a18j9oksjwf).
+    for (const c of t.group ?? []) {
+      if (!COMPANION_SET.has(c) || !o.force.characters.includes(c)) throw new Error(`${characterDef(c)?.name ?? c} is not standing with ${characterDef(o.ranger)?.name ?? o.ranger}.`);
+    }
+    const chosen = new Set([o.ranger, ...(t.group ?? []), ...applied.filter((a) => a.companion && !a.region).map((a) => a.companion!)]);
     const moving = o.force.characters.filter((c) => chosen.has(c));
     o.force.characters = o.force.characters.filter((c) => !chosen.has(c));
     dst.characters.push(...moving);

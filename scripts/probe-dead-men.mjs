@@ -77,6 +77,24 @@ console.log('\n=== Legolas goes, Gimli stays ===');
   check('the card is finished', s.pendingChoice?.kind !== 'eventTarget', s.pendingChoice?.kind ?? 'none');
 }
 
+// Report m6mk0a18j9oksjwf: the map's Companion picker names the whole party on the
+// destination click, and the card's three places are the only ones it offers —
+// direct, whatever the distance (Pelargir is well beyond Aragorn's Level 3).
+console.log('\n=== the picker\'s group goes in one step, directly ===');
+{
+  let s = playCard(setup());
+  const dests = ets(s).filter((a) => a.region && a.companion === 'aragorn');
+  check('every destination is a direct move', dests.length === 3 && dests.every((a) => a.direct));
+  const pel = dests.find((a) => a.region === 'pelargir');
+  s = wotrAdapter.applyAction(s, { ...pel, group: ['aragorn', 'gimli'] }, 'fp');
+  const p = s.regions['pelargir'];
+  check('Aragorn and Gimli are in Pelargir', p.characters.includes('aragorn') && p.characters.includes('gimli'), p.characters.join(','));
+  check('Legolas stayed in the Helm\'s Deep garrison', s.regions['helms-deep'].siegeBox.characters.includes('legolas'));
+  let refused = false;
+  try { wotrAdapter.applyAction(playCard(setup()), { ...pel, group: ['aragorn', 'boromir'] }, 'fp'); } catch { refused = true; }
+  check('a Companion not standing with him is refused', refused);
+}
+
 console.log('\n=== Pelargir: the Dead Men strike; recruiting none keeps it Shadow ===');
 {
   let s = playCard(setup({ pelargirShadow: true }));
