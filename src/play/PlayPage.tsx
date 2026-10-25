@@ -1272,8 +1272,10 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
             than the screen less the info panel's 360px minimum and this column's 2px
             padding each side: at 74vw an iPad (1180 wide) pushed the panel 57px
             off-screen and the whole page scrolled sideways (player report
-            jzhlm97brwx32j73). */}
-        <div style={{ width: 'min(74vw, calc(100vw - 364px), calc((100vh - 16px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
+            jzhlm97brwx32j73). But never below the old 74vw (at most 640px) for that: on
+            a phone the screen less 364px is next to nothing, and the map shrank to a
+            sliver (player report ac8k2fd8iu4bcyxw) — there the page scrolls as before. */}
+        <div style={{ width: 'min(74vw, max(calc(100vw - 364px), min(74vw, 640px)), calc((100vh - 16px) * 1.1464))', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 2 }}>
           {/* THE MAP'S BOX IS THE COLUMN'S ONLY FLOW CHILD. Every banner below is
               absolutely positioned inside it, because each one of them used to be a
               flow sibling that stole height from the board — so the map visibly shrank
