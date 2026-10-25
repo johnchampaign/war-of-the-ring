@@ -16,7 +16,7 @@ import type { Rng } from 'digital-boardgame-framework';
 import { REGIONS, levelOf, characterDef, sideOfNation, characterSide } from '../engine/data';
 import { unitCount, forceUnitCount, forceLeadership, STACKING_LIMIT, splitBlockReason, fellowshipRegion, armySide, ownNationsIn, type Force } from '../engine/armies';
 import { sortieForce, heroicDeathForce } from '../engine/combat';
-import { MORDOR_ENTRANCES, separationActivates } from '../engine/fellowship';
+import { MORDOR_ENTRANCES, separationActivates, separationDestinations, separationRange } from '../engine/fellowship';
 import { characterDestinations } from '../engine/charMove';
 import { cardSplitBlockReason, dreadfulSpellsBestDice } from '../engine/handlers/index';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
@@ -949,7 +949,13 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // possible moment (player report).
       // …and on the doorstep too, once an entrance is within the Progress banked.
       if (fs.mordor !== null || MORDOR_ENTRANCES.includes(fs.location) || (fs.hidden && toMordor(fs.location) <= fs.progress)) return 1;
-      return passiveFp && fs.corruption < 6 ? 40 : 12;
+      // Only to WAKE a Nation: a Companion who can reach a passive Free Peoples City or
+      // Stronghold he would rouse. Otherwise separating spends a die and a body the
+      // Fellowship still needs (report 3v0c235u2k271235: Merry and Pippin sent to Lórien,
+      // the Elves already active, on a Will of the West).
+      const rouses = passiveFp && separationDestinations(state, fs.location, separationRange(state, a.companion as never))
+        .some((r) => separationActivates(state, a.companion as never, r));
+      return rouses && fs.corruption < 6 ? 40 : 2;
     }
     case 'attack': {
       // SORTIE (p.32): we're the boxed garrison attacking the besiegers, so from === to
@@ -1262,6 +1268,14 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
     && settlementCtrl(state, from) === 'fp' && !armyHere(state, to, 'shadow')) {
     const nations = (Object.keys(state.regions[from]!.units) as Nation[]).filter((n) => FP.has(n) && (state.regions[from]!.units[n]!.regular + state.regions[from]!.units[n]!.elite) > 0);
     if (nations.length && nations.every((n) => state.nations[n].step > 0)) s -= 60;
+  } else if (actor === 'fp' && !armyHere(state, to, 'shadow')) {
+    // …and one standing anywhere else goes home, if anywhere: the Iron Hills Army
+    // wandered to the Vale of the Carnen on turn 1 (report 385r451t3j5q0j0f — "humans
+    // would move the Iron Hills unit into Erebor for protection").
+    const u = state.regions[from]!.units;
+    const nations = (Object.keys(u) as Nation[]).filter((n) => FP.has(n) && (u[n]!.regular + u[n]!.elite) > 0);
+    const home = (REGIONS[to]!.settlement === 'Stronghold' || REGIONS[to]!.settlement === 'City') && settlementCtrl(state, to) === 'fp';
+    if (nations.length && nations.every((n) => state.nations[n].step > 0) && !home) s -= 40;
   }
   // Walking the field Army out of a siege we hold LIFTS it: the garrison is free again
   // and the next action is spent besieging it back. The Shadow did exactly that, in and
@@ -1841,6 +1855,13 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         if (!Object.keys(units).length) return stay;
         return { kind: 'advanceChoice', advance: true, move: { units } };
       }
+      // The Free Peoples never march the last unit out of their own City or Stronghold
+      // after a win: Rivendell's Army struck at the Trollshaws, lost an Elite and walked
+      // its last one out, leaving Rivendell empty (report 0p4o6k63604e2m6s).
+      if (owner === 'fp' && adv.kind === 'advanceChoice' && adv.advance && (REGIONS[d.from]!.vp ?? 0) > 0 && settlementCtrl(state, d.from) === 'fp'
+        && (Object.keys(state.regions[d.from]!.units) as Nation[]).reduce((t, n) => t + (FP.has(n) ? state.regions[d.from]!.units[n]!.regular + state.regions[d.from]!.units[n]!.elite : 0), 0) <= 1) {
+        return legal.find((a) => a.kind === 'advanceChoice' && !a.advance) ?? adv;
+      }
       if (adv.kind === 'advanceChoice' && adv.advance && garrisonWorthy(state, owner, d.from)) {
         const r = state.regions[d.from]!;
         // Own side only: the advance moves the winner's figures, never anyone else's.
@@ -1883,10 +1904,10 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       return legal.find((a) => a.kind === 'relieveAdvance' && a.advance === join) ?? legal[0]!;
     }
     case 'lureChoice': {
-      // FP: absorb as Corruption unless that nears death — then sacrifice the Companion.
-      const level = (state.pendingChoice!.data as { level: number }).level;
-      const deadly = state.fellowship.corruption + level >= 10;
-      return legal.find((a) => a.kind === 'lureChoice' && a.mode === (deadly ? 'eliminate' : 'corruption')) ?? legal[0]!;
+      // FP: the tempted Companion goes. Paying his Level in Corruption to keep him buys
+      // a body worth about that much Hunt damage later, at a permanent cost now (report
+      // 115d3354331s686d: 2 Corruption to keep Legolas).
+      return legal.find((a) => a.kind === 'lureChoice' && a.mode === 'eliminate') ?? legal[0]!;
     }
     case 'huntPreventDraw': // FP Wizard's Staff: spend it to skip the draw when Corruption is dangerous
       return legal.find((a) => a.kind === 'huntPreventDraw' && a.prevent === (state.fellowship.corruption >= 7)) ?? legal[0]!;
@@ -1987,7 +2008,14 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       if (!moves.length) return legal[0]!;
       const healSpots = (Object.keys(state.regions) as RegionId[]).filter((id) => isHealSettlement(state, id));
       const healDist = (t: RegionId): number => healSpots.reduce((m, h) => Math.min(m, dist(t, h)), Infinity);
-      const rank = (t: RegionId): number[] => [toMordor(t), huntClean(state, t) ? 0 : 1, huntThreat(state, t), healDist(t)];
+      // Re-roll sources COUNTED, not just present: Nazgûl alone beat Nazgûl and a Shadow
+      // Army (report 0s2c4f454g1g2i6e: North Ithilien chosen over South Ithilien).
+      const sources = (t: RegionId): number => {
+        const r = state.regions[t]!;
+        return (REGIONS[t]!.settlement === 'Stronghold' && settlementCtrl(state, t) === 'shadow' ? 1 : 0)
+          + (armyHere(state, t, 'shadow') ? 1 : 0) + (r.nazgul > 0 || r.characters.includes('witch-king') ? 1 : 0);
+      };
+      const rank = (t: RegionId): number[] => [toMordor(t), sources(t), huntThreat(state, t), healDist(t)];
       let best = moves[0]!, bestRank = rank(best.target);
       for (const a of moves.slice(1)) {
         const r = rank(a.target);
@@ -2142,6 +2170,9 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
       if (owner === 'fp' && a.companion !== 'nazgul') {
         const join = armyHere(state, a.region, 'fp') && !(a.from && armyHere(state, a.from, 'fp')) ? 18 : 0;
         const danger = settlementCtrl(state, a.region) === 'shadow' || armyHere(state, a.region, 'shadow') ? 40 : 0;
+        // No purpose, no move: "any or all" cards let them stay, and Merry and Pippin
+        // walked from Lórien to the Dimrill Dale for nothing (report 166z0y4r2k44421s).
+        if (rouse + join === 0) return -2;
         return 110 + rouse + join - danger;
       }
       return 110 + rouse - (target ? dist(a.region, target) : 0);
@@ -2188,6 +2219,11 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     // Through a Day and a Night left Moria empty beside the North Dunland Army).
     if (a.to && a.from && owner === 'fp' && a.mode !== 'attack' && REGIONS[a.from]!.settlement
       && settlementCtrl(state, a.from) === 'fp' && enemyNear(state, a.from, 'shadow', 2)) return 5 - (target ? dist(a.to, target) : 0);
+    // …and a small Army does not walk out of its City or Stronghold on a card at all
+    // (report 2n496g3b4d6n3p54: Through a Day and a Night took one Elite and Gandalf the
+    // White from Edoras to the Folde).
+    if (a.to && a.from && owner === 'fp' && a.mode !== 'attack' && (REGIONS[a.from]!.settlement === 'City' || REGIONS[a.from]!.settlement === 'Stronghold')
+      && settlementCtrl(state, a.from) === 'fp' && unitCount(state, a.from) <= 2) return 5 - (target ? dist(a.to, target) : 0);
     if (a.to) return 30 - (target ? dist(a.to, target) : 0);          // move toward the target
     // Recruit placements: same region, Regular-or-Elite — take the Elite (two
     // player reports: Riders of Rohan / Dain's Ironfoot Guard mustered Regulars).
