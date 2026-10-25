@@ -2094,12 +2094,13 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
       if (loc && !occupied) {
         const exit = MORDOR_ENTRANCES.reduce((b, e) => (dist(loc, e) < dist(loc, b) ? e : b), MORDOR_ENTRANCES[0]!);
         const d = dist(loc, a.region);
-        // Where the Fellowship can END its next declare or reveal: on its road, no
-        // farther out than the Progress it has banked — and the farther along, the
-        // likelier. From Rivendell with Progress 3 that is Moria, not the Fords of
-        // Bruinen behind it (report 6p6o0b22046d346i).
-        const reach = Math.max(1, state.fellowship.hidden ? state.fellowship.progress : 1);
-        if (d >= 1 && d <= reach && d + dist(a.region, exit) === dist(loc, exit)) return 20 + d * 10;
+        // Where the Fellowship will END its next declare or reveal: on its road, at the
+        // full Progress it has banked (or the entrance, if nearer) — stopping short
+        // throws Progress away, which the Free Peoples never do. From Rivendell with
+        // Progress 3 that is Moria (report 6p6o0b22046d346i); with Progress 2 it is
+        // Hollin, not the Fords of Bruinen or the Trollshaws (report kz0zb6v5xhdvy7my).
+        const reach = Math.min(dist(loc, exit), Math.max(1, state.fellowship.hidden ? state.fellowship.progress : 1));
+        if (d === reach && d + dist(a.region, exit) === dist(loc, exit)) return 20 + d * 10;
       }
       const staging = nazgulStagingBonus(state, 'nazgul', a.region as RegionId, target);
       if (staging > 0) return staging / 2;
