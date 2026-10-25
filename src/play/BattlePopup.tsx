@@ -2,7 +2,7 @@
 // effect"). Pops once when a battle finishes (seq-tracked, like the HuntPopup),
 // showing the final round's dice for each side (hits in gold), each side's losses,
 // and the result. Combat is public info, so it shows for both players.
-import type { GameState, Side } from '../engine/types';
+import type { BattleRecord, GameState, Side } from '../engine/types';
 import { RollRow, CardRollRows } from './combatDice';
 import mapData from '../../assets/map.json';
 
@@ -14,12 +14,17 @@ const sideName = (s: Side) => (s === 'fp' ? 'Free Peoples' : 'Shadow');
 export const battleResultPending = (view: GameState, seen: number): boolean =>
   !!view.lastBattle && view.lastBattle.seq > seen && !view.pendingChoice && !view.pendingCombat;
 
+/** The oldest finished battle not yet clicked through: when two end in one update,
+ *  each gets its popup in turn, not only the second (player report ij541aaphyxthzkn). */
+const nextBattle = (view: GameState, seen: number): BattleRecord | undefined =>
+  (view.recentBattles ?? []).find((b) => b.seq > seen) ?? view.lastBattle;
+
 export function BattlePopup({ view, seen, onSeen, you }: { view: GameState; seen: number; onSeen: (seq: number) => void;
   /** The viewer's side, to colour the result as a win or a loss for THEM. */
   you?: Side | null }) {
-  const b = view.lastBattle;
   // Wait until the battle is fully resolved and no other prompt is up.
-  if (!b || !battleResultPending(view, seen)) return null;
+  if (!battleResultPending(view, seen)) return null;
+  const b = nextBattle(view, seen)!;
 
   return (
     <div style={backdrop} onClick={() => onSeen(b.seq)}>

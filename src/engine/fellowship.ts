@@ -504,7 +504,8 @@ function sepGuideNote(state: GameState): string {
  *  the Corruption healing takes effect)"; Gwaihir likewise ("sometimes done to bring
  *  Gollum into play for his Guide abilities"). The card was refused outright instead
  *  (player report). Not a casualty — no Hunt damage is absorbed and Worn with Sorrow
- *  does not fire. Returns whether the Companion was removed. */
+ *  does not fire, so the log line avoids "falls"/casualty wording (report
+ *  4v0d5l074c1e2465). Returns whether the Companion was removed. */
 export function removeCompanionOnMordorTrack(state: GameState, id: CharacterId): boolean {
   const fs = state.fellowship;
   if (fs.mordor === null || !fs.companions.includes(id)) return false;
@@ -512,7 +513,7 @@ export function removeCompanionOnMordorTrack(state: GameState, id: CharacterId):
   if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
   const oldGuide = fs.guide;
   reassignGuide(state);
-  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} leaves the Fellowship on the Mordor Track and is removed from play`
+  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separates from the Fellowship and vanishes into the wastes of Mordor`
     + (fs.guide !== oldGuide ? ` — ${COMPANIONS[fs.guide]?.name ?? fs.guide} becomes the Guide` : ''));
   return true;
 }

@@ -97,12 +97,13 @@ export function DiceTray({ view, you, selectedDie, onSelectDie, inActionDie, onl
   };
   return (
     <div style={only ? { ...panel, borderBottom: 'none' } : panel}>
-      {/* Each side's Elven Rings sit with its dice: yours above your dice, the
-          opponent's below theirs (player report 3f0y4s3x0z1a4b3n). */}
+      {/* Each side's Elven Rings sit with its dice, above them — Rings, then the
+          pool's heading, then the dice — the same order for both sides (player
+          reports 3f0y4s3x0z1a4b3n, 5x0k142a1p6x155o). */}
+      {only !== 'mine' && <div style={{ marginBottom: 6 }}><ElvenRings view={view} side={opp} /></div>}
+      {only !== 'mine' && <Pool title={`${name(opp)} dice`} dice={view.dice[opp]} used={used[opp]} mine={false} toRoll={toRoll(opp)} />}
       {only !== 'opp' && <div style={{ marginBottom: 6 }}><ElvenRings view={view} side={me} actions={ringActions} onAction={onAction} dropUp /></div>}
       {only !== 'opp' && <Pool title={`Your dice (${name(me)})`} dice={view.dice[me]} used={used[me]} mine selectedDie={selectedDie} onSelectDie={onSelectDie} toRoll={toRoll(me)} inAction={inActionDie} />}
-      {only !== 'mine' && <Pool title={`${name(opp)} dice`} dice={view.dice[opp]} used={used[opp]} mine={false} toRoll={toRoll(opp)} />}
-      {only !== 'mine' && <div style={{ marginTop: 6 }}><ElvenRings view={view} side={opp} /></div>}
     </div>
   );
 }

@@ -6,7 +6,7 @@
 // decision. Still deferred: initiative-ordered resolution of competing effects
 // (a card's initiative only matters when both sides' effects collide — see D5)
 // and a few intricate per-effect cards (e.g. Mûmakil's two timings).
-import type { GameState, Nation, RegionId, Side, PendingCombat, CardRoll } from './types';
+import type { GameState, Nation, RegionId, Side, PendingCombat, CardRoll, BattleRecord } from './types';
 import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName } from './data';
 import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, fellowshipRegion, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
@@ -1368,12 +1368,12 @@ function finishCombat(state: GameState, advance: boolean): void {
   // into `from` now would let advanceInto sweep it along. resolveRelieveAdvance puts it
   // back once the advance has (or hasn't) happened, matching the field battle's ordering.
   if (pc.rearguard && !reliefAdvance && !advanceOffer && !sortie) restoreRearguard(state, pc.from, pc.rearguard);
-  state.lastBattle = {
-    seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
+  recordBattle(state, {
+    from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round + 1,
     atkLosses: Math.max(0, (pc.atkUnits0 ?? atkAlive) - atkAlive), defLosses: Math.max(0, (pc.defUnits0 ?? defAlive) - defAlive),
     captured, siege: !!pc.siege, outcome, victor, atkRoll: pc.atkRoll, defRoll: pc.defRoll,
     ...(pc.cardRolls?.length ? { cardRolls: pc.cardRolls } : {}),
-  };
+  });
   const opp = other(pc.attacker);
   state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;
   state.pendingCombat = null;
@@ -2201,6 +2201,14 @@ export function resolveSiegeExtend(state: GameState, extend: boolean): void {
   pc.round += 1;
   pc.step = 'attackerCard'; // advance() re-drives the battle sub-machine
 }
+/** How many finished battles the state keeps for the outcome popup to work through. */
+const RECENT_BATTLES = 4;
+/** A battle has finished: it becomes lastBattle, and joins the few kept for the popup. */
+function recordBattle(state: GameState, b: Omit<BattleRecord, 'seq'>): void {
+  const rec: BattleRecord = { seq: (state.lastBattle?.seq ?? 0) + 1, ...b };
+  state.lastBattle = rec;
+  state.recentBattles = [...(state.recentBattles ?? []), rec].slice(-RECENT_BATTLES);
+}
 /** Record a Combat card's extra attack (or Great Host's automatic hit) for the battle
  *  modal and popup to draw as dice — the card is the side's card this round. */
 function noteCardRoll(pc: PendingCombat, side: Side, when: CardRoll['when'], dice: number[], target: number, hits: number): void {
@@ -2279,12 +2287,12 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean, move?
     delete r.siegeBox; r.besieged = false;
     log(state, null, 'combat', `${sideDoes(pc.defender, 'fall')} back into ${REGIONS[pc.to]!.name ?? pc.to}, but ${sideLabel(pc.attacker)} ${pc.attacker === 'fp' ? 'do' : 'does'} not advance — no siege`);
     if (pc.rearguard) restoreRearguard(state, pc.from, pc.rearguard);
-    state.lastBattle = {
-      seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
+    recordBattle(state, {
+      from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
       atkLosses: Math.max(0, (pc.atkUnits0 ?? 0) - unitCount(state, pc.from)),
       defLosses: Math.max(0, (pc.defUnits0 ?? 0) - unitCount(state, pc.to)), captured: false, siege: false,
       outcome: `${sideDoes(pc.attacker, 'decline')} to besiege ${REGIONS[pc.to]!.name ?? pc.to}`,
-    };
+    });
     const opp0 = other(pc.attacker);
     state.currentPlayer = state.dice[opp0].length > 0 ? opp0 : pc.attacker;
     state.pendingCombat = null;
@@ -2307,13 +2315,13 @@ export function resolveBesiegerAdvance(state: GameState, advance: boolean, move?
     // `pc.round` is 0-based and counts the rounds ALREADY fought, so it is exactly the
     // round count for a mid-battle withdrawal (0 when they fall back before fighting).
     // Both sides can have real losses by then, so neither total is hard-coded any more.
-    state.lastBattle = {
-      seq: (state.lastBattle?.seq ?? 0) + 1, from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
+    recordBattle(state, {
+      from: pc.from, to: pc.to, attacker: pc.attacker, rounds: pc.round,
       atkLosses: Math.max(0, (pc.atkUnits0 ?? 0) - unitCount(state, pc.to)), // the besieger has just moved from -> to
       defLosses: Math.max(0, (pc.defUnits0 ?? 0) - (r.siegeBox ? forceUnitCount(r.siegeBox) : 0)), captured: false, siege: true,
       outcome: `${sideDoes(pc.defender, 'withdraw')} into the siege at ${REGIONS[pc.to]!.name ?? pc.to}`
         + (pc.round > 0 ? ` after ${pc.round} round${pc.round === 1 ? '' : 's'}` : ''),
-    };
+    });
     const opp = other(pc.attacker);
     state.currentPlayer = state.dice[opp].length > 0 ? opp : pc.attacker;
     state.pendingCombat = null;

@@ -453,16 +453,24 @@ export interface GameState {
   notices?: { seq: number; msg: string; title?: string }[];
   /** The most recent finished battle, for the battle-outcome popup (public). seq
    *  marks a new battle so the popup shows each once. */
-  lastBattle?: {
-    seq: number; from: RegionId; to: RegionId; attacker: Side; rounds: number;
-    atkLosses: number; defLosses: number; captured: boolean; siege: boolean; outcome: string;
-    /** Who came out ahead (null: nobody — a mutual wipe, a withdrawal into a siege). */
-    victor?: Side | null;
-    atkRoll?: { dice: number[]; rerolls: number[]; target: number };
-    defRoll?: { dice: number[]; rerolls: number[]; target: number };
-    /** The final round's Combat-card extra attacks (see PendingCombat.cardRolls). */
-    cardRolls?: CardRoll[];
-  };
+  lastBattle?: BattleRecord;
+  /** The last few finished battles, oldest first (lastBattle is the newest). Two
+   *  battles can finish within one update — the opponent's casualty pick ends yours,
+   *  then they attack elsewhere — and the popup shows each in turn rather than only
+   *  the second (player report ij541aaphyxthzkn). */
+  recentBattles?: BattleRecord[];
+}
+
+/** A finished battle, as the battle-outcome popup shows it. */
+export interface BattleRecord {
+  seq: number; from: RegionId; to: RegionId; attacker: Side; rounds: number;
+  atkLosses: number; defLosses: number; captured: boolean; siege: boolean; outcome: string;
+  /** Who came out ahead (null: nobody — a mutual wipe, a withdrawal into a siege). */
+  victor?: Side | null;
+  atkRoll?: { dice: number[]; rerolls: number[]; target: number };
+  defRoll?: { dice: number[]; rerolls: number[]; target: number };
+  /** The final round's Combat-card extra attacks (see PendingCombat.cardRolls). */
+  cardRolls?: CardRoll[];
 }
 
 /** One Combat-card extra attack: whose, which card, before the Combat roll or after
