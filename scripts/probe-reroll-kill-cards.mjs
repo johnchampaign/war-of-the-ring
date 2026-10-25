@@ -75,7 +75,7 @@ console.log('\n=== Blade of Westernesse ===');
   }
   check(`Saruman falls exactly when the FP re-roll scores (${scored} scored, ${missed} missed)`, scored > 0 && missed > 0 && bad.length === 0, bad.slice(0, 4).join('; '));
   const s = battle(3, { fpChars: ['meriadoc'], shadowChars: ['saruman'], fpCard: BLADE });
-  check('the card line no longer explains the effect', s.log.some((e) => /play 'Blade of Westernesse' \(Mithril Coat and Sting\)$/.test(e.msg ?? '')));
+  check('the card line no longer explains the effect', s.log.some((e) => /play Blade of Westernesse \(Mithril Coat and Sting\)$/.test(e.msg ?? '')));
 }
 
 console.log('\n=== Fateful Strike ===');

@@ -950,10 +950,12 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const f = figureForce(state, action.region, 'fp'); // open field, or a besieged garrison's box
       // Logged FIRST, naming the card: the loss is the cause of any capture that follows
       // (player report 6b674j562o2h4d17 — it used to read after the Stronghold fell).
-      const nn = nationName(action.nation);
+      // "An Elven Regular", as the battle casualties say it — not "an Elves Regular".
+      const nn = ({ elves: 'Elven', dwarves: 'Dwarven' } as Record<string, string>)[action.nation] ?? nationName(action.nation);
+      // The figure lost is the subject, like every other casualty line (player report 012p4v70195e4c55).
       log(state, null, 'event', action.figure === 'leader'
-        ? `Stormcrow banishes a Free Peoples Leader in ${action.region}`
-        : `Stormcrow banishes ${/^[AEIOU]/.test(nn) ? 'an' : 'a'} ${nn} ${action.figure === 'elite' ? 'Elite' : 'Regular'} in ${action.region}`);
+        ? `A Free Peoples Leader perishes in ${action.region}`
+        : `${/^[AEIOU]/.test(nn) ? 'An' : 'A'} ${nn} ${action.figure === 'elite' ? 'Elite' : 'Regular'} perishes in ${action.region}`);
       if (action.figure === 'leader') {
         if (f.leaders > 0) f.leaders -= 1; // FP Leaders are permanently removed (not to reinforcements)
       } else {

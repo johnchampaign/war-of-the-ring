@@ -10,7 +10,7 @@ import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKI
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, runEventStrikes, hasAtWarUnit, sortieForce, canSortie, attackError, type CasualtyThen, type EventStrike } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
 import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
-import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
+import { activateNation, advancePolitical, isAtWar, nationSubject, onArmyAttacked } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef, theNation, nationsArePlural } from '../data';
 import { moveFellowship, hideFellowship, findCharacterRegion, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS, type RangeOpts } from '../charMove';
@@ -1816,8 +1816,12 @@ register('sh-str-06', {
   targets: (state, _side, applied) => (applied?.length ? [] : stormcrowNations(state).map((nation) => ({ nation }))),
   applyTarget(state, _side, t) {
     const n = t.nation!;
-    state.nations[n].step = Math.min(3, state.nations[n].step + 1); // move back one step
-    log(state, null, 'event', `${n} is set back one step on the Political Track`); // no card prefix on an immediate effect (report 5x412l1p0k3t4l3o)
+    // No card prefix on an immediate effect (report 5x412l1p0k3t4l3o); worded like an
+    // advance, "Rohan withdraws one step from war (1 → 2)" (report 2x5b19454s6e0c69).
+    const was = state.nations[n].step;
+    state.nations[n].step = Math.min(3, was + 1); // move back one step
+    const ns = nationSubject(n);
+    log(state, null, 'event', `${ns.name} ${ns.plural ? 'withdraw' : 'withdraws'} one step from war (${was} → ${state.nations[n].step})`);
   },
   finalize(state, _side, applied) {
     const n = applied[0]?.nation; if (!n) return;
@@ -2625,8 +2629,9 @@ register('sh-str-01', {
       const roll = rollDiceFaces(state, Math.min(u.regular + u.elite, 5), 6); // card: max 5 dice
       const hits = roll.hits;
       if (hits > 0) strikes.push({ side: 'fp', region: id, hits, nation: 'elves', spare: true, card: 'sh-str-01' });
-      // No card prefix (report 2d5o6e2472160r5w): the losses may be anywhere in the Stronghold's Army.
-      log(state, null, 'event', `${hits === 0 ? 'No' : hits} Elven unit${hits === 1 ? '' : 's'} ${hits === 1 ? 'departs' : 'depart'} from ${id} and ${hits === 1 ? 'sails' : 'sail'} for Valinor [${roll.dice.join(' ')}]`);
+      // The standard Event-card roll line; the losses themselves "sail for Valinor"
+      // (player report 0h4i6f5l6l2u6d00).
+      log(state, null, 'event', rollLine('Return to Valinor scores', roll, rName(id)));
       lines.push(`${rName(id)}: rolled [${roll.dice.join(' ')}], ${hits === 0 ? 'no hits' : `${hits} hit${hits === 1 ? '' : 's'}`}`);
     }
     notify(state, `Hitting on 6 — ${lines.join('; ')}.`, 'Return to Valinor');
@@ -2674,7 +2679,7 @@ register('fp-char-14', {
         r.characters = r.characters.filter((c) => c !== who.char);
         delete state.characters.inPlay[who.char];
         if (!state.characters.eliminated.includes(who.char)) state.characters.eliminated.push(who.char);
-        log(state, null, 'event', `Challenge of the King: all Eyes — ${characterDef(who.char)?.name ?? who.char} is lost`);
+        log(state, null, 'event', `${characterDef(who.char)?.name ?? who.char} falls before the gaze of Sauron`); // player report 5h2q1r5r0c510k6q
       }
     }
   },

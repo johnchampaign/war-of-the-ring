@@ -68,8 +68,8 @@ console.log('\n=== Stormcrow banishes, before the capture ===');
   s.pendingChoice = { owner: 'fp', kind: 'stormcrowLoss', data: { nation: 'elves' } };
   const t = wotrAdapter.applyAction(s, { kind: 'stormcrowLoss', region: 'lorien', nation: 'elves', figure: 'regular' }, 'fp');
   const all = msgs(t);
-  const i = all.findIndex((m) => m.startsWith('Stormcrow banishes'));
-  check('wording', all[i] === 'Stormcrow banishes an Elves Regular in lorien', all[i]);
+  const i = all.findIndex((m) => m.startsWith('An Elven Regular perishes'));
+  check('wording', all[i] === 'An Elven Regular perishes in lorien', all[i]);
   const cap = all.findIndex((m) => /captures lorien/.test(m));
   check('the banishment reads before the capture', i >= 0 && cap > i, `banish@${i} capture@${cap}`);
 }

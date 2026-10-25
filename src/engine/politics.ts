@@ -52,10 +52,17 @@ export function advancePolitical(state: GameState, n: Nation, steps = 1, trigger
   const floor = ns.active ? 0 : 1;
   const newStep = Math.max(floor, ns.step - steps);
   if (newStep !== ns.step) {
+    const was = ns.step;
     ns.step = newStep;
     const s = nationSubject(n);
-    // A Character ability names itself in parentheses (player report 2n372n3f3i4f4a24).
-    log(state, null, 'politics', `${s.name} ${s.plural ? 'advance' : 'advances'} to step ${ns.step}${ns.step === 0 ? ' (At War)' : ''}${trigger.ability ? ` (${trigger.ability})` : ''}`);
+    // "Gondor marches to war (1 → 0)", "The Dwarves advance one step towards war
+    // (2 → 1)" (player report 2x5b19454s6e0c69). A Character ability names itself in
+    // parentheses (player report 2n372n3f3i4f4a24).
+    const moved = was - newStep;
+    const verb = newStep === 0
+      ? `${s.plural ? 'march' : 'marches'} to war`
+      : `${s.plural ? 'advance' : 'advances'} ${moved === 1 ? 'one step' : `${moved} steps`} towards war`;
+    log(state, null, 'politics', `${s.name} ${verb} (${was} → ${newStep})${trigger.ability ? ` (${trigger.ability})` : ''}`);
     if (sideOfNation(n) === 'fp' && (trigger.viaAttack || trigger.viaCompanion)) discardThreatsAndPromises(state, !!trigger.viaAttack);
   }
 }

@@ -53,6 +53,26 @@ export function NoticePopup({ view, seen, onSeen }: { view: GameState; seen: num
  *  Athelas, Candles of Corpses, the Eagles) drawn as dice, a success in gold, the way
  *  the battle popup shows them (player report 2k3d2m0s0a5j330q). Anything else is text. */
 export function NoticeText({ msg }: { msg: string }) {
+  // One roll per region — Return to Valinor's "Hitting on 6 — Grey Havens: rolled
+  // [5 1], no hits; Lórien: …" — gets the dice too, a row per region (player report
+  // 4o3u0x0g4g4l5o2d).
+  const multi = /^Hitting on ([2-6]) — (.*)\.$/s.exec(msg);
+  if (multi) {
+    const target = Number(multi[1]);
+    const rows = multi[2]!.split('; ').map((part) => /^(.+): rolled \[([1-6](?: [1-6])*)\], (.+)$/s.exec(part));
+    if (rows.every(Boolean)) {
+      return (
+        <>
+          {`Hitting on ${target}+`}
+          {rows.map((r, i) => (
+            <span key={i} style={{ display: 'block', margin: '4px 0' }}>
+              <b>{r![1]}</b>{' '}{r![2]!.split(' ').map((d, j) => <CDie key={j} n={Number(d)} target={target} />)}{' '}{r![3]}
+            </span>
+          ))}
+        </>
+      );
+    }
+  }
   const m = /^Rolled \[([1-6](?: [1-6])*)\], (\w+) on ([2-6])\+(.*)$/s.exec(msg);
   if (!m) return <>{msg}</>;
   const dice = m[1]!.split(' ').map(Number), target = Number(m[3]);

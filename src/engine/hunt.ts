@@ -248,7 +248,9 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // Ring" — ruled (per playtester Samuel Carey, confirming the community ruling) as
   // STRAIGHT CORRUPTION: no reductions AND no Guide/Companion casualty either.
   if (opts.noReduce) {
-    sufferCorruption(state, damage, `from ${opts.source ?? 'the Hunt'} — no reduction or casualty allowed`);
+    // The log keeps the ordinary "for using the Ring" line; the why lives in the
+    // Hunt popup (player report 3s1e2r2i0a4c646r).
+    sufferCorruption(state, damage, 'for using the Ring');
     if (reveal) beginReveal(state);
     return;
   }
@@ -471,15 +473,19 @@ export function challengeOfTheKing(state: GameState, who = 'Strider/Aragorn'): b
   const refs = [drawTile(state), drawTile(state), drawTile(state)];
   const allEyes = refs.every((r) => r.tile.value === 'eye');
   for (const r of refs) {
-    if (!allEyes && r.tile.value === 'eye' && 'std' in r.ref) {
-      const i = state.hunt.drawn.lastIndexOf(r.ref.std); // permanently remove (don't return to pool)
-      if (i >= 0) state.hunt.drawn.splice(i, 1);
+    if (!allEyes && r.tile.value === 'eye') {
+      // "Discard permanently the drawn tiles bearing an Eye" (card text) — The Ring is
+      // Mine! bears one too, and used to go back into the pool. A drawn special tile
+      // already stays out for good, so only a standard Eye needs taking off the pile.
+      if ('std' in r.ref) {
+        const i = state.hunt.drawn.lastIndexOf(r.ref.std);
+        if (i >= 0) state.hunt.drawn.splice(i, 1);
+      }
     } else {
       returnTileToPool(state, r.ref);
     }
   }
   const face = (v: number | 'eye' | 'die') => (typeof v === 'number' ? String(v) : v === 'eye' ? 'Eye' : 'die');
-  const drew = refs.map((r) => face(r.tile.value)).join(', ');
   const removed = allEyes ? 0 : refs.filter((r) => r.tile.value === 'eye').length;
   // The player sees the three tiles themselves, like a Hunt draw (player request:
   // show the tiles + result, not just a silent log line).
@@ -488,9 +494,13 @@ export function challengeOfTheKing(state: GameState, who = 'Strider/Aragorn'): b
     : removed
       ? `${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt Pool; the other tiles go back into it.`
       : 'No Eyes drawn — nothing is removed, and the tiles go back into the Hunt Pool.');
-  // The log line names the draw too (player report 5y4646420q6j1c2f: "Eye tiles
-  // removed" said neither which nor whether any were).
-  if (!allEyes) log(state, null, 'event', `Challenge of the King: drew ${drew} — ${removed ? `${removed} Eye tile${removed === 1 ? '' : 's'} permanently removed from the Hunt Pool` : 'no Eyes drawn, nothing removed'}`);
+  // One log line per tile drawn, then one per Eye destroyed — naming The Ring Is
+  // Mine! apart from a plain Eye (player reports 5y4646420q6j1c2f, 5h2q1r5r0c510k6q).
+  // The rule itself (Eyes leave, the rest go back) is the popup's to explain.
+  for (const r of refs) log(state, null, 'event', `Free Peoples draw ${r.tile.card ?? (r.tile.value === 'eye' ? 'an Eye' : r.tile.value === 'die' ? 'a die tile' : `a ${face(r.tile.value)}`)}`);
+  if (!allEyes) {
+    for (const r of refs) if (r.tile.value === 'eye') log(state, null, 'event', `${who} destroys ${r.tile.card ?? 'an Eye'}`);
+  }
   return allEyes;
 }
 
@@ -539,7 +549,10 @@ function huntRoll(state: GameState, level: number, bonus: number, rerolls: numbe
     return { successes: hits, dice: faces, rerollDice: rfaces };
   });
   state.hunt.lastRoll = { level, bonus, dice, rerolls: rerollDice, successes, mordor: false };
-  log(state, null, 'hunt', `Hunt roll: ${level} ${level === 1 ? 'die' : 'dice'}${bonus ? ` (+${bonus})` : ''} [${dice.join(' ')}]${rerollDice.length ? ` re-roll [${rerollDice.join(' ')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`,
+  // Worded like a Combat roll — the faces, then what they needed (player report
+  // 460k046t6o5f223t): each die succeeds on 6 less the box bonus, never on a 1.
+  const need = Math.max(2, 6 - bonus);
+  log(state, null, 'hunt', `Hunt roll: [${dice.join(' ')}] on ${need}+${rerollDice.length ? ` re-roll [${rerollDice.join(' ')}]` : ''} → ${successes} success${successes === 1 ? '' : 'es'}`,
     { level, bonus, dice, rerolls: rerollDice, successes });
   if (successes >= 1) { beginHuntDraw(state, successes, false); return; }
   // A miss: record it so the player still SEES the roll (dice + box bonus) and knows

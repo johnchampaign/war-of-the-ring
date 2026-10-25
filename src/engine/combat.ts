@@ -398,7 +398,7 @@ function applyCasualtyOption(state: GameState, f: Force, side: Side, opt: Casual
 
 /** Absorb every hit whose allocation is FORCED (exactly one legal option), so the
  *  player is never asked to "choose" a non-choice. Returns the hits still open. */
-function absorbForced(state: GameState, f: Force, side: Side, hits: number, nation?: Nation): number {
+function absorbForced(state: GameState, f: Force, side: Side, hits: number, nation?: Nation, card?: string): number {
   let left = hits;
   const taken: string[] = [];
   // Enough hits to destroy every unit there (a Regular takes one, an Elite two) leaves
@@ -429,8 +429,13 @@ function absorbForced(state: GameState, f: Force, side: Side, hits: number, nati
   // line while chosen ones each had their own (player report 692l2005000t3z4m).
   // No "(forced)" tag: whether a loss was forced or chosen does not matter in the log
   // (player report 016j5h5h2f1v1t21).
-  for (const what of taken) log(state, null, casualtyLogKind(state), what);
+  for (const what of taken) log(state, null, casualtyLogKind(state), cardVoice(what, card));
   return left;
+}
+/** A card that takes its losses in its own words: Return to Valinor's Elves do not
+ *  fall, they "sail for Valinor" (player report 0h4i6f5l6l2u6d00). */
+function cardVoice(what: string, card?: string): string {
+  return card === 'sh-str-01' ? what.replace(/ falls$/, ' sails for Valinor') : what;
 }
 /** "a Sauron Regular is eliminated" — read BEFORE the option is applied (whether an
  *  Elite is reduced or eliminated depends on a Regular being available to replace it). */
@@ -571,7 +576,7 @@ export function pendingCasualtyOptions(state: GameState): CasualtyOption[] {
 export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, nation: Nation): void {
   const ch = state.pendingChoice!;
   const isEvent = ch.kind === 'eventCasualties';
-  const d = ch.data as { region: RegionId; side: Side; hits: number; next?: PendingCombat['step']; boxed?: boolean; then?: CasualtyThen | null; nation?: Nation; spare?: boolean };
+  const d = ch.data as { region: RegionId; side: Side; hits: number; next?: PendingCombat['step']; boxed?: boolean; then?: CasualtyThen | null; nation?: Nation; spare?: boolean; card?: string };
   const f = pendingCasualtyForce(state)!;
   const opts = casualtyOptions(f, d.hits, { state, side: d.side, nation: d.nation });
   const chosen = opts.find((o) => o.step === step && o.nation === nation) ?? opts[0];
@@ -581,9 +586,9 @@ export function resolveCasualtyStep(state: GameState, step: CasualtyStepKind, na
     // how many landed but never which units fell (report 3i5z6d36724x115m).
     const what = casualtyPhrase(state, d.side, chosen);
     const spent = applyCasualtyOption(state, f, d.side, chosen);
-    if (spent > 0) { left -= spent; log(state, null, casualtyLogKind(state), what); }
+    if (spent > 0) { left -= spent; log(state, null, casualtyLogKind(state), cardVoice(what, d.card)); }
   }
-  left = absorbForced(state, f, d.side, left, d.nation);
+  left = absorbForced(state, f, d.side, left, d.nation, d.card);
   if (meaningfulForceCasualty(state, f, d.side, left, d.nation)) {
     state.pendingChoice = { ...ch, data: { ...d, hits: left } };
     return;
@@ -703,7 +708,7 @@ export function queueOrApplyEventCasualties(state: GameState, side: Side, region
   // side (and leaked Shadow units past the reinforcement pool).
   const f = armyForceOf(state, region, side) ?? state.regions[region]!;
   const boxed = f !== state.regions[region];
-  const left = absorbForced(state, f, side, hits, opts.nation); // forced losses need no prompt
+  const left = absorbForced(state, f, side, hits, opts.nation, opts.card); // forced losses need no prompt
   if (meaningfulForceCasualty(state, f, side, left, opts.nation)) {
     state.pendingChoice = { owner: side, kind: 'eventCasualties', data: { region, side, hits: left, boxed, then: then ?? null,
       ...(opts.nation ? { nation: opts.nation } : {}), ...(opts.spare ? { spare: true } : {}), ...(opts.card ? { card: opts.card } : {}) } };
@@ -1047,7 +1052,10 @@ function describeForce(state: GameState, f: Force, side: Side): string {
   if (figs) parts.push(side === 'fp' ? n(figs, 'Leader', 'Leaders') : `${figs} Nazgûl`);
   for (const c of f.characters) if (characterSide(c) === side) parts.push(characterDef(c)?.name ?? c);
   if (!parts.length) return 'empty';
-  return `${parts.join(', ')} (${Math.min(5, forceUnitCount(f))} dice, Leadership ${forceLeadership(state, f, side)})`;
+  // Each Captain of the West adds a die, as the roll itself counts them (player
+  // report 5p305o524a5n5r5s: "3 dice" announced, 5 rolled).
+  const captains = side === 'fp' ? f.characters.filter((c) => CAPTAINS.has(c)).length : 0;
+  return `${parts.join(', ')} (${Math.min(5, forceUnitCount(f) + captains)} dice, Leadership ${forceLeadership(state, f, side)})`;
 }
 
 /** True when `side`'s Combat card is OUTRUN by a pre-combat retreat printed on the
@@ -1720,7 +1728,8 @@ export function combatStep(state: GameState): void {
           if (!id) return 'no Combat card';
           const def = EVENT_BY_ID[id];
           const combat = def?.combat?.title, event = def?.name;
-          return combat && event && combat !== event ? `'${combat}' (${event})` : `'${combat ?? event ?? id}'`;
+          // No quotes around the name — the log quotes nothing else (player report 1e465d1d6m4e3j1f).
+          return combat && event && combat !== event ? `${combat} (${event})` : `${combat ?? event ?? id}`;
         };
         // Each side's combat card (if any) applies THIS round, then is spent —
         // a fresh card may be played next round (rules-spec §7, p.29).

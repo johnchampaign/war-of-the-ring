@@ -500,10 +500,13 @@ const CHOICE_CHARACTER: Record<string, string> = { guideDraw: 'gandalf-grey', so
 function CharacterBlurb({ id }: { id: string }) {
   const d = charDef(id);
   const art = useCardArt(id);
+  // Click to see it full size, like an Event card here (player report 3o5f37150y5c062m).
+  const [zoom, setZoom] = useState(false);
   if (!d) return <CardBlurb id={null} />;
   return (
     <div style={{ ...blurb, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      {art && <img src={art} alt="" style={{ height: 120, borderRadius: 4, flexShrink: 0 }} />}
+      {art && <img src={art} alt="" title="Click to enlarge" onClick={() => setZoom(true)} style={{ height: 120, borderRadius: 4, flexShrink: 0, cursor: 'zoom-in' }} />}
+      {zoom && <CardZoom id={id} onClose={() => setZoom(false)} />}
       <div>
         <div style={{ fontWeight: 700, fontSize: 13 }}>{d.name}{d.title && <span style={{ color: '#aa9', fontWeight: 400, fontStyle: 'italic' }}> · {d.title}</span>}</div>
         <div style={{ fontSize: 12, color: '#d9c98a', margin: '3px 0' }}>Level {d.level === 'inf' ? '∞' : d.level}{d.leadership ? ` · Leadership ${d.leadership}` : ''}</div>
