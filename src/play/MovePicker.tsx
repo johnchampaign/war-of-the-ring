@@ -224,7 +224,7 @@ export function MovePicker({ from, to, kind, view, you, base, charOnly, onConfir
         {maxLeaders > 0 && <Step label="Leaders" val={leaders} max={maxLeaders} set={setLeaders} />}
         {maxNazgul > 0 && <Step label="Nazgûl" val={nazgul} max={maxNazgul} set={setNazgul} />}
         {charRows.map((c) => (
-          <label key={c.id} style={{ ...row, cursor: c.reason ? 'not-allowed' : 'pointer', opacity: c.reason ? 0.6 : 1 }} title={c.reason ?? undefined}>
+          <label key={c.id} style={{ ...row, cursor: c.reason ? 'default' : 'pointer', opacity: c.reason ? 0.6 : 1 }} title={c.reason ?? undefined}>
             <input type="checkbox" name={`move-char-${c.id}`} disabled={!!c.reason} checked={chars.has(c.id)}
               onChange={(e) => { const s = new Set(chars); e.target.checked ? s.add(c.id) : s.delete(c.id); setChars(s); }} />
             <span style={{ flex: 1 }}>{charName(c.id)}{c.reason ? ` — ${c.reason.replace(/\.$/, '')}` : ''}</span>

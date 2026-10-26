@@ -436,6 +436,13 @@ die already showing an Eye.
   and then it pays with the Event/Will die unless the player picks otherwise), **or** the
   Fellowship in an unconquered Lórien with Corruption to heal. It used to demand a
   Character die even for the heal alone. `scripts/probe-mirror-galadriel.mjs`.
+  **A draw needs a card to draw** *(player report 4p541q1s710v204k, 2026-10-26)*. The
+  draw clause ("Then, draw one/two Strategy Event cards") makes *House of the Stewards*,
+  *The Grey Company*, *King Brand's Men*, *Celeborn's Galadhrim*, *Kindred of
+  Glorfindel*, *Swords in Eriador* and *Thranduil's Archers* playable on its own only
+  while the Free Peoples Strategy deck holds a card (an empty deck is not reshuffled,
+  p.22). With it empty the card needs its other clause live — a unit to recruit, or a
+  Regular to upgrade. `scripts/probe-triage-1026b.mjs`.
   **Not an exception:** a "null effect" card is *not* made playable by Gandalf the Grey
   guiding. Drawing through his ability costs the same Event die as the "Draw an Event
   card" action and additionally spends the card, so it is strictly worse — there is no

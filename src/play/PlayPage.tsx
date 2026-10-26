@@ -87,7 +87,7 @@ function ResolvingCard({ view, onHoverCard }: { view: GameState; onHoverCard: (i
     <>
       <button data-testid="resolving-card" onClick={() => setZoom(true)} onMouseEnter={() => onHoverCard(card)} onMouseLeave={() => onHoverCard(null)}
         title="The Event card being resolved — click to enlarge"
-        style={{ position: 'absolute', top: 38, left: 6, zIndex: 6, padding: '4px 9px', fontSize: 12, fontFamily: 'system-ui', background: 'rgba(28,23,16,0.92)', color: '#e9e1cc', border: '1px solid #c9a24a', borderRadius: 6, cursor: 'zoom-in', boxShadow: '0 2px 8px #0008' }}>
+        style={{ position: 'absolute', top: 38, left: 6, zIndex: 6, padding: '4px 9px', fontSize: 12, fontFamily: 'system-ui', background: 'rgba(28,23,16,0.92)', color: '#e9e1cc', border: '1px solid #c9a24a', borderRadius: 6, cursor: 'pointer', boxShadow: '0 2px 8px #0008' }}>
         <span style={{ color: '#b9b29c' }}>Resolving:</span> <b style={{ textDecoration: 'underline dotted', textUnderlineOffset: 2 }}>{EVENT_BY_ID[card]!.name}</b>
       </button>
       {zoom && <CardZoom id={card} onClose={() => setZoom(false)} />}

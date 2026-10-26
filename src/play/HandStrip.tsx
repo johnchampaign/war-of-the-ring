@@ -168,14 +168,14 @@ function HandCard({ id, onZoom, onHover, lit: playable }: { id: string; onZoom: 
     // Art card with a small play-type badge overlaid top-left, so the die-type is
     // readable at a glance even on the image (Ira #3).
     <div style={{ position: 'relative', flexShrink: 0, ...lit }} {...hov}>
-      <img src={art} alt={def?.name ?? id} title={tip} style={{ ...img, cursor: 'zoom-in' }} onClick={onZoom} />
+      <img src={art} alt={def?.name ?? id} title={tip} style={img} onClick={onZoom} />
       {!id.startsWith('hidden') && def && <CardTypeBadge deck={def.deck} via={def.playableVia} small style={{ position: 'absolute', top: 2, left: 2, boxShadow: '0 1px 3px #000' }} />}
     </div>
   );
   // Text-card placeholder.
   const side = def?.side === 'Shadow' ? '#5a2222' : '#1f3a5a';
   return (
-    <div style={{ ...textCard, background: side, cursor: 'zoom-in', position: 'relative', ...lit }} onClick={onZoom} title={playable ? tip : (def?.eventText ?? '')} {...hov}>
+    <div style={{ ...textCard, background: side, cursor: 'pointer', position: 'relative', ...lit }} onClick={onZoom} title={playable ? tip : (def?.eventText ?? '')} {...hov}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
         <CardTypeBadge deck={def?.deck} via={def?.playableVia} small />
         <span style={{ fontSize: 9, color: '#ccb' }}>Ini {def?.initiative ?? '–'}</span>
@@ -218,7 +218,7 @@ export function CardZoom({ id, onClose, play }: { id: string; onClose: () => voi
       {bar && (
         <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
           <button onClick={play ?? undefined} disabled={!play} data-testid="zoom-play" title={play ? undefined : 'This card can\'t be played right now'}
-            style={{ padding: '10px 22px', fontSize: 16, fontWeight: 700, borderRadius: 8, background: '#4a5a3a', color: '#f0e9d8', border: '1px solid #6a7', cursor: play ? 'pointer' : 'not-allowed', ...(play ? {} : { opacity: 0.4, filter: 'grayscale(1)' }) }}>Play this card</button>
+            style={{ padding: '10px 22px', fontSize: 16, fontWeight: 700, borderRadius: 8, background: '#4a5a3a', color: '#f0e9d8', border: '1px solid #6a7', cursor: play ? 'pointer' : 'default', ...(play ? {} : { opacity: 0.4, filter: 'grayscale(1)' }) }}>Play this card</button>
           <button onClick={onClose} style={{ padding: '10px 18px', fontSize: 16, borderRadius: 8, background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', cursor: 'pointer' }}>Cancel</button>
         </div>
       )}
@@ -239,7 +239,7 @@ const label: React.CSSProperties = { fontSize: 11, color: '#998', alignSelf: 'ce
 const img: React.CSSProperties = { height: 104, width: 'auto', borderRadius: 4, flexShrink: 0, boxShadow: '0 1px 4px #000', cursor: 'pointer', userSelect: 'none' };
 // Above the status bar's drop-downs (70) and the Report button (71) — an enlarged card
 // opened from a drop-down sat under it (player report 5657121k373p5j0w).
-const zoomBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.8)', display: 'grid', placeItems: 'center', zIndex: 78, cursor: 'zoom-out' };
+const zoomBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.8)', display: 'grid', placeItems: 'center', zIndex: 78, cursor: 'pointer' };
 const zoomText: React.CSSProperties = { background: '#211c14', color: '#eee', fontFamily: 'system-ui', padding: 20, borderRadius: 10, maxWidth: 'min(440px, 92vw)', cursor: 'default' };
 const zoomReq: React.CSSProperties = { color: '#d8b48c', fontStyle: 'italic' };
 const textCard: React.CSSProperties = { width: 76, height: 104, flexShrink: 0, borderRadius: 4, padding: 4, userSelect: 'none', color: '#f0e9d8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #443', fontSize: 9 };

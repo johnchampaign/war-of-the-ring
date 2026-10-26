@@ -81,6 +81,10 @@ function drawCard(state: GameState, side: Side, deck: 'character' | 'strategy'):
   logCardDraw(state, side, deck, !!top);
   // Over-limit is resolved by the player's discard choice (engine enforceHandLimit).
 }
+/** Is there a Free Peoples Strategy card left to draw? A card whose draw is its only
+ *  live clause needs one — an empty deck is not reshuffled (p.22), so the draw does
+ *  nothing (player report 4p541q1s710v204k). */
+const fpStrategyLeft = (state: GameState): boolean => state.cards.fp.draw.strategy.length > 0;
 /** Region-step distance (BFS), or Infinity. */
 function regionDist(from: string, to: string): number {
   if (from === to) return 0;
@@ -402,6 +406,8 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
   apply?: (s: GameState) => void;
   leaders?: RecruitSlot[];
   then?: (s: GameState) => void;
+  /** Can `then` still do anything? (A draw needs a card left in the deck.) */
+  thenLive?: (s: GameState) => boolean;
   canPlay?: (s: GameState) => boolean;
 } = {}): EventHandler {
   const slotOptions = (state: GameState, i: number): EventTarget[] => {
@@ -428,9 +434,10 @@ function recruitChoiceCard(side: Side, slots: RecruitSlot[], opts: {
     // unit+Leader card is playable for whichever half can still happen — the same
     // "maximum extent possible" rule the Imrahil example states (p.23). The reporter of
     // 550r3w1c6s3v3b28 had Kindred of Glorfindel stuck in hand with Rivendell besieged
-    // and the Elven reinforcements empty.
+    // and the Elven reinforcements empty. The draw only counts while the deck holds a
+    // card to draw (`thenLive`; player report 4p541q1s710v204k).
     canPlay: opts.canPlay ?? ((state) => slots.some((_, i) => slotOptions(state, i).length > 0)
-      || leaderPlaceable(state) || !!opts.then || !!opts.apply),
+      || leaderPlaceable(state) || (!!opts.then && (opts.thenLive?.(state) ?? true)) || !!opts.apply),
     apply: opts.apply,
     repeat: slots.length,
     // "Recruit …" is mandatory, to the maximum extent possible (p.23; Almanac: partial
@@ -549,17 +556,18 @@ register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP Nation OF 
 // Fixed-region FP recruit cards (place in a named region, with Leaders / draws).
 // Each "(Regular or Elite)" card prompts the player to choose the figure per unit.
 register('fp-str-14', recruitChoiceCard('fp', [{ nation: 'gondor', region: 'minas-tirith' }], { leaders: [{ nation: 'gondor', region: 'minas-tirith' }] })); // Guards of the Citadel
-register('fp-str-15', recruitChoiceCard('fp', [{ nation: 'elves', region: 'lorien' }], { then: (s) => drawCard(s, 'fp', 'strategy') })); // Celeborn's Galadhrim
+register('fp-str-15', recruitChoiceCard('fp', [{ nation: 'elves', region: 'lorien' }], { then: (s) => drawCard(s, 'fp', 'strategy'), thenLive: fpStrategyLeft })); // Celeborn's Galadhrim
 register('fp-str-17', recruitChoiceCard('fp', [{ nation: 'north', region: 'carrock' }], { leaders: [{ nation: 'north', region: 'carrock' }] })); // Grimbeorn the Old
 register('fp-str-18', recruitChoiceCard('fp', [{ nation: 'gondor', region: 'dol-amroth' }], { leaders: [{ nation: 'gondor', region: 'dol-amroth' }] })); // Imrahil of Dol Amroth
 // King Brand's Men (2 Regulars — no choice — then draw). The Almanac names THIS card
 // when it says a recruitment card "may still be played if recruitment is impossible …
 // just follow the other instructions on the card in that case (such as the card draw
 // for 'King Brand's Men')", so the draw alone is a legal reason to play it; the recruit
-// still needs Dale free of the enemy.
-register('fp-str-19', { apply: (s) => { if (recruitable(s, 'fp', 'dale')) placeForce(s, 'north', 'dale', { regular: 2 }); drawCard(s, 'fp', 'strategy'); } });
+// still needs Dale free of the enemy. With Dale lost (or no North Regular left) and the
+// Strategy deck empty, though, nothing at all would happen (report 4p541q1s710v204k).
+register('fp-str-19', { canPlay: (s) => (recruitable(s, 'fp', 'dale') && s.reinforcements.north.regular > 0) || fpStrategyLeft(s), apply: (s) => { if (recruitable(s, 'fp', 'dale')) placeForce(s, 'north', 'dale', { regular: 2 }); drawCard(s, 'fp', 'strategy'); } });
 register('fp-str-22', recruitChoiceCard('fp', [{ nation: 'dwarves', region: 'erebor' }], { leaders: [{ nation: 'dwarves', region: 'erebor' }] })); // Dáin Ironfoot's Guard
-register('fp-str-24', recruitChoiceCard('fp', [{ nation: 'elves', region: 'woodland-realm' }], { then: (s) => drawCard(s, 'fp', 'strategy') })); // Thranduil's Archers
+register('fp-str-24', recruitChoiceCard('fp', [{ nation: 'elves', region: 'woodland-realm' }], { then: (s) => drawCard(s, 'fp', 'strategy'), thenLive: fpStrategyLeft })); // Thranduil's Archers
 
 // (Interactive FP recruit cards — Círdan / Riders / Éomer — are registered below with
 // region-accurate targets.)
@@ -1454,6 +1462,19 @@ register('sh-str-12', {
 
 // --- Recruit + draw / upgrade cards ------------------------------------------
 // House of the Stewards: recruit a Gondor unit (R or E) with Boromir + draw 2 Strategy.
+const stewardsTargets = (state: GameState): EventTarget[] => {
+  const r = findCharacterRegion(state, 'boromir'); if (!r) return [];
+  // Room is measured where the unit would actually land: the boxed garrison (5) when
+  // Boromir is shut inside a besieged Stronghold, the open field (10) otherwise —
+  // the same seam placeUnits recruits through (p.28 opens Event-card recruiting to
+  // a besieged Stronghold).
+  const dest = eventRecruitTarget(state, r as RegionId, 'fp'); if (!dest) return [];
+  const pool = state.reinforcements.gondor; const room = dest.limit - forceUnitCount(dest.force);
+  const o: EventTarget[] = [];
+  if (room > 0 && pool.regular > 0) o.push({ nation: 'gondor', region: r, figure: 'regular', slot: 0 });
+  if (room > 0 && pool.elite > 0) o.push({ nation: 'gondor', region: r, figure: 'elite', slot: 0 });
+  return o;
+};
 register('fp-char-23', {
   // Printed precondition: "Play if Boromir is in a GONDOR region" — anywhere else
   // (Rohan, Rivendell, …) doesn't qualify.
@@ -1461,27 +1482,20 @@ register('fp-char-23', {
   // still plays for its two Strategy cards — effects apply "to the maximum extent
   // possible" (p.22; player report 2h042a1d0k5z4p23, Boromir in Osgiliath with the
   // Gondor reinforcements spent). The recruit step simply offers nothing.
-  canPlay: (state) => { const r = findCharacterRegion(state, 'boromir'); return !!r && REGIONS[r]!.nation === 'gondor'; },
-  targets(state) {
-    const r = findCharacterRegion(state, 'boromir'); if (!r) return [];
-    // Room is measured where the unit would actually land: the boxed garrison (5) when
-    // Boromir is shut inside a besieged Stronghold, the open field (10) otherwise —
-    // the same seam placeUnits recruits through (p.28 opens Event-card recruiting to
-    // a besieged Stronghold).
-    const dest = eventRecruitTarget(state, r as RegionId, 'fp'); if (!dest) return [];
-    const pool = state.reinforcements.gondor; const room = dest.limit - forceUnitCount(dest.force);
-    const o: EventTarget[] = [];
-    if (room > 0 && pool.regular > 0) o.push({ nation: 'gondor', region: r, figure: 'regular', slot: 0 });
-    if (room > 0 && pool.elite > 0) o.push({ nation: 'gondor', region: r, figure: 'elite', slot: 0 });
-    return o;
+  // The draw is only a reason while the Strategy deck holds a card (report
+  // 4p541q1s710v204k); with it empty the recruit has to be live.
+  canPlay(state) {
+    const r = findCharacterRegion(state, 'boromir');
+    return !!r && REGIONS[r]!.nation === 'gondor' && (fpStrategyLeft(state) || stewardsTargets(state).length > 0);
   },
+  targets: (state) => stewardsTargets(state),
   applyTarget(state, _s, t) { placeUnits(state, 'gondor', t.region!, t.figure === 'elite' ? 0 : 1, t.figure === 'elite' ? 1 : 0); },
   finalize(state) { drawCard(state, 'fp', 'strategy'); drawCard(state, 'fp', 'strategy'); },
 });
 // Kindred of Glorfindel: recruit an Elven unit (R or E) in Rivendell + draw 1 Strategy.
-register('fp-str-21', recruitChoiceCard('fp', [{ nation: 'elves', region: 'rivendell' }], { then: (s) => drawCard(s, 'fp', 'strategy') }));
+register('fp-str-21', recruitChoiceCard('fp', [{ nation: 'elves', region: 'rivendell' }], { then: (s) => drawCard(s, 'fp', 'strategy'), thenLive: fpStrategyLeft }));
 // Swords in Eriador: a North unit (R or E) in the Shire + a Dwarven unit (R or E) in Ered Luin, then draw.
-register('fp-str-20', recruitChoiceCard('fp', [{ nation: 'north', region: 'the-shire' }, { nation: 'dwarves', region: 'ered-luin' }], { then: (s) => drawCard(s, 'fp', 'strategy') }));
+register('fp-str-20', recruitChoiceCard('fp', [{ nation: 'north', region: 'the-shire' }, { nation: 'dwarves', region: 'ered-luin' }], { then: (s) => drawCard(s, 'fp', 'strategy'), thenLive: fpStrategyLeft }));
 // The Grey Company: in Strider's Army, upgrade one Regular to an Elite.
 // The Grey Company: in Strider/Aragorn's Army, upgrade one Regular to an Elite of the
 // SAME Nation — the player CHOOSES which Nation (his Army can hold several).
@@ -1500,8 +1514,10 @@ register('fp-char-24', {
   // Requiring an upgradeable Regular as well refused the card in a position where the
   // draw was still a perfectly good reason to play it (p.23: effects apply "to the
   // maximum extent possible"; the Almanac says the same of King Brand's Men's draw).
-  // Report 476n3s6q0c1i2c2w.
-  canPlay: (state) => { const r = greyCompanyRegion(state); const f = r ? armyForceOf(state, r as RegionId, 'fp') : null; return !!f && forceUnitCount(f) > 0; },
+  // Report 476n3s6q0c1i2c2w. The draw needs a card left in the Strategy deck, though;
+  // with it empty the upgrade has to be live (report 4p541q1s710v204k).
+  canPlay: (state) => { const r = greyCompanyRegion(state); const f = r ? armyForceOf(state, r as RegionId, 'fp') : null;
+    return !!f && forceUnitCount(f) > 0 && (fpStrategyLeft(state) || greyCompanyNations(state, r!).length > 0); },
   targets: (state) => { const r = greyCompanyRegion(state); return r ? greyCompanyNations(state, r).map((nation) => ({ nation, region: r, figure: 'elite' as const })) : []; },
   applyTarget(state, _side, t) {
     const u = greyCompanyForce(state, t.region!)?.units[t.nation!];

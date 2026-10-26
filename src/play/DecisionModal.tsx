@@ -505,7 +505,7 @@ function CharacterBlurb({ id }: { id: string }) {
   if (!d) return <CardBlurb id={null} />;
   return (
     <div style={{ ...blurb, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      {art && <img src={art} alt="" title="Click to enlarge" onClick={() => setZoom(true)} style={{ height: 120, borderRadius: 4, flexShrink: 0, cursor: 'zoom-in' }} />}
+      {art && <img src={art} alt="" title="Click to enlarge" onClick={() => setZoom(true)} style={{ height: 120, borderRadius: 4, flexShrink: 0, cursor: 'pointer' }} />}
       {zoom && <CardZoom id={id} onClose={() => setZoom(false)} />}
       <div>
         <div style={{ fontWeight: 700, fontSize: 13 }}>{d.name}{d.title && <span style={{ color: '#aa9', fontWeight: 400, fontStyle: 'italic' }}> · {d.title}</span>}</div>
@@ -524,7 +524,7 @@ function CardBlurb({ id }: { id: string | null }) {
   const [zoom, setZoom] = useState(false);
   return (
     <div style={{ ...blurb, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      {def && art && <img src={art} alt="" title="Click to enlarge" onClick={() => setZoom(true)} style={{ height: 120, borderRadius: 4, flexShrink: 0, cursor: 'zoom-in' }} />}
+      {def && art && <img src={art} alt="" title="Click to enlarge" onClick={() => setZoom(true)} style={{ height: 120, borderRadius: 4, flexShrink: 0, cursor: 'pointer' }} />}
       {zoom && id && <CardZoom id={id} onClose={() => setZoom(false)} />}
       {def ? (
         <div>
