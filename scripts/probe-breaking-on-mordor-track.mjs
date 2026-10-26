@@ -31,7 +31,7 @@ console.log('\n=== on the Mordor Track the card is offered ===');
   check('playEvent sh-char-14 is legal on Mordor step 1', !!play, JSON.stringify(legal.filter((a) => a.kind === 'playEvent')));
   if (play) {
     let t = wotrAdapter.applyAction(s, play, 'shadow');
-    const line = t.log.slice(-6).map((e) => e.msg).find((m) => m.startsWith('The Breaking of the Fellowship'));
+    const line = t.log.slice(-6).map((e) => e.msg).find((m) => m.startsWith('Shadow draws'));
     check('the card resolved (logged the tile)', !!line, line);
     if (t.pendingChoice?.kind === 'breakingSep') {
       const before = t.fellowship.companions.length;
@@ -55,6 +55,8 @@ console.log('\n=== off the Track the Companion is still PLACED in the region (un
     if (s.pendingChoice?.kind === 'breakingSep') {
       const pick = wotrAdapter.legalActions(s, 'fp').find((a) => a.kind === 'breakingSep');
       s = wotrAdapter.applyAction(s, pick, 'fp');
+      // The party is placed together once the last Companion is chosen (report 4p396o3y0p4o5z45).
+      while (s.pendingChoice?.kind === 'breakingSep') s = wotrAdapter.applyAction(s, wotrAdapter.legalActions(s, 'fp').find((a) => a.kind === 'breakingSep'), 'fp');
       check('placed at the Fellowship\'s region, not eliminated', s.regions['dagorlad'].characters.includes(pick.companion) && !s.characters.eliminated.includes(pick.companion), `at dagorlad: ${s.regions['dagorlad'].characters.join(',')}`);
     } else console.log('  (no separation this draw)');
   }

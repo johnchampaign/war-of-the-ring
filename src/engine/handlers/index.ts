@@ -2166,12 +2166,11 @@ register('sh-char-14', {
       : Math.min(num, avail) > 0
         ? `${Math.min(num, avail)} Companion${Math.min(num, avail) === 1 ? '' : 's'} must separate — the Free Peoples choose which.`
         : 'No Companions separate.');
-    if (n === null) { log(state, null, 'event', 'The Breaking of the Fellowship: the tile shows an Eye (or a Fellowship special) — discarded without effect'); return; }
+    if (n === null) return; // the draw line says so
+    // A 0 tile legitimately separates nobody; the draw line above shows the number, so
+    // it no longer reads as the card doing nothing (player report: 'doesn't give you
+    // options to separate and does nothing').
     const k = Math.min(n, avail);
-    // EVERY branch logs the drawn number: a 0 tile legitimately separates nobody,
-    // but doing it silently read as the card being broken (player report: 'doesn't
-    // give you options to separate and does nothing').
-    log(state, null, 'event', `The Breaking of the Fellowship: tile number ${n} — ${k > 0 ? `${k} Companion${k === 1 ? '' : 's'} must separate` : 'no Companions separate'}`);
     if (k > 0) state.pendingChoice = { owner: 'fp', kind: 'breakingSep', data: { left: k } };
   },
 });

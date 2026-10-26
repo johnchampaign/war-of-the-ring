@@ -12,27 +12,21 @@ import { FACE } from './DiceTray';
 import { cardSideLine } from './names';
 
 const CARD = new Map<string, any>((eventCards as { cards: any[] }).cards.map((c) => [c.id, c]));
-/** A touch screen (phone, tablet): there is no hover to read a card, and a tap is easy
- *  to make by accident — so a tap on a playable card opens it large with a "Play" button
- *  instead of playing it (player report oupr2melse2cu5pm). A mouse still plays on click. */
-const touchScreen = (): boolean => {
-  try { return typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches; } catch { return false; }
-};
 
 export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
   view: GameState; you: Side; onHoverCard?: (id: string | null) => void;
   /** The legal "play this card" action per card id, when it can be played right now.
-   *  Playing a card IS clicking it in your hand — the way every card game works, and
-   *  it gives the action list back a lot of room (player report 4b4f6o3p5v066c5o). */
+   *  Cards are played from the hand, not the action list, which gives the action list
+   *  back a lot of room (player report 4b4f6o3p5v066c5o): click the card, then its Play
+   *  button. */
   playable?: Map<string, WotrAction>; onPlay?: (a: WotrAction) => void; busy?: boolean;
 }) {
   const hand = view.cards?.[you]?.hand ?? [];
   // "Play on the table" cards are face-up / public for both sides (Mithril Coat,
   // Wizard's Staff, persistent effects, special-tile cards, …).
   const [zoom, setZoom] = useState<string | null>(null);
-  const [zoomPlay, setZoomPlay] = useState<(() => void) | null>(null);
-  const touch = touchScreen();
   if (hand.length === 0) return null;
+  const zoomAct = zoom ? playable?.get(zoom) ?? null : null;
   // A compact card row (in-play cards, divider, then the hand), with the hint on its
   // own line underneath so it doesn't steal horizontal space.
   return (
@@ -42,16 +36,19 @@ export function HandStrip({ view, you, onHoverCard, playable, onPlay, busy }: {
           underneath (player report 572i6e714m1d2j3t). */}
       <ScrollRow>
         {hand.map((id, i) => {
-          const act = playable?.get(id) ?? null;
-          const playNow = act && onPlay && !busy ? () => onPlay(act) : null;
-          return <HandCard key={i} id={id} onZoom={() => { if (!id.startsWith('hidden')) { setZoomPlay(null); setZoom(id); } }} onHover={onHoverCard}
-            play={playNow && touch ? () => { setZoomPlay(() => playNow); setZoom(id); } : playNow} />;
+          // Every click opens the card large with a Play button under it, greyed out
+          // when the card can't be played right now — one layout whether it is playable
+          // or not, on a mouse or a touch screen alike (player report 68462b1p1p5t540j;
+          // touch screens already worked this way, report oupr2melse2cu5pm). A playable
+          // card is still lit in the hand.
+          return <HandCard key={i} id={id} onZoom={() => { if (!id.startsWith('hidden')) setZoom(id); }} onHover={onHoverCard}
+            lit={!!playable?.get(id) && !!onPlay && !busy} />;
         })}
       </ScrollRow>
       {/* The "Hand (N) · hover to preview · click to enlarge" line under the cards is
           gone — space the cards want more (player report 0e4z5e1m4z4p3t32). */}
-      {zoom && <CardZoom id={zoom} onClose={() => { setZoom(null); setZoomPlay(null); }}
-        onPlay={zoomPlay ? () => { const p = zoomPlay; setZoom(null); setZoomPlay(null); p(); } : undefined} />}
+      {zoom && <CardZoom id={zoom} onClose={() => setZoom(null)}
+        play={zoomAct && onPlay && !busy ? () => { setZoom(null); onPlay(zoomAct); } : null} />}
     </div>
   );
 }
@@ -137,17 +134,6 @@ function OpponentCardBack({ deck, side, h, stacked, sideBg }: { deck: string; si
   );
 }
 
-/** The magnifier corner button: on a PLAYABLE card the plain click plays it, so
- *  enlarging needs its own target. On an unplayable card the whole card still
- *  enlarges, exactly as before. */
-function ZoomDot({ onZoom }: { onZoom: () => void }) {
-  return (
-    <button onClick={(e) => { e.stopPropagation(); onZoom(); }} title="Enlarge this card"
-      style={{ position: 'absolute', bottom: 1, right: 1, width: 17, height: 17, lineHeight: '15px', textAlign: 'center', padding: 0, fontSize: 10,
-        borderRadius: 4, cursor: 'zoom-in', background: 'rgba(12,10,7,0.82)', color: '#e9e1cc', border: '1px solid #6a5a3a' }}>🔍</button>
-  );
-}
-
 /** The cards face-up ON THE TABLE, both sides' — public information, and nothing you
  *  can play, so they sit with the board state rather than crowding the cards that are
  *  yours (player report 572i6e714m1d2j3t). */
@@ -169,29 +155,27 @@ export function TabledStrip({ view, onHoverCard }: { view: GameState; onHoverCar
   );
 }
 
-function HandCard({ id, onZoom, onHover, play }: { id: string; onZoom: () => void; onHover?: (id: string | null) => void; play?: (() => void) | null }) {
+function HandCard({ id, onZoom, onHover, lit: playable }: { id: string; onZoom: () => void; onHover?: (id: string | null) => void; lit?: boolean }) {
   const art = useCardArt(id.startsWith('hidden') ? null : id);
   const def = CARD.get(id);
   const hov = { onMouseEnter: () => onHover?.(id), onMouseLeave: () => onHover?.(null) };
-  // A playable card is lit and plays on click; everything else keeps click-to-enlarge.
-  const lit: React.CSSProperties = play
+  // A playable card is lit; a click always enlarges it (the Play button is there).
+  const lit: React.CSSProperties = playable
     ? { outline: '2px solid #6ea84f', outlineOffset: 1, borderRadius: 5, boxShadow: '0 0 8px rgba(110,168,79,0.55)' }
     : {};
-  const tip = play ? `${def?.name ?? id} — click to PLAY` : `${def?.name ?? id} — click to enlarge`;
+  const tip = playable ? `${def?.name ?? id} — click to enlarge and play` : `${def?.name ?? id} — click to enlarge`;
   if (art) return (
     // Art card with a small play-type badge overlaid top-left, so the die-type is
     // readable at a glance even on the image (Ira #3).
     <div style={{ position: 'relative', flexShrink: 0, ...lit }} {...hov}>
-      <img src={art} alt={def?.name ?? id} title={tip} style={{ ...img, cursor: play ? 'pointer' : 'zoom-in' }} onClick={play ?? onZoom} />
-      {play && <ZoomDot onZoom={onZoom} />}
+      <img src={art} alt={def?.name ?? id} title={tip} style={{ ...img, cursor: 'zoom-in' }} onClick={onZoom} />
       {!id.startsWith('hidden') && def && <CardTypeBadge deck={def.deck} via={def.playableVia} small style={{ position: 'absolute', top: 2, left: 2, boxShadow: '0 1px 3px #000' }} />}
     </div>
   );
   // Text-card placeholder.
   const side = def?.side === 'Shadow' ? '#5a2222' : '#1f3a5a';
   return (
-    <div style={{ ...textCard, background: side, cursor: play ? 'pointer' : 'zoom-in', position: 'relative', ...lit }} onClick={play ?? onZoom} title={play ? tip : (def?.eventText ?? '')} {...hov}>
-      {play && <ZoomDot onZoom={onZoom} />}
+    <div style={{ ...textCard, background: side, cursor: 'zoom-in', position: 'relative', ...lit }} onClick={onZoom} title={playable ? tip : (def?.eventText ?? '')} {...hov}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
         <CardTypeBadge deck={def?.deck} via={def?.playableVia} small />
         <span style={{ fontSize: 9, color: '#ccb' }}>Ini {def?.initiative ?? '–'}</span>
@@ -203,15 +187,18 @@ function HandCard({ id, onZoom, onHover, play }: { id: string; onZoom: () => voi
 
 // Click-to-enlarge: full card art (or full text) over a dimmed backdrop. Exported so
 // the opponent's-turn recap can pop the same enlarged view from a logged card play.
-export function CardZoom({ id, onClose, onPlay }: { id: string; onClose: () => void;
-  /** Touch screens: play the card from its enlarged view (see touchScreen). */
-  onPlay?: () => void }) {
+export function CardZoom({ id, onClose, play }: { id: string; onClose: () => void;
+  /** A card in your own hand: the Play button row under it — the handler when the card
+   *  can be played now, null to show the button greyed out. Omitted (a card on the
+   *  table, in the log, in a decision) = no button row. */
+  play?: (() => void) | null }) {
+  const bar = play !== undefined;
   const art = useCardArt(id);
   const def = CARD.get(id);
   return (
     <div style={{ ...zoomBackdrop, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={onClose}>
       {art ? (
-        <img src={art} alt={def?.name ?? id} style={{ maxHeight: onPlay ? '78vh' : '88vh', maxWidth: '88vw', borderRadius: 8, boxShadow: '0 8px 40px #000' }} />
+        <img src={art} alt={def?.name ?? id} style={{ maxHeight: bar ? '78vh' : '88vh', maxWidth: '88vw', borderRadius: 8, boxShadow: '0 8px 40px #000' }} />
       ) : (
         <div style={zoomText} onClick={(e) => e.stopPropagation()}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -228,10 +215,10 @@ export function CardZoom({ id, onClose, onPlay }: { id: string; onClose: () => v
         </div>
       )}
       {/* Below the card, not above it (player report 2k711o5f0q4x5y2k). */}
-      {onPlay && (
+      {bar && (
         <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={onPlay} data-testid="zoom-play"
-            style={{ padding: '10px 22px', fontSize: 16, fontWeight: 700, borderRadius: 8, background: '#4a5a3a', color: '#f0e9d8', border: '1px solid #6a7', cursor: 'pointer' }}>Play this card</button>
+          <button onClick={play ?? undefined} disabled={!play} data-testid="zoom-play" title={play ? undefined : 'This card can\'t be played right now'}
+            style={{ padding: '10px 22px', fontSize: 16, fontWeight: 700, borderRadius: 8, background: '#4a5a3a', color: '#f0e9d8', border: '1px solid #6a7', cursor: play ? 'pointer' : 'not-allowed', ...(play ? {} : { opacity: 0.4, filter: 'grayscale(1)' }) }}>Play this card</button>
           <button onClick={onClose} style={{ padding: '10px 18px', fontSize: 16, borderRadius: 8, background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', cursor: 'pointer' }}>Cancel</button>
         </div>
       )}

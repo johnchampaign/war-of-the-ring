@@ -515,6 +515,9 @@ export function drawHuntTileNumber(state: GameState, source: string, outcome: (n
     : typeof tile.value === 'number' ? tile.value
     : withRng(state, (rng) => rng.rollDie(6)); // 'die' tile: roll for the number
   recordCardDraws(state, source, [{ tile, ...(tile.value === 'die' && n !== null ? { rolled: n } : {}) }], outcome(n));
+  // The same draw line as a Hunt draw ("Shadow draws a 3"), not a card-specific
+  // "tile number 3" wording (player report 4p396o3y0p4o5z45).
+  logDraw(state, tile, 0, undefined, tile.value === 'die' && n !== null ? ` and rolls a ${n}` : n === null ? ', discarded without effect' : '');
   return n;
 }
 

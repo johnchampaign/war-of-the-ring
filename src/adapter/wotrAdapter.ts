@@ -998,14 +998,19 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'breakingSep': {
       requireChoice(state, 'breakingSep', actor); // FP separates a chosen Companion to the Fellowship's region
-      const data = state.pendingChoice!.data as { left: number };
+      const data = state.pendingChoice!.data as { left: number; picked?: string[] };
       const dest = state.fellowship.location;
       // On the Mordor Track there is no region to place him in: the Companion is
       // removed from play (p.43), the same as the FP's own separation cards there.
+      // Off it, each pick leaves the Fellowship now and the whole party is placed
+      // together once the last is chosen, so the log reads as one separation: "Strider,
+      // Boromir, Legolas separate from the Fellowship and move to …; Gimli becomes the
+      // Guide" (player report 4p396o3y0p4o5z45), not one line per Companion.
       if (state.fellowship.mordor !== null) removeCompanionOnMordorTrack(state, action.companion);
-      else if (beginSeparation(state, action.companion)) placeSeparatedCompanion(state, action.companion, dest);
+      else if (beginSeparation(state, action.companion)) data.picked = [...(data.picked ?? []), action.companion];
       data.left -= 1;
       if (data.left > 0 && state.fellowship.companions.some((c) => c !== 'gollum')) break; // re-prompt for the next
+      if (data.picked?.length) placeSeparatedGroup(state, data.picked, dest);
       // A save from before the end-of-Action draw (advance) may still carry the
       // Palantír draw parked behind this choice.
       state.pendingChoice = (state.pendingChoice!.data as { thenBonusDraw?: boolean }).thenBonusDraw

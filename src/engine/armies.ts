@@ -1024,13 +1024,18 @@ export function liftSiegeIfAbandoned(state: GameState, id: RegionId): void {
     if (u.regular + u.elite > 0) { garrison = sideOfNation(n); break; }
   }
   if (garrison === null) {
-    // No unit is left defending — but Companions, Leaders or Nazgûl may still stand
-    // inside: a card's split move can march every unit out and leave them there.
-    // Deleting the box used to delete THEM with it, still listed as in play but held by
-    // nothing (player report fdx2xl3oo40orw9h: "my Companions in Moria disappeared").
-    // They step out into the region, like the Characters of a garrison a card wipes out
-    // (siegeFall), and with no unit left defending it the Stronghold falls to the Army
-    // around it (p.32).
+    // No unit is left defending, but Companions, Leaders or Nazgûl may still stand
+    // inside. Only one card marches units OUT of a siege box: Paths of the Woses ("from
+    // any one Rohan region, including a Stronghold under siege"), and its split move can
+    // take every unit and leave figures behind. Every other card move starts from an
+    // open-field Army (armySide), and Dead Men of Dunharrow takes Companions only, so
+    // the units stay. A box emptied by casualties never reaches here: combat and the
+    // card strikes (finishEventStrike, siegeFall) clear it themselves. So this branch is
+    // the Woses split, plus the sweepAbandonedSieges safety net.
+    // The figures step out into the region, as when a card wipes a garrison out
+    // (siegeFall), and with no unit left defending, the Stronghold falls to the Army
+    // around it (p.32). The capture line reports that; like siegeFall, nothing is said
+    // about the figures who step out (player report 2v1p6a0e69733u38).
     const box = r.siegeBox;
     const figures = box.characters.length + box.leaders + box.nazgul > 0;
     if (figures) mergeForceInto(state, id, box);
@@ -1038,7 +1043,6 @@ export function liftSiegeIfAbandoned(state: GameState, id: RegionId): void {
     if (figures) {
       const field = armySide(state, id);
       if (field) captureIfEnemySettlement(state, id, field);
-      log(state, null, 'combat', `no unit is left defending ${REGIONS[id]!.name ?? id} — the figures inside step out into the region`);
     }
     return;
   }
