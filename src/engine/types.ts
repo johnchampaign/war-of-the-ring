@@ -438,6 +438,11 @@ export interface GameState {
      *  battle it started. `advance` offers it once nothing else is pending, and only if
      *  the Palantír is still on the table / Gandalf is still Guide by then. */
     actionEndDraw?: { palantir?: boolean; guideDeck?: 'character' | 'strategy' };
+    /** A Companion left the Fellowship (separated, eliminated, removed on the Mordor
+     *  Track), so the FP "may nominate a new Guide" (p.38). `advance` asks once the
+     *  action that changed the Fellowship has finished resolving, and only when more
+     *  than one Companion shares the highest Level — otherwise there is no choice. */
+    guideChoiceOwed?: boolean;
   };
   pendingChoice: PendingChoice | null;
   /** An interactive battle in progress, or null. */

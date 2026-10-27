@@ -297,6 +297,9 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
           .map((deck) => ({ kind: 'bonusDraw' as const, deck })), { kind: 'bonusDraw', deck: 'none' }];
       case 'guideDraw':
         return [{ kind: 'guideDraw', draw: true }, { kind: 'guideDraw', draw: false }];
+      case 'guideChoice': // the Fellowship changed: keep the Guide or name another tied for the highest Level (p.38)
+        return [state.fellowship.guide, ...eligibleGuides(state).filter((c) => c !== state.fellowship.guide)]
+          .map((companion) => ({ kind: 'guideChoice' as const, companion }));
       case 'freeCharEvent': {
         // The Ents Awake: play one Character Event card NOW without a die, or decline.
         const acts: WotrAction[] = [];
@@ -1030,6 +1033,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'freeCharEvent', actor); // declined the Ents Awake free play — it is "immediately" or not at all
       state.flags.fpFreeCharEventThisTurn = false;
       log(state, null, 'event', 'Free Peoples decline to play another Character card (Gandalf the White)');
+      state.pendingChoice = null; break;
+    }
+    case 'guideChoice': {
+      requireChoice(state, 'guideChoice', actor);
+      if (action.companion !== state.fellowship.guide && !setGuide(state, action.companion)) throw new Error('Not an eligible Guide');
       state.pendingChoice = null; break;
     }
     case 'guideDraw': {

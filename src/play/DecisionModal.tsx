@@ -58,6 +58,7 @@ const CHOICE_TITLE: Record<string, string> = {
   crebain: 'Flocks of Crebain — discard for +1 to all Hunt dice this roll?',
   bonusDraw: 'The Palantír of Orthanc — draw a card?',
   guideDraw: 'Gandalf the Grey — draw a card?',
+  guideChoice: 'The Fellowship has changed — who is its Guide?',
   freeCharEvent: 'The Ents Awake — play a Character Event card now, without a die?',
   sorcererDraw: 'The Witch-king’s Sorcery — draw a card?',
   lureChoice: 'Lure of the Ring — the Ring tempts a Companion',
@@ -482,6 +483,7 @@ function DecisionButton({ action, disabled, onClick, onHover, guide, label }: { 
           separated (player report 2k0h2q5l57145k3y). */}
       {action.kind === 'huntDamage' && action.mode === 'guide' && guide ? `Sacrifice ${charName(guide)}`
         : action.kind === 'huntDamage' && action.mode === 'reduceSeparate' && guide ? `Separate ${charName(guide)} (−1 damage)`
+        : action.kind === 'guideChoice' ? (action.companion === guide ? `Keep ${charName(action.companion)} as the Guide` : `Make ${charName(action.companion)} the Guide`)
         : label ?? describeAction(action)}
     </button>
   );

@@ -44,6 +44,7 @@ export function eliminateCompanion(state: GameState, id: CharacterId): number {
     state.characters.eliminated.push(id);
   }
   reassignGuide(state);
+  state.flags.guideChoiceOwed = true;
   pruneFellowshipOnTableCards(state);
   return lvl;
 }
@@ -61,7 +62,7 @@ export function eligibleGuides(state: GameState): CharacterId[] {
 export function setGuide(state: GameState, id: CharacterId): boolean {
   if (!eligibleGuides(state).includes(id)) return false;
   state.fellowship.guide = id;
-  log(state, null, 'fellowship', `${id} becomes the Guide`);
+  log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} becomes the Guide`);
   return true;
 }
 
@@ -484,6 +485,7 @@ export function beginSeparation(state: GameState, id: CharacterId): boolean {
   if (fs.sepGuide === undefined) fs.sepGuide = fs.guide; // the Guide before this group left
   fs.companions.splice(fs.companions.indexOf(id), 1);
   reassignGuide(state);
+  state.flags.guideChoiceOwed = true;
   return true;
 }
 
@@ -513,6 +515,7 @@ export function removeCompanionOnMordorTrack(state: GameState, id: CharacterId):
   if (!state.characters.eliminated.includes(id)) state.characters.eliminated.push(id);
   const oldGuide = fs.guide;
   reassignGuide(state);
+  state.flags.guideChoiceOwed = true;
   log(state, null, 'fellowship', `${COMPANIONS[id]?.name ?? id} separates from the Fellowship and vanishes into the wastes of Mordor`
     + (fs.guide !== oldGuide ? ` — ${COMPANIONS[fs.guide]?.name ?? fs.guide} becomes the Guide` : ''));
   return true;

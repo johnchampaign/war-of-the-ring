@@ -17,6 +17,7 @@ import { sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, chara
 import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
 import { log, sideDoes, sufferCorruption } from './log';
 import { canPlayCard } from './handlers/registry';
+import { eligibleGuides } from './fellowship';
 
 const opponent = (s: Side): Side => (s === 'fp' ? 'shadow' : 'fp');
 
@@ -183,6 +184,16 @@ export function advance(state: GameState): void {
       delete state.flags.revealMoveOwed;
       const fs = state.fellowship;
       if (fs.hidden && fs.progress > 0 && fs.mordor === null) { state.pendingChoice = { owner: 'fp', kind: 'revealMove' }; return; }
+    }
+    // "The Free Peoples player may nominate a new Guide … when, during the course of a
+    // turn, the composition of the Fellowship changes (due to a Character being
+    // separated or eliminated from the Fellowship)" (p.38). The highest-Level Companion
+    // stepped in at once (so a Hunt in progress still has a Guide); the FP's pick is
+    // asked here, after whatever changed the Fellowship has resolved, and only when
+    // a Level tie leaves a real choice (player report 072s2y37376u6l0s).
+    if (state.flags.guideChoiceOwed) {
+      delete state.flags.guideChoiceOwed;
+      if (eligibleGuides(state).length > 1) { state.pendingChoice = { owner: 'fp', kind: 'guideChoice', data: {} }; return; }
     }
     if (state.pendingCombat) {                    // drive the battle sub-machine
       combatStep(state);

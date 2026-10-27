@@ -180,6 +180,7 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     // buttons don't repeat it (report 6r5i5b0o1u4i5x3k).
     case 'bonusDraw': return a.deck === 'none' ? 'Don’t draw' : `Draw a ${cap(a.deck)} card`;
     case 'guideDraw': return a.draw ? 'Draw a card' : 'Don’t draw';
+    case 'guideChoice': return view?.fellowship.guide === a.companion ? `Keep ${charName(a.companion)} as the Guide` : `Make ${charName(a.companion)} the Guide`;
     case 'sorcererDraw': return a.draw ? 'Draw a card' : 'Don’t draw';
     case 'lureChoice': return a.mode === 'corruption' ? 'Use the Ring' : 'Eliminate the Companion';
     case 'stormcrowLoss': return `Lose ${nationName(a.nation)} ${a.figure === 'leader' ? 'Leader' : a.figure === 'elite' ? 'Elite' : 'Regular'} in ${rName(a.region)}`;
@@ -306,7 +307,7 @@ export function dieOptions(a: WotrAction, view: GameState, you: Side): DieFace[]
 
 // The mid-resolution decisions surfaced in the DecisionModal (combat + hunt),
 // kept out of the plain action-button list.
-const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'eaglesRefuge', 'cardRetreat', 'combatKill', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'heroicDeath', 'wordsOfPower', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard', 'wornDiscard']);
+const DECISION_KINDS = new Set(['playCombatCard', 'chooseCasualties', 'casualtyStep', 'advanceHoldBack', 'advanceChoice', 'nazgulStrike', 'combatContinue', 'combatRetreat', 'retreatTo', 'preCombatRetreat', 'eaglesRefuge', 'cardRetreat', 'combatKill', 'siegeWithdraw', 'siegeExtend', 'relieveAdvance', 'combatCardCost', 'besiegerAdvance', 'heroicDeath', 'wordsOfPower', 'whiteRider', 'balrog', 'crebain', 'huntDamage', 'huntPreventDraw', 'huntRedraw', 'bonusDraw', 'guideDraw', 'guideChoice', 'sorcererDraw', 'lureChoice', 'removeExcess', 'stormcrowLoss', 'breakingSep', 'discardCard', 'wornDiscard']);
 export const isDecisionAction = (a: WotrAction): boolean => DECISION_KINDS.has(a.kind);
 
 /** A "simple" event-card target: a pure pick (recruit figure, deck, nation, done…)

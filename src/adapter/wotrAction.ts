@@ -132,6 +132,8 @@ export type WotrAction =
   | { kind: 'bonusDraw'; deck: 'character' | 'strategy' | 'none' }
   // Gandalf the Grey Guide draw (FP): take the matching-deck card, or decline.
   | { kind: 'guideDraw'; draw: boolean }
+  // The Fellowship's composition changed (p.38): keep the Guide, or name another Companion tied for the highest Level.
+  | { kind: 'guideChoice'; companion: string }
   | { kind: 'freeCharEvent'; decline: true } // The Ents Awake: decline the immediate free Character-card play
   // Witch-king Sorcerer draw (Shadow): take the matching-deck card after a combat card, or decline.
   | { kind: 'sorcererDraw'; draw: boolean }

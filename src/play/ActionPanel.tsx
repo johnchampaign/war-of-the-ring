@@ -173,6 +173,15 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
           {finish ? finishLabel : 'Pass'}
         </button>
       )}
+      {/* The Ents Awake rider: one Character Event playable without a die. Surface it — a
+          player couldn't tell why a card was suddenly playable ("I didn't have an [E] or
+          [C] die left... so I did"). A side-panel note beside the actions it explains, not
+          a banner over the map (player report enct4qpf6xejvy6o). */}
+      {you === 'fp' && view.flags?.fpFreeCharEventThisTurn && (
+        <div style={{ color: '#bfe6bf', background: '#1d2f1d', border: '1px solid #3a5a3a', borderRadius: 6, padding: '7px 10px', margin: '4px 0', fontSize: 13 }}>
+          🌳 The Ents Awake: your next Character Event card is played without spending a die.
+        </div>
+      )}
       {/* Board-driven actions live on the MAP (not in this list) — point the player
           there, one line per kind that is actually available right now. */}
       {boardHints.map((hint) => (

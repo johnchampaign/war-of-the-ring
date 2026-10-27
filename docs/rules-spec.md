@@ -1214,6 +1214,16 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   Companion(s) from the Fellowship Box to the Ring-bearers' region, then move ≤
   (Progress step + Companion Level) regions (group: highest Level) (p.39). Remove
   their cards/counters; appoint new Guide. **Separation is permanent** (p.39).
+- **Re-nominating the Guide when the Fellowship changes** (p.38: "or when, during the
+  course of a turn, the composition of the Fellowship changes (due to a Character being
+  separated or eliminated)"). The highest-Level Companion steps in at once, so a Hunt
+  still resolving has a Guide (p.42's "repeat this step with the new Guide's abilities"
+  uses him). Once whatever changed the Fellowship has finished resolving, the FP is asked
+  (`guideChoice`) to keep him or name another Companion tied for the highest Level.
+  *Deviation:* with no Level tie there is no choice, so nothing is asked; and a tie
+  that arises mid-Hunt is settled after the Hunt rather than mid-tile — no two tied
+  Companions differ in a Hunt-relevant Guide ability (Meriadoc and Peregrin share theirs).
+  *(Player report 072s2y37376u6l0s; `scripts/probe-triage-1027.mjs`.)*
 
 ---
 

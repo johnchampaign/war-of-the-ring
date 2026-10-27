@@ -1289,15 +1289,6 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
             <Board view={g.view} onPickRegion={pickRegion} onHoverRegion={onHoverRegion} onHoverChar={onHoverChar} highlights={highlights} />
             <ResolvingCard view={g.view} onHoverCard={onHoverCard} />
-            {/* The Ents Awake rider: one Character Event playable without a die. Surface
-                it — a player couldn't tell why a card was suddenly playable ("I didn't
-                have an [E] or [C] die left... so I did"). Pinned TOP so it can never
-                collide with the message stack at the bottom. */}
-            {g.you === 'fp' && g.view.flags?.fpFreeCharEventThisTurn && (
-              <div style={{ position: 'absolute', left: 8, right: 8, top: 8, zIndex: 18, pointerEvents: 'none', color: '#bfe6bf', background: 'rgba(29,47,29,0.95)', border: '1px solid #3a5a3a', fontFamily: 'system-ui', fontSize: 13, padding: '5px 10px', borderRadius: 6, boxShadow: '0 4px 18px rgba(0,0,0,0.7)' }}>
-                🌳 The Ents Awake: you may play ONE Character Event card without spending a die (your next Character-card play is free).
-              </div>
-            )}
             {/* Bottom message stack, most urgent first: the refused-action error, the
                 refusal reason, then the ambient "what to click" hint. A COLUMN, so two
                 of them showing at once stack instead of drawing on top of each other.

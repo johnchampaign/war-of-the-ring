@@ -775,6 +775,7 @@ function eliminateCompanionInline(state: GameState, id: string, damage: number, 
       ? fs.companions.reduce((b, c) => (levelOf(c) > levelOf(b) ? c : b), fs.companions[0]!)
       : 'gollum';
   }
+  state.flags.guideChoiceOwed = true; // the FP may name a different Guide (p.38) once the Hunt is done
   // Name the casualty. The log used to say only "damage N pending (FP decision)" and
   // then go quiet, so the sacrifice was invisible (player report: "it doesn't say what
   // the FP decision was — I assume Gandalf was sacrificed because he wasn't there

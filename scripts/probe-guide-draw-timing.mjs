@@ -61,8 +61,14 @@ const all = ['gandalf-grey', 'strider', 'boromir', 'legolas', 'gimli', 'meriadoc
 
 {
   console.log('\n=== Gwaihir separates a Hobbit, Gandalf stays Guide: draw ===');
-  const s = separate(base(all, 'gandalf-grey'), ['meriadoc']);
-  check('Gandalf is still Guide', s.fellowship.guide === 'gandalf-grey', s.fellowship.guide);
+  const asked = separate(base(all, 'gandalf-grey'), ['meriadoc']);
+  check('Gandalf is still Guide', asked.fellowship.guide === 'gandalf-grey', asked.fellowship.guide);
+  // Gandalf and Strider tie at Level 3, so the Fellowship's change first lets the FP
+  // re-nominate the Guide (p.38, report 072s2y37376u6l0s) — before the end-of-Action draw.
+  check('the FP may re-nominate the Guide first', asked.pendingChoice?.kind === 'guideChoice', asked.pendingChoice?.kind);
+  const toStrider = act(asked, { kind: 'guideChoice', companion: 'strider' });
+  check('naming Strider instead forfeits Gandalf\'s draw', toStrider.fellowship.guide === 'strider' && toStrider.pendingChoice?.kind !== 'guideDraw', toStrider.pendingChoice?.kind);
+  const s = act(asked, { kind: 'guideChoice', companion: 'gandalf-grey' });
   check('the Guide draw is offered', s.pendingChoice?.kind === 'guideDraw', s.pendingChoice?.kind);
   const drawn = act(s, { kind: 'guideDraw', draw: true });
   check('...and taking it draws a Character card', drawn.cards.fp.hand.length === 1 && !drawn.pendingChoice, JSON.stringify(drawn.cards.fp.hand));

@@ -1927,6 +1927,8 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       for (const a of plays) { const sc = score(state, 'fp', a, tgt); if (sc > bestS) { bestS = sc; best = a; } }
       return best ?? legal.find((a) => a.kind === 'freeCharEvent') ?? legal[0]!;
     }
+    case 'guideChoice': // the Fellowship changed: keep the Guide who already stepped in
+      return legal.find((a) => a.kind === 'guideChoice' && a.companion === state.fellowship.guide) ?? legal[0]!;
     case 'guideDraw': // Gandalf the Grey: take the free card
       return legal.find((a) => a.kind === 'guideDraw' && a.draw) ?? legal[0]!;
     case 'sorcererDraw': // Witch-king: take the free card

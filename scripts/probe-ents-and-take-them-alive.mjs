@@ -189,7 +189,11 @@ function huntBoard({ seed = 3, progress = 4, value = 3 } = {}) {
   resolveHunt(s);
   const t = wotrAdapter.applyAction(s, { kind: 'huntDamage', mode: 'guide' }, 'fp');
   const dest = wotrAdapter.legalActions(t, 'fp').find((a) => a.kind === 'separateMove' && a.target);
-  const u = wotrAdapter.applyAction(t, dest, 'fp');
+  let u = wotrAdapter.applyAction(t, dest, 'fp');
+  // Gandalf and Strider tie once Peregrin leaves, so the FP may re-nominate the Guide
+  // (p.38, report 072s2y37376u6l0s) — keep him; that choice is the FP's, inside the same Action.
+  check('the FP is asked about the Guide', u.pendingChoice?.kind === 'guideChoice', u.pendingChoice?.kind ?? 'none');
+  if (u.pendingChoice?.kind === 'guideChoice') u = wotrAdapter.applyAction(u, { kind: 'guideChoice', companion: u.fellowship.guide }, 'fp');
   check('the FP still has the next Action', u.currentPlayer === 'fp' && !u.pendingChoice,
     `currentPlayer=${u.currentPlayer} pending=${u.pendingChoice?.kind ?? 'none'}`);
 }
