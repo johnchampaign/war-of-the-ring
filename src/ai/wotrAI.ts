@@ -137,6 +137,19 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // AND keep the most ground). Analysis: the FP AI was losing the corruption race
     // even vs a random Shadow because it never healed — it just rushed to Mordor.
     const declares = legal.filter((a): a is Extract<WotrAction, { kind: 'declareFellowship' }> => a.kind === 'declareFellowship');
+    // REJECTED 2026-10-27 (player report 5i1q2c330h0z1367: drop the Progress-keyed
+    // rules below and declare from first principles). Both proposed replacements were
+    // built — each counting the Hunt re-roll sources at the target (Shadow Stronghold,
+    // Shadow Army, Nazgûl), keeping the declare at a Mordor entrance and past a
+    // Shadow-held Moria — and A/B'd as FP wins vs the heuristic Shadow, 2000 games
+    // per family (base 1500 / 1470):
+    //   A, sparing: declare only to FEWER re-roll sources, or to heal in place:
+    //     1459 / 1417 (-41 / -53)
+    //   B, greedy: the target nearest Mordor with no MORE sources, never leaving an
+    //     FP settlement for open ground at equal sources: 1436 / 1425 (-64 / -45)
+    // Both lose on Corruption (Shadow corruption wins 483/511 -> 515-570): the
+    // Progress rules time the declare to the Hunt pool, which a re-roll count alone
+    // cannot see. Keep them until a tested replacement wins.
     // Nearest to the Morannon wins; a TIE goes to the target farther from the
     // Shadow's pieces (Armies, Nazgûl, Shadow-held Strongholds — where the Hunt's
     // re-rolls and the next turn's pounce come from), then to one adjacent to a
