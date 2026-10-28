@@ -362,8 +362,9 @@ export function ElvenRings({ view, side, actions = [], onAction, dropUp }: { vie
           {actions.map((a, i) => (
             <button key={i} onClick={() => { setOpen(false); onAction?.(a); }}
               style={{ display: 'block', width: '100%', textAlign: 'left', margin: '2px 0', padding: '4px 8px', background: '#3a3326', color: '#f0e9d8', border: '1px solid #554', borderRadius: 5, cursor: 'pointer', font: 'inherit', fontSize: 12, whiteSpace: 'nowrap' }}>
-              {/* The heading already says these are Rings. */}
-              {describeAction(a).replace(/^Elven Ring: /, '')}
+              {/* The heading already says these are Rings; what's left starts a sentence,
+                  so it starts with a capital (player report 314q41246r624066). */}
+              {describeAction(a).replace(/^Elven Ring: (.)/, (_, c: string) => c.toUpperCase())}
             </button>
           ))}
         </div>

@@ -17,9 +17,10 @@ const BOARD_CROP = { x: 240, y: 2, w: 1511, h: 1318 };
  *  on its step, as the figure does at the table (player report 0h2028003x3v361w). */
 /** The printed "The Guide of the Fellowship" box at the board's top right (map pixels,
  *  measured off the board image): the Guide's Character card stands in it, as it does at
- *  the table (player report 6a3h1i0i3c6b6c22). Sized to a Character card's proportions
- *  and centred in the box's inner frame (x 1756–1888, y 26–262). */
-const GUIDE_CARD = { x: 1759, y: 56, w: 126, h: 176 };
+ *  the table (player report 6a3h1i0i3c6b6c22). It fills the box's pale inner panel
+ *  (x 1758–1888, y 30–262): the card art is taller than wide, so at the panel's full
+ *  height it is a hair narrower and centres across it (player report 6p684h1c0e3m4g35). */
+const GUIDE_CARD = { x: 1758, y: 30, w: 130, h: 232 };
 const MORDOR_STEPS: readonly { x: number; y: number }[] = [
   { x: 1558, y: 897 }, { x: 1583, y: 928 }, { x: 1624, y: 942 }, { x: 1667, y: 936 }, { x: 1661, y: 894 }, { x: 1618, y: 894 },
 ];
