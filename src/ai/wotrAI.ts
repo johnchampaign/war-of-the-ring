@@ -66,39 +66,31 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
   // --- pending choices (combat / hunt) ---
   if (state.pendingChoice) return resolveChoice(state, legal);
 
-  // --- hunt allocation (Shadow): ALL-OR-NOTHING. Max the Hunt Box once the Ring is
-  //     the live threat (Mordor Track), otherwise spend nothing and keep the dice
-  //     for actions. Every intermediate setting measured worse — see below. ---
+  // --- hunt allocation (Shadow): two dice every turn before Mordor, the Hunt Box maxed
+  //     on the Mordor Track. ---
   if (state.phase === 'huntAllocation') {
     const opts = legal.filter((a) => a.kind === 'allocateHunt') as Extract<WotrAction, { kind: 'allocateHunt' }>[];
     if (!opts.length) return legal[0]!;
     const lo = Math.min(...opts.map((a) => a.dice)), hi = Math.max(...opts.map((a) => a.dice));
-    // Hunt dice ARE Action dice — the exchange rate decides everything, and it is
-    // brutal pre-Mordor: measured self-play (300g) a flat 2-per-turn baseline gave
-    // Shadow 105/300 vs 143/300 for spending nothing. The Shadow's edge is board
-    // tempo (muster/march/attack), not speculative Hunt rolls at low dice counts.
-    //
-    // NB the old heuristic scaled with fs.progress — that signal is near-useless
-    // here. Allocation happens in phase 3, right after the FP's phase-2 declare
-    // RESETS progress, and progress only accrues from phase-5 moves. Instrumented
-    // over 60 games: progress was 0 in 864 of 1137 allocations, 1 in 272, and >=2
-    // exactly ONCE — so the escalation rungs were dead code and the Shadow drifted
-    // through the game at ~0.69 dice.
     const fs = state.fellowship;
-    // HUNT THE APPROACH (shipped 2026-09-10, the first change measured on both
-    // gates — docs/ai-humanlike-yardstick.md). Humans reach Mordor at turn 7 with
-    // ~3 Corruption because nothing is rolled against them on the road; a flat
-    // 2/turn everywhere measured badly (dice thrown at a Fellowship that is resting
-    // or far away). This spends 2 only while the Fellowship is hidden, on the road
-    // (not in a haven where it could heal instead) and within six regions of the
-    // Morannon — the stretch where a hit is hard to walk off. Measured, 2000 games
-    // x 2 families: vs the heuristic FP Shadow 543->606 and 597->673; vs the
-    // human-like yardstick 640->737 and 689->731; corruption wins up in all four.
-    const approach = fs.mordor === null && fs.progress < 4 && fs.hidden
-      && !isHealSettlement(state, fs.location) && dist(fs.location, 'morannon') <= 6;
+    // FLAT TWO before Mordor (2026-10-29, reports 5i1q2c330h0z1367 / 2h56386u064a365t:
+    // "if it's good to place more dice in the Hunt box, then presumably it would
+    // *always* be good"). It was. The rule it replaced spent 2 only while the hidden
+    // Fellowship was on the road within six regions of the Morannon at Progress < 4,
+    // and 3 at Progress 4+ — and the Progress rungs never changed a game (dropping
+    // them replayed the base games exactly). Measured, 2000 games x 2 families,
+    // Shadow wins:
+    //   vs the heuristic FP  500 / 530 -> 720 / 729
+    //   vs the human-like FP 744 / 795 -> 900 / 887
+    // Corruption wins carry it (heuristic 483 -> 694). Also measured: the old rule
+    // plus Moria's road (a reveal through a Shadow-held Moria, as the report suggested)
+    // — 692 / 659, 834 / 880: better than the old rule, short of a flat two.
+    // The old note here ("a flat 2-per-turn baseline gave Shadow 105/300 vs 143/300
+    // for spending nothing") was a 300-game self-play test of a far weaker AI; it no
+    // longer held.
     // Off the Track only the first success of a Hunt roll counts (Eyes aside), so past
     // three dice the returns collapse (report 4d4w4o4f2h310z5l: 5 dice before Mordor).
-    const raw = fs.mordor !== null ? hi : fs.progress >= 4 ? Math.min(hi, 3) : approach ? 2 : 0;
+    const raw = fs.mordor !== null ? hi : 2;
     // On the Mordor Track the Ring is the clock, so max out — but only to what a
     // roll can USE. A Hunt roll rolls `Math.min(5, hunt.box)` dice (hunt.ts), so a
     // 6th/7th die is STRICTLY wasted: it cannot help the Hunt, it only disarms us
@@ -242,6 +234,11 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // are ones the heuristic Shadow barely exploits, so self-play cannot price them; a
     // human Shadow may. (A suspected cause, the HEAL plan reading a figure left in
     // Rivendell as "resting", was tested too: gating HEAL on Progress < 2 changed no game.)
+    // The 4 and the 3 swept 2026-10-29 (report 1i3j6q042e515x3i: "where is that '4'
+    // magic number coming from?"), FP wins vs the heuristic Shadow, base 1500 / 1470:
+    //   Progress >= 3: 1497 / 1468 (flat)   Progress >= 5: 1477 / 1448 (-45)
+    //   a gain of 2 regions instead of 3: the base games exactly (never decides one)
+    // A broad optimum, not a tuned edge: Progress 3 or 4 alike, waiting for 5 loses.
     if (state.fellowship.progress >= 4) {
       const here = toMordor(state.fellowship.location);
       const gains = declares.filter((a) => noRerolls(a.target) && here - toMordor(a.target) >= 3);
@@ -290,13 +287,24 @@ function garrisonWorthy(state: GameState, actor: Side, from: RegionId): boolean 
  *  region? One there gives every Hunt roll its re-roll, hidden or not. Seen in a probe
  *  for report 4w6d6l484k5v0f5d: the pressing Nazgûl flew home to Minas Morgul. */
 function unpressesFellowship(state: GameState, a: Extract<WotrAction, { kind: 'moveCharacter' }>): boolean {
-  const fs = state.fellowship;
-  if (fs.mordor !== null || MORDOR_ENTRANCES.includes(fs.location) || a.from !== fellowshipRegion(state)) return false;
+  if (!pressPays(state) || a.from !== fellowshipRegion(state)) return false;
   const src = state.regions[a.from]!;
   const wk = src.characters.includes('witch-king');
   if (a.char === 'nazgul') return !wk && src.nazgul - (a.count ?? src.nazgul) <= 0;
   if (a.char === 'witch-king') return src.nazgul === 0;
   return false;
+}
+
+/** Does a Nazgûl in the Fellowship's region still buy a Hunt re-roll? Not on the Mordor
+ *  Track (it is in no region), not at an entrance (it enters Mordor next), and not once
+ *  an entrance is within the Progress the hidden Fellowship has banked: it declares there
+ *  next Fellowship phase and goes in without moving through the region again — the Free
+ *  Peoples AI makes the same call (score → 'moveFellowship'). Report a0n0nqq2ahfk33c2: a
+ *  Nazgûl flew to South Ithilien, Progress 1, one region from Minas Morgul. */
+function pressPays(state: GameState): boolean {
+  const fs = state.fellowship;
+  if (fs.mordor !== null || MORDOR_ENTRANCES.includes(fs.location)) return false;
+  return !(fs.hidden && toMordor(fs.location) <= fs.progress);
 }
 
 /** Pressing the Fellowship, hidden or not, takes ONE Nazgûl: the Hunt re-roll is presence-gated,
@@ -1391,7 +1399,7 @@ function moveCharacterScore(state: GameState, actor: Side, a: Extract<WotrAction
     // Hidden or revealed: the re-roll comes from a Nazgûl in the Fellowship's region,
     // the figure's last-known spot (report 5d063j1g3f6s2w6x).
     const pressed = state.regions[a.to]!.nazgul > 0 || state.regions[a.to]!.characters.includes('witch-king');
-    if (a.char === 'nazgul') return (a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location) && !pressed) ? 42 : 6; // never on the Mordor Track
+    if (a.char === 'nazgul') return (a.to === fellowshipRegion(state) && pressPays(state) && !pressed) ? 42 : 6; // never on the Mordor Track
     return 4; // Minions: situational
   }
   // A separated Companion used to score a flat 4 for every destination, so it never
@@ -2088,7 +2096,7 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
   const fs = state.fellowship;
   const scoreMove = (a: Extract<WotrAction, { kind: 'moveCharacter' }>): number => {
     let s = 0;
-    if (owner === 'shadow' && a.char === 'nazgul' && a.to === fellowshipRegion(state) && !MORDOR_ENTRANCES.includes(fs.location)) {
+    if (owner === 'shadow' && a.char === 'nazgul' && a.to === fellowshipRegion(state) && pressPays(state)) {
       // Press the Fellowship, hidden or not — with ONE Ringwraith. The Hunt re-roll is
       // presence-gated, so the second wraith adds nothing; the die-driven chain
       // used to pile all five on (player report: 'spent [C] to move 5(!) Nazgul
@@ -2118,6 +2126,23 @@ function chooseCharMove(state: GameState, legal: WotrAction[]): WotrAction {
 
 /** Pick an interactive event-card target: prefer an attack/move toward the campaign
  *  target; for a Companion separation keep the strong ones (separate the lowest Level). */
+/** An Event card's attack the die-driven rules (score → 'attack') would never make:
+ *  outnumbered, short of twice a City's or Stronghold's defenders, or a sortie or
+ *  assault without twice the other side. */
+function cardAttackOutmatched(state: GameState, from: RegionId, to: RegionId): boolean {
+  const sortieBox = sortieForce(state, from, 'shadow') ?? sortieForce(state, from, 'fp');
+  if (sortieBox) return forceUnitCount(sortieBox) < unitCount(state, to) * 2;
+  const fromU = unitCount(state, from), toU = unitCount(state, to);
+  if (from === to) {
+    const box = state.regions[to]!.siegeBox;
+    const gar = box ? forceUnitCount(box) : 0;
+    return gar > 0 && fromU < gar * 2;
+  }
+  if (fromU < toU) return true;
+  const fortified = !!REGIONS[to]!.settlement && REGIONS[to]!.settlement !== 'Town' && toU > 0;
+  return fortified && fromU < toU * 2;
+}
+
 function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
   const ets = legal.filter((a) => a.kind === 'eventTarget') as Extract<WotrAction, { kind: 'eventTarget' }>[];
   if (ets.length === 0) return legal[0]!;
@@ -2217,6 +2242,11 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     // even a Stronghold attack (60 + 2 VP × 20).
     if (a.card === 'sh-char-24' && a.mode === 'recruit') return 101;
     if (a.companion) return 100 - levelOf(a.companion) * 10;          // separate the lowest-Level Companion
+    // …but not into a fight it loses. The card's attack is a die attack's: the same
+    // uphill and fortification margins apply (report cca118k2smx6lk2j: The Black Captain
+    // Commands sent 2 Elites and the Witch-king against 6 units in Edoras). Below 'done',
+    // so the card keeps its Nazgûl and skips the attack.
+    if (a.mode === 'attack' && a.to && a.from && cardAttackOutmatched(state, a.from as RegionId, a.to as RegionId)) return -10;
     if (a.mode === 'attack' && a.to) return 60 + REGIONS[a.to]!.vp * 20;
     // A card move may overstack (the excess is removed afterwards), so every unit past
     // the limit is simply thrown away. The Shadow used The Shadow Lengthens to pile two
