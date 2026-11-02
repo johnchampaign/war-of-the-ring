@@ -7,6 +7,7 @@ import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
 import { getHandler } from '../src/engine/handlers/registry.ts';
 import { resolveNazgulStrike } from '../src/engine/handlers/index.ts';
+import { STANDARD_TILE_LIST } from '../src/engine/data.ts';
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -64,6 +65,35 @@ function playIt(s) {
   check('no choice', s.pendingChoice == null, s.pendingChoice?.kind ?? 'none');
   check('no Hunt', (s.hunt.draws ?? []).length === 0);
   check('the table card is untouched', s.cards.fp.table.includes('fp-char-07'));
+}
+
+{
+  // "Roll for the Hunt (as if the Free Peoples player had moved the Fellowship)": a
+  // real Hunt roll, so an Eye is worth the successes rather than nothing (report
+  // yp4qcv008k4z6k7g: the card drew a tile straight away and threw the Eye out).
+  console.log('\n=== the Hunt is ROLLED, and an Eye counts the successes ===');
+  const s = board(false);
+  s.hunt.box = 3;
+  s.hunt.fpDiceInBox = 4;                              // +4: every die but a 1 succeeds
+  s.hunt.pool = STANDARD_TILE_LIST.map((t, i) => (t.value === 'eye' ? i : -1)).filter((i) => i >= 0);
+  s.hunt.drawn = [];
+  playIt(s);
+  const roll = s.hunt.lastRoll;
+  check('the Hunt dice were rolled', roll?.dice?.length === 3, JSON.stringify(roll?.dice));
+  const draw = (s.hunt.draws ?? []).at(-1);
+  check('an Eye was drawn', draw?.value === 'eye', String(draw?.value));
+  check('...and is worth the successes, not 0', roll && draw?.damage === roll.successes && roll.successes > 0,
+    `damage=${draw?.damage}, successes=${roll?.successes}`);
+  check('no die entered the Hunt Box (the card moved nothing)', s.hunt.fpDiceInBox === 4, String(s.hunt.fpDiceInBox));
+}
+
+{
+  console.log('\n=== an empty Hunt Box rolls nothing, so no tile is drawn ===');
+  const s = board(false);
+  s.hunt.box = 0;
+  playIt(s);
+  check('no tile drawn', (s.hunt.draws ?? []).length === 0);
+  check('no choice raised', s.pendingChoice == null, s.pendingChoice?.kind ?? 'none');
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall ok');

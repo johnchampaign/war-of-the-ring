@@ -9,7 +9,7 @@ import { register, type EventTarget, type EventHandler } from './registry';
 import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, fellowshipRegion, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason, cardAttackFighters, characterInPlay } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, runEventStrikes, hasAtWarUnit, sortieForce, canSortie, attackError, type CasualtyThen, type EventStrike } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
-import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
+import { extraHunt, resolveHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
 import { activateNation, advancePolitical, isAtWar, nationSubject, onArmyAttacked } from '../politics';
 import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef, theNation, nationsArePlural } from '../data';
 import { moveFellowship, hideFellowship, findCharacterRegion, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
@@ -2597,7 +2597,7 @@ register('sh-char-08b', {
         return;
       }
       log(state, null, 'event', 'The Nazgûl Strike! — Hunt roll');
-      extraHunt(state, { source: 'The Nazgûl Strike!' });
+      nazgulStrikeHunt(state);
     }
   }),
   canPlay: (state) => state.fellowship.mordor === null && state.fellowship.progress >= 1 && nazgulOnMap(state),
@@ -2618,7 +2618,16 @@ export function resolveNazgulStrike(state: GameState, discard?: string): void {
     }
   }
   log(state, null, 'event', 'The Nazgûl Strike! — Hunt roll');
-  extraHunt(state, { source: 'The Nazgûl Strike!' });
+  nazgulStrikeHunt(state);
+}
+/** "Roll for the Hunt (as if the Free Peoples player had moved the Fellowship)" — a
+ *  real Hunt roll, not a bare tile draw: the Hunt Box dice (max 5) with the usual
+ *  re-rolls and FP-dice bonus, a tile only on a success, and an Eye worth the number
+ *  of successes (Almanac C 11: "a normal Hunt is triggered for all purposes"). No die
+ *  enters the Hunt Box, since no Action die moved the Fellowship. It used to draw a
+ *  tile straight away and throw an Eye out (player report yp4qcv008k4z6k7g). */
+function nazgulStrikeHunt(state: GameState): void {
+  resolveHunt(state, false);
 }
 
 // Return to Valinor: each non-besieged Elven Stronghold with Elven units takes a
