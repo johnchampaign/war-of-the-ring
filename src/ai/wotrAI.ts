@@ -58,6 +58,21 @@ function revealHitsShadowStronghold(state: GameState): boolean {
   return (['moria', 'minas-morgul', 'morannon'] as RegionId[]).some((x) => settlementCtrl(state, x) === 'shadow'
     && dist(fs.location, x) <= fs.progress && dist(fs.location, x) + dist(x, exit) === dist(fs.location, exit));
 }
+const SPECIAL_TILE_CARDS = new Set(['sh-char-01', 'sh-char-02', 'sh-char-03', 'sh-char-04']); // Shelob's Lair, The Ring is Mine!, On, On They Went, Give it to Uss!
+const FP_NATIONS_AI: Nation[] = ['dwarves', 'elves', 'gondor', 'north', 'rohan'];
+/** The Free Peoples still hold a die that could advance a passive Nation by Muster. */
+function fpCanMusterPassive(state: GameState): boolean {
+  if (FP_NATIONS_AI.every((n) => state.nations[n].active)) return false;
+  return state.dice.fp.some((d) => d === 'muster' || d === 'armyMuster' || d === 'will');
+}
+/** The Free Peoples still hold a die that moves the Fellowship this turn. */
+function fpCanStillMoveFellowship(state: GameState): boolean {
+  return state.dice.fp.some((d) => d === 'character' || d === 'will');
+}
+/** After paying for a Character card now, the Shadow still holds a die that can play one. */
+function shadowKeepsCardDie(state: GameState): boolean {
+  return state.dice.shadow.filter((d) => d === 'event' || d === 'character').length >= 2;
+}
 const SHADOW_CHARS = new Set(['witch-king', 'saruman', 'mouth-of-sauron']); // the rest are FP Companions
 
 export function chooseAction(state: GameState, actor: Side, legal: WotrAction[], rng: Rng): WotrAction {
@@ -330,6 +345,10 @@ function oneWraith(state: GameState, actor: Side, action: WotrAction): WotrActio
 //  card later in the turn. So the Free Peoples keep the engine's icon-die-first payment.
 function payWithEventDie(state: GameState, actor: Side, action: WotrAction): WotrAction {
   if (actor !== 'shadow' || action.kind !== 'playEvent' || action.die || action.cardId === 'fp-char-13') return action;
+  // The Palantír of Orthanc itself goes down with a Character die when one is free: it
+  // draws a card for every later play with an Event die, so that die is worth keeping
+  // for the turn it first pays off (report bxa5j7lysb5l9c80).
+  if (action.cardId === 'sh-char-21' && state.dice[actor].includes('character')) return { ...action, die: 'character' };
   return state.dice[actor].includes('event') ? { ...action, die: 'event' } : action;
 }
 
@@ -1034,6 +1053,10 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // Held back firmly, not just discounted: at −30 he still came whenever nothing else
       // scored higher (report k90pu3ftiq97aevx).
       if (a.minion === 'saruman') v += whiteCouldAnswerSaruman(state) ? -60 : 25;
+      // The Witch-king and the Mouth of Sauron are Leaders: they belong with an Army
+      // (report 2jgxdumh7qp76nzf: the Mouth arrived in an empty Dol Guldur while two
+      // Regulars stood in Minas Morgul).
+      if (a.minion !== 'saruman') v += armyHere(state, a.region, 'shadow') ? Math.min(8, unitCount(state, a.region)) : -12;
       return v;
     }
     case 'recruitUnit': return recruitScore(state, actor, a, target); // build the war stacks WHERE THEY MATTER
@@ -1073,6 +1096,19 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
         return fs.corruption >= 6 ? 95 : 25;
       }
       if (actor === 'shadow' && CORRUPT_EVENTS.has(a.cardId)) return 70;
+      // On the Mordor Track a special Hunt tile is in the pool for the Free Peoples' very
+      // next step, so it goes in before anything else (report jwmzip9icferu71a: Give it to
+      // Uss! came after recruiting the Mouth of Sauron).
+      if (actor === 'shadow' && SPECIAL_TILE_CARDS.has(a.cardId) && fs.mordor !== null) return 92;
+      // Threats and Promises bars a Muster die from advancing a passive Nation, so it goes
+      // down while the Free Peoples still hold one to spend (report ogkqsw8p1k3ygah3: played
+      // as the last action of the turn, after their Muster dice were gone).
+      if (actor === 'shadow' && a.cardId === 'sh-str-05' && fpCanMusterPassive(state)) return 66;
+      // Cruel Weather sets the Fellowship back one region; played while the Free Peoples can
+      // still move it this turn, they simply walk the region back (report qrfbl7pj707a7w0e:
+      // a Will of the West was still in hand). Held while they have a die that moves it and
+      // the Shadow keeps a die that can play the card later.
+      if (actor === 'shadow' && a.cardId === 'sh-char-10' && fpCanStillMoveFellowship(state) && shadowKeepsCardDie(state)) return 3;
       // Tried 2026-10-25: holding the special Hunt-tile cards (Shelob's Lair, The Ring is
       // Mine!, On, On They Went, Give it to Uss!) while the Fellowship is more than four
       // regions from Mordor, drawing a card instead and discarding them first at the hand
@@ -1132,6 +1168,15 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // Shadow played Musterings of Long-planned War into a full Gorgoroth and removed
       // the five Southrons it had just recruited (player report 3t5w710l563l4s4t).
       const waste = actor === 'shadow' ? (FIXED_RECRUITS[a.cardId] ?? []).reduce((w, [r, n]) => w + Math.max(0, unitCount(state, r) + n - STACKING_LIMIT), 0) : 0;
+      // …and units the pool cannot supply are units the card never places: A New Power is
+      // Rising with three Isengard figures left recruited three of its six, where an attack
+      // first would have refilled the pool (report ceohaqegxw9j8mr9).
+      const fixed = actor === 'shadow' ? FIXED_RECRUITS[a.cardId] : undefined;
+      if (fixed) {
+        const pool = state.reinforcements[REGIONS[fixed[0]![0]]!.nation as Nation];
+        const short = Math.max(0, fixed.reduce((t, [, n]) => t + n, 0) - pool.regular - pool.elite);
+        if (short > 0) return 35 - combatCardValue(combatModsFor(a.cardId)) * 3 - waste * 8 - short * 8;
+      }
       return 35 - combatCardValue(combatModsFor(a.cardId)) * 3 - waste * 8;
     }
     case 'forceDiscardCard':
@@ -1202,6 +1247,13 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
   let s = actor === 'shadow' ? 30 : 16;
   if (armyHere(state, a.region, actor)) s += 10;                       // reinforce a real stack
   if (target) s += Math.max(0, 12 - dist(a.region, target) * 2);       // near the front
+  // The Shadow's Muster dice go to the Political Track, Minions, the Voice of Saruman and
+  // Nazgûl first; a plain recruit is the fallback (reports oqwst19crttqrf4p,
+  // 7yzh545b34c0eflm). A garrison for a threatened Settlement still comes first.
+  // Measured 2026-11-02, 2000 games x 2 families, Shadow wins: heuristic FP 730 / 727 ->
+  // 780 / 757, human-like FP 916 / 919 -> 1003 / 1003.
+  const gap = garrisonGap(state, a.region, actor);
+  if (actor === 'shadow' && gap === 0) return Math.min(s, 14);
   // GARRISON. Mustering into an empty VP Settlement we hold is the cheapest possible
   // defence — it conjures a defender on the spot, so no army has to leave the front to
   // cover it. Weighted above the march-toward-the-target term, because losing a
@@ -1210,7 +1262,7 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
   // Scaled by how close the enemy is to their VP threshold: with the board quiet this
   // is exactly the weight measured when the term was introduced, but once they are
   // genuinely closing, covering our own Settlements outranks pressing the attack.
-  s += garrisonGap(state, a.region, actor) * ((REGIONS[a.region]!.vp ?? 0) * 20 + 30) * (1 + 1.5 * enemyPressure(state, actor));
+  s += gap * ((REGIONS[a.region]!.vp ?? 0) * 20 + 30) * (1 + 1.5 * enemyPressure(state, actor));
   // NOT a Free Peoples "muster where the Shadow is about to strike" term. Reports
   // 40736j3x5z665456, 1m4j350n0t1x0u6o, 6c502v5f6d1e6t5z (Gondor, the Woodland Realm,
   // Edoras) asked the FP to muster before the Fellowship moves when a Shadow Army is
