@@ -461,6 +461,13 @@ die already showing an Eye.
   Revealed** needs a Sauron Regular or a Nazgûl in reinforcements and a Minas Morgul the
   Shadow can recruit into; **Musterings of Long-planned War** needs a Southron Regular
   placeable in Gorgoroth or a Sauron Regular in Nurn. `scripts/probe-triage-1008c.mjs`.
+  **No card recruit lands in a Settlement the enemy has captured.** Almanac: "It is never
+  permitted to use any of these cards to recruit into a captured Shadow Settlement" (naming
+  *Monsters Roused*). The whole-card recruits asked only about an enemy Army, so an empty
+  captured Settlement took the figure *(player report l2qbeep3olo04yjh, 2026-11-02)*. The
+  shared placement now refuses it, the figure stays in reinforcements, and the card's other
+  regions recruit as printed. Only *Dead Men of Dunharrow* recruits into enemy control (FAQ
+  1.2), through its own path. `scripts/probe-triage-1102.mjs`.
   **A recruitment card with nothing to recruit is still playable for the rest of its
   text.** Almanac, "Points common to all Free Peoples recruitment cards": "These cards
   may still be played if recruitment is impossible (e.g., if the required Settlement has

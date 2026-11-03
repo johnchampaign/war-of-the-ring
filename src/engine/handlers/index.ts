@@ -321,7 +321,10 @@ const logCardRecruit = (state: GameState, nation: Nation, region: string, reg: n
 function placeUnits(state: GameState, nation: Nation, region: string, regular: number, elite: number, quiet = false): number {
   const pool = state.reinforcements[nation];
   const dest = eventRecruitTarget(state, region, sideOfNation(nation));
-  if (!dest) return 0;
+  // An empty Settlement the enemy has captured has no enemy Army in it, so the seam above
+  // lets it through; the Almanac forbids it by name: "never permitted ... to recruit into a
+  // captured Shadow Settlement (e.g., see Monsters Roused)" (player report l2qbeep3olo04yjh).
+  if (!dest || !recruitable(state, sideOfNation(nation), region)) return 0;
   const reg = Math.max(0, Math.min(regular, pool.regular));
   const el = Math.max(0, Math.min(elite, pool.elite));
   if (reg + el === 0) return 0;
@@ -341,7 +344,7 @@ function placeForce(state: GameState, nation: Nation, region: string, opts: { re
   const lead = opts.leader ?? 0;
   let k = 0;
   if (lead > 0) {
-    const dest = eventRecruitTarget(state, region, sideOfNation(nation));
+    const dest = recruitable(state, sideOfNation(nation), region) ? eventRecruitTarget(state, region, sideOfNation(nation)) : null;
     k = dest ? Math.min(lead, pool.leader ?? 0) : 0;
     if (dest && k > 0) { dest.force.leaders += k; pool.leader = (pool.leader ?? 0) - k; }
   }
