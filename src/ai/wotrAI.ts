@@ -1389,6 +1389,9 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   //  - a Free Peoples Army under 5 units doesn't march to a non-Settlement more than two
   //    regions from its target unless joining an Army (3u0wjxt92deb58ra): FP wins 1168 /
   //    1156, -65.
+  //  - Minas Morgul's Army leaves by South Ithilien, not North, so it doesn't block the
+  //    Morannon's road (ku36pb4rjb7160eh, e70gksrzc98iwyjo): 833 / 810, but 1082 / 1032
+  //    human-like (-45).
   // Never march units into a stack that's already full: anything over the 10-unit
   // limit is removed (lost to reinforcements). Penalise per lost unit so the AI
   // would rather not move than over-stack and bleed its own army (player report).
