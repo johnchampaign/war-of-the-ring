@@ -80,6 +80,8 @@ const hunt = (guide, damage, corruption, dice = []) => {
 {
   // Report 5y710h445c4l222i: Gollum as Guide reveals the Fellowship to take 1 off a hit.
   const s = fpTurn();
+  // Out in the open: with no Progress in an unconquered Rivendell he could not reveal at all.
+  s.fellowship.location = 'dimrill-dale';
   s.fellowship.guide = 'gollum'; s.fellowship.companions = []; s.fellowship.hidden = true; s.fellowship.corruption = 5;
   s.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage: 2, reveal: false, numbered: true } };
   const a = decide(s);

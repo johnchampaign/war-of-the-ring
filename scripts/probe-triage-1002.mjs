@@ -50,7 +50,8 @@ const check = (label, ok, detail = '') => {
   console.log('\n=== a standard numbered tile still lets Gollum ignore its reveal ===');
   let s = startGame(createGame({ seed: 32 }));
   s.phase = 'actionResolution';
-  s.fellowship.location = 'rivendell'; s.fellowship.hidden = true;
+  s.fellowship.location = 'dimrill-dale'; // with no Progress in an unconquered Rivendell he could not reveal
+   s.fellowship.hidden = true;
   s.fellowship.companions = []; s.fellowship.guide = 'gollum';
   s.pendingChoice = { owner: 'fp', kind: 'huntDamage', data: { damage: 1, reveal: false, revealIcon: true, numbered: true } };
   const legal = wotrAdapter.legalActions(s, 'fp');

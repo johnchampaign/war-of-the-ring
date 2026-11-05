@@ -8,8 +8,8 @@
 // and may reveal to reduce damage by 1 — all as `huntDamage` choice options.
 // Still deferred: "play on the table" damage-cancel cards (Axe & Bow, Mithril
 // Coat — they land with the on-table event-handler increment).
-import type { GameState } from './types';
-import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, characterDef, EVENT_BY_ID, type HuntTileDef } from './data';
+import type { GameState, Nation } from './types';
+import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, characterDef, EVENT_BY_ID, sideOfNation, type HuntTileDef } from './data';
 import { fellowshipDieSkipsHuntBox, wornWithSorrowActive } from './persistent';
 import { withRng } from './rng';
 import { settlementController, armySide, heldShadowStronghold, fellowshipRegion } from './armies';
@@ -184,7 +184,24 @@ function logDraw(state: GameState, tile: HuntTileDef, damage: number, source?: s
  *  otherwise applies directly. Reveal is applied with the resolution. `opts.source`
  *  names the Event card that caused a no-roll draw (shown in the FP's damage prompt);
  *  `opts.noReduce` bars the damage-reduction options (Isildur's Bane). */
-export type HuntOpts = { noReduce?: boolean; forceRandomCasualty?: boolean; source?: string };
+export type HuntOpts = { noReduce?: boolean; forceRandomCasualty?: boolean; source?: string; ignoreReveal?: boolean };
+/** The Fellowship stands in a City or Stronghold of a Free Peoples NATION, whoever holds
+ *  it now. Balrog of Moria ignores a Reveal icon there: "this applies even if the
+ *  Settlement has been captured by the Shadow player; the remnant of that captured
+ *  Settlement offers the Fellowship some protection in this case" (Almanac). */
+export function fellowshipInFpCityOrStronghold(state: GameState): boolean {
+  const def = REGIONS[state.fellowship.location];
+  return (def?.settlement === 'City' || def?.settlement === 'Stronghold') && !!def.nation && sideOfNation(def.nation as Nation) === 'fp';
+}
+/** Gollum may reveal to reduce Hunt damage only while hidden, and not with no Progress
+ *  left in a City or Stronghold the Free Peoples still hold: the reveal could only end
+ *  there, which is barred (Almanac, Gollum: "cannot use his ability to reveal the
+ *  Fellowship in Lórien"). */
+export function gollumMayReveal(state: GameState): boolean {
+  const fs = state.fellowship;
+  if (fs.guide !== 'gollum' || !fs.hidden) return false;
+  return fs.mordor !== null || fs.progress > 0 || !fellowshipInFpCityOrStronghold(state) || settlementController(state, fs.location) !== 'fp';
+}
 /** `extra` marks a draw with no Hunt roll of its own (a Shadow Stronghold reveal, an
  *  Event card, the Balrog): its record names the source instead of carrying the last
  *  Hunt's dice, which the popup used to show as if they had been rolled for it
@@ -206,7 +223,8 @@ function applyHuntTile(state: GameState, tile: HuntTileDef, successes: number, o
   // a number ("Give it to Uss!" is a 1 with a reveal icon): its reveal always applies,
   // so Gollum can neither ignore it nor reveal on top of it to reduce the damage
   // (Almanac, Gollum (ii)-(iii); player report osf97egfulfaixb3).
-  const revealIcon = !!tile.reveal, numbered = typeof tile.value === 'number' && !tile.introducedBy;
+  const revealIcon = !!tile.reveal && !opts.ignoreReveal, numbered = typeof tile.value === 'number' && !tile.introducedBy;
+  if (tile.reveal && opts.ignoreReveal) log(state, null, 'hunt', `The tile's Reveal icon is ignored: the Fellowship was declared in ${REGIONS[fs.location]!.name ?? fs.location}`);
   const reveal = revealIcon && !gollumIgnoresReveal(state, numbered);
 
   // Record every draw (even 0/blank) for the UI's informational popup. Newest last,
@@ -282,7 +300,7 @@ const hasOnTableReducer = (state: GameState): boolean =>
 export function huntReductionAvailable(state: GameState, revealDue = false): boolean {
   const fs = state.fellowship;
   return fs.guide === 'meriadoc' || fs.guide === 'peregrin'
-    || (!revealDue && fs.guide === 'gollum' && fs.hidden) || hasOnTableReducer(state);
+    || (!revealDue && gollumMayReveal(state)) || hasOnTableReducer(state);
 }
 
 /** Gollum as Guide ignores a tile's REVEAL icon — but only on a standard NUMBERED

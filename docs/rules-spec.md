@@ -1176,6 +1176,11 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   the Balrog is asked **before**
   the Stronghold tiles and carries them with it (they draw once it is answered), so
   the card's one-shot is settled before Moria's own Stronghold tile comes out.
+  On a **declaration** into a City or Stronghold of a Free Peoples Nation the tile's
+  **Reveal icon is ignored** (card text), "even if the Settlement has been captured by
+  the Shadow player" (Almanac). Gollum's own reveal-to-reduce is barred with no Progress
+  left in one the Free Peoples still hold, as "the restriction on revealing into an
+  unconquered Free Peoples City or Stronghold" leaves him nowhere to end (Almanac).
   `scripts/probe-rules-batch-0917.mjs`.
   Declaring does **not** end the Fellowship phase: the FP may then change the Guide
   or, if the figure now sits at Morannon/Minas Morgul, **enter Mordor this same

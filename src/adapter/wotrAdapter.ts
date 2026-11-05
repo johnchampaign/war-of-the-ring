@@ -9,7 +9,7 @@ import {
 } from '../engine/phases';
 import { forfeit } from '../engine/victory';
 import { moveFellowship, hideFellowship, declareFellowship, enterMordor, removeCompanionOnMordorTrack, beginSeparation, placeSeparatedCompanion, placeSeparatedGroup, separationDestinations, separationRange, bringUpgrade, canBringAragorn, canBringGandalfWhite, gandalfWhiteCandidates, resolveLureChoice, eligibleGuides, setGuide, findCharacterRegion, MORDOR_ENTRANCES, fellowshipPath } from '../engine/fellowship';
-import { extraHunt, logRevealed, queueTakenAlive, wornWithSorrowOptions, resolveWornWithSorrow } from '../engine/hunt';
+import { extraHunt, logRevealed, queueTakenAlive, wornWithSorrowOptions, resolveWornWithSorrow, fellowshipInFpCityOrStronghold, gollumMayReveal } from '../engine/hunt';
 import { log, logCardDraw, sideDoes } from '../engine/log';
 import {
   recruit, moveArmy, moveArmySplit, canMoveSomeArmy, moveBlockReason, splitBlockReason, nationsAllowedInto, armySide, settlementController, heldShadowStronghold, unitCount, STACKING_LIMIT,
@@ -372,7 +372,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         // drawn tile itself already reveals it (his card: only while it would stay
         // hidden; player report from a Mordor Eye+Reveal tile).
         const tileReveals = !!(state.pendingChoice!.data as { reveal?: boolean } | undefined)?.reveal;
-        if (fs.guide === 'gollum' && fs.hidden && !tileReveals) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
+        if (gollumMayReveal(state) && !tileReveals) acts.push({ kind: 'huntDamage', mode: 'reduceReveal' });
         // One option PER on-table reducer — Axe and Bow vs Horn of Gondor is a real
         // choice (their keep-conditions differ; player report).
         for (const card of huntReduceCards(state)) acts.push({ kind: 'huntDamage', mode: 'reduceCard', card });
@@ -684,7 +684,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // Balrog of Moria is a CARD-SPECIFIC exception: its own text draws an extra tile
       // when the Fellowship is "declared or revealed" through Moria.
       if (balrogFires(state, traversed)) {
-        state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: {} };
+        state.pendingChoice = { owner: 'shadow', kind: 'balrog', data: { declared: true } };
       }
       break;
     }
@@ -1381,7 +1381,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       requireChoice(state, 'balrog', actor);
       // A reveal hands its Shadow Strongholds over to this choice so the card is asked
       // first; they draw once the Balrog is answered (see the revealMove handler).
-      const owedStrongholds = (state.pendingChoice!.data as { strongholds?: RegionId[] }).strongholds ?? [];
+      const balrogData = state.pendingChoice!.data as { strongholds?: RegionId[]; declared?: boolean };
+      const owedStrongholds = balrogData.strongholds ?? [];
       state.pendingChoice = null;
       const i = state.cards.shadow.table.indexOf('sh-char-17');
       if (action.use && i >= 0) {
@@ -1393,7 +1394,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         // so (report wg37yx). The card is named here and on the Hunt line itself.
         log(state, null, 'event', 'Shadow discards Balrog of Moria to draw an extra Hunt tile as the Fellowship passes through Moria');
         state.log[state.log.length - 1]!.card = 'sh-char-17';
-        extraHunt(state, { source: 'Balrog of Moria' }); // may set a huntDamage choice for the FP
+        // "Ignore any 'Reveal' icon on the drawn tile if the Fellowship has been declared
+        // in a Free Peoples City or Stronghold" (card text), captured or not (Almanac).
+        extraHunt(state, { source: 'Balrog of Moria', ignoreReveal: !!balrogData.declared && fellowshipInFpCityOrStronghold(state) }); // may set a huntDamage choice for the FP
       }
       drawStrongholdHunts(state, owedStrongholds); // no-op on a declaration (none are owed)
       break; // Hunt Allocation phase was already set
