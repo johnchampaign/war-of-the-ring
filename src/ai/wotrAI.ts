@@ -352,6 +352,11 @@ function payWithEventDie(state: GameState, actor: Side, action: WotrAction): Wot
   return state.dice[actor].includes('event') ? { ...action, die: 'event' } : action;
 }
 
+// NOT shipped, 2026-11-04 (report azuww06qg8zqnk1l): a Shadow attack led by a Leader paid
+// with a Character die whenever an Army die is also in hand, keeping the Army die for
+// marching. Shadow wins against e9e3f7b: heuristic 721 / 715 vs 730 / 727 (measured at
+// cfde5fe), human-like 1063 / 1066 vs 1093 / 1066 — slightly down both times.
+
 /** A Shadow whole-Army move that would overstack the destination moves only what fits
  *  (Elites first; the Nazgûl and Minions go along) — anything past the limit is removed
  *  on arrival, and the AI was throwing away whole Armies' worth of Regulars marching
@@ -1252,6 +1257,9 @@ function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { ki
   // 7yzh545b34c0eflm). A garrison for a threatened Settlement still comes first.
   // Measured 2026-11-02, 2000 games x 2 families, Shadow wins: heuristic FP 730 / 727 ->
   // 780 / 757, human-like FP 916 / 919 -> 1003 / 1003.
+  // NOT shipped: the last Muster die held back while the Witch-king waits and the Free
+  // Peoples hold a Muster die (report fvwx4i603yvyggw5) — 825 / 779, 1049 / 1064 against
+  // 824 / 787, 1093 / 1066: the held die mostly went unused.
   const gap = garrisonGap(state, a.region, actor);
   if (actor === 'shadow' && gap === 0) return Math.min(s, 14);
   // GARRISON. Mustering into an empty VP Settlement we hold is the cheapest possible
@@ -1370,6 +1378,17 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
     s += -(dist(to, target) - dist(from, target)) * (open ? 20 : 12) * (pressing ? 1.5 : 1);
     if (to === target) s += 30;
   }
+  // NOT shipped, 2026-11-04 (2000 games x 2 families against e9e3f7b; base Shadow wins
+  // 824 / 787 heuristic, 1093 / 1066 human-like; FP wins 1176 / 1213):
+  //  - no Shadow move carrying a single unit unless it captures (reports lwfzbpo5mi536dj7,
+  //    e6vw06s9p5c7fkgc, e70gksrzc98iwyjo): 802 / 818, 1080 / 1075 — even, and one
+  //    heuristic game ran to the action cap.
+  //  - Orthanc's Army stays home while Saruman can still build it, and the Voice stops
+  //    recruiting once 3+ Isengard units stand in the field (ka9zuc2c4ogqbc6y,
+  //    xlhaqs110nl0dqyc): 816 / 806, 1076 / 1053 — even, slightly down human-like.
+  //  - a Free Peoples Army under 5 units doesn't march to a non-Settlement more than two
+  //    regions from its target unless joining an Army (3u0wjxt92deb58ra): FP wins 1168 /
+  //    1156, -65.
   // Never march units into a stack that's already full: anything over the 10-unit
   // limit is removed (lost to reinforcements). Penalise per lost unit so the AI
   // would rather not move than over-stack and bleed its own army (player report).
@@ -1404,6 +1423,9 @@ function elvenRingScore(state: GameState, actor: Side, a: Extract<WotrAction, { 
   // …and only while the Free Peoples can still move the Fellowship this turn: a Hunt
   // Box Eye bites only on a move. Revealed on the Track it must hide first, so it needs
   // two Character-capable dice (report 214722232j396x52: the Eye after their last one).
+  // NOT shipped: the Ring turned to a Muster die to bring the Witch-king (report
+  // 0ov3z4onhjfdrdnp) — 816 / 793, 1078 / 1056 against 824 / 787, 1093 / 1066: the Ring is
+  // then gone when the Hunt wants it.
   const fpRing = state.elvenRings.includes('fp') && !state.flags.fpUsedElvenRingThisTurn;
   const movers = state.dice.fp.filter((f) => f === 'character' || f === 'will').length
     + (fpRing && state.dice.fp.some((f) => f !== 'character' && f !== 'will') ? 1 : 0);
