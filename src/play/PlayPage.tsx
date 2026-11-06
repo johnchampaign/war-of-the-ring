@@ -38,7 +38,7 @@ import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, isSecondMusterTarget, trivialDie, isCardRegionPick } from './actionText';
-import { moveBlockReason, musterBlockReason, cardPathBlockReason, regionHops, companionLandingActivates } from '../engine/armies';
+import { moveBlockReason, musterBlockReason, cardRouteNextSteps, regionHops, companionLandingActivates } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial, isCardCompanionMove } from './panelFilter';
 import { movableCharsAt, characterDestinations, characterMoveBlockReason, companionGroupLeader, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS } from '../engine/charMove';
@@ -604,16 +604,9 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     if (budget <= 1) return null;
     const nations = (Object.keys(g.view.regions[selected]?.units ?? {}) as Nation[])
       .filter((n) => (g.you === 'fp') === FP_NATIONS.has(n));
-    const steps = new Set<RegionId>();
-    if (route.length < budget) {
-      for (const n of REGIONS[head]?.adjacency ?? []) {
-        // A route MAY walk back through a region it has already entered (only ENDING
-        // where it started is barred, and the engine never offers that destination) —
-        // barring revisits here made legal detours impossible to trace (player report
-        // 306c5v2g003c6332).
-        if (!cardPathBlockReason(g.view, selected as RegionId, [...route, n as RegionId], g.you as Side, nations)) steps.add(n as RegionId);
-      }
-    }
+    // Only steps from which the card can still END somewhere it allows (see
+    // cardRouteNextSteps — player report kglsmlh727juow8r).
+    const steps = cardRouteNextSteps(g.view, selected as RegionId, route, legs.map((a) => a.to as RegionId), budget, g.you as Side, nations);
     const finish = legs.find((a) => a.to === head) ?? null;
     return { head, budget, steps, finish, left: budget - route.length };
   }, [selected, route, cardMoveActs, g.view, g.you]);
@@ -1303,8 +1296,14 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                     {trace.left > 0 ? ` · ${trace.left} step${trace.left === 1 ? '' : 's'} left` : ' · no steps left'}
                   </span>
                   <span style={{ color: '#b9d6a3' }}>
-                    {trace.steps.size > 0 ? 'Click a highlighted region to walk one step.' : 'Nowhere further to go.'}
+                    {trace.steps.size > 0 ? 'Click a highlighted region to walk one step.' : trace.finish ? 'Nowhere further to go.' : 'The card cannot end here — go back a step or cancel.'}
                   </span>
+                  {route.length > 0 && (
+                    <button onClick={() => setRoute((r) => r.slice(0, -1))}
+                      style={{ padding: '3px 10px', fontSize: 12, lineHeight: '16px', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: '#cfe3c0', border: '1px solid #6ea84f' }}>
+                      ↶ back a step
+                    </button>
+                  )}
                   {trace.finish && (
                     <button onClick={() => { const act = trace.finish!; const path = [...route]; clearMove();
                       if (act.mode === 'attack' && !isSplitCardAttack(act)) setMoveDraft({ from: act.from!, to: act.to!, kind: 'eventAttack', base: { ...act, path } });

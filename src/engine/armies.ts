@@ -361,6 +361,33 @@ export function cardPathBlockReason(state: GameState, from: RegionId, path: read
   return null;
 }
 
+/** The next regions a traced card route may step into: open by cardPathBlockReason AND
+ *  still able to END at one of `ends` (the card's offered destinations) within the
+ *  steps left of `budget`. Shadows Gather must stop where another Shadow Army stands;
+ *  offering every walkable neighbour let a player spend all three steps into empty
+ *  country, where the card could neither stop nor go on (player report
+ *  kglsmlh727juow8r — "my game cannot progress"). */
+export function cardRouteNextSteps(state: GameState, from: RegionId, route: readonly RegionId[], ends: readonly RegionId[], budget: number, side: Side, movingNations: readonly Nation[]): Set<RegionId> {
+  const open = (path: RegionId[]) => !cardPathBlockReason(state, from, path, side, movingNations);
+  const canEnd = (path: RegionId[], left: number): boolean => {
+    const head = path[path.length - 1];
+    if (ends.includes(head)) return true;
+    if (left <= 0) return false;
+    return (REGIONS[head]?.adjacency ?? []).some((n) => open([...path, n as RegionId]) && canEnd([...path, n as RegionId], left - 1));
+  };
+  const steps = new Set<RegionId>();
+  if (route.length >= budget) return steps;
+  const head = route.length ? route[route.length - 1] : from;
+  for (const n of REGIONS[head]?.adjacency ?? []) {
+    // A route MAY walk back through a region it has already entered (only ENDING where
+    // it started is barred, and the engine never offers that destination) — barring
+    // revisits made legal detours impossible to trace (player report 306c5v2g003c6332).
+    const path = [...route, n as RegionId];
+    if (open(path) && canEnd(path, budget - path.length)) steps.add(n as RegionId);
+  }
+  return steps;
+}
+
 /** A legal route of at most `maxSteps` from→to, preferring one that ENTERS NO enemy
  *  Settlement. Entering one captures it and wakes its Nation (p.27/p.32), which is a
  *  decision, not a side effect — so when the player has not traced a route the quiet
