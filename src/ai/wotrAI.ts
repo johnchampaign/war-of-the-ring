@@ -18,7 +18,7 @@ import { unitCount, forceUnitCount, forceLeadership, STACKING_LIMIT, splitBlockR
 import { sortieForce, heroicDeathForce } from '../engine/combat';
 import { MORDOR_ENTRANCES, separationActivates, separationDestinations, separationRange } from '../engine/fellowship';
 import { characterDestinations } from '../engine/charMove';
-import { cardSplitBlockReason, dreadfulSpellsBestDice } from '../engine/handlers/index';
+import { cardSplitBlockReason, dreadfulSpellsBestDice, stormcrowNations } from '../engine/handlers/index';
 import { combatModsFor, type CombatMods } from '../engine/combatCards';
 import { SH_FORCE_DISCARD_UNLOCKS } from '../engine/persistent';
 
@@ -68,6 +68,11 @@ function fpCanMusterPassive(state: GameState): boolean {
 /** The Free Peoples still hold a die that moves the Fellowship this turn. */
 function fpCanStillMoveFellowship(state: GameState): boolean {
   return state.dice.fp.some((d) => d === 'character' || d === 'will');
+}
+/** Some region next to the Fellowship is farther from Mordor than where it stands. */
+function cruelWeatherSetsBack(state: GameState): boolean {
+  const loc = state.fellowship.location;
+  return (REGIONS[loc]!.adjacency as RegionId[]).some((r) => toMordor(r) > toMordor(loc));
 }
 /** After paying for a Character card now, the Shadow still holds a die that can play one. */
 function shadowKeepsCardDie(state: GameState): boolean {
@@ -914,6 +919,9 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // Fellowship phase declares there and goes in, so another move is a Hunt roll for
       // ground it does not need (report 4v503t4g6f496w49: Progress 1 in Dagorlad).
       if (fs.hidden && toMordor(fs.location) <= fs.progress) return 1;
+      // NOT shipped, 2026-11-07 (report uakpnuvmgalut9f7): the same hold once the Progress
+      // banked reaches past a Shadow-held Moria. Flat alone (FP wins 1267 / 1260 vs 1270 /
+      // 1273), and part of a Free Peoples set that lost ~130 per 4000 together.
       // Pre-Mordor each move triggers a Hunt, so the push eases as Corruption climbs
       // and leans on declare-to-heal to bring it back down. But the old curve
       // (72 - 9x, floor 8) fell off a cliff: by Corruption 5 the Fellowship move lost
@@ -1114,6 +1122,17 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // a Will of the West was still in hand). Held while they have a die that moves it and
       // the Shadow keeps a die that can play the card later.
       if (actor === 'shadow' && a.cardId === 'sh-char-10' && fpCanStillMoveFellowship(state) && shadowKeepsCardDie(state)) return 3;
+      // …and never played where every neighbour is nearer Mordor: from Rivendell, a dead end,
+      // both roads lead toward Mordor, so the card handed the Free Peoples a free step
+      // (report qvbtrxo6p0jag62o).
+      if (actor === 'shadow' && a.cardId === 'sh-char-10' && !cruelWeatherSetsBack(state)) return 0;
+      // The Day Without Dawn discards the Free Peoples' unused Will of the West dice, so it
+      // goes down while they still hold them, and waits while they hold none (report
+      // xy4mcfzfpp6ut5i6: played late, it caught one of two).
+      if (actor === 'shadow' && a.cardId === 'sh-str-04') {
+        const wills = state.dice.fp.filter((d) => d === 'will').length;
+        return wills ? 50 + wills * 20 : 1;
+      }
       // Tried 2026-10-25: holding the special Hunt-tile cards (Shelob's Lair, The Ring is
       // Mine!, On, On They Went, Give it to Uss!) while the Fellowship is more than four
       // regions from Mordor, drawing a card instead and discarding them first at the hand
@@ -1165,6 +1184,10 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // for its combat half (Devilry of Orthanc). Same trap as Wormtongue (player
       // report: "played Threats & Promises after the Witch-King activated all FP nations").
       if (a.cardId === 'sh-str-05' && (['dwarves', 'elves', 'gondor', 'north', 'rohan'] as Nation[]).every((n) => state.nations[n].active)) return 1;
+      // Stormcrow's real prize is setting a Nation back on the Political Track; a Nation
+      // already at its farthest step only loses a unit (report fy8fvfwd0jgqrrom: the Elves
+      // at step 3 on turn 1). Kept for its combat half until a target can be set back.
+      if (actor === 'shadow' && a.cardId === 'sh-str-06' && stormcrowNations(state).every((n) => state.nations[n].step >= 3)) return 1;
       // A card with a strong COMBAT box (Deadly Strife etc.) is usually worth more
       // held for battle than played as its event — burning it is weak play (player
       // report: "Return to Valinor for the top half is VERY weak").
@@ -1240,11 +1263,17 @@ function diplomaticScore(state: GameState, actor: Side, nation: Nation): number 
     return proximity + army * 2 + saruman;
   }
   if (!ns.active) return 8;                                             // FP advances toward War reactively
+  // NOT shipped, 2026-11-07 (report y4e51heiq8055xok): holding back the first Free Peoples
+  // Nation to reach War, the Witch-king's door. Flat alone (1269 / 1274 vs 1270 / 1273);
+  // with the Moria hold, the Elven Ring and the muster rule below, ~130 per 4000 worse.
   // Finish one Nation before starting the next: a step only pays once the Nation is At
   // War, and North then Elves left both two steps short (report 334n152r4u1p2h3o).
   return ns.step === 1 ? 30 : ns.step === 2 ? 24 : 20;
 }
 
+// NOT shipped, 2026-11-07 (report yibbe17joi301d6x): +40 / +45 for a Free Peoples recruit
+// into a City or Stronghold with a Shadow Army next door while a Muster die is in hand.
+// Flat alone (FP wins 1186 / 1194 vs 1176 / 1213); in the combined set, worse.
 /** Muster where it matters: into/near an existing army or near the campaign target —
  *  not a lone Nazgûl in an empty rear Stronghold (player report: "spent musters on
  *  nazgul in barad-dur (with no army) and angmar"). */
@@ -1419,6 +1448,10 @@ function elvenRingScore(state: GameState, actor: Side, a: Extract<WotrAction, { 
     const faces = state.dice.fp;
     if (faces.includes('character') || faces.includes('will')) return -5; // already have one — don't pass a Ring to Shadow for free
     if (fs.mordor !== null) return 90;                                // Mordor Track: MUST keep moving
+    // NOT shipped, 2026-11-07 (report yurin5vxdq8j6zkt): an Elven Ring for a Character die
+    // whenever the Fellowship is hidden. Flat alone (FP wins 1202 / 1185 vs 1176 / 1213),
+    // but it hurried the Fellowship into Mordor (turn 7.3 vs 8.6) and was the worst piece of
+    // the combined Free Peoples set (leaving it out recovered 107 of the 130 lost).
     // Not merely to hide: re-hiding after a reveal buys little (the Shadow has acted by
     // then) and a hidden Fellowship feeds its tile cards (report 04291r2i296h5w1n).
     return -5;
@@ -2299,6 +2332,8 @@ function chooseEventTarget(state: GameState, legal: WotrAction[]): WotrAction {
     // below (closest to the army campaign target) and pushed it from Hollin into
     // Moria (player report 4t142j4z4p205c20). A Nazgûl / Shadow Army already there
     // breaks ties (the Hunt re-roll).
+    // Stormcrow sets back the Nation nearest war, never one already at its farthest step.
+    if (a.card === 'sh-str-06' && a.nation) return 50 + (3 - state.nations[a.nation].step) * 15;
     if (a.card === 'sh-char-10' && a.region) {
       const away = Math.min(...MORDOR_ENTRANCES.map((e) => dist(a.region!, e)));
       const r = state.regions[a.region]!;

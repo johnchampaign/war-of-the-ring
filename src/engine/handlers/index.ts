@@ -1387,8 +1387,14 @@ function dayNightMoves(state: GameState): EventTarget[] {
     // hold another Shadow Army; this card "does not require the presence of an Army in
     // the destination region", and a round trip still takes the empty Settlement it
     // passes through (player report 6z2m220l620p5r0g). Offered when there is a first
-    // step to take; the route is traced, or the quiet one is used.
-    if (reach.size > 0 && out.length < 120) out.push({ from, to: from, range: DAY_NIGHT_RANGE });
+    // step to take AND a way back in — the same quiet-route search the move itself runs:
+    // a passive North Regular in a besieging Army outside Dol Guldur could step out but
+    // never re-enter Sauron's region, so the round trip was offered and then refused
+    // (soak: seed 101423, human-like FP).
+    if (reach.size > 0 && out.length < 120
+      && quietCardPath(state, from as RegionId, from as RegionId, 'fp', ownNationsIn(state, from as RegionId, 'fp'), DAY_NIGHT_RANGE).length > 0) {
+      out.push({ from, to: from, range: DAY_NIGHT_RANGE });
+    }
   }
   return out;
 }
@@ -1856,7 +1862,7 @@ register('sh-str-06', {
   },
 });
 /** Every FP Nation, not yet At War, whose borders hold the Fellowship or a Companion. */
-function stormcrowNations(state: GameState): Nation[] {
+export function stormcrowNations(state: GameState): Nation[] {
   const inRegion = (id: string): Nation | null => {
     const def = REGIONS[id]!; const n = def.nation as Nation | null;
     return n && isFpNation(n) && state.nations[n].step > 0 ? n : null;
