@@ -29,7 +29,7 @@ otherwise leave it open as backlog. Add a line here whenever John makes a new ca
 | Sign-in: anonymous play stays; optional profile features are welcome but not scheduled. | 2026-09-10 |
 | Hover reach rings: on by default; "only on the plain map" and "never" are ⚙ Settings choices. | 2026-10-11 |
 | Abandoned ranked games forfeit after a period of inactivity: the idle human seat loses once a ranked game has had no move for 14 days (`functions/_lib/forfeit.ts`, daily from the reminder cron). Games already quiet before the rule started (last move before 2026-09-27) are grandfathered. | 2026-10-11 |
-| **Card text over the general rule when sources conflict.** Balrog of Moria ignores a Reveal icon on a declaration into a Free Peoples City or Stronghold even if the Shadow has captured it (card text, FAQ p.11, Almanac), although rulebook p.41 and the FAQ erratum say "controlled by the Free Peoples" for the general case (report 3y1r5x6w581t291p). | 2026-11-08 |
+| **Card text over the general rule when sources conflict.** Balrog of Moria ignores a Reveal icon on a declaration into a Free Peoples City or Stronghold even if the Shadow has captured it (card text, FAQ p.11, Almanac v98 p.27 "Balrog of Moria" b)(i): "this applies even if the Settlement has been captured"), although rulebook p.41 and the FAQ erratum say "controlled by the Free Peoples" for the general case (reports 3y1r5x6w581t291p, 0g1p702v370v1i5z). | 2026-11-08 |
 
 ## What still genuinely needs John
 
