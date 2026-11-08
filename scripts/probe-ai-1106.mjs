@@ -9,6 +9,8 @@
 //  - Through a Day and a Night (soak, seed 101423 human-like): the out-and-back move is not
 //    offered to an Army that could step out but never back in — a passive North Regular
 //    besieging Dol Guldur cannot re-enter Sauron's region — and every target it offers applies.
+//  - cgvz3xaorxeczwjb: the Free Peoples pass rather than spend a die on a weak action while
+//    no Shadow Army stands beside one of their Victory-Point Settlements, and act when one does.
 import { Rng } from 'digital-boardgame-framework';
 import { createGame } from '../src/engine/setup.ts';
 import { startGame, wotrAdapter } from '../src/adapter/wotrAdapter.ts';
@@ -93,6 +95,17 @@ for (const [northAtWar, want] of [[false, false], [true, true]]) {
   check(`North ${northAtWar ? 'at war' : 'passive'}: round trip ${want ? 'offered' : 'not offered'}`, targets.some((x) => x.to === 'dol-guldur') === want);
   const refused = targets.filter((x) => !wotrAdapter.tryApplyAction(t, x, 'fp').ok);
   check(`North ${northAtWar ? 'at war' : 'passive'}: every offered target applies`, refused.length === 0, refused.map(show).join(' '));
+}
+
+console.log('\n=== The Free Peoples pass until something presses them ===');
+for (const pressed of [false, true]) {
+  const s = turn('fp');
+  s.dice.fp = ['event']; s.dice.shadow = ['army', 'army', 'army']; s.cards.fp.hand = [];
+  if (pressed) s.regions['westemnet'].units.isengard = { regular: 3, elite: 0 };
+  const legal = wotrAdapter.legalActions(s, 'fp');
+  const a = decide(s, 'fp');
+  check(`${pressed ? 'Isengard Army beside Edoras' : 'nothing near'}: ${pressed ? 'acts' : 'passes'}`,
+    legal.some((x) => x.kind === 'pass') && (a.kind === 'pass') === !pressed, show(a));
 }
 
 console.log(failures ? `\nFAIL: ${failures} failed` : '\nOK: all AI 11-06 checks pass');

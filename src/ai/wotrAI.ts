@@ -1217,7 +1217,11 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       return 20; // FP: lifting Palantír / Denethor's Folly is generally good value
     case 'drawEvent': return 12;
     case 'skipDie': return 1;
-    case 'pass': return 0;
+    // The Free Peoples pass rather than spend a die on a weak action while nothing presses
+    // them — a human holds dice back to answer the Shadow's moves (report cgvz3xaorxeczwjb).
+    // Measured 2026-11-08 against 2665e98: FP wins 1170 / 1191 -> 1188 / 1177 (heuristic
+    // Shadow); against the human-like FP the Shadow 1096 / 1096 -> 1072 / 1093.
+    case 'pass': return actor === 'fp' && !fpPressed(state) ? 25 : 0;
     default: return 2;
   }
 }
@@ -1269,6 +1273,11 @@ function diplomaticScore(state: GameState, actor: Side, nation: Nation): number 
   // Finish one Nation before starting the next: a step only pays once the Nation is At
   // War, and North then Elves left both two steps short (report 334n152r4u1p2h3o).
   return ns.step === 1 ? 30 : ns.step === 2 ? 24 : 20;
+}
+
+/** A Shadow Army stands beside a Free Peoples Settlement worth Victory Points. */
+function fpPressed(state: GameState): boolean {
+  return (Object.keys(REGIONS) as RegionId[]).some((id) => (REGIONS[id]!.vp ?? 0) > 0 && settlementCtrl(state, id) === 'fp' && enemyNear(state, id, 'shadow', 1));
 }
 
 // NOT shipped, 2026-11-07 (report yibbe17joi301d6x): +40 / +45 for a Free Peoples recruit
