@@ -626,6 +626,11 @@ function garrisonGap(state: GameState, id: RegionId, actor: Side, reach = 2): nu
   // Army, was its only road).
   if (n === 0) return enemyNearOpen(state, id, enemy, actor, reach) ? 1 : 0;
   if (n > 1) return 0;
+  return loneDefenderGap(state, id, actor);
+}
+/** A lone defender beside an enemy Army of 3+ that can storm it is half a gap. */
+function loneDefenderGap(state: GameState, id: RegionId, actor: Side): number {
+  const enemy: Side = actor === 'fp' ? 'shadow' : 'fp';
   const stormer = (REGIONS[id]!.adjacency ?? []).some((a) => armyThreatens(state, a, enemy, id, true) && unitCount(state, a) >= 3);
   return stormer ? 0.5 : 0;
 }
@@ -1351,7 +1356,12 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   const overflowsSiege = (id: RegionId) => actor === 'shadow' && besiegedGarrison(state, id, actor) > 0
     && unitCount(state, id) + unitCount(state, from) > STACKING_LIMIT;
   const held = (id: RegionId) => armyHere(state, id, enemy) || overflowsSiege(id);
-  if (settlementCtrl(state, to) === enemy && !held(to)) {
+  // A Fortification (Osgiliath, the Fords of Isen) is never captured and is worth nothing
+  // (p.10; the engine's captureIfEnemySettlement skips it), but it still read as an enemy
+  // Settlement, so walking an Army back onto an empty one scored a 25-point capture: the
+  // Shadow marched Fords of Isen -> Fangorn -> Fords of Isen, a die each way (seen in the
+  // snapshot of report xy4mcfzfpp6ut5i6, Westemnet <-> Fords of Isen).
+  if (settlementCtrl(state, to) === enemy && !held(to) && REGIONS[to]!.settlement !== 'Fortification') {
     s += (REGIONS[to]!.vp * 30 + 25) * (pressing ? 1.4 : 1);                                // capture
     s -= wakePrice(state, actor, to) * WAKE_W_ACTION;                                       // ...at the political price of it
   }
@@ -1369,6 +1379,13 @@ function armyMoveScore(state: GameState, actor: Side, from: RegionId, to: Region
   // unit marching off really does hand it over.
   if (garrisonWorthy(state, actor, from) && unitCount(state, from) < 2) {
     s -= (REGIONS[from]!.vp * 14 + 10) * (1 + 1.5 * enemyPressure(state, actor));
+  }
+  // …and the one unit that split leaves is itself only half a garrison beside an enemy
+  // Army that can storm it, which garrisonGap pays to top up. Charged here at the same
+  // rate, or the Shadow walked out of Angmar leaving one unit and straight back in to
+  // fill it, three Army dice in a row (self-play seed 3, turn 14).
+  if (actor === 'shadow' && garrisonWorthy(state, actor, from) && unitCount(state, from) === 2) {
+    s -= loneDefenderGap(state, from, actor) * (REGIONS[from]!.vp * 18 + 12) * (1 + 1.5 * enemyPressure(state, actor));
   }
   // The Free Peoples walking their Army out of a Stronghold with a Shadow Army within
   // two regions: the garrison split leaves one unit, which reads as "held" above but
