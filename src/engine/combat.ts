@@ -2097,7 +2097,11 @@ export function combatStep(state: GameState): void {
             for (const n of Object.keys(own.units) as Nation[]) elites += own.units[n]!.elite;
             const dice = Math.min(5, elites);
             if (dice <= 0) continue;
-            const target = side === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
+            // The card prints its own odds ("score one hit for each result of 5+"),
+            // so a siege or a City/Fortification does NOT push it to 6+ (Almanac
+            // p.45: "Hits are scored only on 5 or more") — unlike Charge / Sudden
+            // Strike, which roll at the normal odds (player report pdr0p7utegolu4dw).
+            const target = 5;
             const faces: number[] = [];
             const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= target) h++; } return h; });
             log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (after casualties): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`);
