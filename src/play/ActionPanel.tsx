@@ -53,7 +53,20 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   selectedDie?: DieFace | null; compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
-  const click = async (a: WotrAction) => { setBusy(true); try { await onAction(a); } finally { setBusy(false); } };
+  // An action held back by the Mordor guard (below) until the player confirms it.
+  const [held, setHeld] = useState<WotrAction | null>(null);
+  const send = async (a: WotrAction) => { setHeld(null); setBusy(true); try { await onAction(a); } finally { setBusy(false); } };
+  // Entering Mordor is only possible in the Fellowship phase (p.43), and both ending the
+  // phase and naming a new Guide (the phase's last act, p.38) close that window until
+  // next turn. At the table nobody forgets; on screen it was one line among several and
+  // a Guide change first quietly cost a whole turn (player reports kq8go7sm01b05hqx,
+  // 1a71ivyoeg7in1t4). So Enter Mordor gets its own prominent button, and either way
+  // of closing the phase without it asks once.
+  const mordor = actions.find((a) => a.kind === 'enterMordor');
+  const click = (a: WotrAction) => {
+    if (mordor && (a.kind === 'skipFellowshipPhase' || a.kind === 'changeGuide')) { setHeld(a); return; }
+    return send(a);
+  };
 
   if (gameOver) {
     return <div style={panel}><h3>Game over</h3><p>{view.winner === 'fp' ? 'Free Peoples win' : 'Shadow wins'} — {view.winReason}</p></div>;
@@ -78,7 +91,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
   // (player report 1v1g2y5x095p2m1n). They collapse into ONE button with the same
   // face picker the other ambiguous actions use.
   const allSkips = actions.filter((a) => a.kind === 'skipDie') as Extract<WotrAction, { kind: 'skipDie' }>[];
-  const live = actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie' && a !== finish);
+  const live = actions.filter((a) => a.kind !== 'pass' && a.kind !== 'skipDie' && a !== finish && a !== mordor);
   const reasonFor = new Map<WotrAction, string>(blocked.map((b) => [b.action, b.reason]));
   // Barred actions sort in with the real ones (same kind, same Nation order), so a
   // greyed "advance Rohan" sits where the player expects it, not in a footnote.
@@ -173,6 +186,23 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
           {finish ? finishLabel : 'Pass'}
         </button>
       )}
+      {mordor && (
+        <button disabled={busy} onClick={() => send(mordor)} data-testid="enter-mordor"
+          style={{ display: 'block', width: '100%', textAlign: 'center', margin: compact ? '0 0 3px' : '0 0 8px', padding: compact ? '3px 10px' : '9px 10px', borderRadius: 6, fontSize: compact ? 11 : 14, fontWeight: 700,
+            background: '#5a1f12', color: '#ffd0a0', border: '1px solid #b4502a', cursor: 'pointer' }}>
+          🌋 Enter Mordor
+        </button>
+      )}
+      {held && mordor && (
+        <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', margin: '4px 0', fontSize: 13 }}>
+          <div>⚑ The Fellowship has not entered Mordor. {held.kind === 'changeGuide' ? 'Naming a new Guide ends the Fellowship phase' : 'Ending the Fellowship phase now'} means it cannot enter until next turn.</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            <button disabled={busy} onClick={() => send(mordor)} style={{ ...btn, width: 'auto', margin: 0 }}>Enter Mordor first</button>
+            <button disabled={busy} onClick={() => send(held)} style={{ ...btn, width: 'auto', margin: 0 }}>{held.kind === 'changeGuide' ? 'Name the Guide anyway' : 'End the phase anyway'}</button>
+            <button disabled={busy} onClick={() => setHeld(null)} style={{ ...btn, width: 'auto', margin: 0 }}>Cancel</button>
+          </div>
+        </div>
+      )}
       {/* The Ents Awake rider: one Character Event playable without a die. Surface it — a
           player couldn't tell why a card was suddenly playable ("I didn't have an [E] or
           [C] die left... so I did"). A side-panel note beside the actions it explains, not
@@ -220,7 +250,7 @@ export function ActionPanel({ actions, onAction, onHover, yourTurn, gameOver, vi
       )}
       {/* Not when the big button is the move (e.g. "End the Fellowship phase" while the
           map banner asks for a declaration): "No actions." would be wrong. */}
-      {live.length === 0 && skips.length === 0 && boardHints.length === 0 && !chainNote && (!finish || !!boardPending) && (
+      {live.length === 0 && !mordor && skips.length === 0 && boardHints.length === 0 && !chainNote && (!finish || !!boardPending) && (
         boardPending
           ? <div style={{ color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '7px 10px', fontSize: 13 }}>⚑ {boardPending}</div>
           : <div style={{ color: '#999' }}>{sel ? `No ${faceLabel} actions — pick another die or Pass.` : 'No actions.'}</div>

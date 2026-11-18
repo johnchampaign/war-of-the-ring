@@ -1196,6 +1196,12 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   the phase's last act — after any declaration or Mordor entry (player report
   6d5b4l4o6b4a630x; earlier a Guide could be named first, and entering Mordor shut
   the phase before a Guide change).
+  **UI guard:** because both ending the phase and naming a Guide close the only window
+  to enter Mordor, the side panel shows *Enter Mordor* as its own prominent button
+  whenever it is legal, and asks once ("enter Mordor first / anyway / cancel") before
+  either would end the phase without it (player reports kq8go7sm01b05hqx,
+  1a71ivyoeg7in1t4: a Guide change first cost a turn). Display only; the rules are
+  unchanged.
 - **Balrog of Moria as a Combat card.** It may be discarded from the table to use its **Durin's Bane** Combat
   effect "as if you were playing the card from your hand" (Card Text Reference; player report
   221x631w3b3i4b1j) — offered in the Combat-card step whenever Durin's Bane's precondition holds.
