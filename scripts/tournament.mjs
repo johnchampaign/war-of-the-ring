@@ -14,6 +14,7 @@ import { REGIONS as REGIONSBYID } from '../src/engine/data.ts';
 import { chooseAction } from '../src/ai/wotrAI.ts';
 import { chooseActionEval } from '../src/ai/evalChooser.ts';
 import { chooseActionHumanlike } from '../src/ai/humanlikeFP.ts';
+import { chooseActionSearch, DEFAULT_SEARCH, searchStats } from '../src/ai/search.ts';
 
 const arg = (name, def) => {
   const i = process.argv.indexOf(name);
@@ -28,6 +29,8 @@ const GAMES = arg('--games', 300);
 // sample for A/Bs whose result sits near a threshold, so noise can be estimated
 // instead of guessed. Default 0 keeps every historic soak reproducible.
 const SEED_OFFSET = arg('--seed-offset', 0);
+// --per-game: print each seed's winner (for paired A/B comparisons).
+const PER_GAME = process.argv.includes('--per-game');
 const MAX_ACTIONS = 20000;
 // Controller per side: 'heuristic' (default), 'random', 'humanlike' (FP), or 'eval' (the 1-ply
 // evaluator — docs/ai-1ply-evaluator.md; ~50-100x slower per decision, so size
@@ -35,8 +38,15 @@ const MAX_ACTIONS = 20000;
 const CTRL = { fp: strArg('--fp', 'heuristic'), shadow: strArg('--shadow', 'heuristic') };
 // 'humanlike' (FP only): the scripted human-like yardstick — src/ai/humanlikeFP.ts,
 // docs/ai-humanlike-yardstick.md. Shadow changes must not lose ground against it.
+// 'search' (src/ai/search.ts): the heuristic's top candidates played out on shared
+// determinized copies; --search-cands/--search-samples/--search-horizon/--search-margin.
+const SEARCH = {
+  cands: arg('--search-cands', DEFAULT_SEARCH.cands), samples: arg('--search-samples', DEFAULT_SEARCH.samples),
+  horizon: arg('--search-horizon', DEFAULT_SEARCH.horizon), margin: arg('--search-margin', DEFAULT_SEARCH.margin),
+};
 const pick = (ctrl, state, actor, legal, rng) =>
   ctrl === 'random' ? rng.pick(legal)
+    : ctrl === 'search' ? chooseActionSearch(state, actor, legal, rng, SEARCH)
     : ctrl === 'eval' ? chooseActionEval(state, actor, legal, rng)
       : ctrl === 'humanlike' ? chooseActionHumanlike(state, actor, legal, rng)
         : chooseAction(state, actor, legal, rng);
@@ -150,6 +160,7 @@ for (let game = 0; game < GAMES; game++) {
   const result = wotrAdapter.result(state);
   fel.games++;
   fel.peakCorruption.push(peakCorr);
+  if (PER_GAME) console.log(`  game seed ${seed}: ${result ? result.winners[0] : 'none'} turn ${state.turn}`);
   if (result) { wins[result.winners[0]]++; turnCounts.push(state.turn); reasons[result.reason] = (reasons[result.reason] || 0) + 1; }
   else if (actions >= MAX_ACTIONS) { timeouts++; console.log(`  timeout: seed ${seed} hit ${MAX_ACTIONS} actions (turn ${state.turn}, phase ${state.phase}, pending ${state.pendingChoice?.kind ?? 'none'})`); }
 }
@@ -166,5 +177,6 @@ const favg = (xs) => (xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).to
 console.log(`  fellowship: Mordor entries ${fel.mordorEntries}/${fel.games} (mean turn ${favg(fel.entryTurns)}), heal-declares ${fel.healDeclares}, push-declares ${fel.pushDeclares} (mean progress ${favg(fel.progressAtPush)}), stalled pre-Mordor turns ${fel.stalledTurns}/${fel.preMordorTurns}, peak corruption ${favg(fel.peakCorruption)}`);
 
 const ok = stalls === 0 && illegals === 0 && timeouts === 0 && leaks === 0 && vanished === 0 && stranded === 0 && ghosts === 0 && (wins.fp + wins.shadow) === GAMES;
+if (CTRL.fp === 'search' || CTRL.shadow === 'search') console.log(`search ${JSON.stringify(SEARCH)}: ${JSON.stringify(searchStats)}`);
 console.log(ok ? '\nsoak OK — all games terminated cleanly' : '\nSOAK FAILED');
 process.exit(ok ? 0 : 1);

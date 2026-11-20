@@ -274,7 +274,35 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     const s = score(state, actor, a, target) + rng.next() * 0.5; // tiny noise for tie-breaks
     if (s > bestScore) { bestScore = s; best = a; }
   }
-  return oneWraith(state, actor, payWithEventDie(state, actor, maybeAttackRearguard(state, actor, maybeFitStack(state, actor, maybeSplitGarrison(state, actor, best))))); // hold a threatened origin; don't overstack
+  return refinePick(state, actor, best);
+}
+
+/** The refinements every picked action goes through: hold a threatened origin, don't
+ *  overstack, keep a rearguard, pay with an Event die, send one Wraith. */
+function refinePick(state: GameState, actor: Side, a: WotrAction): WotrAction {
+  return oneWraith(state, actor, payWithEventDie(state, actor, maybeAttackRearguard(state, actor, maybeFitStack(state, actor, maybeSplitGarrison(state, actor, a)))));
+}
+
+/** The search's candidate list (src/ai/search.ts): for an action-resolution decision,
+ *  the `k` best-scored actions, each refined exactly as `chooseAction` refines its
+ *  pick, best first, with `chooseAction`'s own pick always first. Null when the
+ *  decision is not one `score` ranks (a pending choice, the Hunt allocation, the
+ *  Fellowship phase): the search leaves those to the heuristic. */
+export function topCandidates(state: GameState, actor: Side, legal: WotrAction[], rng: Rng, k: number): WotrAction[] | null {
+  if (legal.length <= 1 || state.pendingChoice || state.phase === 'huntAllocation' || state.phase === 'fellowship') return null;
+  const target = campaignTarget(state, actor);
+  const scored = legal.map((a) => ({ a, s: score(state, actor, a, target) + rng.next() * 0.5 }));
+  scored.sort((x, y) => y.s - x.s);
+  const out: WotrAction[] = [];
+  const seen = new Set<string>();
+  for (const { a } of scored) {
+    if (out.length >= k) break;
+    const r = refinePick(state, actor, a);
+    const key = JSON.stringify(r);
+    if (seen.has(key)) continue;
+    seen.add(key); out.push(r);
+  }
+  return out;
 }
 
 /** Is `from` a VP Settlement of ours that a departing Army must not simply abandon?

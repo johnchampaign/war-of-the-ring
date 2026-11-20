@@ -1832,6 +1832,12 @@ function owePostActionDraw(state: GameState, actor: Side, palantir: boolean, gui
   else if (actor === 'fp' && guide) state.flags.actionEndDraw = { guideDeck: deck };
 }
 
+/** Search playouts only: apply an action IN PLACE (no clone). On a throw the state is
+ *  left half-applied, so a caller must discard it — never use this on a live game. */
+export function applyActionInPlace(state: GameState, action: WotrAction, actor: Side): void {
+  dispatch(state, action, actor);
+}
+
 export const wotrAdapter: GameAdapter<GameState, WotrAction, Side> = {
   schemaVersion: 2,
   applyAction(state, action, actor) {
