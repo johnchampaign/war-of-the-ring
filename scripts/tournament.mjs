@@ -15,6 +15,9 @@ import { chooseAction } from '../src/ai/wotrAI.ts';
 import { chooseActionEval } from '../src/ai/evalChooser.ts';
 import { chooseActionHumanlike } from '../src/ai/humanlikeFP.ts';
 import { chooseActionSearch, DEFAULT_SEARCH, searchStats } from '../src/ai/search.ts';
+import { chooseActionNet, DEFAULT_NET_PLAYER, netStats } from '../src/ai/netPlayer.ts';
+import { loadValueNet } from '../src/ai/valueNet.ts';
+import { readFileSync } from 'node:fs';
 
 const arg = (name, def) => {
   const i = process.argv.indexOf(name);
@@ -44,8 +47,18 @@ const SEARCH = {
   cands: arg('--search-cands', DEFAULT_SEARCH.cands), samples: arg('--search-samples', DEFAULT_SEARCH.samples),
   horizon: arg('--search-horizon', DEFAULT_SEARCH.horizon), margin: arg('--search-margin', DEFAULT_SEARCH.margin), oppMix: arg('--search-mix', 0), oppNoise: arg('--search-noise', 0),
 };
+// 'net' (src/ai/netPlayer.ts): one ply scored by a learned value net, --net FILE (from
+// scripts/train-value-net.mjs); --net-cands/--net-samples/--net-margin.
+const NET_FILE = strArg('--net', null);
+const NET = NET_FILE ? loadValueNet(JSON.parse(readFileSync(NET_FILE, 'utf8'))) : null;
+const NETOPT = {
+  cands: arg('--net-cands', DEFAULT_NET_PLAYER.cands), samples: arg('--net-samples', DEFAULT_NET_PLAYER.samples),
+  margin: arg('--net-margin', DEFAULT_NET_PLAYER.margin),
+};
+if ((CTRL.fp === 'net' || CTRL.shadow === 'net') && !NET) throw new Error("controller 'net' needs --net FILE");
 const pick = (ctrl, state, actor, legal, rng) =>
   ctrl === 'random' ? rng.pick(legal)
+    : ctrl === 'net' ? chooseActionNet(NET, state, actor, legal, rng, NETOPT)
     : ctrl === 'search' ? chooseActionSearch(state, actor, legal, rng, SEARCH)
     : ctrl === 'eval' ? chooseActionEval(state, actor, legal, rng)
       : ctrl === 'humanlike' ? chooseActionHumanlike(state, actor, legal, rng)
@@ -177,6 +190,7 @@ const favg = (xs) => (xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).to
 console.log(`  fellowship: Mordor entries ${fel.mordorEntries}/${fel.games} (mean turn ${favg(fel.entryTurns)}), heal-declares ${fel.healDeclares}, push-declares ${fel.pushDeclares} (mean progress ${favg(fel.progressAtPush)}), stalled pre-Mordor turns ${fel.stalledTurns}/${fel.preMordorTurns}, peak corruption ${favg(fel.peakCorruption)}`);
 
 const ok = stalls === 0 && illegals === 0 && timeouts === 0 && leaks === 0 && vanished === 0 && stranded === 0 && ghosts === 0 && (wins.fp + wins.shadow) === GAMES;
+if (CTRL.fp === 'net' || CTRL.shadow === 'net') console.log(`net ${NET_FILE} ${JSON.stringify(NETOPT)}: ${JSON.stringify(netStats)}`);
 if (CTRL.fp === 'search' || CTRL.shadow === 'search') console.log(`search ${JSON.stringify(SEARCH)}: ${JSON.stringify(searchStats)}`);
 console.log(ok ? '\nsoak OK — all games terminated cleanly' : '\nSOAK FAILED');
 process.exit(ok ? 0 : 1);
