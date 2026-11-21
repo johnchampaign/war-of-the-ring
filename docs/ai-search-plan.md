@@ -1,6 +1,6 @@
 # Sampled look-ahead search — plan and build log
 
-Status: **prototype, measuring** (direction chosen by John 2026-11-20). Code:
+Status: **prototype, measured: gains vs modelled opponents only** (direction chosen by John 2026-11-20). Code:
 `src/ai/search.ts`, `src/ai/valueModel.ts` + `valueWeights.json`,
 `scripts/fit-value.mjs`, `scripts/probe-search.mjs`. The shipped in-game AI is
 unchanged until an A/B shows a win on both seed families.
@@ -119,6 +119,47 @@ and a paired sign test over seeds whose winner changed
   8–15 points, so search beats the heuristic on both sides. The heuristic
   baseline was checked seed-for-seed against untouched `main`, which confirms
   the `topCandidates`/`refinePick` refactor changes nothing.
+
+- **2026-11-20, A/B 3 (Shadow searches vs the human-like FP, f1, paired):**
+  116 → 117, with flips +37 / −36 (z 0.12). **No gain.** The playouts model the
+  opponent as our own heuristic, so against the heuristic the search's
+  predictions are exact. Against anyone else they are wrong. Every tournament
+  bot is "anyone else", so the A/B 2 gains may be largely self-exploitation.
+  A/B 4 tests a mixed opponent model: on half the samples the FP plays the
+  human-like policy in the playouts (`--search-mix 0.5`). The 1-ply evaluator
+  FP (`--fp eval`) cannot serve as an independent test opponent: 4 games took 35
+  minutes, and it never entered Mordor.
+
+- **2026-11-21, A/B 4 (mixed opponent model, `--search-mix 0.5`, paired):**
+
+  | vs | heuristic Shadow | pure search | mixed search | mixed vs heuristic |
+  |---|---|---|---|---|
+  | human-like FP (f1) | 116 | 117 | **140** | +51 / −27, z 2.72 |
+  | heuristic FP (f2) | 76 | 102 | **97** | +52 / −31, z 2.31 |
+
+  Modelling the opponent drives the gain: once the human-like policy is in the
+  mix, the search beats it by +12 points, and it keeps most of its gain against
+  the heuristic (102 vs 97, z −0.63, noise). The human-like policy is now *in*
+  the model, though, so this is not yet a test against an unseen opponent.
+  A/B 5 asks that question. The playout opponent is the heuristic with noise
+  (half its decisions are uniform over its top 3; `--search-noise 0.5`), the
+  human-like policy is left out, and the test opponent is the human-like FP.
+
+- **2026-11-21, A/B 5 (noisy opponent model, `--search-noise 0.5`, paired):**
+  vs the human-like FP, which is now *unseen*: 116 → **129** (+47 / −34, z 1.44,
+  not significant). vs the heuristic: 76 → 82, well below the pure search's 102
+  (z −2.26). Against an opponent the search does not model, the gain is small
+  (~+6 points, unproven). A varied model is not a substitute for the right one.
+
+  **What A/Bs 1–5 say together.** The search gains a lot (+10 to +15 points)
+  against whichever policy the playouts use for the opponent, and little
+  against anything else. The playouts are only as good as the heuristic.
+  Against bots that play very differently, such as the tournament's Normal and
+  AlphaWOTR, expect a few points, not the 0/40 → competitive swing we want.
+  Closing that gap needs a stronger in-playout policy or opponent model: a
+  learned policy from self-play, or a benchmark opponent that plays unlike us.
+  The best setting for unknown opponents today is the mixed model
+  (`--search-mix 0.5`), because it covers two different policies.
 
 ## Next
 

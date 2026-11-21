@@ -42,7 +42,7 @@ const CTRL = { fp: strArg('--fp', 'heuristic'), shadow: strArg('--shadow', 'heur
 // determinized copies; --search-cands/--search-samples/--search-horizon/--search-margin.
 const SEARCH = {
   cands: arg('--search-cands', DEFAULT_SEARCH.cands), samples: arg('--search-samples', DEFAULT_SEARCH.samples),
-  horizon: arg('--search-horizon', DEFAULT_SEARCH.horizon), margin: arg('--search-margin', DEFAULT_SEARCH.margin),
+  horizon: arg('--search-horizon', DEFAULT_SEARCH.horizon), margin: arg('--search-margin', DEFAULT_SEARCH.margin), oppMix: arg('--search-mix', 0), oppNoise: arg('--search-noise', 0),
 };
 const pick = (ctrl, state, actor, legal, rng) =>
   ctrl === 'random' ? rng.pick(legal)

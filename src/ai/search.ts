@@ -25,6 +25,7 @@ import type { WotrAction } from '../adapter/wotrAction';
 import { wotrAdapter, applyActionInPlace } from '../adapter/wotrAdapter';
 import { deckOf, EVENT_BY_ID } from '../engine/data';
 import { chooseAction, topCandidates } from './wotrAI';
+import { chooseActionHumanlike } from './humanlikeFP';
 import { materializeView } from './simulate';
 import { value } from './valueModel';
 
@@ -39,6 +40,14 @@ export interface SearchOptions {
   margin: number;
   /** Optional wall-clock cap in ms (tournament play); A/Bs use fixed samples for determinism. */
   budgetMs?: number;
+  /** Opponent-model mix: on this fraction of samples a Free Peoples opponent plays the
+   *  human-like policy (humanlikeFP.ts) in the playouts instead of the heuristic, so the
+   *  search does not just exploit a copy of itself. Shadow searches only. */
+  oppMix?: number;
+  /** Opponent noise: in the playouts the opponent, on this fraction of its decisions,
+   *  picks uniformly among its heuristic top 3 instead of the top 1 — a varied opponent
+   *  model that names no particular policy. */
+  oppNoise?: number;
 }
 
 export const DEFAULT_SEARCH: SearchOptions = { cands: 4, samples: 24, horizon: 1, margin: 0.03 };
@@ -82,7 +91,18 @@ const PLAYOUT_GUARD = 4000;
 
 /** Play `sim` forward in place on the heuristic until the start of `stopTurn` or the
  *  game's end. False if the engine refused a step (the copy is then unusable). */
-function playout(sim: GameState, stopTurn: number, rng: Rng): boolean {
+interface OppModel { humanlikeFp: boolean; side: Side; noise: number }
+
+function opponentPick(sim: GameState, who: Side, legal: WotrAction[], rng: Rng, m: OppModel): WotrAction {
+  if (m.humanlikeFp && who === 'fp') return chooseActionHumanlike(sim, who, legal, rng);
+  if (m.noise && rng.next() < m.noise) {
+    const top = topCandidates(sim, who, legal, rng, 3);
+    if (top && top.length > 1) return top[rng.int(top.length)]!;
+  }
+  return chooseAction(sim, who, legal, rng);
+}
+
+function playout(sim: GameState, stopTurn: number, rng: Rng, m: OppModel): boolean {
   let n = 0;
   while (!sim.winner && n++ < PLAYOUT_GUARD) {
     if (sim.turn >= stopTurn && sim.phase === 'fellowship' && !sim.pendingChoice) return true;
@@ -90,7 +110,8 @@ function playout(sim: GameState, stopTurn: number, rng: Rng): boolean {
     if (!who) return false;
     const legal = wotrAdapter.legalActions(sim, who);
     if (!legal.length) return false;
-    try { applyActionInPlace(sim, chooseAction(sim, who, legal, rng), who); } catch { return false; }
+    const pick = who === m.side ? opponentPick(sim, who, legal, rng, m) : chooseAction(sim, who, legal, rng);
+    try { applyActionInPlace(sim, pick, who); } catch { return false; }
     if (sim.log.length > 64) sim.log.splice(0, sim.log.length - 16);
   }
   return !!sim.winner;
@@ -112,11 +133,15 @@ export function searchScores(state: GameState, actor: Side, legal: WotrAction[],
     if (opts.budgetMs && i >= 4 && Date.now() - t0 > opts.budgetMs) break;
     const seed = rng.int(0x7fffffff);
     const det = determinize(state, actor, seed);
+    const m: OppModel = {
+      side: actor === 'fp' ? 'shadow' : 'fp', noise: opts.oppNoise ?? 0,
+      humanlikeFp: actor === 'shadow' && !!opts.oppMix && new Rng(seed ^ 0x1b873593).next() < opts.oppMix,
+    };
     const vals: (number | null)[] = cands.map((c) => {
       const sim = clone(det);
       try { applyActionInPlace(sim, c, actor); } catch { return null; }
       searchStats.playouts++;
-      return playout(sim, stopTurn, new Rng(seed ^ 0x68e31da4)) ? value(sim, actor) : null;
+      return playout(sim, stopTurn, new Rng(seed ^ 0x68e31da4), m) ? value(sim, actor) : null;
     });
     // Common random numbers: a sample counts only if every candidate finished on it,
     // so all means are over the same samples.
