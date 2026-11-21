@@ -147,7 +147,37 @@ Building CWOTR here takes local Makefile copies:
   - At margin 0.02 the net overruled half of the decisions it saw, and lost. At
     0.08 it was neutral. A better predictor of the winner is not yet a better
     judge *between candidate moves*.
-  - Next: `net0b`. 100k games, 40% of positions (`--sample`), h1 64, L2 1e-4.
+  - `net0b`: 100k games, 40% of positions, h1 64, L2 1e-4. Held-out 0.645, and
+    no longer overfitting (train 0.60). Margin 0.08:
+
+    | player | vs | heuristic | `net0b` | z |
+    |---|---|---|---|---|
+    | net Shadow | human-like FP | 116 | 109 | −0.73 |
+    | net FP | heuristic Shadow | 114 | 118 | 0.43 |
+    | net Shadow | heuristic FP | 86 | 99 | 1.52 |
+
+    Neutral within noise. **Iteration 0 gives no player gain.**
+  - Generating iteration 1 with the net player costs ~6 s/game, so ~17 h per
+    10k games on one core. With no gain from iteration 0, the loop is parked.
+- **2026-11-21, where the leaders differ (`scripts/protocol-agree.mjs`).** At
+  Normal's (1st place) decisions in the tournament logs, our heuristic picks the
+  same option 42% of the time as FP and 24% as Shadow.
+  - Shadow, commonest differences:
+    - Normal recruits with Muster dice where we take Voice of Saruman.
+    - Normal puts **1** Hunt die where we put 2.
+    - Normal draws a card where we play one.
+  - FP, commonest differences:
+    - Normal draws where we play.
+    - Normal recruits.
+    - Normal **declares** where we end the Fellowship phase.
+    - Normal uses Elven Rings.
+
+  These are hypotheses for heuristic A/Bs, measured against both yardsticks and
+  CWOTR. They do not show that Normal is right at each decision.
+
+  The tool also found a client bug: with no die named, the client took the first
+  matching die, often a Will of the West. It now pays as our engine does: plain
+  face, then Army/Muster, Will last.
 - **2026-11-21:** CWOTR built and training locally: 400 iterations × 320 games,
   2 threads. The client plays it end to end. First games, against the *untrained*
   CWOTR (`prior`, its strategy-guide formula), went to the Shadow almost every

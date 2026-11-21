@@ -242,7 +242,11 @@ const dieOk = (o: Opt, die: string | undefined): boolean => !die || o.face === N
 const useDie = (d: Decision, die: string | undefined, action: string | string[], extra: (o: Opt) => boolean = () => true): Opt | undefined => {
   const acts = Array.isArray(action) ? action : [action];
   const ok = (o: Opt): boolean => o.kind === 'use_die' && acts.includes(o.action) && extra(o);
-  return d.options.find((o) => ok(o) && dieOk(o, die)) ?? d.options.find(ok);
+  if (die) return d.options.find((o) => ok(o) && dieOk(o, die)) ?? d.options.find(ok);
+  // No die named: pay as our engine does (consumeArmyDie etc.) — the plain face first,
+  // then Army/Muster, a Will of the West die last (it can pay for anything).
+  const rank = (o: Opt): number => (o.face === 'WILL_OF_THE_WEST' ? 2 : o.face === 'ARMY_MUSTER' ? 1 : 0);
+  return d.options.filter(ok).sort((a, b) => rank(a) - rank(b) || acts.indexOf(a.action) - acts.indexOf(b.action))[0];
 };
 const find = (d: Decision, f: (o: Opt) => boolean): Opt | undefined => d.options.find(f);
 
