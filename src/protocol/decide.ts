@@ -169,14 +169,36 @@ function fromPending(ctx: BotContext, d: Decision, view: View): Opt | undefined 
   (st as any).pendingChoice = data === undefined ? { owner: ctx.side, kind } : { owner: ctx.side, kind, data };
   st.currentPlayer = ctx.side;
   const legal = wotrAdapter.legalActions(st, ctx.side);
+  if (process.env.WOTR_BOT_DEBUG) console.error('pending', d.kind, JSON.stringify(d.context), 'legal', JSON.stringify(legal).slice(0, 300), 'options', JSON.stringify(d.options.map((o) => o.kind)));
   if (!legal.length) return undefined;
-  const a: any = ctx.chooser(st, ctx.side, legal, ctx.rng);
+  return askUntilMatched(ctx, st, legal, (a) => matchPending(a, d));
+}
+
+function matchPending(a: any, d: Decision): Opt | undefined {
   const k = (kk: string, f: (o: Opt) => boolean = () => true): Opt | undefined => d.options.find((o) => o.kind === kk && f(o));
   switch (a.kind) {
     case 'discardCard': return k('discard', (o) => N.card(o.card) === a.card);
     case 'revealMove': return k('reveal', (o) => N.region(o.region) === a.target);
-    case 'huntDamage': return a.mode === 'corruption' ? k('corruption') : a.mode === 'guide' ? k('guide') : a.mode === 'random' ? k('random') : undefined;
+    case 'huntDamage':
+      if (a.mode === 'reduceSeparate' || a.mode === 'reduceReveal') return k('guide_ability');
+      if (a.mode === 'reduceCard') return k('card_choice', (o) => N.card(o.target_card ?? '') === a.card);
+      return k(a.mode);
     case 'guideChoice': return k('guide', (o) => N.character(o.character) === a.companion);
+  }
+  return undefined;
+}
+
+/** Ask our chooser; when its pick is not among the referee's options, take it out and ask
+ *  again (our next choice), up to 4 times. The referee's list is the truth (SPEC §1). */
+function askUntilMatched(ctx: BotContext, st: GameState, legal: WotrAction[], match: (a: WotrAction) => Opt | undefined, onPick?: (a: WotrAction) => void): Opt | undefined {
+  let left = legal;
+  for (let tries = 0; tries < 4 && left.length; tries++) {
+    const a = ctx.chooser(st, ctx.side, left, ctx.rng);
+    const o = match(a);
+    if (o) { if (tries) bump(ctx, 'retried'); onPick?.(a); return o; }
+    bump(ctx, `unmatched:${a.kind}`);
+    const key = JSON.stringify(a);
+    left = left.filter((x) => JSON.stringify(x) !== key);
   }
   return undefined;
 }
@@ -190,11 +212,14 @@ function fromEngine(ctx: BotContext, d: Decision, view: View): Opt | undefined {
   const det = determinize(st, ctx.side, ctx.rng.int(0x7fffffff));
   const legal = wotrAdapter.legalActions(det, ctx.side);
   if (!legal.length) { bump(ctx, 'noLegal'); return rule(d, view); }
-  const a = ctx.chooser(det, ctx.side, legal, ctx.rng);
-  const o = matchAction(ctx, a, d);
-  if (!o) { bump(ctx, `unmatched:${a.kind}`); return rule(d, view); }
-  bump(ctx, `matched:${a.kind}`);
-  try { applyActionInPlace(det, a, ctx.side); ctx.after = det; } catch { ctx.after = null; }
+  let picked: WotrAction | null = null;
+  const o = askUntilMatched(ctx, det, legal, (a) => { ctx.plan = []; return matchAction(ctx, a, d); }, (a) => { picked = a; });
+  if (!o || !picked) {
+    if (d.kind === 'FELLOWSHIP_PHASE') return d.options.find((x) => x.kind === 'done') ?? rule(d, view);
+    return rule(d, view);
+  }
+  bump(ctx, `matched:${(picked as WotrAction).kind}`);
+  try { applyActionInPlace(det, picked, ctx.side); ctx.after = det; } catch { ctx.after = null; }
   return o;
 }
 
@@ -203,11 +228,11 @@ function followUp(ctx: BotContext, d: Decision): Opt | undefined {
   if (!s.pendingChoice || wotrAdapter.currentActor(s) !== ctx.side) return undefined;
   const legal = wotrAdapter.legalActions(s, ctx.side);
   if (!legal.length) return undefined;
-  const a = ctx.chooser(s, ctx.side, legal, ctx.rng);
-  const o = matchAction(ctx, a, d);
-  if (!o) { bump(ctx, `unmatchedFollow:${a.kind}`); return undefined; }
-  bump(ctx, `follow:${a.kind}`);
-  try { applyActionInPlace(s, a, ctx.side); } catch { ctx.after = null; }
+  let picked: WotrAction | null = null;
+  const o = askUntilMatched(ctx, s, legal, (a) => { ctx.plan = []; return matchAction(ctx, a, d); }, (a) => { picked = a; });
+  if (!o || !picked) return undefined;
+  bump(ctx, `follow:${(picked as WotrAction).kind}`);
+  try { applyActionInPlace(s, picked, ctx.side); } catch { ctx.after = null; }
   return o;
 }
 
@@ -397,6 +422,14 @@ function rule(d: Decision, view: View): Opt | undefined {
       return k('corruption') ?? O[0];
     }
     case 'DISCARD_EXCESS_CARD': return O[O.length - 1];
+    case 'CARD_CHOICE': {
+      // a card already chosen by our AI asks for a detail: take the stronger figure,
+      // act rather than skip, and the fewest self-inflicted hits
+      const cc = O.filter((o) => o.kind === 'card_choice');
+      return cc.find((o) => o.answer === 'ELITE')
+        ?? (cc.some((o) => typeof o.count === 'number' && /hits/.test(d.context?.question ?? '')) ? cc.reduce((m, o) => (o.count < m.count ? o : m)) : undefined)
+        ?? cc.find((o) => !o.skip) ?? O[0];
+    }
     default: return O[0];
   }
 }

@@ -110,6 +110,44 @@ Building CWOTR here takes local Makefile copies:
 
 ## Build log
 
+- **2026-11-21, vs CWOTR (trained locally, 400 × 320 games), 60 seeds, our side
+  alternating:**
+
+  | our bot | as FP | as Shadow | total |
+  |---|---|---|---|
+  | heuristic, client v1 | 14/30 | 27/30 | 41/60 |
+  | heuristic, client v2 | **21/30** | 26/30 | 47/60 |
+  | search `--search-mix 0.5`, client v2 | 22/30 | 20/30 | 42/60 |
+
+  The client changes from v1 to v2 count (FP z 2.11):
+  - Hunt-damage reductions are mapped.
+  - An unmatched pick asks our AI for its next choice instead of taking option 0.
+  - The Fellowship phase falls back to `done`.
+  - Card questions get defaults.
+
+  Against an opponent it does not model, the playout search did not help: 47 → 42
+  overall, z −1.09; as Shadow z −1.90. This is the same verdict as A/B 5 in
+  `ai-search-plan.md`. Our local CWOTR is weaker than the tournament's (that one
+  drew 20–20 with us), but it is an honest yardstick that is not us.
+- **2026-11-21, iteration 0 (`net0`: 40k noisy-heuristic games, 1.1M positions,
+  h1 128):**
+  - Held-out log-loss was 0.629 against a base rate of 0.693, after the first
+    epoch. Every later epoch overfit: train 0.48, held-out up to 0.81. With 40k
+    games of labels the net memorises games, not positions.
+  - Paired A/Bs:
+
+    | player | vs | heuristic | `net0` |
+    |---|---|---|---|
+    | net Shadow (margin 0.02) | heuristic FP | 86 | 87 |
+    | net Shadow (margin 0.02) | human-like FP | 116 | 93 (z −2.41) |
+    | net FP (margin 0.02) | heuristic Shadow | 114 | 98 (z −1.62) |
+    | net Shadow (margin 0.08) | human-like FP | 116 | 107 |
+    | net FP (margin 0.08) | heuristic Shadow | 114 | 114 |
+
+  - At margin 0.02 the net overruled half of the decisions it saw, and lost. At
+    0.08 it was neutral. A better predictor of the winner is not yet a better
+    judge *between candidate moves*.
+  - Next: `net0b`. 100k games, 40% of positions (`--sample`), h1 64, L2 1e-4.
 - **2026-11-21:** CWOTR built and training locally: 400 iterations × 320 games,
   2 threads. The client plays it end to end. First games, against the *untrained*
   CWOTR (`prior`, its strategy-guide formula), went to the Shadow almost every

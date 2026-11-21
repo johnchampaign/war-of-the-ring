@@ -18,23 +18,32 @@ const OUT = opt('--out', 'value-net.json');
 const EPOCHS = Number(opt('--epochs', 6)), H1 = Number(opt('--h1', 128)), H2 = Number(opt('--h2', 32));
 const LR = Number(opt('--lr', 0.001)), B = Number(opt('--batch', 1024)), L2 = Number(opt('--l2', 1e-5));
 const INIT = opt('--init', null);
+const SAMPLE = Number(opt('--sample', 1));
 const files = args.filter((a) => !a.startsWith('--'));
 if (!files.length) throw new Error('no data files');
 
 const REC = INPUT_SIZE + 4;
-// Read every file straight into one buffer (a concat would briefly hold the corpus twice).
+// Read every file into one buffer (a concat would briefly hold the corpus twice).
+// --sample P keeps each position with probability P (a fixed hash of its index, so the
+// same run keeps the same positions): it bounds memory and thins positions of one game.
 const sizes = files.map((f) => statSync(f).size);
 for (const [i, n] of sizes.entries()) if (n % REC) throw new Error(`${files[i]}: size ${n} is not a multiple of ${REC}`);
-const data = Buffer.allocUnsafe(sizes.reduce((a, b) => a + b, 0));
+const keep = (fi, r) => SAMPLE >= 1 || (((Math.imul(fi * 1000003 + r, 0x9e3779b1) >>> 0) / 4294967296) < SAMPLE);
+const counts = sizes.map((n, fi) => { let k = 0; for (let r = 0; r < n / REC; r++) if (keep(fi, r)) k++; return k; });
+const data = Buffer.allocUnsafe(counts.reduce((a, b) => a + b, 0) * REC);
 let off = 0;
-for (const [i, f] of files.entries()) {
+const CH = 4096 * REC, chunk = Buffer.allocUnsafe(CH);
+for (const [fi, f] of files.entries()) {
   const fd = openSync(f, 'r');
-  for (let got = 0; got < sizes[i];) got += readSync(fd, data, off + got, sizes[i] - got, got);
+  for (let pos = 0, r = 0; pos < sizes[fi];) {
+    const n = readSync(fd, chunk, 0, Math.min(CH, sizes[fi] - pos), pos);
+    for (let q = 0; q + REC <= n; q += REC, r++) if (keep(fi, r)) { chunk.copy(data, off, q, q + REC); off += REC; }
+    pos += n;
+  }
   closeSync(fd);
-  off += sizes[i];
 }
 const N = data.length / REC;
-const lastN = sizes[sizes.length - 1] / REC;
+const lastN = counts[counts.length - 1];
 const nVal = Math.floor(lastN * 0.1);
 const valStart = N - nVal;
 console.log(`${N} positions from ${files.length} files; training ${valStart}, held out ${nVal}`);
