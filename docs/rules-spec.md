@@ -895,6 +895,17 @@ chosen as casualties/advance) (p.28). All defenders are always in the battle.
   … thus the Shadow player doesn't get a chance to resolve the effects of their
   Combat card. That's the expected behavior, but now Dread and Despair resolved
   first." `scripts/probe-siege-destination-and-initiative.mjs`.
+  *Scouts* has two halves — "retreat your Army to an adjacent free region **or
+  withdraw into a siege**" (Card Text Reference; Almanac, Scouts: "The Free Peoples
+  Army may play this card to retreat into a Stronghold instead of to a different
+  region"). The second was missing: an Army that stood in the open before its own
+  unbesieged Stronghold now has that Stronghold among the destinations (clicked on
+  the map, the battle's own region), and the Shadow then decides whether to advance
+  and besiege, as with any withdrawal (p.31). With neither a free region nor a
+  Stronghold the card is **still playable** — its "Play if" asks only for a Free
+  Peoples Army defending in a field battle — and does nothing; the button says so
+  ("nowhere to retreat, so it would do nothing") rather than hiding the card (report
+  ngqb3corp8eecwqf). `scripts/probe-triage-1122.mjs`.
 
 ### Fortifications & Cities (p.31)
 First combat round only: attacker hits on **6+** (instead of 5+). Then normal.

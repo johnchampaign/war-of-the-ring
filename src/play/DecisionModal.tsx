@@ -13,7 +13,8 @@ import { RollRow, CardRollRows } from './combatDice';
 import { NoticeText } from './NoticePopup';
 import { CardZoom } from './HandStrip';
 import type { GameState, Side, Nation } from '../engine/types';
-import { eliteHasReplacement } from '../engine/combat';
+import { eliteHasReplacement, preCombatRetreatBlocked } from '../engine/combat';
+import { combatModsFor } from '../engine/combatCards';
 import type { WotrAction } from '../adapter/wotrAction';
 import mapData from '../../assets/map.json';
 import { characterSide, nationName, sideOfNation } from '../engine/data';
@@ -458,6 +459,11 @@ function eliteLabel(a: WotrAction, view: GameState): string | undefined {
   // Name the Companion the Lure would claim (player report 54406l4k1y6d5f0b).
   const lured = (view.pendingChoice?.data as { companion?: string } | undefined)?.companion;
   if (a.kind === 'lureChoice' && a.mode === 'eliminate' && lured) return `Eliminate ${charName(lured)}`;
+  // Scouts with nowhere to go: still playable (its "Play if" is met), but say what
+  // it will do — nothing (player report ngqb3corp8eecwqf).
+  if (a.kind === 'playCombatCard' && a.cardId && combatModsFor(a.cardId)?.retreatBeforeCombat && preCombatRetreatBlocked(view, owner)) {
+    return `${describeAction(a)} — nowhere to retreat, so it would do nothing`;
+  }
   if (a.kind === 'casualtyStep' && a.step === 'reduceElite' && !eliteHasReplacement(view, a.nation, owner)) {
     return `Lose a ${nationName(a.nation)} Elite (no Regular left to replace it)`;
   }

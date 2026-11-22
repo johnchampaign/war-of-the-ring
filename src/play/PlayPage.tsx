@@ -1360,6 +1360,8 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
                     ? 'The Eagles are Coming! — click a highlighted Sauron Stronghold to fly the surviving Nazgûl there.'
                     : isRetreatPick
                     ? `Retreating — click a highlighted region to fall back there. Only regions free of enemy troops and enemy Settlements can be retreated into.`
+                      + (g.view.pendingCombat && retreatActs.some((a) => a.kind === 'preCombatRetreat' && a.region === g.view!.pendingCombat!.to)
+                        ? ` Or click ${regionName(g.view.pendingCombat.to)} itself to withdraw into the Stronghold.` : '')
                     : isPlaceGandalf
                     ? 'Gandalf the White returns — click a highlighted region to place him there.'
                     : placeActs.length > 0

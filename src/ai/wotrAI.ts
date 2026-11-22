@@ -2140,8 +2140,12 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     }
     case 'preCombatRetreat': { // Scouts: retreat toward a friendly Settlement if possible
       const me: Side = state.pendingChoice!.owner;
-      const friendly = legal.find((a) => a.kind === 'preCombatRetreat' && settlementCtrl(state, a.region) === me);
-      return friendly ?? legal[0]!;
+      // The battle region itself is "withdraw into the Stronghold" — only when there
+      // is no region to fall back to (keeps the choice it made before that was offered).
+      const here = state.pendingCombat?.to;
+      const away = legal.filter((a) => a.kind === 'preCombatRetreat' && a.region !== here);
+      const friendly = away.find((a) => a.kind === 'preCombatRetreat' && settlementCtrl(state, a.region) === me);
+      return friendly ?? away[0] ?? legal[0]!;
     }
     case 'heroicDeath': {
       // If the hits would destroy the Army, sacrifice whoever saves it (a Leader

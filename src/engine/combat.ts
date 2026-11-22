@@ -929,6 +929,29 @@ function strongholdWithdrawAvailable(state: GameState, pc: PendingCombat): boole
   return unitCount(state, pc.to) > 0;                           // somebody left to fall back
 }
 
+/** Where a pre-combat retreat (Scouts) can take `side`'s Army: the free adjacent
+ *  regions and — for a defender standing in the open before its own unbesieged
+ *  Stronghold — that Stronghold itself, listed as the battle region. The card reads
+ *  "retreat your Army to an adjacent free region or withdraw into a siege" (Card Text
+ *  Reference); Almanac, Scouts: "The Free Peoples Army may play this card to retreat
+ *  into a Stronghold instead of to a different region." The siege half used to be
+ *  missing (found on report ngqb3corp8eecwqf). */
+function preCombatRetreatOptions(state: GameState, pc: PendingCombat, side: Side): RegionId[] {
+  const own = side === pc.attacker ? pc.from : pc.to;
+  const dests = freeAdjacentRegions(state, own, side);
+  if (side === pc.defender && strongholdWithdrawAvailable(state, pc)) dests.push(own);
+  return dests;
+}
+
+/** True when `side` has a battle on and a pre-combat retreat card (Scouts) would find
+ *  nowhere to go — no free adjacent region and no Stronghold to fall back into. The
+ *  card may still be played (its "Play if" is met), so the UI says so on the button
+ *  instead of hiding it (report ngqb3corp8eecwqf). */
+export function preCombatRetreatBlocked(state: GameState, side: Side): boolean {
+  const pc = state.pendingCombat;
+  return !!pc && preCombatRetreatOptions(state, pc, side).length === 0;
+}
+
 /** Begin a battle: political reactions, then set up the sub-machine. The driver
  *  (combatStep, run from advance) takes it from here. */
 export function startBattle(state: GameState, attacker: Side, from: RegionId, to: RegionId,
@@ -1081,8 +1104,9 @@ function outrunByPreCombatRetreat(state: GameState, pc: PendingCombat, side: Sid
   });
   if (!foeMods?.retreatBeforeCombat) return false;
   // Only a retreat that can actually happen ends the battle: with no free adjacent
-  // region the card does nothing and the round is fought out as normal.
-  if (freeAdjacentRegions(state, foeIsAttacker ? pc.from : pc.to, foeSide).length === 0) return false;
+  // region (and no Stronghold to withdraw into) the card does nothing and the round
+  // is fought out as normal.
+  if (preCombatRetreatOptions(state, pc, foeSide).length === 0) return false;
   const ini = cardInitiative(own), foeIni = cardInitiative(foeCard);
   return foeIni < ini || (foeIni === ini && foeSide === pc.defender);
 }
@@ -1127,7 +1151,7 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
     const ownForce = ef.side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
     if (forceUnitCount(ownForce) === 0) continue; // owner already left/wiped by an earlier pre-effect
     if (ef.mods.retreatBeforeCombat) {
-      const dests = freeAdjacentRegions(state, own, ef.side);
+      const dests = preCombatRetreatOptions(state, pc, ef.side);
       // Let the owner CHOOSE the destination (rulebook: retreat is the retreating
       // player's choice) — a click even for a single one (report 364t5b2j0o3h3h16).
       // Only the simple single-effect case is interactive; a rare retreat+pre-attack
@@ -1138,6 +1162,9 @@ function resolvePreCombat(state: GameState, pc: PendingCombat, aMods: CombatMods
         return true; // pause; resolvePreCombatRetreat resumes
       }
       const dest = dests[0] ?? null;
+      // Nowhere but the Stronghold: withdraw into the siege (the attacker then decides
+      // whether to advance and besiege — resolveSiegeWithdraw asks).
+      if (dest === own) { log(state, null, 'combat', `${preCardTitle(ef.side)}: ${sideDoes(ef.side, 'withdraw')} into the Stronghold before combat`); resolveSiegeWithdraw(state, true); return true; }
       if (dest) { noteWithdrawal(state, pc, ef.side); moveStack(state, own, dest, ef.side, true, true); log(state, null, 'combat', `${sideDoes(ef.side, 'retreat')} ${own}→${dest} before combat`); }
       // Say so when there is nowhere to go, where the retreat line would have been
       // (player report 1nsn7gf4r95r03t8).
@@ -1200,7 +1227,7 @@ export const preCombatRetreatDestinations = (state: GameState): RegionId[] => {
   const pc = state.pendingCombat;
   if (!pc?.preCombatRetreatFrom) return [];
   const side = armySide(state, pc.preCombatRetreatFrom);
-  return side ? freeAdjacentRegions(state, pc.preCombatRetreatFrom, side) : [];
+  return side ? preCombatRetreatOptions(state, pc, side) : [];
 };
 
 /** Resolve the chosen pre-combat retreat destination. Moves the whole Army there;
@@ -1212,8 +1239,16 @@ export function resolvePreCombatRetreat(state: GameState, region: RegionId): voi
   delete pc.preCombatRetreatFrom;
   if (!from) return;
   const side = armySide(state, from);
-  const dests = freeAdjacentRegions(state, from, side!);
+  const dests = preCombatRetreatOptions(state, pc, side!);
   const dest = dests.includes(region) ? region : dests[0];
+  // The battle region itself = "withdraw into a siege": the Army goes into its
+  // Stronghold and the attacker decides whether to advance and besiege (p.31).
+  if (dest === from) {
+    const title = pc.defenderCard ? (EVENT_BY_ID[pc.defenderCard]?.combat?.title ?? 'Scouts') : 'Scouts';
+    log(state, null, 'combat', `${title}: ${sideDoes(side!, 'withdraw')} into the Stronghold before combat`);
+    resolveSiegeWithdraw(state, true);
+    return;
+  }
   if (dest) { noteWithdrawal(state, pc, side!); moveStack(state, from, dest, side!, true, true); log(state, null, 'combat', `${sideDoes(side!, 'retreat')} ${from}→${dest} before combat`); }
 }
 
