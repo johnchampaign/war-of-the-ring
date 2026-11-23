@@ -8,6 +8,7 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "tournament": "vite-node scripts/tournament.mjs",
+    "prebuild": "node scripts/check-install.mjs",
     "build": "node scripts/copy-dev-assets.mjs && vite build && node scripts/strip-images-from-dist.mjs",
     "build:with-art": "vite build",
     "preview": "vite preview",
