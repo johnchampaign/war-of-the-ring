@@ -625,6 +625,8 @@ register('sh-char-12', { // Morgul Wound: +2 if corruption ≤3 else +1; require
 register('sh-char-18', {
   canPlay: (state) => state.dice.shadow.some((f) => f !== 'eye'),
   repeat: 3,
+  // "Up to three": none at all too, while following (the followed game offers it; followOptions.noEffectChoices).
+  optionalFromStart: () => followOptions.noEffectChoices,
   targets: (state, _side, applied = []) => {
     if (applied.length >= 3) return [];
     const faces = [...new Set(state.dice.shadow.filter((f) => f !== 'eye'))];

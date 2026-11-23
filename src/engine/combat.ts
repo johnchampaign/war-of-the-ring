@@ -1860,7 +1860,11 @@ export function combatStep(state: GameState): void {
         //    when the enemy DEFENDS — tied initiatives resolve the defender's card first;
         //  - Shield-wall / Heroic Death cancel at initiative 6, so they never matter here.
         // The bonus hit is then part of what the enemy's initiative-6 cards see.
-        const { atk: aMum, def: dMum } = outscoreBonusHits(aMods, dMods, atkHits, defHits, aRoll, dRoll);
+        // While following (followOptions.printedCardRolls): "more total hits than your opponent (including hits from any
+        // Free Peoples pre-Combat attack from a Combat card)", as Mûmakil's text counts them.
+        const preHits = (side: Side) => !followOptions.printedCardRolls ? 0
+          : (pc.cardRolls ?? []).filter((r) => r.side === side && r.when === 'before' && r.round === pc.round).reduce((n, r) => n + r.hits, 0);
+        const { atk: aMum, def: dMum } = outscoreBonusHits(aMods, dMods, atkHits + preHits(pc.attacker), defHits + preHits(pc.defender), aRoll, dRoll);
         const dCancel = cancelFor(dMods, atkHits + aMum);
         const aCancel = cancelFor(aMods, defHits + dMum);
         let atk = Math.max(0, atkHits + aMum - dCancel);
@@ -2086,7 +2090,8 @@ export function combatStep(state: GameState): void {
             for (const n of Object.keys(own.units) as Nation[]) elites += own.units[n]!.elite;
             const dice = Math.min(5, elites);
             if (dice <= 0) continue;
-            const target = side === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
+            // (While following: the card's printed "5+", as the followed game rolls it; followOptions.printedCardRolls.)
+            const target = !followOptions.printedCardRolls && side === pc.attacker && (pc.siege || (pc.fortified && pc.round === 0)) ? 6 : 5;
             const faces: number[] = [];
             const hits = withRng(state, (rng) => { let h = 0; for (let i = 0; i < dice; i++) { const d = rng.rollDie(6); faces.push(d); if (d >= target) h++; } return h; });
             log(state, null, 'combat', `${side === 'fp' ? 'Free Peoples' : 'Shadow'} additional attack (after casualties): [${faces.join(' ')}] on ${target}+ → ${hits} hit${hits === 1 ? '' : 's'}`);

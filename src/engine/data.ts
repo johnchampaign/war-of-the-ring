@@ -129,6 +129,8 @@ export const STARTING_COMPANIONS: string[] = Object.entries(COMPANIONS)
  *   two or more hits to take (this engine then offers only its removal for two).
  * - noEffectChoices: a card's choice that changes nothing is offered too (Wisdom of Elrond's Nation At War already),
  *   as the followed game offers every option.
+ * - printedCardRolls: Combat cards' rolls as their texts say: We Come to Kill's attack hits on 5+ (not at the round's
+ *   odds), Mûmakil's "more total hits" counts the pre-Combat attacks' hits.
  * - revealStrongholds: the Shadow Strongholds the followed game's reveal path passed (one Hunt tile each), or null
  *   (this engine's own least-harm route; set only while applying that reveal).
  * - playAsPlayed: an Event card the followed game played is played here too, whatever this engine's own conditions
@@ -136,8 +138,8 @@ export const STARTING_COMPANIONS: string[] = Object.entries(COMPANIONS)
  */
 export const followOptions: {
   askEveryCombatCard: boolean; ownSideLeadership: boolean; scoutsIntoSiege: boolean; sarumanRecruitIn: string[] | null;
-  nazgulStrikeAsPrinted: boolean; rageStacksAfter: boolean; everyNazgul: boolean; forfeitedLeadership: { side: string; n: number } | null; countedRecruits: boolean; musterOverLimit: boolean; selfHitsAll: boolean; dreadfulFrom: boolean; hitsBeforeReroll: boolean; fpCasualtyOffset: Record<string, number> | null; revealStrongholds: number | null; reduceAlways: boolean; noEffectChoices: boolean; playAsPlayed: boolean;
-} = { askEveryCombatCard: false, ownSideLeadership: false, scoutsIntoSiege: false, sarumanRecruitIn: null, nazgulStrikeAsPrinted: false, rageStacksAfter: false, everyNazgul: false, forfeitedLeadership: null, countedRecruits: false, musterOverLimit: false, selfHitsAll: false, dreadfulFrom: false, hitsBeforeReroll: false, fpCasualtyOffset: null, revealStrongholds: null, reduceAlways: false, noEffectChoices: false, playAsPlayed: false };
+  nazgulStrikeAsPrinted: boolean; rageStacksAfter: boolean; everyNazgul: boolean; forfeitedLeadership: { side: string; n: number } | null; countedRecruits: boolean; musterOverLimit: boolean; selfHitsAll: boolean; dreadfulFrom: boolean; hitsBeforeReroll: boolean; fpCasualtyOffset: Record<string, number> | null; revealStrongholds: number | null; reduceAlways: boolean; noEffectChoices: boolean; printedCardRolls: boolean; playAsPlayed: boolean;
+} = { askEveryCombatCard: false, ownSideLeadership: false, scoutsIntoSiege: false, sarumanRecruitIn: null, nazgulStrikeAsPrinted: false, rageStacksAfter: false, everyNazgul: false, forfeitedLeadership: null, countedRecruits: false, musterOverLimit: false, selfHitsAll: false, dreadfulFrom: false, hitsBeforeReroll: false, fpCasualtyOffset: null, revealStrongholds: null, reduceAlways: false, noEffectChoices: false, printedCardRolls: false, playAsPlayed: false };
 
 export function characterDef(id: string): CharacterDef | undefined {
   return COMPANIONS[id] ?? UPGRADES[id] ?? MINIONS[id] ?? (id === 'gollum' ? GOLLUM : undefined);

@@ -480,6 +480,7 @@ function pendingOf(s) {
 // - fpCasualtyOffset: the Free Peoples Regular casualties as the referee counts them (casualtyOffset, at a rebuild);
 // - reduceAlways: an Elite may be reduced for one hit with no Regular to replace it (eliminated), as the referee offers;
 // - noEffectChoices: a card's choice with no effect is offered (Wisdom of Elrond's Nation At War already);
+// - printedCardRolls: Combat cards' rolls as printed (We Come to Kill's 5+, Mûmakil counting pre-Combat hits);
 // - sarumanRecruitIn, playAsPlayed, revealStrongholds: set for one step only (the Voice of Saruman's Settlements, a
 //   card played as the referee played it, the reveal path's Strongholds as the referee's option counts them).
 let followHidden = false;
@@ -500,6 +501,7 @@ function following(on) {
   E.followOptions.fpCasualtyOffset = on ? casualtyOffset : null;
   E.followOptions.reduceAlways = on;
   E.followOptions.noEffectChoices = on;
+  E.followOptions.printedCardRolls = on;
 }
 // Per Nation, the Free Peoples Regular casualties this engine derives beyond the referee's count (set at a rebuild).
 let casualtyOffset = null;
@@ -507,6 +509,8 @@ let casualtyOffset = null;
 let forfeit = null;
 // The Action dice as the referee numbers them (the last view's): the Day Without Dawn's "Which die becomes an Eye?".
 let viewDice = null;
+// The battle as the bot's last view shows it (its attackers): a part-Army attack's rearguard (rearguardFromView).
+let battleView = null;
 const EYE_QUESTION = 'Which die becomes an Eye?';
 const dieFace = (side, i, dice = viewDice) => dice?.[N.pSide(side)]?.find((x) => x.die === i)?.face ?? null;
 const MIGHTY_ATTACK = new Set(['fp-char-06', 'fp-char-07']);
@@ -661,10 +665,11 @@ const refWords = (answer) => new Set(String(answer).split(/[:>]/));
 const containsAll = (big, small) => [...small].every((w) => big.has(w));
 const minus = (a, b) => [...a].filter((w) => !b.has(w));
 
-/** Whether `answer` (x>…>b) is the route of the card move `prev` (a>b) just before it: the same end, another start. */
+/** Whether `answer` (x>…>b, or b alone) is the route of the card move `prev` (a>b) just before it: the same end. */
 function isRouteAfter(answer, prev) {
-  if (typeof answer !== 'string' || typeof prev !== 'string' || !answer.includes('>') || !prev.includes('>')) return false;
+  if (typeof answer !== 'string' || typeof prev !== 'string' || !prev.includes('>')) return false;
   const a = answer.split('>'), p = prev.split('>');
+  if (a.length === 1) return a[0] === p[p.length - 1]; // "Straight to …": the destination alone
   return a[a.length - 1] === p[p.length - 1] && a[0] !== p[0];
 }
 
@@ -716,9 +721,18 @@ const ACTS = (acts, n, note) => ({ acts, n, note });
 const has = (st, kind) => st.events.some((e) => e.kind === kind);
 
 /** The figures that left `from` in `steps` (their army_moved and character_moved events), as a MoveSel. */
-/** The figures that go along as the referee's ARMY_SELECTION answers count them (a move selection). */
-function countedSel(steps) {
+/**
+ * The figures that go along as the referee's ARMY_SELECTION answers count them (a move selection); the Army units of
+ * `from` it asked nothing about went along (the only legal count: an Army moves with a unit).
+ */
+function countedSel(steps, state = null, from = null) {
   const sel = { units: {} };
+  const asked = new Set(steps.filter((st) => st.kind === 'ARMY_SELECTION' && st.opt.nation).map((st) => `${N.nation(st.opt.nation)}|${st.opt.unit}`));
+  const side = steps[0]?.side;
+  for (const [n, u] of Object.entries(state?.regions?.[from]?.units ?? {})) {
+    if (E.data.sideOfNation(n) !== side) continue;
+    for (const t of ['regular', 'elite']) if ((u?.[t] ?? 0) > 0 && !asked.has(`${n}|${t}`)) { sel.units[n] ??= {}; sel.units[n][t] = u[t]; }
+  }
   for (const st of steps) {
     if (st.kind !== 'ARMY_SELECTION') continue;
     const o = st.opt;
@@ -765,6 +779,26 @@ function selectionEnd(steps, start, next) {
 }
 
 /** The attack's rearguard: the figures of `from` (in `state`) the selection steps left out. */
+/** The figures of `from` that do not attack, by the referee's view of the battle (battleView), or null. */
+function rearguardFromView(state, side, from, to, selections = []) {
+  const b = battleView;
+  if (!b || N.region(b.from ?? '') !== from || N.region(b.region ?? '') !== to || !Array.isArray(b.attackers)) return null;
+  const r = state.regions[from];
+  if (!r) return null;
+  // (Characters: the view lists Army figures; a Character stays when the referee's answer kept him back.)
+  const kept = selections.filter((st) => st.opt.character && st.opt.count === 0).map((st) => N.char(st.opt.character));
+  const out = { units: {}, leaders: r.leaders ?? 0, nazgul: r.nazgul ?? 0, characters: kept };
+  for (const [n, u] of Object.entries(r.units ?? {})) if (E.data.sideOfNation(n) === side) out.units[n] = { regular: u.regular ?? 0, elite: u.elite ?? 0 };
+  for (const x of b.attackers) {
+    const n = N.nation(x.nation);
+    if (x.unit === 'regular' || x.unit === 'elite') { if (out.units[n]) out.units[n][x.unit] = Math.max(0, out.units[n][x.unit] - x.n); }
+    else if (x.unit === 'leader') out.leaders = Math.max(0, out.leaders - x.n);
+    else if (x.unit === 'nazgul') out.nazgul = Math.max(0, out.nazgul - x.n);
+  }
+  const any = Object.values(out.units).some((u) => u.regular + u.elite > 0) || out.leaders || out.nazgul || out.characters.length;
+  return any ? out : null;
+}
+
 function rearguardOf(state, side, from, selections, withLeader = false) {
   const r = state.regions[from];
   if (!r) return undefined;
@@ -857,7 +891,7 @@ export function collapse(steps, here, state, next) {
           return ACTS([step({ ...a, move: movedSel(steps.slice(0, end + 1), N.region(o.from)) })], end + 1, "part of an Army in a card's move");
         }
       }
-      if (here.kind === 'eventTarget') return cardChoices(steps, here, next);
+      if (here.kind === 'eventTarget') return cardChoices(steps, here, next, state);
       if (f.inCard && here.kind !== 'armyMove2') return cardArmyStepDone(steps, next);
       {
         const end = selectionEnd(steps, 0, next);
@@ -865,13 +899,13 @@ export function collapse(steps, here, state, next) {
         return ACTS([step(act('armyMove2', { from: N.region(o.from), to: N.region(o.to), move: movedSel(steps.slice(0, end + 1), N.region(o.from)) }), 'armyMove2')], end + 1);
       }
     case 'CHOOSE_ATTACK':
-      if (here.kind === 'eventTarget') return cardChoices(steps, here, next);
+      if (here.kind === 'eventTarget') return cardChoices(steps, here, next, state);
       return cardArmyStepDone(steps, next);
     case 'ARMY_SELECTION':
       return { absorb: 1, note: "figures of a card's move: this engine takes all" };
     case 'RECRUIT':
       if (o.kind === 'end') return one(act('recruitSecond', { done: true }), 'musterSecond');
-      if (here.kind === 'eventTarget') return cardChoices(steps, here, next);
+      if (here.kind === 'eventTarget') return cardChoices(steps, here, next, state);
       return one(act('recruitSecond', { nation: recruitNation(o), region: N.region(o.region), figure: o.unit === 'regular' ? 'regular' : 'leader' }), 'musterSecond');
     case 'MOVE_COMPANIONS':
     case 'MOVE_MINIONS':
@@ -1022,7 +1056,9 @@ function collapseDie(steps, here, state, next) {
       // The figures left behind counted on the board as it is when the attack is made (steps may wait before it).
       const sels = steps.slice(2, end + 1).filter((s) => s.kind === 'ARMY_SELECTION');
       const attack = (st) => {
-        const rearguard = a.all === false ? rearguardOf(st, f.side, from, sels, o.action === 'attack_with_leader') : undefined;
+        // The attackers as the referee's view of the battle lists them, when the bot has it (exact); else counted.
+        const listed = a.all === false ? rearguardFromView(st, f.side, from, N.region(a.to), sels) : null;
+        const rearguard = a.all === false ? listed ?? rearguardOf(st, f.side, from, sels, o.action === 'attack_with_leader') : undefined;
         const x = act('attack', { from, to: N.region(a.to), rearguard, die: face });
         // Leaders kept back that this engine will not leave there (no unit of theirs stays here): they go along.
         if (rearguard?.leaders && !tryAhead(st, x, f.side)) {
@@ -1241,6 +1277,21 @@ function collapseCard(steps, here, state, next) {
   }
   if (o.answer === 'separate') return { absorb: 1 };
   if (f.route) return { absorb: 1, note: "a card move's route: this engine takes its own" };
+  // A card's Army move whose figures moved with this answer (or with its ARMY_SELECTION steps after it): the move as
+  // the referee made it, from where to where it went (its answer may name the destination only).
+  if (here.kind === 'eventTarget' && o.answer != null && !skip) {
+    let at = -1;
+    for (let i = 0; i < steps.length; i++) {
+      if (i > 0 && !(steps[i].kind === 'ARMY_SELECTION' && steps[i].side === f.side)) break;
+      if (steps[i].events.some((e) => e.kind === 'army_moved' && N.side(e.side) === f.side)) { at = i; break; }
+    }
+    const e = at >= 0 ? steps[at].events.find((x) => x.kind === 'army_moved' && N.side(x.side) === f.side) : null;
+    const t = e && cardLegal(here).find((a) => a.from === N.region(e.from) && (a.to ?? a.region) === N.region(e.to));
+    if (t) {
+      const sel = at > 0 ? movedSel(steps.slice(0, at + 1), t.from) : undefined;
+      return ACTS([step(sel ? { ...t, move: sel } : t)], at + 1, 'a card move as the referee made it');
+    }
+  }
   if (!cardLegal(here).length) return { absorb: 1, note: `a card question this engine does not ask (${o.card})` };
   // A figure the card recruits in a region this engine fills by itself (A New Power is Rising's Dunland Regulars), asked
   // figure by figure: this engine has made it already, its own question is about another region.
@@ -1249,14 +1300,14 @@ function collapseCard(steps, here, state, next) {
   if (recruited && ['REGULAR', 'ELITE'].includes(o.answer) && !cardLegal(here).some((a) => a.region === N.region(recruited.region))) {
     return { absorb: 1, note: "a card's recruit this engine made by itself" };
   }
-  return cardChoices(steps, here, next);
+  return cardChoices(steps, here, next, state);
 }
 
 /**
  * The referee's answers to a card's questions (one or several in a row, for the same card) as this engine's one
  * answer: the one naming all the referee's answers name. When several fit and the referee asks a follow-up, wait.
  */
-function cardChoices(steps, here, next) {
+function cardChoices(steps, here, next, state = null) {
   const card = steps[0].opt.card ?? null;
   const sameCard = (s) => (s.kind === 'CARD_CHOICE' ? (s.opt.card ?? null) === card : ['ARMY_MOVE', 'CHOOSE_ATTACK', 'ARMY_SELECTION'].includes(s.kind) && s.inCard);
   let most = 1;
@@ -1325,7 +1376,7 @@ function cardChoices(steps, here, next) {
     if (end === null) return { more: true };
     // (An attack moves nothing before the battle, Corsairs of Umbar's landing: the selections' counts.)
     const moved = steps.slice(0, end + 1).some((x) => x.events.some((e) => e.kind === 'army_moved'));
-    const move = moved ? movedSel(steps.slice(0, end + 1), chosen.from) : countedSel(steps.slice(k, end + 1));
+    const move = moved ? movedSel(steps.slice(0, end + 1), chosen.from) : countedSel(steps.slice(k, end + 1), state, chosen.from);
     return ACTS([step({ ...chosen, move })], end + 1, "the figures of a card's move");
   }
   return ACTS([step(chosen)], k);
@@ -1870,8 +1921,9 @@ export class Game {
         if (e.side === 'SHADOW' && e.face === 'MUSTER' && ARMY_DIE_ACTIONS.has(e.action?.action)) this.flags.messengerUsed = true;
         break;
       case 'card_played': this.cardInPlay = true; break;
-      case 'battle_started': this.inBattle = true; break;
-      case 'battle_ended': this.inBattle = false; break;
+      // (A view of an earlier battle says nothing about this one's attackers: battleView.)
+      case 'battle_started': this.inBattle = true; battleView = null; break;
+      case 'battle_ended': this.inBattle = false; battleView = null; break;
     }
   }
 
@@ -2142,6 +2194,12 @@ export class Game {
       const s = JSON.parse(JSON.stringify(this.state));
       const p = s.cards[action.side];
       let card = action.card ?? p.draw[action.deck][0];
+      // A card this engine drew already, as a draw of its own made before this one (the turn's, the referee's bonus card
+      // on top of the pile then): the card the referee drew for that one comes now instead.
+      if (action.card && action.side === this.side && p.hand.includes(card)) {
+        const q = cardQueue.find((c) => c.side === action.side && c.deck === action.deck && c.card && !p.hand.includes(c.card));
+        if (q) card = q.card;
+      }
       if (action.card && action.side !== this.side) swapIntoHand(s, action.side, card);
       const i = p.draw[action.deck].indexOf(card);
       if (i >= 0) p.draw[action.deck].splice(i, 1);
@@ -2413,6 +2471,7 @@ export class Game {
   decide0(d, view) {
     const side = this.side;
     if (view?.dice) viewDice = view.dice;
+    battleView = view?.battle ?? null;
     this.feedRandoms();
     if (!this.desynced) this.matchPiles(view);
     this.drain({ side: N.side(d.side), kind: d.kind, opt: null, card: d.context?.card ?? null, route: d.context?.question === 'Which way?' });
@@ -2467,6 +2526,11 @@ export class Game {
       this.plan = null;
     }
     if (this.desynced) { this.stats.rule++; this.note(`answered by default while out of step: ${d.kind}`); return defaultAnswer(d); }
+    // A siege the referee did not extend: its battle is over at the referee (no battle in the view), so here too.
+    if (this.pending().kind === 'siegeExtend' && d.kind !== 'EXTEND_SIEGE' && !view?.battle && !this.steps.length && !this.held.length) {
+      const h = this.pending();
+      if (this.applyHis(step(act('siegeExtend', { extend: false }), null, { side: h.actor }), true)) this.note('a siege the referee ended: not extended here');
+    }
     // What the referee settled unasked before this question (a card's only recruit, its target): made here first.
     for (let g = 0; g < 6 && !this.steps.length && !this.held.length; g++) {
       const h = this.pending();
