@@ -2,7 +2,7 @@
 // capture (rules-spec §1, §6). Combat is in combat.ts.
 import type { GameState, Nation, RegionId, Side, ArmyUnits } from './types';
 import { FP_NATIONS } from './types';
-import { REGIONS, sideOfNation, characterDef, characterSide, nationName, nationSubject, nationList, nationsArePlural, theNation, COMPANIONS, UPGRADES } from './data';
+import { REGIONS, sideOfNation, characterDef, characterSide, nationName, nationSubject, nationList, nationsArePlural, theNation, COMPANIONS, UPGRADES, followOptions } from './data';
 import { isAtWar, onSettlementCaptured, activateNation } from './politics';
 import { shadowBarredFromRegion, shadowBarringCard } from './persistent';
 import { log, sideDoes, sideName } from './log';
@@ -101,6 +101,7 @@ export function forceLeadership(state: GameState, f: Force, side: Side): number 
   let l = side === 'fp' ? f.leaders : f.nazgul;
   for (const cid of f.characters) {
     const d = characterDef(cid);
+    if (followOptions.ownSideLeadership && characterSide(cid) !== side) continue;
     if (d && sideOfNation((d.nation && d.nation !== 'any' ? d.nation : (side === 'fp' ? 'gondor' : 'sauron')) as Nation) === side) {
       l += d.leadership;
     }
@@ -176,7 +177,9 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
   if (regular > pool.regular || elite > pool.elite || leader > (pool.leader ?? 0)) return false;
   // A Muster die respects the limit up front; an Event card recruits in full and the
   // excess is trimmed by the owner afterwards (p.26, Almanac — see placeUnits).
-  if (!opts.ignoreAtWar && forceUnitCount(into) + regular + elite > limit) return false;
+  // (While following another rules engine's game, the stacking limit is checked after the action instead:
+  // followOptions.musterOverLimit; rulebook p.26 "at the end of any action (for example, after … mustering)".)
+  if (!opts.ignoreAtWar && !followOptions.musterOverLimit && forceUnitCount(into) + regular + elite > limit) return false;
   // "Free Peoples Leaders can never be in a region without Free Peoples Army units"
   // (p.26). The movement paths enforce this (moveArmySplit, moveSelectedUnits) but
   // the MUSTER path did not, so a Leader could be recruited alone into an empty

@@ -22,8 +22,10 @@
 // Options: --connect URL, --token TOKEN or --token-file FILE (a match's seat token or an online bot's key),
 // --reconnect (dial again after a drop, for good: an online bot), --seek JSON (the games an online bot takes, sent in
 // its hello), --name NAME, --version-label TEXT (the version its hello gives), --seed N (the AI's tie-breaks; else
-// each game's seed_bot), --verbose (every decision on stderr), --root DIR (the game's checkout; default: this file's
-// parent folder). MIT, like the repository.
+// each game's seed_bot), --chooser standard|eval|humanlike (which of his choosers: standard, the site's heuristic
+// chooseAction; eval, his 1-ply evaluator chooseActionEval of src/ai/evalChooser.ts; humanlike, his scripted human-like
+// Free Peoples chooseActionHumanlike of src/ai/humanlikeFP.ts, the heuristic as the Shadow), --verbose (every decision
+// on stderr), --root DIR (the game's checkout; default: this file's parent folder). MIT, like the repository.
 import { registerHooks } from 'node:module';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -38,8 +40,11 @@ const NAME = "John Champaign's War of the Ring AI";
 
 // --- Command line ---------------------------------------------------------------------------------------------------
 
+// His choosers (src/ai/): the site's heuristic, his 1-ply evaluator and his human-like Free Peoples (the Shadow: the heuristic).
+const CHOOSERS = ['standard', 'eval', 'humanlike'];
+
 function parseArgs(argv) {
-  const o = { connect: null, token: null, tokenFile: null, reconnect: false, seek: null, name: NAME, versionLabel: null, seed: null, verbose: false, root: null };
+  const o = { connect: null, token: null, tokenFile: null, reconnect: false, seek: null, name: NAME, versionLabel: null, seed: null, chooser: 'standard', verbose: false, root: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => { if (i + 1 >= argv.length) throw new Error(`${a} needs a value`); return argv[++i]; };
@@ -52,6 +57,7 @@ function parseArgs(argv) {
       case '--name': o.name = next(); break;
       case '--version-label': o.versionLabel = next(); break;
       case '--seed': o.seed = Number(next()); break;
+      case '--chooser': o.chooser = next(); if (!CHOOSERS.includes(o.chooser)) throw new Error(`--chooser: ${CHOOSERS.join(', ')}, not ${o.chooser}`); break;
       case '--verbose': o.verbose = true; break;
       case '--root': o.root = next(); break;
       case '-h': case '--help':
@@ -75,7 +81,7 @@ const debug = (...parts) => { if (verbose) log(...parts); };
 
 let E = null; // the engine's modules, once loaded
 
-export async function loadEngine(rootDir) {
+export async function loadEngine(rootDir, chooser = 'standard') {
   if (E) return E;
   const root = resolvePath(rootDir ?? resolvePath(dirname(fileURLToPath(import.meta.url)), '..'));
   if (!existsSync(`${root}/src/adapter/wotrAdapter.ts`)) throw new Error(`${root} is not this game's checkout (no src/adapter/wotrAdapter.ts)`);
@@ -104,15 +110,20 @@ export async function loadEngine(rootDir) {
     });
   }
   const mod = (p) => import(pathToFileURL(`${root}/${p}`).href);
-  const [adapter, redact, ai, data, dice, phases, setup, types, framework] = await Promise.all([
+  const [adapter, redact, ai, data, dice, phases, setup, types, framework, combat] = await Promise.all([
     mod('src/adapter/wotrAdapter.ts'), mod('src/adapter/redact.ts'), mod('src/ai/wotrAI.ts'), mod('src/engine/data.ts'),
     mod('src/engine/dice.ts'), mod('src/engine/phases.ts'), mod('src/engine/setup.ts'), mod('src/engine/types.ts'),
-    import('digital-boardgame-framework'),
+    import('digital-boardgame-framework'), mod('src/engine/combat.ts'),
   ]);
+  // The chooser (--chooser): his other two are imported only when asked for.
+  let chooseAction = ai.chooseAction;
+  if (chooser === 'eval') chooseAction = (await mod('src/ai/evalChooser.ts')).chooseActionEval;
+  else if (chooser === 'humanlike') chooseAction = (await mod('src/ai/humanlikeFP.ts')).chooseActionHumanlike;
+  if (typeof chooseAction !== 'function') throw new Error(`the game has no chooser ${chooser}`);
   E = {
-    root, wotrAdapter: adapter.wotrAdapter, redact: redact.redactStateForViewer, chooseAction: ai.chooseAction,
+    root, wotrAdapter: adapter.wotrAdapter, redact: redact.redactStateForViewer, chooseAction, chooser,
     data, dice, phases, createGame: setup.createGame, FP_NATIONS: types.FP_NATIONS, SHADOW_NATIONS: types.SHADOW_NATIONS,
-    Rng: framework.Rng,
+    Rng: framework.Rng, followOptions: combat.followOptions, fpRegularCasualties: combat.fpRegularCasualties,
   };
   installRandomness();
   buildNames();
@@ -420,6 +431,14 @@ export function stateFromView(view, flags = {}, planRoll = 0) {
     fellowshipDeclaredThisTurn: !!flags.declared,
     ...(flags.freeCharEvent ? { fpFreeCharEventThisTurn: true } : {}),
   };
+  // The Free Peoples Regular casualties as the referee counts them: this engine derives them from its figure totals.
+  casualtyOffset = {};
+  E.followOptions.fpCasualtyOffset = null;
+  for (const n of FP_NATIONS) {
+    const derived = E.fpRegularCasualties(s, n);
+    const real = view.casualties?.[N.pNation(n)]?.regular ?? derived;
+    if (derived !== real) casualtyOffset[n] = derived - real;
+  }
   s.shadowPlanRoll = planRoll;
   s.pendingChoice = null;
   s.pendingCombat = null;
@@ -438,14 +457,72 @@ function pendingOf(s) {
   const actor = wotrAdapter.currentActor(s);
   return {
     actor, kind: s.pendingChoice?.kind ?? null, phase: s.phase, step: s.pendingCombat?.step ?? null,
-    legal: actor ? wotrAdapter.legalActions(s, actor) : [], winner: s.winner,
+    legal: actor ? asFollowed(() => wotrAdapter.legalActions(s, actor)) : [], winner: s.winner,
   };
+}
+
+// While it follows the referee's game, his engine plays by the followed rules where they differ from its own
+// (followOptions in src/engine/data.ts, each off in his own play; the comments there say what each changes):
+// - askEveryCombatCard: every Combat card question asked, also of a side with no card (the referee's hidden passes:
+//   new_game official_rules, hidden_passes not false);
+// - ownSideLeadership: only a side's own Characters lend its Army Leadership (a Companion of no Nation standing with
+//   a Shadow Army counted for the Shadow's re-roll);
+// - scoutsIntoSiege: Scouts may withdraw into a siege, as its card says;
+// - nazgulStrikeAsPrinted: The Nazgûl Strike!'s "may" is asked, and its Hunt is a Hunt roll;
+// - rageStacksAfter: Rage of the Dunlendings moves its units whatever the stacking limit, the excess removed after;
+// - everyNazgul: the "move any or all of the Nazgûl" cards have room for every Nazgûl;
+// - forfeitedLeadership: Mighty Attack forfeits the chosen Companion's Leadership (forfeit, from the referee's answer);
+// - countedRecruits: Many Kings / Pits of Mordor place the count the referee's player chose;
+// - musterOverLimit: a Muster die may recruit into a full region, the excess removed after the action;
+// - selfHitsAll: a Combat card's hits on its own Army may take all of it;
+// - dreadfulFrom: Dreadful Spells is cast by the Army the referee's answer names;
+// - hitsBeforeReroll: Mighty Attack's miss turned into a hit before the Leader re-roll, as its card says;
+// - fpCasualtyOffset: the Free Peoples Regular casualties as the referee counts them (casualtyOffset, at a rebuild);
+// - reduceAlways: an Elite may be reduced for one hit with no Regular to replace it (eliminated), as the referee offers;
+// - noEffectChoices: a card's choice with no effect is offered (Wisdom of Elrond's Nation At War already);
+// - sarumanRecruitIn, playAsPlayed, revealStrongholds: set for one step only (the Voice of Saruman's Settlements, a
+//   card played as the referee played it, the reveal path's Strongholds as the referee's option counts them).
+let followHidden = false;
+/** His engine's switches for following the referee's game (above): on while applying a step or listing its actions. */
+function following(on) {
+  E.followOptions.askEveryCombatCard = on && followHidden;
+  E.followOptions.ownSideLeadership = on;
+  E.followOptions.scoutsIntoSiege = on;
+  E.followOptions.nazgulStrikeAsPrinted = on;
+  E.followOptions.rageStacksAfter = on;
+  E.followOptions.everyNazgul = on;
+  E.followOptions.forfeitedLeadership = on ? forfeit : null;
+  E.followOptions.countedRecruits = on;
+  E.followOptions.musterOverLimit = on;
+  E.followOptions.selfHitsAll = on;
+  E.followOptions.dreadfulFrom = on;
+  E.followOptions.hitsBeforeReroll = on;
+  E.followOptions.fpCasualtyOffset = on ? casualtyOffset : null;
+  E.followOptions.reduceAlways = on;
+  E.followOptions.noEffectChoices = on;
+}
+// Per Nation, the Free Peoples Regular casualties this engine derives beyond the referee's count (set at a rebuild).
+let casualtyOffset = null;
+// Mighty Attack's Companion forfeiting his Leadership this round, as the referee's answer named him (collapseCard).
+let forfeit = null;
+// The Action dice as the referee numbers them (the last view's): the Day Without Dawn's "Which die becomes an Eye?".
+let viewDice = null;
+const EYE_QUESTION = 'Which die becomes an Eye?';
+const dieFace = (side, i, dice = viewDice) => dice?.[N.pSide(side)]?.find((x) => x.die === i)?.face ?? null;
+const MIGHTY_ATTACK = new Set(['fp-char-06', 'fp-char-07']);
+const leadershipOf = (c) => E.data.characterDef(c)?.leadership ?? 0;
+/** `fn()` with the switches on (nested calls keep them on). */
+function asFollowed(fn) {
+  if (E.followOptions.ownSideLeadership) return fn();
+  following(true);
+  try { return fn(); } finally { following(false); }
 }
 
 /** `action` by `actor` applied to `state` with the referee's outcomes: { ok, state } or { ok: false, needsChance, reason }. */
 function applyForced(state, action, actor) {
   const { wotrAdapter } = E;
   const saved = saveQueues();
+  following(true);
   const before = JSON.parse(JSON.stringify(state));
   stackPiles(before);
   tileState = null;
@@ -464,12 +541,14 @@ function applyForced(state, action, actor) {
   } finally {
     forcing = false;
     tileState = null;
+    following(false);
   }
 }
 
 /** The automatic phases (src/engine/phases.ts) run on `state` with the referee's outcomes. */
 function advanceForced(state) {
   const saved = saveQueues();
+  following(true);
   const s = JSON.parse(JSON.stringify(state));
   const before = JSON.parse(JSON.stringify(state));
   stackPiles(s);
@@ -489,6 +568,7 @@ function advanceForced(state) {
   } finally {
     forcing = false;
     tileState = null;
+    following(false);
   }
 }
 
@@ -557,6 +637,8 @@ function word(here) {
 }
 
 export function answerWords(a) {
+  // The Nazgûl Strike!: the Hunt roll (no card named), or neither (`decline`, while following).
+  if (a.kind === 'nazgulStrike' && !a.discard) return new Set([a.decline ? 'skip' : 'hunt']);
   const out = new Set();
   const add = (k, v) => {
     if (v === null || v === undefined) return;
@@ -578,6 +660,13 @@ export function answerWords(a) {
 const refWords = (answer) => new Set(String(answer).split(/[:>]/));
 const containsAll = (big, small) => [...small].every((w) => big.has(w));
 const minus = (a, b) => [...a].filter((w) => !b.has(w));
+
+/** Whether `answer` (x>…>b) is the route of the card move `prev` (a>b) just before it: the same end, another start. */
+function isRouteAfter(answer, prev) {
+  if (typeof answer !== 'string' || typeof prev !== 'string' || !answer.includes('>') || !prev.includes('>')) return false;
+  const a = answer.split('>'), p = prev.split('>');
+  return a[a.length - 1] === p[p.length - 1] && a[0] !== p[0];
+}
 
 /** Whether a referee answer naming a route fits this engine's answer `a` in order. */
 function inOrder(answer, a) {
@@ -627,6 +716,20 @@ const ACTS = (acts, n, note) => ({ acts, n, note });
 const has = (st, kind) => st.events.some((e) => e.kind === kind);
 
 /** The figures that left `from` in `steps` (their army_moved and character_moved events), as a MoveSel. */
+/** The figures that go along as the referee's ARMY_SELECTION answers count them (a move selection). */
+function countedSel(steps) {
+  const sel = { units: {} };
+  for (const st of steps) {
+    if (st.kind !== 'ARMY_SELECTION') continue;
+    const o = st.opt;
+    if (o.character) { if (o.count) (sel.characters ??= []).push(N.char(o.character)); continue; }
+    if (o.unit === 'leader') sel.leaders = (sel.leaders ?? 0) + o.count;
+    else if (o.unit === 'nazgul') sel.nazgul = (sel.nazgul ?? 0) + o.count;
+    else { const n = N.nation(o.nation); sel.units[n] ??= {}; sel.units[n][o.unit] = (sel.units[n][o.unit] ?? 0) + o.count; }
+  }
+  return sel;
+}
+
 function movedSel(steps, from) {
   const sel = { units: {} };
   let leaders = 0, nazgul = 0;
@@ -662,7 +765,7 @@ function selectionEnd(steps, start, next) {
 }
 
 /** The attack's rearguard: the figures of `from` (in `state`) the selection steps left out. */
-function rearguardOf(state, side, from, selections) {
+function rearguardOf(state, side, from, selections, withLeader = false) {
   const r = state.regions[from];
   if (!r) return undefined;
   const force = r.besieged && r.siegeBox && E.data.sideOfNation(Object.keys(r.siegeBox.units)[0] ?? (side === 'fp' ? 'gondor' : 'sauron')) === side ? r.siegeBox : r;
@@ -683,6 +786,14 @@ function rearguardOf(state, side, from, selections) {
     else if (o.unit === 'nazgul') out.nazgul += left;
     else { out.units[n] ??= { regular: 0, elite: 0 }; out.units[n][o.unit] += left; }
   }
+  // Leaders the referee asked nothing about: they go along in an attack with a Leader (one must) and when no unit stays
+  // (a Leader is never left alone); else they stay with the units left behind (they may not go: their Nation is not
+  // "At War"; a free choice is asked).
+  if (withLeader) return any ? out : undefined;
+  const asked = new Set(selections.map((st) => `${st.opt.nation ? N.nation(st.opt.nation) : ''}|${st.opt.unit}`));
+  const unitsLeft = Object.values(out.units).some((u) => u.regular + u.elite > 0) ||
+    Object.entries(force.units ?? {}).some(([n, u]) => ['regular', 'elite'].some((t) => (u?.[t] ?? 0) > 0 && !asked.has(`${n}|${t}`)));
+  if (force.leaders > 0 && unitsLeft && !selections.some((st) => st.opt.unit === 'leader')) { out.leaders += force.leaders; any = true; }
   return any ? out : undefined;
 }
 
@@ -694,6 +805,10 @@ export function collapse(steps, here, state, next) {
   // A forced step of the referee's (one option) that this engine settled by itself: it is not asking it any more.
   if (f.forced && !corresponds(here, { side: f.side, kind: f.kind, context: f.ctx, options: [o] }, f.inCard)) return { absorb: 1, note: `settled by this engine itself: ${f.kind}` };
   switch (f.kind) {
+    // The official rules' Leader re-roll ("both players can re-roll"): this engine always re-rolls, without a question;
+    // the referee's dice that follow are the re-roll's. A side that declines rolls none: this engine cannot follow it.
+    case 'LEADER_REROLL':
+      return o.answer === 'reroll' ? { absorb: 1 } : { fail: `${f.side} declined its Leader re-roll (this engine always re-rolls)` };
     case 'HUNT_ALLOCATION': {
       // This engine allocates by itself when only one number is allowed.
       const max = Math.max(0, ...here.legal.filter((a) => a.kind === 'allocateHunt').map((a) => a.dice));
@@ -733,6 +848,15 @@ export function collapse(steps, here, state, next) {
       break;
     case 'ARMY_MOVE':
       if (o.kind === 'end') return f.inCard && here.kind === 'eventTarget' ? one(matchAnswer('skip', cardLegal(here)) ?? act('@noop')) : one(act('armyMove2', { done: true }), 'armyMove2');
+      // Part of an Army in a card's move: the figures chosen go along (this engine's `move` selection of the target).
+      if (here.kind === 'eventTarget' && o.all === false) {
+        const a = cardLegal(here).find((x) => x.from === N.region(o.from) && x.to === N.region(o.to));
+        if (a) {
+          const end = selectionEnd(steps, 0, next);
+          if (end === null) return { more: true };
+          return ACTS([step({ ...a, move: movedSel(steps.slice(0, end + 1), N.region(o.from)) })], end + 1, "part of an Army in a card's move");
+        }
+      }
       if (here.kind === 'eventTarget') return cardChoices(steps, here, next);
       if (f.inCard && here.kind !== 'armyMove2') return cardArmyStepDone(steps, next);
       {
@@ -751,6 +875,8 @@ export function collapse(steps, here, state, next) {
       return one(act('recruitSecond', { nation: recruitNation(o), region: N.region(o.region), figure: o.unit === 'regular' ? 'regular' : 'leader' }), 'musterSecond');
     case 'MOVE_COMPANIONS':
     case 'MOVE_MINIONS':
+      // The end of such a card's Nazgûl moves: the card goes on (the referee asks its Army clause next).
+      if (o.kind === 'end' && NAZGUL_THEN_ARMY.has(eventCardOf(here))) return { absorb: 1 };
       if (o.kind === 'end') return here.kind === 'eventTarget' ? one(matchAnswer('skip', cardLegal(here)) ?? act('@noop')) : one(act('charMove2', { done: true }), 'charMove2');
       if (here.kind === 'eventTarget') return o.kind === 'move_companion' ? cardCompanionMove(steps, here, next) : cardMinionMove(steps, here);
       return characterMove(steps, 0, null, next);
@@ -766,9 +892,15 @@ export function collapse(steps, here, state, next) {
         const pick = (state.fellowship.mordor !== null ? legal.find((a) => a.done) : null) ?? matchAnswer(o.to, legal) ?? legal.find((a) => a.done);
         return one(pick ?? act('@noop'));
       }
-      return one(act('separateMove', { target: N.region(o.to) }));
+      {
+        // The referee separates a group to one place (two Hobbit Guides who left at the same Hunt, say); this engine
+        // asks each Companion's move: the same place for each, as long as it asks.
+        const n = Math.max(1, f.events.find((e) => e.kind === 'companions_separated')?.characters?.length ?? 1);
+        return ACTS(Array.from({ length: n }, () => step(act('separateMove', { target: N.region(o.to) }), 'separateMove')), 1);
+      }
     case 'REMOVE_EXCESS_UNIT':
-      if (here.kind === 'removeExcess') return one(act('removeExcess', { nation: N.nation(o.nation), figure: o.unit === 'elite' ? 'elite' : 'regular' }));
+      // (Only while this engine still asks it: it removes the rest itself once the choice no longer matters.)
+      if (here.kind === 'removeExcess') return one(act('removeExcess', { nation: N.nation(o.nation), figure: o.unit === 'elite' ? 'elite' : 'regular' }), 'removeExcess');
       return { absorb: 1, note: 'a unit over the stacking limit by the referee, not here' };
     case 'WHITE_RIDER': return one(act('whiteRider', { forfeit: o.kind === 'use' }), 'whiteRider');
     case 'FIELD_OR_SIEGE': return one(act('siegeWithdraw', { withdraw: o.kind === 'siege' }), 'siegeWithdraw');
@@ -777,6 +909,8 @@ export function collapse(steps, here, state, next) {
     case 'CASUALTY': {
       const stepKind = o.unit === 'regular' ? 'removeRegular' : o.effect === 'reduce' ? 'reduceElite' : 'removeElite';
       const k = here.kind === 'eventCasualties' ? 'eventCasualties' : 'combatCasualties';
+      const taken = f.events.find((e) => e.kind === 'casualty_taken' && !e.used);
+      if (taken) taken.used = true; // this answer's casualty (a later one the referee took unasked: silentDefault)
       return one(act('casualtyStep', { step: stepKind, nation: N.nation(o.nation) }), k);
     }
     case 'CEASE_ATTACK': return one(act('combatContinue', { cont: o.kind === 'continue' }), 'combatContinue');
@@ -795,12 +929,24 @@ export function collapse(steps, here, state, next) {
       return ACTS([step(act(k, { advance: true, move: movedSel(steps.slice(0, end + 1), N.region(moved.from)) }), k)], end + 1);
     }
     case 'GUIDE_ABILITY':
+      // Declined, and the referee took the damage left as Corruption (corruption_changed with the step): here too.
+      if (o.kind !== 'use' && here.kind === 'huntDamage' && f.events.some((e) => e.kind === 'corruption_changed') &&
+        here.legal.some((a) => a.mode === 'corruption')) return one(act('huntDamage', { mode: 'corruption' }), 'huntDamage');
       if (o.kind !== 'use') return { absorb: 1 };
       return one(act('huntDamage', { mode: ['meriadoc', 'peregrin'].includes(state.fellowship.guide) ? 'reduceSeparate' : 'reduceReveal' }), 'huntDamage');
-    case 'HUNT_CASUALTY':
-      return one(act('huntDamage', { mode: o.kind === 'guide' ? 'guide' : o.kind === 'random' ? 'random' : 'corruption' }), 'huntDamage');
+    case 'HUNT_CASUALTY': {
+      const mode = o.kind === 'guide' ? 'guide' : o.kind === 'random' ? 'random' : 'corruption';
+      // One Companion per tile (rulebook): what his Level did not absorb is Corruption at once at the referee
+      // (corruption_changed with the step); this engine asks again: the rest as Corruption here too.
+      if (mode !== 'corruption' && f.events.some((e) => e.kind === 'corruption_changed')) {
+        return ACTS([step(act('huntDamage', { mode }), 'huntDamage'), step(act('huntDamage', { mode: 'corruption' }), 'huntDamage')], 1);
+      }
+      return one(act('huntDamage', { mode }), 'huntDamage');
+    }
     case 'REVEAL_FELLOWSHIP':
-      return one(act('revealMove', { target: N.region(o.region) }), 'revealMove');
+      // The path's Shadow Strongholds (one Hunt tile each) when the referee's option names them (without, the path of
+      // the fewest, as this engine takes it).
+      return one(act('revealMove', { target: N.region(o.region), strongholds: o.strongholds }), 'revealMove');
     case 'CARD_CHOICE':
       return collapseCard(steps, here, state, next);
   }
@@ -827,13 +973,22 @@ function collapseDie(steps, here, state, next) {
     case 'play_companion':
       return ACTS([step(act('bringUpgrade', { which: N.char(o.character) })), step(act('placeGandalf', { region: N.region(o.region) }), 'placeGandalf')], 1);
     case 'play_minion': return one(act('bringMinion', { minion: N.char(o.character), region: N.region(o.region), die: face }));
-    case 'voice_of_saruman': return one(act('sarumanMuster', { mode: o.upgrade ? 'upgrade' : 'recruit', die: face }));
+    case 'voice_of_saruman': {
+      // The Settlements the referee recruited in (its order when the Regulars run short; a full one too, trimmed after).
+      const regions = o.upgrade ? undefined : f.events.filter((e) => e.kind === 'figure_recruited').map((e) => N.region(e.region));
+      return one(act('sarumanMuster', { mode: o.upgrade ? 'upgrade' : 'recruit', die: face, regions }));
+    }
     case 'force_discard': {
       const pay = (o.pay ?? []).map(N.card);
-      const via = pay.length ? 'cards' : o.elven_ring ? 'ring' : !o.any_die ? 'will' : 'die';
+      // The Shadow's price for forcing "A Power too Great" / "The Power of Tom Bombadil" off (an Army and a Character
+      // card) is discarded face down since 2026-10-31: the opponent's choice has `hidden` and no `pay`. Paid with cards
+      // all the same, stand-ins of the two decks here (prepare), not with a die.
+      const hiddenPay = !pay.length && !!o.hidden && !o.elven_ring;
+      const via = pay.length || hiddenPay ? 'cards' : o.elven_ring ? 'ring' : !o.any_die ? 'will' : 'die';
       return one(act('forceDiscardCard', {
         cardId: N.card(o.card), via, die: face,
-        discardStrategy: pay.find((c) => N.deck(c) === 'strategy'), discardCharacter: pay.find((c) => N.deck(c) === 'character'),
+        discardStrategy: hiddenPay ? { hiddenDeck: 'strategy' } : pay.find((c) => N.deck(c) === 'strategy'),
+        discardCharacter: hiddenPay ? { hiddenDeck: 'character' } : pay.find((c) => N.deck(c) === 'character'),
       }));
     }
     case 'recruit': {
@@ -864,8 +1019,20 @@ function collapseDie(steps, here, state, next) {
       const end = selectionEnd(steps, 1, next);
       if (end === null) return { more: true };
       const from = N.region(a.from);
-      const rearguard = a.all === false ? rearguardOf(state, f.side, from, steps.slice(2, end + 1).filter((s) => s.kind === 'ARMY_SELECTION')) : undefined;
-      return ACTS([step(act('attack', { from, to: N.region(a.to), rearguard, die: face }))], end + 1);
+      // The figures left behind counted on the board as it is when the attack is made (steps may wait before it).
+      const sels = steps.slice(2, end + 1).filter((s) => s.kind === 'ARMY_SELECTION');
+      const attack = (st) => {
+        const rearguard = a.all === false ? rearguardOf(st, f.side, from, sels, o.action === 'attack_with_leader') : undefined;
+        const x = act('attack', { from, to: N.region(a.to), rearguard, die: face });
+        // Leaders kept back that this engine will not leave there (no unit of theirs stays here): they go along.
+        if (rearguard?.leaders && !tryAhead(st, x, f.side)) {
+          const r = { ...rearguard, leaders: 0 };
+          const any = Object.values(r.units).some((u) => u.regular + u.elite > 0) || r.nazgul || r.characters.length;
+          return act('attack', { from, to: N.region(a.to), rearguard: any ? r : undefined, die: face });
+        }
+        return x;
+      };
+      return ACTS([step(attack(state), null, { resolve: (h, st) => attack(st) })], end + 1);
     }
     case 'move_minions': case 'move_companions': {
       if (steps.length < 2) return { more: true };
@@ -943,6 +1110,8 @@ function cardMinionMove(steps, here) {
     const legal = cardLegal(h);
     const fits = legal.filter((a) => containsAll(answerWords(a), words) && (a.region != null) === destination);
     fits.sort((a, b) => minus(answerWords(a), words).length - minus(answerWords(b), words).length);
+    // The figure picked already (a card's "move" answer picked it): its destination is this engine's question now.
+    if (!fits.length && !destination && legal.some((a) => a.region != null && a.from === N.region(from))) return act('@noop');
     return fits[0] ?? legal.find((a) => answerWords(a).has('skip')) ?? null;
   };
   const label = act('eventTarget', { note: `card move of ${figure} ${from}>${to}` });
@@ -966,9 +1135,27 @@ function cardCompanionMove(steps, here, next) {
   const legal = cardLegal(here).filter((a) => containsAll(answerWords(a), words));
   if (!legal.length) return { fail: `no answer here moves ${s.opt.character} to ${s.opt.to}` };
   const group = [...new Set(steps.slice(0, end + 1).flatMap((x) => x.events).filter((e) => e.kind === 'character_moved' && e.character !== 'ring-bearers').map((e) => N.char(e.character)))];
-  const chosen = group.length > 1 ? { ...legal[0], group } : legal[0];
-  return ACTS([step(chosen)], end + 1);
+  // A move that names the Companion only (Gwaihir the Windlord's: the group first, then where): the referee's one answer
+  // also says where, the second step here.
+  const exact = legal.find((a) => a.region === N.region(s.opt.to) || a.to === N.region(s.opt.to));
+  const base = exact ?? legal[0];
+  const chosen = group.length > 1 ? { ...base, group } : base;
+  const acts = [step(chosen)];
+  if (!exact) {
+    const to = N.region(s.opt.to);
+    acts.push(step(act('@noop'), null, {
+      resolve: (h) => h.kind === 'eventTarget' ? (cardLegal(h).find((a) => a.region === to || a.to === to) ?? act('@noop')) : act('@noop'),
+    }));
+  }
+  return ACTS(acts, end + 1);
 }
+
+// Cards whose Nazgûl moves come before an Army clause (move two Armies or attack with one): this engine offers both at
+// once and ends the card with its `done`; the referee asks the Nazgûl, their end, then the clause ("move", "attack",
+// "skip").
+const NAZGUL_THEN_ARMY = new Set(['sh-char-23', 'sh-char-24']);
+/** The card this engine's open event target is for, or null. */
+function eventCardOf(here) { return here.kind === 'eventTarget' ? here.legal.find((a) => a.kind === 'eventTarget')?.card ?? null : null; }
 
 function collapseCard(steps, here, state, next) {
   const f = steps[0];
@@ -976,11 +1163,24 @@ function collapseCard(steps, here, state, next) {
   const one = (a) => ACTS([step(a)], 1);
   const card = o.card ? N.card(o.card) : null;
   const skip = o.skip === true || o.answer === 'skip';
+  // "How many Regulars in <region>?" (Many Kings to the Service of Mordor, Pits of Mordor, asked when the Regulars run
+  // short): this engine recruits two in each region itself, no step of its own.
+  // The count follows the region's answer: one target here, with its `count` (followOptions.countedRecruits).
+  if ((o.card === 'sh-strat-17' || o.card === 'sh-strat-24') && o.count != null && o.region == null) return { absorb: 1 };
+  if ((o.card === 'sh-strat-17' || o.card === 'sh-strat-24') && o.region && here.kind === 'eventTarget') {
+    const t = cardLegal(here).find((a) => a.region === N.region(o.region));
+    const c = steps[1];
+    if (t && !c && next?.side === f.side && next.kind === 'CARD_CHOICE' && next.card === o.card) return { more: true };
+    if (t && c?.kind === 'CARD_CHOICE' && c.opt.card === o.card && c.opt.count != null && c.opt.region == null) return ACTS([step({ ...t, count: c.opt.count })], 2);
+    if (t) return ACTS([step(t)], 1);
+  }
   // A bonus draw (Gandalf the Grey as Guide, the Palantír): `draw` options.
   if (o.kind === 'draw') {
-    if (here.kind === 'bonusDraw') return one(act('bonusDraw', { deck: o.deck }));
-    if (here.kind === 'guideDraw') return one(act('guideDraw', { draw: true }));
-    if (here.kind === 'sorcererDraw') return one(act('sorcererDraw', { draw: true }));
+    // The official rules let a "may draw" be declined: `skip`, no deck (this engine's "no").
+    if (here.kind === 'bonusDraw') return one(act('bonusDraw', { deck: o.skip ? 'none' : o.deck }));
+    if (here.kind === 'guideDraw') return one(act('guideDraw', { draw: !o.skip }));
+    if (here.kind === 'sorcererDraw') return one(act('sorcererDraw', { draw: !o.skip }));
+    if (o.skip) return { absorb: 1, note: 'a bonus draw declined that this engine does not ask' };
     const drawn = f.events.find((e) => e.kind === 'card_drawn');
     if (!drawn) return { absorb: 1, note: 'a bonus draw that drew nothing' };
     return ACTS([step(act('@draw', { side: N.side(drawn.side), deck: drawn.deck, card: drawn.card ? N.card(drawn.card) : null })), step(act('@advance'))], 1, 'a bonus draw this engine asked at another time, written into the hand');
@@ -998,10 +1198,57 @@ function collapseCard(steps, here, state, next) {
     if (!amounts.length || Number.isNaN(wanted)) return { absorb: 1 };
     return one(act('combatCardCost', { amount: Math.min(Math.max(wanted, Math.min(...amounts)), Math.max(...amounts)) }));
   }
+  // Scouts' withdrawal into the siege: this engine's pre-combat "retreat" to the Army's own region.
+  if (here.kind === 'preCombatRetreat' && o.answer === 'siege') {
+    const own = here.legal.find((a) => a.region === state.pendingCombat?.to);
+    if (own) return one(own);
+  }
+  if (card && MIGHTY_ATTACK.has(card) && o.character) {
+    return { absorb: 1, note: "Mighty Attack's forfeited Leadership, this round's" };
+  }
+  // Dreadful Spells' caster and target ("from>to"): the target here, cast from that Army (followOptions.dreadfulFrom).
+  if (o.card === 'sh-char-19' && o.from && o.to && here.kind === 'eventTarget') {
+    const t = cardLegal(here).find((a) => a.region === N.region(o.to));
+    if (t) return one({ ...t, from: N.region(o.from) });
+  }
+  // Worn with Sorrow and Toil's discard: a random Character card of the hand, a tabled one, or none. This engine asks
+  // it once the Hunt has resolved, often later than the referee: kept until it is asked.
+  if (o.card === 'sh-char-15') {
+    const a = skip ? act('wornDiscard', { decline: true }) : o.answer === 'hand' ? act('wornDiscard') : act('wornDiscard', { card: N.card(o.target_card ?? o.answer) });
+    if (here.kind === 'wornDiscard') return one(a);
+    return { absorb: 1, defer: { side: f.side, action: a }, note: "Worn with Sorrow and Toil's discard, for when this engine asks it" };
+  }
+  // A die turned into an Eye, named by its number: the die's face here.
+  if (o.card === 'sh-char-18' && here.kind === 'eventTarget' && (o.count != null || skip)) {
+    if (skip) return one(cardLegal(here).find((a) => a.done) ?? act('@noop'));
+    const face = dieFace(f.side, o.count, f.dice); // the dice as they were when it was answered
+    const a = face && cardLegal(here).find((x) => x.eye && x.face === N.face(face));
+    if (a) return one(a);
+  }
   if (f.inBattle && !CARD_KINDS.has(here.kind)) return { absorb: 1, note: "a Combat card's question this engine settles by itself" };
+  // The Black Captain's "move the Nazgûl" clause: the moves that follow are this engine's picks (not one picked here).
+  if (o.card === 'sh-char-24' && o.answer === 'move') {
+    const after = steps[1] ?? next;
+    if (!after) return { more: true };
+    if (after.side === f.side && after.kind === 'MOVE_MINIONS') return { absorb: 1, note: "the Black Captain's Nazgûl clause" };
+  }
+  // A card's first clause declined, its second asked next (The Black Captain Commands: no Nazgûl, then the Army):
+  // this engine's card goes on to the second one.
+  if (skip && o.card === 'sh-char-24') {
+    const after = steps[1] ?? next;
+    if (!after) return { more: true };
+    if (after.side === f.side && after.kind === 'CARD_CHOICE' && (after.opt?.card ?? after.card) === o.card) return { absorb: 1, note: "a card's first clause declined" };
+  }
   if (o.answer === 'separate') return { absorb: 1 };
-  if (f.ctx?.question === 'Which way?' || o.answer?.includes?.('>') && f.prevRoute) return { absorb: 1, note: "a card move's route: this engine takes its own" };
+  if (f.route) return { absorb: 1, note: "a card move's route: this engine takes its own" };
   if (!cardLegal(here).length) return { absorb: 1, note: `a card question this engine does not ask (${o.card})` };
+  // A figure the card recruits in a region this engine fills by itself (A New Power is Rising's Dunland Regulars), asked
+  // figure by figure: this engine has made it already, its own question is about another region.
+  const recruited = f.events.find((e) => e.kind === 'figure_recruited');
+  if (recruited) recruited.used = true; // this answer's own figure (later ones the referee recruited unasked: silentDefault)
+  if (recruited && ['REGULAR', 'ELITE'].includes(o.answer) && !cardLegal(here).some((a) => a.region === N.region(recruited.region))) {
+    return { absorb: 1, note: "a card's recruit this engine made by itself" };
+  }
   return cardChoices(steps, here, next);
 }
 
@@ -1021,6 +1268,8 @@ function cardChoices(steps, here, next) {
     for (const s of steps.slice(0, k)) {
       if (s.kind === 'CARD_CHOICE' && s.opt.answer != null) refWords(s.opt.answer).forEach((x) => w.add(x));
       else if (s.opt.kind === 'army_move' || s.opt.kind === 'attack') { w.add(s.opt.from); w.add(s.opt.to); }
+      // A card's Companion move in one answer (Gwaihir the Windlord: the Companion and where his group goes).
+      else if (s.kind === 'CARD_CHOICE' && s.opt.kind === 'move_companion') { w.add(s.opt.character); w.add(s.opt.to); }
     }
     return w;
   };
@@ -1040,20 +1289,46 @@ function cardChoices(steps, here, next) {
     const lesser = legal.filter((a) => containsAll(words, answerWords(a)) && answersOf(k).every((x) => inOrder(x, a)));
     if (lesser.length) {
       const most2 = Math.max(...lesser.map((a) => answerWords(a).size));
-      return ACTS([step(lesser.find((a) => answerWords(a).size === most2))], k);
+      const chosen = lesser.find((a) => answerWords(a).size === most2);
+      // What the referee's answer names beyond it (the destination of a Companion's move) is this engine's next step.
+      const rest = [...words].filter((x) => !answerWords(chosen).has(x));
+      const acts = [step(chosen)];
+      if (rest.length) {
+        acts.push(step(act('@noop'), null, {
+          resolve: (h) => h.kind === 'eventTarget'
+            ? (cardLegal(h).find((a) => rest.every((x) => answerWords(a).has(x))) ?? cardLegal(h).find((a) => rest.some((x) => answerWords(a).has(x))) ?? act('@noop'))
+            : act('@noop'),
+        }));
+      }
+      return ACTS(acts, k);
     }
     if (legal.length === 1 || answersOf(k).includes('siege')) return ACTS([step(legal[0])], k, 'a card answer this engine does not offer; its only one made');
     return { fail: `none of this engine's ${legal.length} answers fits the referee's ${[...words].join(',')}` };
   }
-  const least = Math.min(...fits.map((a) => minus(answerWords(a), words).length));
-  const best = fits.filter((a) => minus(answerWords(a), words).length === least);
+  // What an answer names beyond the referee's (a recruit's "recruit" is no word of the referee's when it names the region).
+  const beyond = (a) => minus(answerWords(a), words).filter((w) => !(w === 'recruit' && a.region)).length;
+  const least = Math.min(...fits.map(beyond));
+  const best = fits.filter((a) => beyond(a) === least);
   const last = steps[k - 1];
   const after = steps[k] ?? next;
   if (k === steps.length && !after) return { more: true };
   if (k === steps.length && after && after.side === last.side && after.kind === 'ARMY_SELECTION') return { more: true };
-  if ((best.length > 1 || least > 0) && k === steps.length && after && after.side === last.side &&
+  // (Several answers naming exactly the referee's: they differ in what the referee does not name, the first is made
+  // now, so that this engine is up to date when the next move is asked.)
+  if ((least > 0 || (best.length > 1 && after?.kind === 'CARD_CHOICE')) && k === steps.length && after && after.side === last.side &&
     (after.kind === 'ARMY_MOVE' || after.kind === 'CHOOSE_ATTACK' || (after.kind === 'CARD_CHOICE' && (after.card ?? after.opt?.card ?? null) === card))) return { more: true };
-  return ACTS([step(best[0])], k);
+  // The figures that go along (ARMY_SELECTION after the move's answer, Rage of the Dunlendings' units): this engine's
+  // `move` selection of the target.
+  const chosen = best[0];
+  if (chosen.from && steps[k]?.kind === 'ARMY_SELECTION' && steps[k].side === last.side) {
+    const end = selectionEnd(steps, k - 1, next);
+    if (end === null) return { more: true };
+    // (An attack moves nothing before the battle, Corsairs of Umbar's landing: the selections' counts.)
+    const moved = steps.slice(0, end + 1).some((x) => x.events.some((e) => e.kind === 'army_moved'));
+    const move = moved ? movedSel(steps.slice(0, end + 1), chosen.from) : countedSel(steps.slice(k, end + 1));
+    return ACTS([step({ ...chosen, move })], end + 1, "the figures of a card's move");
+  }
+  return ACTS([step(chosen)], k);
 }
 
 // --- This engine's action as the referee's options ("expand") -------------------------------------------------------
@@ -1291,7 +1566,10 @@ export class Plan {
       case 'revealMove': {
         if (!first || k !== 'REVEAL_FELLOWSHIP') return null;
         const opts = ops.filter((o) => o.kind === 'reveal' && o.region === N.pRegion(a.target));
-        return opts.find((o) => !o.through_moria) ?? opts[0] ?? null;
+        // This engine's route: the fewest Shadow Strongholds, then not through Moria.
+        const least = Math.min(...opts.map((o) => o.strongholds ?? -1));
+        const best = opts.filter((o) => (o.strongholds ?? -1) === least);
+        return best.find((o) => !o.through_moria) ?? best[0] ?? null;
       }
       case 'huntRedraw': case 'huntPreventDraw': {
         if (!first || k !== 'CARD_CHOICE') return null;
@@ -1300,9 +1578,12 @@ export class Plan {
         return use ? pick(ops, (o) => (o.answer === N.pCard(card) || o.target_card === N.pCard(card))) : pick(ops, (o) => o.answer === 'skip' || o.skip === true);
       }
       case 'guideDraw': case 'sorcererDraw': case 'bonusDraw': {
-        // The referee never offers to skip an optional draw; this engine's "no" draws as well.
+        // The official rules let a "may draw" be declined (`skip`); before them this engine's "no" drew as well.
         if (!first || k !== 'CARD_CHOICE') return null;
-        const draws = ops.filter((o) => o.kind === 'draw');
+        const decline = a.draw === false || a.deck === 'none';
+        const skipOption = ops.find((o) => o.kind === 'draw' && o.skip === true);
+        if (decline && skipOption) return skipOption;
+        const draws = ops.filter((o) => o.kind === 'draw' && !o.skip);
         if (!draws.length) return null;
         return draws.find((o) => o.deck === a.deck) ?? draws[0];
       }
@@ -1354,7 +1635,8 @@ export class Plan {
         if (this.progress && !this.minionLeft) return null;
         const figure = a.companion;
         if (!figure) {
-          if (words.has('skip')) return pick(ops, (o) => o.kind === 'end');
+          // The end of the card's moves: its answer is spent (the card's next question is another answer's).
+          if (words.has('skip')) { this.progress = true; this.words = new Set(); return pick(ops, (o) => o.kind === 'end'); }
           if (a.from) return pick(ops, (o) => o.kind === 'end');
           return null;
         }
@@ -1495,12 +1777,21 @@ export class Game {
     this.id = msg.game;
     this.side = N.side(msg.side);
     this.clock = msg.clock ?? null;
+    // The official rules (#1371): the Leader re-roll is asked after the Combat roll, so its dice come later.
+    this.official = msg.official_rules === true;
+    followHidden = this.official && msg.hidden_passes !== false;
+    // A battle's second side's Combat roll, kept back until the first side's re-roll is known (combatStash).
+    this.combatStash = null;
     const seed = seed32(opts.seed ?? msg.seed_bot ?? 1);
     this.rng = new Rng(seed);
     // The Shadow AI's campaign roll for the game, as its setup derives one from a seed (src/engine/setup.ts).
     this.planRoll = Math.abs(Math.imul(seed ^ 0x9e3779b9, 2654435761)) % 100;
     this.state = createGame({ seed });
     this.state.shadowPlanRoll = this.planRoll;
+    // A game from a position (the referee's position suite: start "position", the bot's view of it): this engine's
+    // state built from that view, the side to act as the view says; no setup events follow.
+    this.fromPosition = msg.start === 'position' && !!msg.view;
+    if (this.fromPosition) this.state = stateFromView(msg.view, {}, this.planRoll);
     clearQueues();
     this.steps = [];
     this.last = null;
@@ -1531,22 +1822,48 @@ export class Game {
   event(e) {
     if (e.kind === 'choice') {
       this.feedRandoms();
-      this.drain({ side: N.side(e.side), kind: e.decision, opt: e.option, card: e.option?.card ?? null });
+      // A card move's route ("Which way?", asked after the Army's move when it has several): the bot's own from the
+      // question; the opponent's an answer ending where the card's move just before it went, from elsewhere.
+      const prev = this.last;
+      const route = (N.side(e.side) === this.side && this.ownCtx?.kind === e.decision && this.ownCtx.ctx?.question === 'Which way?') ||
+        (N.side(e.side) !== this.side && e.decision === 'CARD_CHOICE' && prev?.kind === 'CARD_CHOICE' && prev.side === N.side(e.side) &&
+          prev.opt.card === e.option?.card && isRouteAfter(e.option?.answer, prev.opt.answer));
+      this.drain({ side: N.side(e.side), kind: e.decision, opt: e.option, card: e.option?.card ?? null, route });
       const st = {
         side: N.side(e.side), kind: e.decision, o: e.o, opt: { ...e.option }, events: [],
         inCard: this.cardInPlay && !TOP_LEVEL.has(e.decision), inBattle: this.inBattle, ctx: null,
       };
       if (e.option?.hidden) st.opt.hidden = true;
+      // Mighty Attack's Companion, known before the steps waiting for the re-roll's dice are made (followOptions).
+      if (e.decision === 'CARD_CHOICE' && MIGHTY_ATTACK.has(N.card(e.option?.card ?? '')) && e.option?.character) {
+        forfeit = { side: st.side, n: leadershipOf(N.char(e.option.character)) };
+      }
       if (st.side === this.side && this.ownCtx?.kind === e.decision) { st.ctx = this.ownCtx.ctx; st.forced = this.ownCtx.forced; this.ownCtx = null; }
       if (TOP_LEVEL.has(e.decision)) this.cardInPlay = false;
+      st.route = route;
+      st.dice = viewDice;
       this.steps.push(st);
       this.last = st;
       return;
     }
-    if (e.kind.startsWith('random_')) { this.randoms.push(e); return; }
+    if (e.kind.startsWith('random_')) {
+      // The round's Combat roll: the casualties before it (preCombat) are complete.
+      if (e.kind === 'random_roll' && e.roll === 'combat' && this.preCombat) { this.lastPreCombat = this.preCombat; this.preCombat = null; }
+      this.randoms.push(e);
+      return;
+    }
     this.last?.events.push(e);
     switch (e.kind) {
-      case 'turn_started': this.flags = {}; break;
+      case 'turn_started': this.flags = {}; this.huntRest = false; this.cardCasualty = false; break;
+      // A card's forced Hunt casualty (Foul Thing from the Deep) and then the rest as Corruption at once (maybe after a
+      // new Guide's choice): for silentDefault.
+      case 'companion_lost_to_hunt': this.cardCasualty = !!e.card; break;
+      // Casualties before a round's Combat roll (a card's attack before it): already taken when CASUALTY is asked.
+      case 'combat_cards_revealed': this.preCombat = []; forfeit = null; break;
+      case 'casualty_taken': this.preCombat?.push(e); break;
+      case 'corruption_changed':
+        if (this.cardCasualty) { this.huntRest = true; this.cardCasualty = false; }
+        break;
       case 'fellowship_declared': this.flags.declared = true; this.flags.fellowshipActed = true; break;
       case 'fellowship_moved': case 'fellowship_hidden': this.flags.fellowshipActed = true; break;
       case 'die_used':
@@ -1598,8 +1915,28 @@ export class Game {
         }
       }
     }
+    // By the official rules the re-roll's dice come after both Combat rolls, in a later batch: the second side's roll
+    // waited (combatStash) and goes after the first side's re-roll, as this engine rolls them.
+    if (this.combatStash) {
+      const i = rolls.findIndex((r) => r[1] === 'leader_reroll' && r[0] === this.combatStash.first);
+      const first = i >= 0 ? rolls.splice(i, 1) : [];
+      rolls.unshift(...first, ...this.combatStash.rolls);
+      this.combatStash = null;
+    }
+    const combat = rolls.map((r, i) => [r, i]).filter(([r]) => r[1] === 'combat');
+    if (this.official && combat.length === 2 && combat[0][0][0] !== combat[1][0][0] && !rolls.some((r) => r[1] === 'leader_reroll')) {
+      const at = combat[1][1];
+      this.combatStash = { first: combat[0][0][0], rolls: rolls.splice(at) };
+    }
     for (const [, , d] of rolls) queues.d6.push(...d);
     this.randoms = [];
+  }
+
+  /** The second side's Combat roll that waited for the first side's re-roll: no re-roll came (none for that side). */
+  flushCombatStash() {
+    if (!this.combatStash) return;
+    for (const [, , d] of this.combatStash.rolls) queues.d6.push(...d);
+    this.combatStash = null;
   }
 
   // --- The lock step ---
@@ -1633,6 +1970,8 @@ export class Game {
         if (!this.applyHis(this.held[0], true)) {
           // Later steps wait behind it; they are collapsed now so that their actions queue up in order.
           while (this.steps.length) {
+            // A card's question (a Combat card's cost) is read against this engine's question then: it waits.
+            if (this.steps[0].kind === 'CARD_CHOICE') break;
             const r = collapse(this.steps, here, this.state, next);
             if (r.acts) { const side = this.steps[0].side; this.fixReveal(this.steps.slice(0, r.n)); this.steps.splice(0, r.n); for (const a of r.acts) this.held.push({ ...a, side: a.side ?? side }); }
             else if (r.absorb) this.steps.splice(0, r.absorb);
@@ -1652,9 +1991,26 @@ export class Game {
       }
       const head = this.steps[0];
       // An optional draw this engine asks before the referee draws: declined here, the referee's draw written in later.
-      if (head && ['guideDraw', 'sorcererDraw', 'bonusDraw'].includes(here.kind) && !(head.kind === 'CARD_CHOICE' && head.opt.kind === 'draw')) {
+      // Not before the referee's own questions that come first there: a card move's route, a figure the card recruits,
+      // a new Guide (then the draw is asked).
+      const before = head && (head.kind === 'CHOOSE_GUIDE' || (head.kind === 'CARD_CHOICE' &&
+        (head.opt.kind === 'draw' || head.route || ['REGULAR', 'ELITE'].includes(head.opt.answer))));
+      // A hand-limit discard the referee asks before the draw (this engine: the draw first): kept until it is asked.
+      if (head && ['guideDraw', 'sorcererDraw', 'bonusDraw'].includes(here.kind) && head.kind === 'DISCARD_EXCESS_CARD' && head.side === here.actor) {
+        this.deferred.push({ side: head.side, action: act('discardCard', { card: head.opt.hidden ? { hiddenDeck: head.opt.deck } : N.card(head.opt.card) }) });
+        this.steps.shift();
+        this.note("a hand-limit discard before this engine's draw: kept for later");
+        continue;
+      }
+      if (head && ['guideDraw', 'sorcererDraw', 'bonusDraw'].includes(here.kind) && !before) {
         this.note(`this engine only: ${here.kind} declined`);
         this.applyOrHold(this.silentDefault(null, true));
+        continue;
+      }
+      // A siege the referee did not extend (it asks only when the attacker can and may; here the next action comes).
+      if (head && TOP_LEVEL.has(head.kind) && here.kind === 'siegeExtend') {
+        this.note('a siege the referee ended: not extended here');
+        this.applyOrHold(step(act('siegeExtend', { extend: false }), null, { side: here.actor }));
         continue;
       }
       // Hand-limit discards: the referee asks the Shadow first, this engine the Free Peoples.
@@ -1673,7 +2029,7 @@ export class Game {
       const r = collapse(this.steps, here, this.state, next);
       if (r.more) return;
       if (r.fail) throw new Desync(r.fail);
-      if (r.absorb) { this.steps.splice(0, r.absorb); if (r.note) this.note(r.note); continue; }
+      if (r.absorb) { this.steps.splice(0, r.absorb); if (r.defer) this.deferred.push(r.defer); if (r.note) this.note(r.note); continue; }
       const side = head.side;
       this.fixReveal(this.steps.slice(0, r.n));
       this.steps.splice(0, r.n);
@@ -1701,12 +2057,18 @@ export class Game {
     } finally {
       lenient = false;
     }
+    if (madeUp) debug(`[${this.id}]   this engine's log: ${JSON.stringify((this.state.log ?? []).slice(-7).map((l) => l.msg))}`);
     if (madeUp) { this.stats.madeUp = (this.stats.madeUp ?? 0) + madeUp; this.note(`outcomes the referee did not draw, made up here: ${madeUp}`); }
   }
 
   applyOrHold(hs) {
+    const asked = this.state;
     if (this.held.length) { this.held.push(hs); return; }
-    if (!this.applyHis(hs, true)) this.held.push(hs);
+    if (!this.applyHis(hs, true)) {
+      this.held.push(hs);
+      // A draw of the bot's declined here and waiting: the AI answers the referee's draw question from this point.
+      if (['guideDraw', 'sorcererDraw', 'bonusDraw'].includes(hs.action.kind) && hs.side === this.side) this.drawAsked = asked;
+    }
   }
 
   /** Applies one step of this engine's; false when it needs an outcome the referee has not drawn yet (with `mayWait`). */
@@ -1739,6 +2101,14 @@ export class Game {
       return true;
     }
     if (hs.onlyIf && hs.onlyIf !== here.kind && !(hs.side && here.actor !== hs.side)) return true;
+    // The end of a card's choices where this engine has ended the card already: nothing to do.
+    if (hs.action.kind === 'eventTarget' && hs.action.done && here.kind !== 'eventTarget') { this.note('the end of a card this engine ended already'); return true; }
+    // Hand-limit discards (also of steps held for an outcome): the referee asks the Shadow first, this engine the Free
+    // Peoples; kept until this engine asks it.
+    if (hs.action.kind === 'discardCard' && here.kind === 'discardCard' && hs.side && here.actor !== hs.side) {
+      this.deferred.push({ side: hs.side, action: hs.action });
+      return true;
+    }
     // This engine waits for the other side: its questions the referee does not have go first.
     for (let g = 0; hs.side && here.actor !== hs.side && !here.winner && g < 8; g++) {
       if (hs.phaseIf && here.phase === 'actionResolution') { this.note(`settled by this engine itself: ${hs.action.kind}`); return true; }
@@ -1755,7 +2125,7 @@ export class Game {
     if (hs.phaseIf && here.phase !== hs.phaseIf) { this.note(`settled by this engine itself: ${hs.action.kind}`); return true; }
     let action = hs.action;
     if (hs.resolve) {
-      action = hs.resolve(here);
+      action = hs.resolve(here, this.state);
       if (!action) throw new Desync(`no answer here for ${JSON.stringify(hs.action)}`);
     }
     if (action.kind === '@noop') return true;
@@ -1785,17 +2155,45 @@ export class Game {
       if (action.kind === 'playEvent') { this.cardBase = this.state; this.cardUsed = new Map(); }
       const prepared = this.prepare(action, actor);
       const before = { state: this.state, q: saveQueues() };
-      r = applyForced(prepared.state, prepared.action, actor);
+      // The Voice of Saruman's recruits where the referee made them (followOptions.sarumanRecruitIn); an Event card
+      // played as the referee played it (followOptions.playAsPlayed).
+      if (action.kind === 'sarumanMuster' && action.regions) {
+        const { regions, ...plain } = prepared.action;
+        prepared.action = plain;
+        E.followOptions.sarumanRecruitIn = regions;
+      }
+      E.followOptions.playAsPlayed = action.kind === 'playEvent';
+      if (action.kind === 'revealMove' && action.strongholds != null) {
+        const { strongholds, ...plain } = prepared.action;
+        prepared.action = plain;
+        E.followOptions.revealStrongholds = strongholds;
+      }
+      try { r = applyForced(prepared.state, prepared.action, actor); } finally {
+        E.followOptions.sarumanRecruitIn = null; E.followOptions.playAsPlayed = false; E.followOptions.revealStrongholds = null;
+      }
       if (r.ok && prepared.standIn) {
         this.hidden = { ...prepared.standIn, snapshot: before.state, q: before.q, fed: { d6: [], faces: [], tiles: [], picks: [] }, fedCards: [], replay: [] };
       }
     }
     if (!r.ok) {
-      if (mayWait && r.needsChance) { debug(`[${this.id}] waits: ${JSON.stringify(action)}: ${r.reason}`); return false; }
+      if (mayWait && r.needsChance) { this.waitsFor = r.reason; debug(`[${this.id}] waits: ${JSON.stringify(action)}: ${r.reason}`); return false; }
       throw new Desync(`this engine refuses ${JSON.stringify(action)}: ${r.reason}`);
     }
+    // The Hunt damage this engine took last (a reveal's Stronghold tile it merges with the damage before it).
+    if (action.kind === 'huntDamage' && action.mode) this.lastHuntMode = action.mode;
+    if (action.kind === 'moveFellowship' || action.kind === 'playEvent') this.lastHuntMode = null;
+    const prior = this.state;
+    // An optional draw of the bot's this engine settled before the referee asks it: the state where it was asked.
+    if (['guideDraw', 'sorcererDraw', 'bonusDraw'].includes(action.kind) && (hs.side ?? here.actor) === this.side) this.drawAsked = prior;
+    const logged = (prior.log ?? []).length;
     this.state = r.state;
     debug(`[${this.id}] applied ${hs.side ?? ''} ${JSON.stringify(action)} -> ${this.pending().actor} ${this.pending().kind ?? this.state.phase}`);
+    // A battle round's Combat rolls: the board before them, for the casualties this engine takes by itself (casualtyBase).
+    const rolled = (this.state.log ?? []).slice(logged).filter((l) => / dice — /.test(l.msg ?? ''));
+    if (rolled.length) {
+      this.casualtyBase = { state: prior, used: new Map(), pre: this.lastPreCombat ?? [] };
+      for (const l of rolled) debug(`[${this.id}]   ${l.msg}`);
+    }
     return true;
   }
 
@@ -1826,7 +2224,23 @@ export class Game {
         }
       }
       a.cardId = card;
-      standIn = card ? { side: actor, card } : null;
+      // No stand-in this engine would let it play: none here, and the real card made at the reveal (fixReveal).
+      standIn = { side: actor, card };
+    } else if (a.kind === 'forceDiscardCard' && (hidden(a.discardStrategy) || hidden(a.discardCharacter))) {
+      // The price paid face down (A Power too Great / Tom Bombadil): an Army-icon Strategy card and a Character card
+      // of the hand, or else unseen ones (draw piles, face-down discards) put into it, so that this engine takes it.
+      const p = s.cards[actor];
+      const fits = { discardStrategy: (c) => E.data.EVENT_BY_ID[c]?.deck === 'Strategy' && E.data.EVENT_BY_ID[c]?.playableVia === 'army',
+        discardCharacter: (c) => E.data.EVENT_BY_ID[c]?.deck === 'Character' };
+      for (const k of ['discardStrategy', 'discardCharacter']) {
+        if (!hidden(a[k])) continue;
+        let card = p.hand.find(fits[k]);
+        if (!card) {
+          card = [...p.draw[a[k].hiddenDeck], ...(p.discardFaceDown ?? [])].find(fits[k]);
+          if (card) swapIntoHand(s, actor, card);
+        }
+        a[k] = card;
+      }
     }
     for (const k of ['cardId', 'card', 'discardStrategy', 'discardCharacter']) {
       if (typeof a[k] === 'string' && E.data.EVENT_BY_ID[a[k]] && !s.cards[actor].hand.includes(a[k]) && !(a.kind === 'playCombatCard' && s.cards[actor].table.includes(a[k]))) {
@@ -1874,26 +2288,78 @@ export class Game {
     const here = this.pending();
     if (here.winner) return null;
     if (!here.actor) return this.state.phase !== 'gameOver' ? step(act('@advance')) : null;
+    // A card move's route asked next: this engine took its own, its open question comes after it.
+    if (!force && next?.route) return null;
     if (!force && next && corresponds(here, { side: next.side, kind: next.kind, context: { card: next.card }, options: next.opt ? [next.opt] : [] }, this.cardInPlay)) return null;
     const end = (() => {
       switch (here.kind) {
         case 'armyMove2': return act('armyMove2', { done: true });
         case 'charMove2': return act('charMove2', { done: true });
         case 'musterSecond': return act('recruitSecond', { done: true });
-        case 'guideDraw': case 'sorcererDraw': return act(here.kind, { draw: false });
-        case 'bonusDraw': return act('bonusDraw', { deck: 'none' });
-        case 'combatCard': return act('playCombatCard', { cardId: null }); // the referee asks no Combat card here
+        // (The referee's hand-limit discard asked first: the draw waits for its question after it.)
+        case 'guideDraw': case 'sorcererDraw':
+          return next?.kind === 'DISCARD_EXCESS_CARD' && next.side === here.actor ? null : act(here.kind, { draw: false });
+        case 'bonusDraw': return next?.kind === 'DISCARD_EXCESS_CARD' && next.side === here.actor ? null : act('bonusDraw', { deck: 'none' });
+        // The referee asks no Combat card here (by the official rules with hidden passes it asks every one: wait).
+        case 'combatCard': return followHidden ? null : act('playCombatCard', { cardId: null });
         case 'freeCharEvent': return act('freeCharEvent', { decline: true });
         case 'huntDamage':
+          // A casualty the card forced (Foul Thing from the Deep): the referee took the rest as Corruption at once (one
+          // Companion per tile), this engine asks it.
+          if (this.huntRest && here.legal.some((a) => a.mode === 'corruption')) { this.huntRest = false; return act('huntDamage', { mode: 'corruption' }); }
           // The referee goes on with the same Hunt (a new Guide among equals, his ability, another casualty): wait.
           if (next && next.side === here.actor && ['CHOOSE_GUIDE', 'GUIDE_ABILITY', 'HUNT_CASUALTY', 'CARD_CHOICE', 'REVEAL_FELLOWSHIP', 'SEPARATE_COMPANIONS'].includes(next.kind)) return null;
           return here.legal.some((a) => a.mode === 'corruption') ? act('huntDamage', { mode: 'corruption' }) : null;
       }
       if (!here.kind && here.phase === 'fellowship') return act('skipFellowshipPhase');
-      return null;
+      return this.unasked(here);
     })();
     if (end) return step(end, null, { side: here.actor });
     if (here.legal.length === 1) return step(here.legal[0], null, { side: here.actor });
+    return null;
+  }
+
+  /**
+   * This engine's open question that the referee settled without asking (its only option there), as the events of the
+   * last step show it: a card's figure recruited, a casualty taken, a card's target Army hit. The same answer here.
+   */
+  unasked(here) {
+    const events = this.last?.events ?? [];
+    if (here.kind === 'eventTarget') {
+      const e = events.find((x) => x.kind === 'figure_recruited' && !x.used && N.side(x.side) === here.actor);
+      const a = e && here.legal.find((x) => x.kind === 'eventTarget' && x.region === N.region(e.region) && x.figure === String(e.unit).toLowerCase() &&
+        (!x.nation || x.nation === N.nation(e.nation)));
+      if (a) { e.used = true; return a; }
+      // The card's target Army (Faramir's Rangers' dice): the region whose figures it hit, the target's only word.
+      const hit = events.filter((x) => (x.kind === 'figure_eliminated' || x.kind === 'casualty_taken') && !x.used && N.side(x.side) !== here.actor);
+      const regions = [...new Set(hit.map((x) => x.region))];
+      if (regions.length === 1) {
+        const t = here.legal.find((x) => x.kind === 'eventTarget' && same([...answerWords(x)], [regions[0]]));
+        if (t) { hit.forEach((x) => { x.used = true; }); return t; }
+      }
+    }
+    // The Breaking of the Fellowship's Companions, when there was no choice to make.
+    if (here.kind === 'breakingSep') {
+      for (const e of events) {
+        if (e.kind !== 'companions_separated') continue;
+        const c = (e.characters ?? []).map(N.char).find((x) => !(e.usedChars ?? []).includes(x) && here.legal.some((a) => a.companion === x));
+        if (c) { (e.usedChars ??= []).push(c); return act('breakingSep', { companion: c }); }
+      }
+    }
+    // The attacker's advance after the battle (a card's attack that must advance): all of it, or none.
+    if (['advanceChoice', 'besiegerAdvance', 'relieveAdvance'].includes(here.kind) && events.some((x) => x.kind === 'battle_ended')) {
+      const to = this.state.pendingCombat?.to;
+      const moved = events.find((x) => x.kind === 'army_moved' && !x.used && N.side(x.side) === here.actor && N.region(x.to) === to);
+      if (moved) moved.used = true;
+      return act(here.kind, { advance: !!moved });
+    }
+    // (Not while the referee's own steps wait to be made: their casualties come first, in their order.)
+    if ((here.kind === 'eventCasualties' || here.kind === 'combatCasualties') && !this.steps.length) {
+      const e = events.find((x) => x.kind === 'casualty_taken' && !x.used && N.side(x.side) === here.actor);
+      const stepKind = { REDUCE_ELITE: 'reduceElite', REMOVE_REGULAR: 'removeRegular', REMOVE_ELITE: 'removeElite' }[e?.casualty];
+      const a = stepKind && here.legal.find((x) => x.kind === 'casualtyStep' && x.step === stepKind && x.nation === N.nation(e.nation));
+      if (a) { e.used = true; return a; }
+    }
     return null;
   }
 
@@ -1923,12 +2389,66 @@ export class Game {
     return option;
   }
 
+  /**
+   * The opponent's draw piles as large as the referee's (the view's deck sizes, less the draws queued here): its cards
+   * are stand-ins here, and a stand-in left in a pile the referee has emptied would be drawn at the next turn.
+   */
+  matchPiles(view) {
+    const other = this.side === 'fp' ? 'shadow' : 'fp';
+    const decks = view?.cards?.decks?.[N.pSide(other)];
+    const p = this.state.cards?.[other];
+    if (!decks || !p) return;
+    p.discardFaceDown ??= [];
+    for (const deck of ['character', 'strategy']) {
+      if (typeof decks[deck] !== 'number') continue;
+      const want = decks[deck] + cardQueue.filter((c) => c.side === other && c.deck === deck).length;
+      const pile = p.draw[deck];
+      while (pile.length > want) p.discardFaceDown.push(pile.pop());
+      for (let i = p.discardFaceDown.length - 1; i >= 0 && pile.length < want; i--) {
+        if (N.deck(p.discardFaceDown[i]) === deck) pile.push(...p.discardFaceDown.splice(i, 1));
+      }
+    }
+  }
+
   decide0(d, view) {
     const side = this.side;
+    if (view?.dice) viewDice = view.dice;
     this.feedRandoms();
-    this.drain({ side: N.side(d.side), kind: d.kind, opt: null, card: d.context?.card ?? null });
-    if (this.held.length && !this.desynced) this.unblock({ side: N.side(d.side), kind: d.kind, opt: null, card: d.context?.card ?? null });
+    if (!this.desynced) this.matchPiles(view);
+    this.drain({ side: N.side(d.side), kind: d.kind, opt: null, card: d.context?.card ?? null, route: d.context?.question === 'Which way?' });
+    // The Leader re-roll's question comes before its dice (the official rules ask it after the Combat roll): a step
+    // waiting for them still gets them, nothing is made up yet.
+    // (So does a Combat card's question asked between the roll and the re-roll: Mighty Attack's forfeited Leadership.)
+    const beforeReroll = d.kind === 'LEADER_REROLL' || (d.kind === 'CARD_CHOICE' && this.inBattle);
+    if (!beforeReroll && this.combatStash) {
+      this.flushCombatStash();
+      if (this.held.length && !this.desynced) this.drain({ side: N.side(d.side), kind: d.kind, opt: null, card: d.context?.card ?? null, route: d.context?.question === 'Which way?' });
+    }
+    // A step that ends the turn here waits for the next turn's card draws, which the referee makes once the action's
+    // last questions (a card move's route, the figures that go along, a new Guide) are answered: not made up at those.
+    // (A hand-limit discard too while a card is in play: its draws come before the turn's.)
+    const cardGoesOn = !TOP_LEVEL.has(d.kind) && (d.kind !== 'DISCARD_EXCESS_CARD' || this.cardInPlay) && /this engine draws a/.test(this.waitsFor ?? '');
+    if (this.held.length && !this.desynced && !beforeReroll && !cardGoesOn) this.unblock({ side: N.side(d.side), kind: d.kind, opt: null, card: d.context?.card ?? null });
     if (d.options.length === 1) { this.stats.forced++; this.plan = this.plan?.answer(d) ? this.plan : null; return d.options[0]; }
+    // Many Kings / Pits of Mordor's count where the Regulars run short: this engine places two where it can.
+    if (d.kind === 'CARD_CHOICE' && ['sh-strat-17', 'sh-strat-24'].includes(d.context?.card) && d.options.every((o) => o.count != null && o.region == null)) {
+      const most = d.options.reduce((b, o) => (o.count > b.count && o.count <= 2 ? o : b), d.options[0]);
+      this.stats.plan++;
+      this.note('a recruit count: two where this engine can');
+      return most;
+    }
+    // Mighty Attack's Companion: this engine forfeits a Leadership of 1, the least (its re-roll stays largest).
+    if (d.kind === 'CARD_CHOICE' && MIGHTY_ATTACK.has(N.card(d.context?.card ?? '')) && d.options.every((o) => o.character)) {
+      const least = d.options.reduce((b, o) => (leadershipOf(N.char(o.character)) < leadershipOf(N.char(b.character)) ? o : b), d.options[0]);
+      this.stats.plan++;
+      this.note("Mighty Attack's forfeit: the least Leadership, as this engine forfeits");
+      return least;
+    }
+    // The official rules' Leader re-roll: taken, as this engine always does (a re-roll can only add hits).
+    if (d.kind === 'LEADER_REROLL') {
+      const reroll = pick(d.options, (o) => o.answer === 'reroll');
+      if (reroll) { this.stats.plan++; return reroll; }
+    }
     const clean = !view.battle && (TOP_LEVEL.has(d.kind) || (d.kind === 'DISCARD_EXCESS_CARD' && !this.cardInPlay));
     if (clean) {
       const keep = this.plan && d.kind === 'FELLOWSHIP_PHASE' && this.plan.action.kind === 'changeGuide' && this.plan.turn === view.turn ? this.plan : null;
@@ -1940,13 +2460,20 @@ export class Game {
       if (o) { this.stats.plan++; return o; }
       // A card's question the AI's answer leaves to this engine (a recruit's figure after its region, how many): as
       // the answer turns out here.
-      if (this.plan.ahead && CARD_FLOW.has(d.kind) && this.plan.stage > 0) {
+      if (this.plan.ahead && CARD_FLOW.has(d.kind) && !['ARMY_MOVE', 'CHOOSE_ATTACK', 'MOVE_MINIONS', 'MOVE_COMPANIONS'].includes(d.kind) && this.plan.stage > 0) {
         const s = byGains(gains(this.plan.base, this.plan.ahead), this.plan.used ??= new Map(), d);
         if (s) { this.stats.plan++; return s; }
       }
       this.plan = null;
     }
     if (this.desynced) { this.stats.rule++; this.note(`answered by default while out of step: ${d.kind}`); return defaultAnswer(d); }
+    // What the referee settled unasked before this question (a card's only recruit, its target): made here first.
+    for (let g = 0; g < 6 && !this.steps.length && !this.held.length; g++) {
+      const h = this.pending();
+      const a = h.actor && !h.winner ? this.unasked(h) : null;
+      if (!a || !this.applyHis(step(a, null, { side: h.actor }), true)) break;
+      this.note(`settled by the referee unasked: ${a.kind}`);
+    }
     let here = this.pending();
     // The reveal's move that this engine's AI answered before the referee asked it.
     if (d.kind === 'REVEAL_FELLOWSHIP' && this.earlyReveal) {
@@ -1965,23 +2492,78 @@ export class Game {
         here = this.pending();
       }
     }
+    // A hand-limit discard while this engine's card could go on (an optional clause the referee did not offer): the
+    // card is over at the referee, so here too.
+    if (d.kind === 'DISCARD_EXCESS_CARD' && here.kind === 'eventTarget' && here.actor === side && !this.steps.length && !this.held.length) {
+      const done = here.legal.find((x) => x.kind === 'eventTarget' && x.done);
+      if (done && this.applyHis(step(done, null, { side }), true)) { this.note("a card the referee ended: ended here"); here = this.pending(); }
+    }
     // A hand-limit discard the referee asks before this engine does (the Shadow's first).
-    if (d.kind === 'DISCARD_EXCESS_CARD' && here.kind === 'discardCard' && here.actor !== side) {
+    // Worn with Sorrow and Toil asked before this engine raises it (after the Hunt): the AI's answer to it now.
+    if (d.kind === 'CARD_CHOICE' && d.context?.card === 'sh-char-15' && here.kind !== 'wornDiscard') {
+      const t = JSON.parse(JSON.stringify(this.state));
+      t.pendingChoice = { owner: side, kind: 'wornDiscard', data: {} };
+      const a = this.choose(side, [], t);
+      const o = a?.kind !== 'wornDiscard' ? null : a.decline ? pick(d.options, (x) => x.skip) : a.card ? pick(d.options, (x) => N.card(x.target_card ?? x.answer) === a.card) : pick(d.options, (x) => x.answer === 'hand');
+      if (o) { this.stats.ai++; return o; }
+    }
+    // (Also while steps wait for an outcome: the hand as the referee offers it.)
+    // (And before this engine's own optional draw, which the referee asks after the discard.)
+    if (d.kind === 'DISCARD_EXCESS_CARD' && ((here.kind === 'discardCard' && here.actor !== side) || this.held.length ||
+      (['guideDraw', 'sorcererDraw', 'bonusDraw'].includes(here.kind) && here.actor === side))) {
       const t = JSON.parse(JSON.stringify(this.state));
       t.pendingChoice = { owner: side, kind: 'discardCard', data: {} };
+      // The hand as the referee's options name it (a second discard: the first is not made here yet).
+      const offered = new Set(d.options.filter((o) => o.card).map((o) => N.card(o.card)));
+      t.cards[side].hand = t.cards[side].hand.filter((c) => offered.has(c));
       const a = this.choose(side, [], t);
       if (a) { this.plan = new Plan(a, null, side); const o = this.plan.answer(d); if (o) { this.stats.ai++; return o; } }
     }
     if (this.held.length || !corresponds(here, d, this.cardInPlay)) {
       if (d.kind === 'CHOOSE_GUIDE') {
-        const g = pick(d.options, (o) => o.character === N.pChar(this.state.fellowship.guide));
+        // The Guide this engine names (after the casualty held for the next turn's draws, looked ahead on a copy).
+        const ahead = this.held.length ? tryAhead(this.state, this.held[0].action, this.held[0].side ?? side) : null;
+        const guide = (ahead ?? this.state).fellowship.guide;
+        // (Else this engine's rule: the remaining Companion of the highest Level.)
+        const level = (o) => E.data.levelOf(N.char(o.character));
+        const g = pick(d.options, (o) => o.character === N.pChar(guide)) ??
+          (d.options.every((o) => o.character) ? d.options.reduce((b, o) => (level(o) > level(b) ? o : b), d.options[0]) : null);
         if (g) { this.stats.rule++; this.note('Guide among equals: this engine\'s'); return g; }
       }
       // A card this engine resolved by itself (placing units, moving an Army): the option that does what it did.
       const settled = this.settledAnswer(d);
       if (settled) { this.stats.rule++; this.note(`answered as this engine resolved the card: ${d.kind}`); return settled; }
+      const draw = this.drawAnswer(d);
+      if (draw) return draw;
+      // A reveal's Stronghold tile whose damage this engine took together with the damage before it: the same way.
+      if (d.kind === 'HUNT_CASUALTY' && this.lastHuntMode && !here.kind) {
+        const o = pick(d.options, (x) => x.kind === this.lastHuntMode);
+        if (o) { this.stats.rule++; this.note('a Hunt tile whose damage this engine took with the one before: the same way'); return o; }
+      }
+      // The Army move or attack of the die the AI chose, which the referee does not offer (it bars a move this engine
+      // allows): the AI's choice among those it offers, the die already chosen.
+      const again = this.armyAgain(d, here);
+      if (again) { this.stats.ai++; this.note(`the AI's ${d.kind} asked again among the referee's moves`); return again; }
+      // A battle's casualties this engine took by itself (the only sensible way, which it does not ask): as it took them.
+      const casualty = this.settledCasualty(d);
+      if (casualty) { this.stats.rule++; this.note('a casualty this engine took by itself: as it took it'); return casualty; }
+      // A card this engine resolved by itself in a step that waits for an outcome (its fixed recruits): the option that
+      // does what that step does, looked ahead on a copy.
+      if (this.held.length && CARD_FLOW.has(d.kind) && this.held[0].action.kind === 'playEvent') {
+        const ahead = tryAhead(this.state, this.held[0].action, this.held[0].side ?? side);
+        const o = ahead && byGains(gains(this.state, ahead), this.heldUsed ??= new Map(), d);
+        if (o) { this.stats.rule++; this.note(`answered as this engine resolves the card: ${d.kind}`); return o; }
+      }
+      // A card's further choice this engine does not offer (it ended the card: "The Ringwraiths Are Abroad"'s attack or
+      // moves after the Nazgûl, the Ents' further Character card): declined, as this engine went on.
+      if (d.kind === 'CARD_CHOICE' && !CARD_KINDS.has(here.kind)) {
+        const decline = pick(d.options, (o) => o.skip === true || o.answer === 'none' || o.answer === 'no' || o.kind === 'none');
+        if (decline) { this.stats.rule++; this.note(`a card's choice this engine does not offer: declined (${d.context?.card ?? '-'})`); return decline; }
+      }
       this.stats.rule++;
       this.note(`answered by default: ${d.kind} (this engine ${here.actor ?? '-'} ${here.kind ?? here.phase})`);
+      debug(`[${this.id}]   this engine's: ${here.legal.slice(0, 8).map((a) => JSON.stringify(a)).join(' ')}; held ${JSON.stringify(this.held.map((h) => h.action)).slice(0, 300)}`);
+      debug(`[${this.id}]   this engine's log: ${JSON.stringify((this.state.log ?? []).slice(-8).map((l) => l.msg))}`);
       return defaultAnswer(d);
     }
     // The AI's choice; one that has no counterpart among the referee's options is left out and the AI asked again.
@@ -1991,13 +2573,36 @@ export class Game {
       if (here.actor !== side || !corresponds(here, d, this.cardInPlay)) break;
       const a = this.choose(side, excluded);
       if (!a) break;
+      debug(`[${this.id}]   the AI: ${JSON.stringify(a)}`);
       const face = spentFace(this.state, a, side);
       const plan = new Plan(a, face, side);
       plan.turn = view.turn;
       this.lookAhead(plan, a);
       if (CARD_KINDS.has(a.kind)) { plan.base = this.state; plan.ahead = tryAhead(this.state, a, side); }
+      // Dreadful Spells: the AI's target, cast by the Army with the most Nazgûl there (as this engine casts it).
+      if (d.context?.card === 'sh-char-19' && a.kind === 'eventTarget' && a.region) {
+        const naz = (r) => { const g = this.state.regions[N.region(r)]; return (g?.nazgul ?? 0) + (g?.characters?.includes('witch-king') ? 1 : 0); };
+        const fits = d.options.filter((x) => x.to === N.pRegion(a.region) && x.from);
+        if (fits.length) { this.plan = null; this.stats.ai++; return fits.reduce((b, x) => (naz(x.from) > naz(b.from) ? x : b), fits[0]); }
+      }
       const o = plan.answer(d);
       if (o) { this.plan = plan; this.stats.ai++; return o; }
+      // The die the AI turns into an Eye, by the referee's number for it.
+      if (d.context?.question === EYE_QUESTION && a.kind === 'eventTarget') {
+        const o2 = a.done ? pick(d.options, (x) => x.skip) : pick(d.options, (x) => x.count != null && dieFace(side, x.count) === N.pFace(a.face));
+        if (o2) { this.plan = null; this.stats.ai++; return o2; }
+      }
+      // A card's moves this engine has ended (no figure of the card's left to move here), its next question asked: the
+      // end of the referee's moves.
+      if (this.cardInPlay && ['MOVE_MINIONS', 'MOVE_COMPANIONS', 'ARMY_MOVE'].includes(d.kind) && !a.from && !a.companion && !here.legal.some((x) => x.from)) {
+        const end = pick(d.options, (x) => x.kind === 'end');
+        if (end) { this.stats.rule++; this.note(`a card's moves this engine has ended: ${d.kind} ended`); return end; }
+      }
+      // The referee's bonus draw after a card this engine has not finished (the referee settled the rest unasked): the
+      // card's rest as the AI makes it, here only, then the draw.
+      if (here.kind === 'eventTarget' && a.kind === 'eventTarget' && d.options.every((x) => x.kind === 'draw')) {
+        if (this.applyHis(step(a, null, { side }), true)) { this.note("this engine only: a card's rest before the referee's bonus draw"); continue; }
+      }
       // An action of this engine with no step of the referee's (an optional draw the referee makes later): here only.
       if (['guideDraw', 'sorcererDraw', 'bonusDraw', 'freeCharEvent'].includes(a.kind) && d.kind !== 'CARD_CHOICE') {
         const decline = a.kind === 'bonusDraw' ? act('bonusDraw', { deck: 'none' }) : a.kind === 'freeCharEvent' ? a : act(a.kind, { draw: false });
@@ -2007,6 +2612,11 @@ export class Game {
       debug(`[${this.id}]   ${JSON.stringify(a)} (this engine ${here.kind}); the referee's: ${d.options.slice(0, 12).map((o) => JSON.stringify({ ...o, text: undefined })).join(' ')}`);
       excluded.push(a);
     }
+    const draw = this.drawAnswer(d);
+    if (draw) return draw;
+    // A card's question about what this engine did by itself (its fixed recruits, asked figure by figure): as it did.
+    const settled = this.settledAnswer(d);
+    if (settled) { this.stats.rule++; this.note(`answered as this engine resolved the card: ${d.kind}`); return settled; }
     this.stats.rule++;
     this.note(`answered by default: ${d.kind}, the AI's answers have no option here`);
     return defaultAnswer(d);
@@ -2020,6 +2630,88 @@ export class Game {
     if (!this.cardBase || !CARD_FLOW.has(d.kind)) return null;
     return byGains(gains(this.cardBase, this.state), this.cardUsed, d);
   }
+  /** See decide0: the AI's Army move (attack) again, among the referee's options, for the die answered already. */
+  armyAgain(d, here) {
+    const kind = d.kind === 'ARMY_MOVE' ? 'moveArmy' : d.kind === 'CHOOSE_ATTACK' ? 'attack' : null;
+    const opt = d.kind === 'ARMY_MOVE' ? 'army_move' : 'attack';
+    if (!kind || here.actor !== this.side || here.kind || this.steps.length !== 1 || this.steps[0].kind !== 'ACTION') return null;
+    const offered = (a) => d.options.some((o) => o.kind === opt && o.from === N.pRegion(a.from) && o.to === N.pRegion(a.to));
+    const exclude = here.legal.filter((a) => a.kind !== kind || !offered(a));
+    if (exclude.length === here.legal.length) return null;
+    const a = this.choose(this.side, exclude);
+    if (!a || a.kind !== kind || !offered(a)) return null;
+    const plan = new Plan(a, null, this.side);
+    plan.stage = 1; // the die is chosen
+    const o = plan.answer(d);
+    if (o) this.plan = plan;
+    return o;
+  }
+
+  /**
+   * The referee's "may draw" question (a card's bonus draw, Gandalf the Grey's, the Witch-king's) that this engine asked
+   * earlier and settled there (declined, waiting for the referee's draw): the AI's answer at that point.
+   */
+  drawAnswer(d) {
+    const draws = d.kind === 'CARD_CHOICE' ? d.options.filter((o) => o.kind === 'draw') : [];
+    if (!draws.length || !this.drawAsked) return null;
+    const asked = this.drawAsked;
+    this.drawAsked = null;
+    const a = this.choose(this.side, [], asked);
+    if (!a || !['guideDraw', 'sorcererDraw', 'bonusDraw'].includes(a.kind)) return null;
+    const take = a.kind === 'bonusDraw' ? (a.deck !== 'none' ? a.deck : null) : a.draw ? true : null;
+    const o = take === null ? pick(draws, (x) => x.skip === true) : pick(draws, (x) => !x.skip && (take === true || x.deck === take)) ?? pick(draws, (x) => !x.skip);
+    if (o) { this.stats.ai++; this.note('a draw this engine asked earlier: the AI\'s answer there'); }
+    return o;
+  }
+
+  /**
+   * The referee's CASUALTY question where this engine removed the casualties by itself (it asks only when the choice
+   * matters; the official rules ask every time): the option doing what it did, from the side's units before the round's
+   * Combat rolls (casualtyBase) and now, less what earlier answers named.
+   */
+  settledCasualty(d) {
+    if (d.kind !== 'CASUALTY' || !this.casualtyBase) return null;
+    const side = N.side(d.side);
+    const count = (s) => {
+      const c = new Map();
+      for (const r of Object.values(s.regions)) for (const [n, u] of Object.entries(r.units ?? {})) {
+        if (E.data.sideOfNation(n) !== side) continue;
+        const x = c.get(n) ?? { e: 0, r: 0 };
+        x.e += u.elite ?? 0; x.r += u.regular ?? 0;
+        c.set(n, x);
+      }
+      return c;
+    };
+    const was = count(this.casualtyBase.state), now = count(this.state), used = this.casualtyBase.used;
+    // The casualties taken before the roll (a card's attack) are no answer of this question's.
+    for (const e of this.casualtyBase.pre.splice(0)) {
+      const n = N.nation(e.nation);
+      if (N.side(e.side) !== side) continue;
+      const u = used.get(n) ?? { e: 0, g: 0 };
+      const regularsUp = ((now.get(n)?.r ?? 0) - (was.get(n)?.r ?? 0)) > 0;
+      if (e.casualty === 'REMOVE_REGULAR') u.g -= 1;
+      else { u.e += 1; if (e.casualty === 'REDUCE_ELITE' && regularsUp) u.g += 1; }
+      used.set(n, u);
+    }
+    const hits = Number(d.context?.hits ?? 1);
+    const ofNation = (n) => d.options.filter((o) => o.kind === 'casualty' && N.nation(o.nation) === n);
+    for (const [n, w] of was) {
+      const x = now.get(n) ?? { e: 0, r: 0 };
+      const u = used.get(n) ?? { e: 0, g: 0 };
+      const lostE = w.e - x.e - u.e, gainedR = x.r - w.r - u.g;
+      const ops = ofNation(n);
+      let o = null;
+      if (lostE > 0 && gainedR > 0) o = pick(ops, (p) => p.unit === 'elite' && p.effect === 'reduce');
+      else if (lostE > 0) o = (hits >= 2 * lostE ? pick(ops, (p) => p.unit === 'elite' && p.effect === 'remove') : null) ?? pick(ops, (p) => p.unit === 'elite' && p.effect === 'reduce');
+      else if (gainedR < 0) o = pick(ops, (p) => p.unit === 'regular');
+      if (!o) continue;
+      const g = o.unit === 'regular' ? -1 : o.effect === 'reduce' && gainedR > 0 ? 1 : 0;
+      used.set(n, { e: u.e + (o.unit === 'elite' ? 1 : 0), g: u.g + g });
+      return o;
+    }
+    return null;
+  }
+
   /** A follow-up question this engine asks right after the action (where Gandalf the White goes, where to retreat): answered now. */
   lookAhead(plan, a) {
     // A card's figure picked to fly (a Nazgûl group, a Minion): where it goes is this engine's next question.
@@ -2044,7 +2736,8 @@ export class Game {
   choose(side, exclude = [], state = this.state) {
     const { wotrAdapter, redact, chooseAction } = E;
     const view = redact(state, side);
-    const legal = wotrAdapter.legalActions(view, side).filter((l) => !exclude.some((x) => refines(x, l) || refines(l, x)));
+    // The actions as the followed game has them (Scouts' withdrawal into a siege); the AI's choice among them its own.
+    const legal = asFollowed(() => wotrAdapter.legalActions(view, side)).filter((l) => !exclude.some((x) => refines(x, l) || refines(l, x)));
     if (!legal.length) return null;
     let a;
     try {
@@ -2082,6 +2775,9 @@ export class Game {
     this.earlyReveal = null;
     this.hidden = null;
     this.cardBase = null;
+    this.heldUsed = null;
+    this.casualtyBase = null;
+    this.drawAsked = null;
     this.stats.rebuilds++;
     clearQueues();
   }
@@ -2101,8 +2797,12 @@ function byGains(gained0, used, d) {
   for (const [w, n] of used) gained.set(w, (gained.get(w) ?? 0) - n);
   if (d.kind === 'ARMY_SELECTION') {
     const c = d.context ?? {};
+    // A Character going along (the Witch-king, the Mouth of Sauron): whether he moved here.
+    if (c.to && c.character) return d.options.find((o) => o.kind === 'count' && o.count === ((gained.get(c.character) ?? 0) > 0 ? 1 : 0)) ?? null;
     if (!c.to || !c.unit) return null;
-    const n = gained.get(`${c.to}|${c.nation ?? ''}|${c.unit.toUpperCase()}`) ?? 0;
+    // The figures that left the Army's region (another Army may have come to the same place), else those that arrived.
+    const left = c.from ? gained.get(`-${c.from}|${c.nation ?? ''}|${c.unit.toUpperCase()}`) : undefined;
+    const n = left ?? gained.get(`${c.to}|${c.nation ?? ''}|${c.unit.toUpperCase()}`) ?? 0;
     return d.options.find((o) => o.kind === 'count' && o.count === n) ?? null;
   }
   let best = null, bestScore = 0;
@@ -2136,6 +2836,11 @@ function gains(base, now) {
   };
   for (const [id, r] of Object.entries(now.regions)) {
     const a = count(base.regions[id]), b = count(r);
+    for (const [k, v] of a) {
+      const lost = v - (b.get(k) ?? 0);
+      const [n, type] = k.split('|');
+      if (lost > 0 && n) add(`-${N.pRegion(id)}|${N.pNation(n)}|${type}`, lost); // figures that left (ARMY_SELECTION)
+    }
     for (const [k, v] of b) {
       const delta = v - (a.get(k) ?? 0);
       if (delta <= 0) continue;
@@ -2166,8 +2871,10 @@ function swapIntoHand(s, side, card) {
   if (standIn >= 0) {
     const out = p.hand[standIn];
     p.hand[standIn] = card;
+    // (A card found nowhere here: its stand-in goes among the unknown face-down cards, not into a draw pile whose size
+    // the referee knows.)
     if (zone) zone.splice(zone.indexOf(card), 1, out);
-    else p.draw[deck].push(out);
+    else (p.discardFaceDown ??= []).push(out);
   } else {
     if (zone) zone.splice(zone.indexOf(card), 1);
     p.hand.push(card);
@@ -2221,6 +2928,9 @@ export class Session {
           author: 'John Champaign', events: true, options: [],
         };
         if (this.opts.seek) hello.seek = this.opts.seek;
+        // An online bot: this process's id, the same on every reconnection, so the site gives it back its own game
+        // (not another copy's of the same bot account).
+        if (this.opts.instance) hello.instance = this.opts.instance;
         if (this.opts.token) hello.token = this.opts.token;
         this.send(hello);
         log(`referee: ${msg.referee ?? '?'} (${msg.protocol ?? '?'})`);
@@ -2401,6 +3111,7 @@ function runConnection(opts) {
 }
 
 async function runOnline(opts) {
+  opts.instance ??= randomBytes(8).toString('hex');
   let delay = 5000;
   for (;;) {
     const r = await runConnection(opts);
@@ -2418,7 +3129,8 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   verbose = opts.verbose;
   if (opts.tokenFile) opts.token = readFileSync(opts.tokenFile, 'utf8').trim();
-  await loadEngine(opts.root);
+  await loadEngine(opts.root, opts.chooser);
+  if (opts.chooser !== 'standard') log(`chooser: ${opts.chooser}`);
   if (opts.connect) await runOnline(opts);
   else runStdio(opts);
 }

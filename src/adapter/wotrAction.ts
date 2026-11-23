@@ -87,7 +87,7 @@ export type WotrAction =
   // Declining captures NOTHING: a region no one enters is not captured (p.32).
   | { kind: 'advanceChoice'; advance: boolean; move?: MoveSel }
   // The Nazgûl Strike!: discard the named FP Character table card, or omit to Hunt.
-  | { kind: 'nazgulStrike'; discard?: string }
+  | { kind: 'nazgulStrike'; discard?: string; decline?: boolean } // decline: neither (only while following: followOptions.nazgulStrikeAsPrinted)
   | { kind: 'relieveAdvance'; advance: boolean; move?: MoveSel } // reliever: march into the region whose siege it just broke (p.31, p.32)
   | { kind: 'besiegerAdvance'; advance: boolean; move?: MoveSel } // attacker: advance into the region a defender just vacated, establishing the siege (p.31)
   | { kind: 'combatCardCost'; amount: number } // size a variable-cost combat card (self-hits / Nazgûl Leadership forfeited)
@@ -127,7 +127,7 @@ export type WotrAction =
   // Over the 6-card hand limit: choose which Event card to discard (to its deck).
   | { kind: 'discardCard'; card: string }
   // Worn with Sorrow and Toil (Shadow): a tabled FP Character card, or (no card) a random one from the FP hand.
-  | { kind: 'wornDiscard'; card?: string }
+  | { kind: 'wornDiscard'; card?: string; decline?: boolean } // decline: only while following (followOptions.noEffectChoices)
   // Palantír of Orthanc bonus draw (Shadow): a deck to draw from, or 'none' to decline.
   | { kind: 'bonusDraw'; deck: 'character' | 'strategy' | 'none' }
   // Gandalf the Grey Guide draw (FP): take the matching-deck card, or decline.

@@ -9,9 +9,9 @@ import { register, type EventTarget, type EventHandler } from './registry';
 import { recruit, settlementController, armySide, armyForceOf, unitCount, STACKING_LIMIT, captureIfEnemySettlement, freeForMovement, canMoveArmy, forceUnitCount, moveOwnLeaders, characterWithArmy, eventRecruitTarget, liftSiegeIfAbandoned, cardPathBlockReason, quietCardPath, cardMoveReach, ownNationsIn, freeRegion, forceSide, figureForce, fellowshipRegion, activateOnCompanionLand, type MoveSelection, type Force, armySelectionReason, cardAttackFighters, characterInPlay } from '../armies';
 import { applyCasualties, startBattle, queueOrApplyEventCasualties, runEventStrikes, hasAtWarUnit, sortieForce, canSortie, attackError, type CasualtyThen, type EventStrike } from '../combat';
 import { shadowBarredFromRegion } from '../persistent';
-import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal } from '../hunt';
+import { extraHunt, drawHuntTileNumber, challengeOfTheKing, beginReveal, resolveHunt } from '../hunt';
 import { activateNation, advancePolitical, isAtWar, onArmyAttacked } from '../politics';
-import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef, theNation, nationsArePlural } from '../data';
+import { REGIONS, levelOf, characterSide, sideOfNation, EVENT_BY_ID, characterDef, theNation, nationsArePlural, followOptions } from '../data';
 import { moveFellowship, hideFellowship, findCharacterRegion, beginSeparation, placeSeparatedGroup, separationRange, separationDestinations, removeCompanionOnMordorTrack } from '../fellowship';
 import { moveCharacter, moveCompanionGroup, characterDestinations, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS, type RangeOpts } from '../charMove';
 import { log, logCardDraw, notify, sideDoes, sideName, sufferCorruption, shedCorruption, andList } from '../log';
@@ -536,7 +536,9 @@ register('fp-char-12', { canPlay: (state) => state.fellowship.corruption > 0, ap
 register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP Nation OF YOUR CHOICE
   canPlay: (state) => FP_NATIONS.some((n) => state.nations[n].step > 0),
   // The player chooses which Free Peoples Nation (one that can still advance).
-  targets: (state) => FP_NATIONS.filter((n) => state.nations[n].step > 0).map((n) => ({ nation: n })),
+  // (While following, also a Nation At War already, as the followed game offers every choice: no effect then;
+  // followOptions.noEffectChoices.)
+  targets: (state) => FP_NATIONS.filter((n) => followOptions.noEffectChoices || state.nations[n].step > 0).map((n) => ({ nation: n })),
   applyTarget(state, _side, t) {
     const n = t.nation!;
     // No card-level line: the activation and the advance log themselves (player
@@ -788,7 +790,8 @@ register('sh-str-11', {
   targets: (s, _side, applied = []) => {
     if (applied.length === 0) return rageTargets(s); // choose the recruit region
     const to = applied[0]!.region!;
-    const room = Math.min(RAGE_MAX_MOVED - rageMoved(applied), STACKING_LIMIT - unitCount(s, to));
+    // While following: the stacking limit is checked after the card (the excess removed then; followOptions.rageStacksAfter).
+    const room = Math.min(RAGE_MAX_MOVED - rageMoved(applied), followOptions.rageStacksAfter ? RAGE_MAX_MOVED : STACKING_LIMIT - unitCount(s, to));
     if (room <= 0) return []; // moved the max / no room
     const used = new Set(applied.slice(1).map((a) => a.from));
     // `to` (not `region`) makes this a real card ARMY MOVE, so the board runs it the way
@@ -809,7 +812,7 @@ register('sh-str-11', {
     if (!to || !first || to !== first || !RAGE_SOURCES.includes(t.from)) return;
     const src = s.regions[t.from]!.units.isengard;
     if (!src) return;
-    let room = Math.min(RAGE_MAX_MOVED - rageMoved(applied), STACKING_LIMIT - unitCount(s, to));
+    let room = Math.min(RAGE_MAX_MOVED - rageMoved(applied), followOptions.rageStacksAfter ? RAGE_MAX_MOVED : STACKING_LIMIT - unitCount(s, to));
     if (room <= 0) return;
     // The picker's selection says WHICH figures go (Regular vs Elite is a real choice);
     // with none, the card takes as many as it may, Regulars first.
@@ -874,7 +877,7 @@ register('sh-str-17', { // Many Kings: 2 S&E Regulars in each of three different
     const used = new Set(applied.map((a) => a.region));
     return seSettlements(s).filter((r) => !used.has(r) && hasEventRoom(s, r, 'shadow')).map((region) => ({ region, mode: 'recruit' as const }));
   },
-  applyTarget: (s, _side, t) => placeForce(s, 'southrons', t.region!, { regular: 2 }),
+  applyTarget: (s, _side, t) => placeForce(s, 'southrons', t.region!, { regular: followOptions.countedRecruits && t.count ? t.count : 2 }),
 });
 // "Recruit two Isengard Regular units in a FREE REGION adjacent to North or South
 // Dunland." A free region (p.10) is stricter than the general Event-card recruit test:
@@ -1411,7 +1414,7 @@ register('sh-str-24', {
   },
   // placeForce, not recruit(): recruit() refuses the whole pair when only one Regular
   // (or one space) is left, but the card recruits to the maximum extent possible (p.23).
-  applyTarget: (state, _side, t) => placeForce(state, 'sauron', t.region!, { regular: 2 }),
+  applyTarget: (state, _side, t) => placeForce(state, 'sauron', t.region!, { regular: followOptions.countedRecruits && t.count ? t.count : 2 }),
 });
 // Musterings of Long-planned War: 5 Southrons in Gorgoroth + 5 Sauron in Nurn.
 register('sh-str-23', {
@@ -1775,7 +1778,13 @@ register('sh-char-19', {
   targets: (state) => dreadfulSpellsTargets(state).map((region) => ({ region })),
   applyTarget(state, _side, t) {
     const fp = t.region!;
-    const caster = dreadfulSpellsCaster(state, fp);
+    // While following: the casting Army the followed game's player chose (t.from; followOptions.dreadfulFrom).
+    const chosen = followOptions.dreadfulFrom && t.from ? fpArmyNearNazgul(state, true).find(([f, sh]) => f === fp && sh === t.from) : undefined;
+    const caster = chosen ? (() => {
+      const force = armyForceOf(state, t.from!, 'shadow') ?? state.regions[t.from!]!;
+      const wk = force.characters.includes('witch-king');
+      return { region: t.from!, nazgul: force.nazgul + (wk ? 1 : 0), wk };
+    })() : dreadfulSpellsCaster(state, fp);
     if (!caster) return;
     const roll = rollDiceFaces(state, Math.min(5, caster.nazgul), 5);
     const hits = roll.hits;
@@ -2342,6 +2351,7 @@ function moveNazgulCard(after: (state: GameState) => void): EventHandler {
   return {
     canPlay: (state) => nazgulFigureOnMap(state),
     repeat: 12,
+    everyNazgul: true,                         // "any or ALL": room for every figure when following (followOptions)
     optionalFromStart: true,                   // "any or ALL" — moving zero is allowed
     targets(state, _side, applied = []) {
       const last = applied[applied.length - 1];
@@ -2566,7 +2576,9 @@ register('sh-char-08b', {
   ...moveNazgulCard((state) => {
     if (nazgulWithFellowship(state)) {
       const tableFpChar = state.cards.fp.table.filter((id) => EVENT_BY_ID[id]?.deck === 'Character');
-      if (tableFpChar.length > 0) {
+      // "You may either discard … or roll for the Hunt": while following, asked also with no card to discard (the
+      // Hunt roll or nothing; followOptions.nazgulStrikeAsPrinted).
+      if (tableFpChar.length > 0 || followOptions.nazgulStrikeAsPrinted) {
         state.pendingChoice = { owner: 'shadow', kind: 'nazgulStrike', data: { cards: tableFpChar } };
         return;
       }
@@ -2578,9 +2590,10 @@ register('sh-char-08b', {
 });
 /** Resolve the Nazgûl Strike choice: discard the named FP Character table card, or
  *  (discard omitted) roll for the Hunt. Public either way — table cards are open. */
-export function resolveNazgulStrike(state: GameState, discard?: string): void {
+export function resolveNazgulStrike(state: GameState, discard?: string, decline = false): void {
   const d = state.pendingChoice!.data as { cards: string[] };
   state.pendingChoice = null;
+  if (decline) { log(state, null, 'event', 'The Nazgûl Strike! — neither a discard nor a Hunt roll'); return; }
   if (discard && d.cards.includes(discard)) {
     const t = state.cards.fp.table;
     const i = t.indexOf(discard);
@@ -2592,6 +2605,9 @@ export function resolveNazgulStrike(state: GameState, discard?: string): void {
     }
   }
   log(state, null, 'event', 'The Nazgûl Strike! — Hunt roll');
+  // "Roll for the Hunt (as if the Free Peoples player had moved the Fellowship)": while following, the Hunt roll itself
+  // (the Hunt box's dice, Flocks of Crebain first; no die enters the box); this engine draws a tile at once.
+  if (followOptions.nazgulStrikeAsPrinted) { resolveHunt(state, false); return; }
   extraHunt(state, { source: 'The Nazgûl Strike!' });
 }
 

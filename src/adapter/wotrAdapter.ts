@@ -24,7 +24,7 @@ import { moveCharacter, moveCompanionGroup, characterMoveOptions, remainingCharM
 import { REGIONS, sideOfNation, EVENT_BY_ID, playFacesFor, nationName } from '../engine/data';
 import type { DieFace, Nation, RegionId } from '../engine/types';
 import { getHandler, canPlayCard, flagValue, type EventTarget } from '../engine/handlers/registry';
-import { characterDef } from '../engine/data';
+import { characterDef, followOptions } from '../engine/data';
 import { resolveNazgulStrike, mirrorPayFaces, eaglesFlee, deadMenRetreat } from '../engine/handlers/index';
 import '../engine/handlers/index'; // registers the handlers (side-effect import)
 import { redactStateForViewer } from './redact';
@@ -108,8 +108,9 @@ const voiceOfSarumanActive = (state: GameState): boolean =>
   characterInPlay(state, 'saruman')
   && settlementController(state, 'orthanc') === 'shadow' && !state.regions['orthanc']!.besieged;
 const canSarumanRecruit = (state: GameState): boolean =>
-  state.reinforcements.isengard.regular > 0
-  && isengardSettlements().some((id) => settlementController(state, id) === 'shadow' && unitCount(state, id) < STACKING_LIMIT);
+  (followOptions.sarumanRecruitIn?.length ?? 0) > 0 // following: the referee recruited (recruit() still checks the pool)
+  || (state.reinforcements.isengard.regular > 0
+    && isengardSettlements().some((id) => settlementController(state, id) === 'shadow' && unitCount(state, id) < STACKING_LIMIT));
 // Partial upgrades count: a Muster action does as much as it can, exactly like a
 // Muster die recruiting into a Nation whose reinforcements have run short, and like
 // the recruit half of this same ability (the Almanac's own note: a captured Dunland
@@ -234,7 +235,8 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
         return [{ kind: 'siegeExtend', extend: true }, { kind: 'siegeExtend', extend: false }];
       case 'nazgulStrike': {
         const d = state.pendingChoice!.data as { cards: string[] };
-        return [...d.cards.map((c) => ({ kind: 'nazgulStrike' as const, discard: c })), { kind: 'nazgulStrike' as const }];
+        return [...d.cards.map((c) => ({ kind: 'nazgulStrike' as const, discard: c })), { kind: 'nazgulStrike' as const },
+          ...(followOptions.nazgulStrikeAsPrinted ? [{ kind: 'nazgulStrike' as const, decline: true }] : [])];
       }
       case 'advanceChoice':
         // "Advance everything" and "hold position" as plain buttons; the UI's split
@@ -333,7 +335,9 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'wornDiscard':
         // Worn with Sorrow and Toil (Shadow): a random Character card from the FP hand,
         // or a named tabled one. The hand's cards stay hidden — only "the hand" is offered.
-        return wornWithSorrowOptions(state).map((o) => (o === 'hand' ? { kind: 'wornDiscard' } : { kind: 'wornDiscard', card: o }));
+        // (While following, also "no discard": the card's "you may"; followOptions.noEffectChoices.)
+        return [...wornWithSorrowOptions(state).map((o) => (o === 'hand' ? { kind: 'wornDiscard' as const } : { kind: 'wornDiscard' as const, card: o })),
+          ...(followOptions.noEffectChoices ? [{ kind: 'wornDiscard' as const, decline: true }] : [])];
       case 'discardCard':
         // Over the hand limit: choose which Event card to discard.
         return [...new Set(state.cards[actor].hand)].map((card) => ({ kind: 'discardCard', card }));
@@ -798,7 +802,9 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       const idx = hand.indexOf(action.cardId);
       if (idx < 0) throw new Error('Card not in hand');
       const h = getHandler(action.cardId);
-      if (!h || !canPlayCard(state, action.cardId, actor)) throw new Error('Card not playable');
+      // While following: the followed game's referee played it (this engine's stricter conditions, as Athelas at no
+      // Corruption, give way; followOptions.playAsPlayed).
+      if (!h || (!followOptions.playAsPlayed && !canPlayCard(state, action.cardId, actor))) throw new Error('Card not playable');
       // The Ents Awake free play: an FP Character Event costs no die (consumes the flag).
       const freePlay = actor === 'fp' && state.flags.fpFreeCharEventThisTurn && EVENT_BY_ID[action.cardId]!.deck === 'Character';
       // Which dice can pay for this card: the die whose icon the card prints
@@ -847,7 +853,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       // (out of hand) until the eventTarget resolves.
       const opts = h.targets ? h.targets(state, actor) : null;
       if (opts && opts.length > 0) {
-        state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId, repeat: h.repeat ?? 1, left: h.repeat ?? 1, applied: [], palantir: palantirWasActive, guideDraw: guideDrawsNow } };
+        const repeat = followOptions.everyNazgul && h.everyNazgul ? Math.max(h.repeat ?? 1, 24) : h.repeat ?? 1;
+        state.pendingChoice = { owner: actor, kind: 'eventTarget', data: { card: action.cardId, repeat, left: repeat, applied: [], palantir: palantirWasActive, guideDraw: guideDrawsNow } };
         break;
       }
       const deck = EVENT_BY_ID[action.cardId]!.deck === 'Character' ? 'character' : 'strategy';
@@ -967,6 +974,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'wornDiscard': {
       requireChoice(state, 'wornDiscard', actor); // Worn with Sorrow and Toil: hand (random) or a tabled card
+      if (action.decline) { state.pendingChoice = null; break; } // (only while following: noEffectChoices)
       const pick = action.card ?? 'hand';
       if (!wornWithSorrowOptions(state).includes(pick)) throw new Error('Worn with Sorrow and Toil: that card is not on offer');
       resolveWornWithSorrow(state, pick);
@@ -1141,7 +1149,8 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
         state.reinforcements.isengard.regular += n; state.reinforcements.isengard.elite -= n;
         log(state, null, 'muster', `Shadow replaces ${n === 1 ? 'an Isengard Regular' : `${n} Isengard Regulars`} in Orthanc with ${n === 1 ? 'an Elite' : 'Elites'}`);
       } else {
-        for (const id of isengardSettlements()) {
+        // While following another rules engine's game: the Settlements it recruited in, in its order (followOptions).
+        for (const id of followOptions.sarumanRecruitIn ?? isengardSettlements()) {
           if (settlementController(state, id) === 'shadow') recruit(state, 'isengard', id, 1, 0, { ignoreAtWar: true });
         }
       }
@@ -1327,7 +1336,7 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
     }
     case 'nazgulStrike':
       requireChoice(state, 'nazgulStrike', actor);
-      resolveNazgulStrike(state, action.discard);
+      resolveNazgulStrike(state, action.discard, action.decline === true);
       break;
     case 'advanceChoice': {
       requireChoice(state, 'advanceChoice', actor);
@@ -1459,7 +1468,14 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       logRevealed(state); // its own line, where the figure ends up (player report 1o362m1a3w0e5658)
       // Revealing through a Shadow Stronghold draws a Hunt tile per such Stronghold on
       // the traced path (rulebook p.39), each drawn once the one before it resolves.
-      const strongholds = traversed.filter((r) => heldShadowStronghold(state, r));
+      let strongholds = traversed.filter((r) => heldShadowStronghold(state, r));
+      // While following: as many Stronghold tiles as the followed game's chosen path passed (its own route, which this
+      // engine does not retrace; followOptions.revealStrongholds).
+      const n = followOptions.revealStrongholds;
+      if (n != null) {
+        strongholds = strongholds.slice(0, n);
+        while (strongholds.length < n) strongholds.push(action.target);
+      }
       // Balrog of Moria fires on a REVEAL through Moria too, not only on a declaration:
       // "if the Fellowship moves into, out of, or through Moria while being declared or
       // revealed" (card text). Only the declare path offered it, so a Fellowship caught
@@ -1628,7 +1644,7 @@ function recruitRegions(state: GameState, side: Side, nation: Nation, cap = Infi
     if (def.nation !== nation || !def.settlement || def.settlement === 'Fortification') continue; // City/Town/Stronghold only (p.26)
     if (settlementController(state, id) !== side || armySide(state, id) === opp(side)) continue;
     if (state.regions[id]!.besieged) continue; // can't muster into a besieged Stronghold (p.26)
-    if (unitCount(state, id) >= STACKING_LIMIT) continue;
+    if (unitCount(state, id) >= STACKING_LIMIT && !followOptions.musterOverLimit) continue;
     out.push(id);
     if (out.length >= cap) break;
   }
