@@ -110,6 +110,23 @@ Building CWOTR here takes local Makefile copies:
 
 ## Build log
 
+- **2026-11-23, testing the leader's habits as heuristic changes.** Each habit got a
+  paired A/B: 2000 games × 2 seed families × both FP yardsticks, Shadow wins, base
+  826 / 801 against the heuristic FP and 1111 / 1093 against the human-like FP.
+
+  | change | heuristic FP | human-like FP | verdict |
+  |---|---|---|---|
+  | Hunt: 1 die before Mordor | 706 / 702 | 1024 / 1026 | loses (z −2.2 to −4.2) |
+  | Hunt: 1 die in Mordor | 760 / 752 | 1072 / 1041 | loses (z −2.4 to −4.5) |
+  | Voice of Saruman off | 850 / 873 | 1108 / 1131 | +131, one dip |
+  | Voice of Saruman at half weight | 847 / 867 | 1134 / 1121 | **+138, up in all four; shipped** |
+
+  - Against CWOTR, half weight was neutral: 63 → 60 of 90 Shadow games, z −0.48.
+    `spar-cwotr.mjs --side sh` plays only our-Shadow seeds.
+  - A leader's habit is a hypothesis, not a fix. Normal's light Hunt works inside
+    Normal's game, not ours.
+  - The soak also caught an offered-then-refused card move (sh-str-09 into Lórien
+    under A Power too Great), now fixed.
 - **2026-11-21, vs CWOTR (trained locally, 400 × 320 games), 60 seeds, our side
   alternating:**
 

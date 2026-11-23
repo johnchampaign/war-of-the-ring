@@ -116,6 +116,12 @@ export function chooseAction(state: GameState, actor: Side, legal: WotrAction[],
     // 6th/7th die is STRICTLY wasted: it cannot help the Hunt, it only disarms us
     // (player report: the AI dumped SEVEN and nearly had no actions). Holding back
     // BELOW 5 in Mordor was also measured and it loses — the Ring gets through.
+    // Re-measured 2026-11-23 against today's AI, because the tournament leader (Normal)
+    // puts ONE die in on the Mordor Track and 1-2 before it. 2000 games x 2 families,
+    // Shadow wins (base 826 / 801 heuristic FP, 1111 / 1093 human-like):
+    //   1 die in Mordor    760 / 752, 1072 / 1041 (z -2.4 to -4.5)
+    //   1 die before it    706 / 702, 1024 / 1026 (z -2.2 to -4.2)
+    // Both lose for our Shadow; the flat two and the Mordor max stand.
     const HUNT_ROLL_CAP = 5;
     const target = Math.min(raw, HUNT_ROLL_CAP);
     const want = Math.max(lo, Math.min(hi, target));
@@ -1120,16 +1126,24 @@ function score(state: GameState, actor: Side, a: WotrAction, target: RegionId | 
       // upgrade promotes ONE Regular, and with a single Regular left the recruit places
       // ONE — both worse than a plain muster of an Elite (reports 290o72523h2w0o0g,
       // 2w4n2f1y1y4o5j59).
+      // HALF WEIGHT (2026-11-23). The tournament leader (Normal) almost never uses the
+      // Voice: in 2,973 decisions where it was on offer it plain-recruited instead, mostly
+      // an Elite in Orthanc. Measured, 2000 games x 2 families, Shadow wins:
+      //   vs the heuristic FP  826 / 801 -> 847 / 867
+      //   vs the human-like FP 1111 / 1093 -> 1134 / 1121   (+138 of 8000, up in all four)
+      // Never using it scored +131 but dipped once (human-like f1 -3). Against CWOTR
+      // (local, 90 Shadow games) it was neutral: 63 -> 60, z -0.48.
+      const VOICE_WEIGHT = 0.5;
       const pool = state.reinforcements.isengard;
       if (a.mode !== 'recruit') {
         const n = Math.min(2, state.regions['orthanc']!.units.isengard?.regular ?? 0, pool.elite);
-        return n >= 2 ? 62 : 10;
+        return VOICE_WEIGHT * (n >= 2 ? 62 : 10);
       }
       // A Regular in EVERY Isengard Settlement — one landing on a full stack is lost (report 3t5w710l563l4s4t).
       const held = ISENGARD_SETTLEMENTS.filter((r) => settlementCtrl(state, r) === 'shadow');
       const full = held.filter((r) => unitCount(state, r) >= STACKING_LIMIT).length;
       const placed = Math.min(held.length - full, pool.regular);
-      return placed <= 1 ? 10 : 40 + placed * 9 - full * 12;
+      return VOICE_WEIGHT * (placed <= 1 ? 10 : 40 + placed * 9 - full * 12);
     }
     case 'useElvenRing': return elvenRingScore(state, actor, a);       // change a die's face (conservatively)
     case 'playEvent': {

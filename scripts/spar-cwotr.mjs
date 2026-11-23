@@ -20,6 +20,8 @@ const a = argv.slice(0, sep);
 const opt = (n, d) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : d; };
 const BRIDGE = opt('--bridge'), PLAYER = opt('--player', 'prior');
 const GAMES = Number(opt('--games', 2)), SEED0 = Number(opt('--seed-start', 0));
+// --side sh|fp: play only the seeds where we hold that side (seed parity decides it).
+const SIDE = opt('--side', null);
 const CLOCK = opt('--clock', '2000'), SIMS = opt('--sims', '0'), OUT = opt('--out', 'spar-out');
 mkdirSync(OUT, { recursive: true });
 const RES = join(OUT, 'results.jsonl');
@@ -51,5 +53,6 @@ function play(seed) {
 for (let g = 0; g < GAMES; g++) {
   const seed = SEED0 + g + 1;
   if (done.has(seed)) continue;
+  if (SIDE && (seed % 2 === 1 ? 'fp' : 'sh') !== SIDE) continue;
   await play(seed);
 }
