@@ -100,8 +100,7 @@ export const STARTING_COMPANIONS: string[] = Object.entries(COMPANIONS)
  * referee's game; all off otherwise, so this engine plays as ever for itself):
  * - askEveryCombatCard: every Combat card question is asked, also of a side with no card to play ("no card" its only
  *   option: the WotR Bot Protocol's hidden passes, so that no question skipped tells about a hand).
- * - ownSideLeadership: only a side's own Characters lend an Army Leadership (a Companion left in a region with a
- *   Shadow Army, a Hobbit or Gandalf of no Nation, adds none to the Shadow's re-roll).
+ * - ownSideLeadership: no longer needed — our engine now does this in every game (docs/rules-spec.md, 2026-11-23).
  * - scoutsIntoSiege: no longer used: this engine now offers Scouts' "or withdraw into a siege" itself.
  * - sarumanRecruitIn: the Isengard Settlements the Voice of Saruman recruits in, in that order (the followed game's,
  *   when the Regulars run short or a Settlement is full), or null (all of them, as ever).
@@ -109,28 +108,26 @@ export const STARTING_COMPANIONS: string[] = Object.entries(COMPANIONS)
  *   discard, and may be declined (nazgulStrike with `decline`); its Hunt is a Hunt roll, as if the Fellowship moved.
  * - rageStacksAfter: Rage of the Dunlendings moves its up to four units whatever the stacking limit, the excess removed
  *   after the card (as the followed game does).
- * - everyNazgul: the "move any or all of the Nazgûl" cards have room for every Nazgûl moved one by one (this engine
- *   stops at six moves).
+ * - everyNazgul: the "move any or all of the Nazgûl" cards get 24 steps (our own play now has 16, enough for all
+ *   eight figures moved apart).
  * - forfeitedLeadership: Mighty Attack's forfeit, the Leadership of the Companion the followed game's player chose
- *   ("forfeit the Leadership of one Companion"; this engine forfeits 1), or null.
+ *   ("forfeit the Leadership of one Companion"; this engine forfeits the cheapest one's), or null.
  * - countedRecruits: Many Kings / Pits of Mordor place a target's `count` of Regulars (the followed game's player
  *   chose how many when they run short; this engine places two where it can).
  * - musterOverLimit: a Muster die may recruit into a region at the stacking limit, the excess removed after the
  *   action (as the followed game does; this engine refuses the recruit).
- * - selfHitsAll: a Combat card's hits on its own units (Relentless Assault, Onslaught) may take every unit of the Army
- *   (the followed game allows it; this engine keeps one).
+ * - selfHitsAll: no longer needed — our engine now does this in every game (docs/rules-spec.md, 2026-11-23).
  * - dreadfulFrom: Dreadful Spells is cast by the Army its target names (`from`), as the followed game's player chose
  *   (this engine picks the one with the most Nazgûl).
- * - hitsBeforeReroll: Mighty Attack / Andúril turn their miss into a hit before the Leader re-roll (the card's "before
- *   rolling the dice for your Leader re-roll"; this engine turns a miss left after the re-roll).
+ * - hitsBeforeReroll: no longer needed — our engine now does this in every game (docs/rules-spec.md, 2026-11-23).
  * - fpCasualtyOffset: per Nation, the Free Peoples Regulars this engine would count as casualties that the followed
  *   game does not (Elites reduced take their Regular from the casualties first), or null.
  * - reduceAlways: an Elite may be "reduced" for one hit even with no Regular to replace it (it is eliminated), also with
  *   two or more hits to take (this engine then offers only its removal for two).
  * - noEffectChoices: a card's choice that changes nothing is offered too (Wisdom of Elrond's Nation At War already),
  *   as the followed game offers every option.
- * - printedCardRolls: Combat cards' rolls as their texts say: We Come to Kill's attack hits on 5+ (not at the round's
- *   odds), Mûmakil's "more total hits" counts the pre-Combat attacks' hits.
+ * - printedCardRolls: no longer needed — We Come to Kill's 5+ and Mûmakil's count of pre-Combat hits are now our
+ *   engine's own rule (docs/rules-spec.md, 2026-11-23).
  * - revealStrongholds: the Shadow Strongholds the followed game's reveal path passed (one Hunt tile each), or null
  *   (this engine's own least-harm route; set only while applying that reveal).
  * - playAsPlayed: an Event card the followed game played is played here too, whatever this engine's own conditions

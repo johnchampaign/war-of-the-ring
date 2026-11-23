@@ -260,6 +260,13 @@ export function combatModsFor(cardId: string, ctx?: CombatModContext): CombatMod
   // there is no real choice, because forfeiting Aragorn costs his full Leadership (2)
   // whether you convert one die or two, so converting two is never worse. The table
   // holds Strider's numbers; upgrade them when Aragorn is the one in the battle.
+  // Mighty Attack: "forfeit the Leadership of ONE Companion participating in the battle" —
+  // the owner forfeits the cheapest, so 1 while any 1-Leadership Companion is there, but
+  // Aragorn's 2 when he is the only one (it used to cost 1 whoever was there).
+  if (title === 'Mighty Attack' && ctx?.ownCharacters) {
+    const lead = ctx.ownCharacters.filter((c) => c in COMPANIONS || c in UPGRADES).map((c) => characterDef(c)?.leadership ?? 1);
+    if (lead.length) return { ...base, ownLeadershipPenalty: Math.min(...lead) };
+  }
   if (title === 'Andúril' && ctx?.ownCharacters?.includes('aragorn')) {
     return { ...base, guaranteedHits: 2, ownLeadershipPenalty: 2 };
   }

@@ -2387,7 +2387,10 @@ function nazgulFigureOnMap(state: GameState): boolean {
 function moveNazgulCard(after: (state: GameState) => void): EventHandler {
   return {
     canPlay: (state) => nazgulFigureOnMap(state),
-    repeat: 12,
+    // Two steps a move (pick, destination): 16 lets all eight figures (seven Nazgûl and
+    // the Witch-king) fly to eight different regions. At 12 the seventh and eighth could
+    // not move apart, though the card says "any or ALL".
+    repeat: 16,
     everyNazgul: true,                         // "any or ALL": room for every figure when following (followOptions)
     optionalFromStart: true,                   // "any or ALL" — moving zero is allowed
     targets(state, _side, applied = []) {

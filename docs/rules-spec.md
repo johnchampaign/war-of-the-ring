@@ -1472,6 +1472,57 @@ turn the FP reached 4 and still lost). Regression-tested in
 
 ---
 
+### Rule differences found by following another engine (2026-11-23)
+
+PR #1 (werner77's WotR Bot Protocol bot, merged 19c587b) replays a referee's game on our
+engine and switches on `followOptions` (data.ts) wherever the two engines disagreed. Each
+switch was checked against the card text and the Almanac.
+
+**Our engine was wrong. Fixed for every game; `scripts/probe-protocol-rule-diffs.mjs`:**
+- **Leadership is the owning side's.** `forceLeadership` read a Character of no Nation
+  (Gandalf, the Hobbits, Aragorn) as belonging to whichever side asked. So a Companion left in
+  a region that a Shadow Army entered added his Leadership to the Shadow's re-roll.
+- **Mighty Attack** forfeits "the Leadership of one Companion participating in the battle".
+  It is the cheapest, so 1, except Aragorn's 2 when he is the only Companion. It cost 1
+  whoever was there.
+- **Mighty Attack / Andúril:** "*before* rolling the dice for your Leader re-roll … change
+  one missed die roll to a hit." The miss used to be turned after the re-roll, which let
+  that die be re-rolled first: a free extra re-roll whenever Leadership covered every miss.
+- **Relentless Assault / Onslaught** may take every unit of the Army. The Almanac allows
+  it for both: "possible … but completely counterproductive" and "may eliminate all units
+  in the Shadow Army". The engine kept one back. The AI still spends only units above the
+  5-dice cap.
+- **"Move any or all of the Nazgûl"** cards stopped at 12 steps, which is 6 figures moved
+  apart. They now have 16, enough for all 8 figures (7 Nazgûl and the Witch-king).
+- **Mûmakil's** "more total hits than your opponent (including hits from any Free Peoples
+  pre-Combat attack from a Combat card)" now counts Charge / Sudden Strike hits from the
+  round. The Almanac says so explicitly.
+
+**Already fixed on main before the merge** (the switch is now a no-op or unused):
+- We Come to Kill rolls at 5+.
+- The Nazgûl Strike!'s Hunt is a real Hunt roll.
+- Scouts may withdraw into a siege.
+
+**Not rule bugs.** These are protocol bookkeeping, or a dominated option we don't ask:
+- `fpCasualtyOffset`: our Elite reduction already takes the Regular from casualties first
+  (p.30).
+- `reduceAlways`: we don't offer a 1-hit "reduce" of an Elite with no Regular to replace it
+  when 2+ hits are owed. Removing it for 2 is never worse.
+- `noEffectChoices` (Wisdom of Elrond on a Nation already At War).
+- `countedRecruits`, `revealStrongholds`, `playAsPlayed`, `sarumanRecruitIn`,
+  `dreadfulFrom`: these replay the referee's own choices.
+
+**Open: John's call** (rules-legal readings our engine does not offer):
+- **Muster into a full region** (p.26: the stacking limit is checked "at the end of any
+  action (for example, after moving or mustering troops)"). That allows e.g. an Elite
+  mustered into a 10-stack with a Regular removed. Our engine refuses the muster up front.
+- **Athelas at 0 Corruption.** The card has no play condition. We refuse it (it would heal
+  nothing, but it plays the card).
+- **The Nazgûl Strike! / Worn with Sorrow and Toil "you may".** Declining both branches is
+  legal but never better, so it is not offered.
+- **Combat card question when you hold none.** We skip it, so the opponent learns the hand
+  holds no playable Combat card. The protocol asks every time to hide that.
+
 ### Card clauses corrected from player reports (2026-09-23)
 
 - **"The Last Battle" (fp-str-01)** — the printed card carries a discard clause the

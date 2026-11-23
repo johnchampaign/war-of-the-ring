@@ -187,15 +187,14 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     // re-roll die from the ones still owed (player report: 3 misses with Leadership
     // 5 got only 2 re-rolls, because the first re-roll hit).
     // Mighty Attack / Andúril's "before rolling the dice for your Leader re-roll … change one missed die roll to a
-    // hit": while following (followOptions.hitsBeforeReroll), that miss is a hit before the re-roll, not re-rolled.
-    const early = followOptions.hitsBeforeReroll ? Math.min(guaranteed, failed) : 0;
+    // hit": the miss becomes a hit BEFORE the re-roll and is not re-rolled. (It used to be turned after the
+    // re-roll, which let that die be re-rolled first: a free extra re-roll whenever Leadership covered every miss.)
+    const early = Math.min(guaranteed, failed);
     h += early; failed -= early;
     const rerollDice = allowReroll ? Math.min(lead, failed) : 0;
     let rh = 0;
     for (let i = 0; i < rerollDice; i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; rh++; failed--; } }
     if (roll) roll.rerollHits = rh;
-    // Mighty Attack: turn up to N still-missed dice into hits.
-    h += Math.min(guaranteed - early, failed);
     return h;
   });
   // AUTOMATIC hits, which no die shows. Record them, or the line reads "[5 6 1 1 6]
@@ -883,8 +882,9 @@ const defCount = (state: GameState, pc: PendingCombat): number => forceUnitCount
 function costRange(state: GameState, pc: PendingCombat, side: Side, vc: VariableCost): { min: number; max: number } {
   const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
   const have = vc.kind === 'selfHits'
-    // never self-annihilate (while following, as the followed game allows: up to every unit; followOptions.selfHitsAll)
-    ? Math.max(0, forceUnitCount(own) - (followOptions.selfHitsAll ? 0 : 1))
+    // Up to every unit of the Army: the Almanac allows it for both Relentless Assault ("possible … but completely
+    // counterproductive") and Onslaught ("may eliminate all units in the Shadow Army"; it can finish the enemy too).
+    ? forceUnitCount(own)
     : nazgulLeadership(own, pc.whiteRiderForfeit);  // not the Mouth's or Saruman's
   const max = Math.min(vc.cap, have);
   return { min: Math.min(vc.min, max), max };
@@ -1918,10 +1918,9 @@ export function combatStep(state: GameState): void {
         //    when the enemy DEFENDS — tied initiatives resolve the defender's card first;
         //  - Shield-wall / Heroic Death cancel at initiative 6, so they never matter here.
         // The bonus hit is then part of what the enemy's initiative-6 cards see.
-        // While following (followOptions.printedCardRolls): "more total hits than your opponent (including hits from any
-        // Free Peoples pre-Combat attack from a Combat card)", as Mûmakil's text counts them.
-        const preHits = (side: Side) => !followOptions.printedCardRolls ? 0
-          : (pc.cardRolls ?? []).filter((r) => r.side === side && r.when === 'before' && r.round === pc.round).reduce((n, r) => n + r.hits, 0);
+        //  - and the card's own "(including hits from any Free Peoples pre-Combat attack from a
+        //    Combat card)": Charge / Sudden Strike hits this round count (Almanac, Mûmakil).
+        const preHits = (side: Side) => (pc.cardRolls ?? []).filter((r) => r.side === side && r.when === 'before' && r.round === pc.round).reduce((n, r) => n + r.hits, 0);
         const { atk: aMum, def: dMum } = outscoreBonusHits(aMods, dMods, atkHits + preHits(pc.attacker), defHits + preHits(pc.defender), aRoll, dRoll);
         const dCancel = cancelFor(dMods, atkHits + aMum);
         const aCancel = cancelFor(aMods, defHits + dMum);

@@ -101,7 +101,10 @@ export function forceLeadership(state: GameState, f: Force, side: Side): number 
   let l = side === 'fp' ? f.leaders : f.nazgul;
   for (const cid of f.characters) {
     const d = characterDef(cid);
-    if (followOptions.ownSideLeadership && characterSide(cid) !== side) continue;
+    // Only a side's OWN Characters lead its Army. A Companion of no Nation (Gandalf, the
+    // Hobbits, Aragorn) left in a region a Shadow Army then entered used to add his
+    // Leadership to the SHADOW's re-roll, because 'any' Nation was read as the asking side's.
+    if (characterSide(cid) !== side) continue;
     if (d && sideOfNation((d.nation && d.nation !== 'any' ? d.nation : (side === 'fp' ? 'gondor' : 'sauron')) as Nation) === side) {
       l += d.leadership;
     }
