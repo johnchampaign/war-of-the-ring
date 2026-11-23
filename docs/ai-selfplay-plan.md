@@ -110,6 +110,24 @@ Building CWOTR here takes local Makefile copies:
 
 ## Build log
 
+- **2026-11-23, the leader's remaining habits, all rejected.** These ran on the
+  shipped code (453a7bd, Voice at half weight) against a fresh baseline: 2000
+  games × f1 / f2. Base Shadow wins were 867 / 899 vs the heuristic FP and
+  1156 / 1142 vs the human-like FP. Base FP wins vs the heuristic Shadow were
+  1133 / 1101. Every gate counter was 0 in all 28 runs.
+
+  | change | result (f1 / f2) | flips | verdict |
+  |---|---|---|---|
+  | Shadow draws (score 30, not 12) at ≤ 4 cards | Shadow 881 / 890 heur, 1125 / 1114 human-like | +560 −555 heur, +611 −670 human-like | flat, slightly worse vs human-like |
+  | FP declares at Progress ≥ 2, gain ≥ 2 | FP 1104 / 1111 | +244 −263 | flat to worse |
+  | FP declares at Progress ≥ 1, gain ≥ 1 | FP 1097 / 1114 | +386 −409 | flat to worse |
+  | FP Elven Ring → Character die while hidden (40) | FP 1150 / 1123 | +916 −877 (z ≈ 0.9) | flat, as on 2026-11-07 |
+
+  - No change shipped and none went to CWOTR.
+  - The declare knobs did change play. Push-declares went from ~1,600 per 1,000
+    games to ~2,000 (Progress 2) and ~2,550 (Progress 1). The extra declares
+    won nothing.
+  - Of Normal's habits, only the Voice of Saruman difference paid in our game.
 - **2026-11-23, testing the leader's habits as heuristic changes.** Each habit got a
   paired A/B: 2000 games × 2 seed families × both FP yardsticks, Shadow wins, base
   826 / 801 against the heuristic FP and 1111 / 1093 against the human-like FP.
