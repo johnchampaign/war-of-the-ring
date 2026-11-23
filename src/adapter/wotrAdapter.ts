@@ -236,7 +236,7 @@ function legalActions(state: GameState, actor: Side): WotrAction[] {
       case 'nazgulStrike': {
         const d = state.pendingChoice!.data as { cards: string[] };
         return [...d.cards.map((c) => ({ kind: 'nazgulStrike' as const, discard: c })), { kind: 'nazgulStrike' as const },
-          ...(followOptions.nazgulStrikeAsPrinted ? [{ kind: 'nazgulStrike' as const, decline: true }] : [])];
+          { kind: 'nazgulStrike' as const, decline: true }]; // "you MAY": neither (Almanac)
       }
       case 'advanceChoice':
         // "Advance everything" and "hold position" as plain buttons; the UI's split
@@ -1308,6 +1308,11 @@ function dispatch(state: GameState, action: WotrAction, actor: Side): void {
       startBattle(state, actor, action.from, action.to, { rearguard: action.rearguard }); break; // finishCombat resumes the turn
     }
     // --- interactive combat choices (resolving state.pendingChoice) ---
+    case 'setPreference': {
+      // Changes nothing on the board and leaves the same player to act.
+      state.prefs = { ...state.prefs, alwaysAskCombatCard: { ...state.prefs?.alwaysAskCombatCard, [actor]: !!action.alwaysAskCombatCard } };
+      break;
+    }
     case 'playCombatCard': {
       requireChoice(state, 'combatCard', actor);
       resolvePlayCombatCard(state, action.cardId);
@@ -1666,7 +1671,9 @@ function recruitRegions(state: GameState, side: Side, nation: Nation, cap = Infi
     if (def.nation !== nation || !def.settlement || def.settlement === 'Fortification') continue; // City/Town/Stronghold only (p.26)
     if (settlementController(state, id) !== side || armySide(state, id) === opp(side)) continue;
     if (state.regions[id]!.besieged) continue; // can't muster into a besieged Stronghold (p.26)
-    if (unitCount(state, id) >= STACKING_LIMIT && !followOptions.musterOverLimit) continue;
+    // A full region stays a target: the stacking limit is checked "at the end of any action
+    // (for example, after moving or mustering troops)" (p.26), and enforceStackingLimit then
+    // has the owner send the excess back to reinforcements (e.g. an Elite in, a Regular out).
     out.push(id);
     if (out.length >= cap) break;
   }

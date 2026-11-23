@@ -38,7 +38,7 @@ import { ReportResponseModal } from './ReportResponseModal';
 import { getReporterId, getSeenResponses, markResponseSeen } from './reporterId';
 import { HoverPreview, type Hover } from './HoverPreview';
 import { dieOptions, describeAction, isCardRecruitTarget, isCardArmyMoveTarget, isSplitCardAttack, isSecondMusterTarget, trivialDie, isCardRegionPick } from './actionText';
-import { moveBlockReason, musterBlockReason, cardRouteNextSteps, regionHops, companionLandingActivates } from '../engine/armies';
+import { moveBlockReason, musterBlockReason, cardRouteNextSteps, regionHops, companionLandingActivates, unitCount, STACKING_LIMIT } from '../engine/armies';
 import { basicMoveHintsApply } from './blockHints';
 import { panelShowsAction, isSpatial, isCardCompanionMove } from './panelFilter';
 import { movableCharsAt, characterDestinations, characterMoveBlockReason, companionGroupLeader, companionGroupDestinations, companionGroupBlockReason, CARD_COMPANION_MOVE_OPTS } from '../engine/charMove';
@@ -47,6 +47,13 @@ import { separationActivates, separationBlockReason, revealMoveBlockReason } fro
 import { REGIONS, levelOf, sideOfNation, nationName, EVENT_BY_ID } from '../engine/data';
 import { threatsAndPromisesActive } from '../engine/persistent';
 import { charName } from './charInfo';
+
+/** Athelas, There Is Another Way and Bilbo's Song are playable at no Corruption (Almanac),
+ *  where they heal nothing — There Is Another Way still moves or hides with Gollum guiding. */
+function healsNothing(v: GameState, cardId: string): boolean {
+  if (!['fp-char-09', 'fp-char-10', 'fp-char-12'].includes(cardId) || v.fellowship.corruption > 0) return false;
+  return !(cardId === 'fp-char-10' && v.fellowship.guide === 'gollum');
+}
 
 /** What to click for an Event card whose next step is ONE region on the map (a card
  *  striking an Army, Cruel Weather's region). Named by the map banner. */
@@ -267,8 +274,16 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
   const seenNow = useRef({ hunt: 0, battle: 0, notice: 0 });
   const seenBefore = useRef<Array<{ hunt: number; battle: number; notice: number }>>([]);
   const undoRestore = useRef<{ hunt: number; battle: number; notice: number } | null>(null);
+  // A heal card played with nothing to heal is legal (Almanac) but nearly always a slip,
+  // so it waits here for a confirm; `noEffectOk` lets the confirmed one through.
+  const [noEffect, setNoEffect] = useState<Extract<WotrAction, { kind: 'playEvent' }> | null>(null);
+  const noEffectOk = useRef<WotrAction | null>(null);
   const submit = useCallback(async (a: WotrAction) => {
     if (inFlight.current) return;
+    if (a.kind === 'playEvent' && g.view && healsNothing(g.view, a.cardId)) {
+      if (noEffectOk.current !== a) { setNoEffect(a); return; }
+      noEffectOk.current = null;
+    }
     // Taken first, before anything renders: a roll shown with its question is marked
     // seen on answering, and undoing that answer should bring the roll back with it.
     const seenAtAction = { ...seenNow.current };
@@ -311,6 +326,21 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
     catch { return false; }
     finally { inFlight.current = false; setBusy(false); }
   }, [g, activeDie]);
+
+  // ⚙ "Combat card question" reaches the engine as the player's own setPreference action,
+  // sent on their move. Online only: a local game has no opponent to hide a hand from, and
+  // an automatic action there would sit on the Undo stack (Undo would just re-send it).
+  const prefSent = useRef<string | null>(null);
+  useEffect(() => {
+    if (client.undo || !g.view || !g.you || !g.yourTurn || g.gameOver || inFlight.current) return;
+    const want = settings.combatCardAsk === 'always';
+    const have = !!g.view.prefs?.alwaysAskCombatCard?.[g.you as Side];
+    if (want === have) { prefSent.current = null; return; }
+    const sig = `${g.you}:${want}`;
+    if (prefSent.current === sig) return;
+    prefSent.current = sig;
+    g.submit({ kind: 'setPreference', alwaysAskCombatCard: want }).catch(() => { prefSent.current = null; });
+  }, [client, g, settings.combatCardAsk]);
 
   // Undo (local hotseat / vs-AI only — the online client has no undo()). A
   // foreknowledge undo (one that crosses a dice roll / card draw) requires an explicit
@@ -1508,6 +1538,12 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
           <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 16, borderRadius: 12, border: '1px solid #5a4a2a', minWidth: 280, boxShadow: '0 8px 40px #000' }}
             onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: 12, color: '#e6b85a', fontVariant: 'small-caps', letterSpacing: 1, marginBottom: 8 }}>Muster in {REGIONS[musterMenu]?.name ?? musterMenu}</div>
+            {/* A full region may still be mustered into (p.26 checks the limit after the action). */}
+            {g.view && unitCount(g.view, musterMenu) >= STACKING_LIMIT && (
+              <div style={{ fontSize: 12.5, color: '#f0d090', background: '#3a2a12', border: '1px solid #6a531f', borderRadius: 6, padding: '6px 9px', margin: '0 0 6px', maxWidth: 320 }}>
+                ⚑ This Army already has {unitCount(g.view, musterMenu)} units. A unit mustered here puts it over the limit of 10, and you then send one unit of your choice back to reinforcements (e.g. muster an Elite, send back a Regular).
+              </div>
+            )}
             {[...recruitActs, ...cardRecruitActs, ...secondMusterActs].filter((a) => a.region === musterMenu).map((a, i) => (
               <button key={i} onClick={() => { setMusterMenu(null); void submit(a); }}
                 style={{ display: 'block', width: '100%', textAlign: 'left', margin: '4px 0', padding: '8px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>
@@ -1515,6 +1551,21 @@ export function PlayPage({ client, onExit }: { client: GameClientApi; onExit?: (
               </button>
             ))}
             <button onClick={() => setMusterMenu(null)} style={{ marginTop: 6, padding: '5px 12px', fontSize: 13, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {noEffect && g.view && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,3,0.55)', display: 'grid', placeItems: 'center', zIndex: 60 }}
+          onClick={() => setNoEffect(null)}>
+          <div style={{ background: '#1c1710', color: '#eee', fontFamily: 'system-ui', padding: 16, borderRadius: 12, border: '1px solid #5a4a2a', maxWidth: 340, boxShadow: '0 8px 40px #000' }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 14, marginBottom: 10 }}>⚑ The Fellowship has no Corruption, so {cardName(noEffect.cardId)} will heal nothing. Play it anyway? (It spends the die and the card.)</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button data-testid="no-effect-play" onClick={() => { const a = noEffect; setNoEffect(null); noEffectOk.current = a; void submit(a); }}
+                style={{ padding: '7px 12px', fontSize: 14, background: '#3a3326', color: '#f0e9d8', border: '1px solid #5a4a2a', borderRadius: 6, cursor: 'pointer' }}>Play it anyway</button>
+              <button onClick={() => setNoEffect(null)}
+                style={{ padding: '7px 12px', fontSize: 14, background: 'transparent', color: '#a98', border: '1px solid #553', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+            </div>
           </div>
         </div>
       )}

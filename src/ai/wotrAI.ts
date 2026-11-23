@@ -1320,6 +1320,10 @@ function fpPressed(state: GameState): boolean {
  *  not a lone Nazgûl in an empty rear Stronghold (player report: "spent musters on
  *  nazgul in barad-dur (with no army) and angmar"). */
 function recruitScore(state: GameState, actor: Side, a: Extract<WotrAction, { kind: 'recruitUnit' }>, target: RegionId | null): number {
+  // A full region is a legal muster target (p.26 checks the limit after the action), but
+  // the AI stays out of it: the excess goes straight back to reinforcements. (A human may
+  // use it to swap an Elite in for a Regular; unmeasured for the AI, so not offered to it.)
+  if (unitCount(state, a.region) + a.regular + a.elite > STACKING_LIMIT) return -50;
   let s = actor === 'shadow' ? 30 : 16;
   if (armyHere(state, a.region, actor)) s += 10;                       // reinforce a real stack
   if (target) s += Math.max(0, 12 - dist(a.region, target) * 2);       // near the front
@@ -2004,7 +2008,7 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
       // FUTURE Hunt, worth more than one roll now — otherwise take the roll.
       const guards = new Set(['fp-char-06', 'fp-char-07', 'fp-char-08']); // Axe and Bow / Horn of Gondor / Wizard's Staff
       const rip = legal.find((a) => a.kind === 'nazgulStrike' && a.discard && guards.has(a.discard));
-      return rip ?? legal.find((a) => a.kind === 'nazgulStrike' && !a.discard) ?? legal[0]!;
+      return rip ?? legal.find((a) => a.kind === 'nazgulStrike' && !a.discard && !a.decline) ?? legal[0]!;
     }
     case 'advanceChoice': {
       const adv = legal.find((a) => a.kind === 'advanceChoice' && a.advance) ?? legal[0]!;
@@ -2219,7 +2223,9 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
     }
     case 'eventTarget': return chooseEventTarget(state, legal);
     case 'musterSecond': // place the second figure of a two-figure muster (fuller build)
-      return legal.find((a) => a.kind === 'recruitSecond' && !a.done) ?? legal[0]!;
+      // Not into a full region (a Regular there would go straight back to reinforcements).
+      return legal.find((a) => a.kind === 'recruitSecond' && !a.done && (a.figure !== 'regular' || unitCount(state, a.region!) < STACKING_LIMIT))
+        ?? legal.find((a) => a.kind === 'recruitSecond' && a.done) ?? legal[0]!;
     case 'armyMove2': return chooseArmyMove2(state, legal);
     case 'charMove2': return chooseCharMove(state, legal);
     case 'stormcrowLoss': // forced loss: shed a Regular, then an Elite, keep Leaders

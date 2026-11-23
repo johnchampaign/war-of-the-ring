@@ -1711,11 +1711,11 @@ export function combatStep(state: GameState): void {
         if (pc.siegeWithdrawAsked !== pc.round && strongholdWithdrawAvailable(state, pc)) {
           pc.step = 'siegeWithdraw'; continue;
         }
-        if (followOptions.askEveryCombatCard || hasPlayableCombatCard(state, pc.attacker)) { state.pendingChoice = { owner: pc.attacker, kind: 'combatCard' }; return; }
+        if (asksCombatCard(state, pc.attacker)) { state.pendingChoice = { owner: pc.attacker, kind: 'combatCard' }; return; }
         pc.step = 'defenderCard'; continue;
       }
       case 'defenderCard': {
-        if (followOptions.askEveryCombatCard || hasPlayableCombatCard(state, pc.defender)) { state.pendingChoice = { owner: pc.defender, kind: 'combatCard' }; return; }
+        if (asksCombatCard(state, pc.defender)) { state.pendingChoice = { owner: pc.defender, kind: 'combatCard' }; return; }
         pc.step = 'cardCost'; continue;
       }
       case 'cardCost': {
@@ -2704,6 +2704,11 @@ export function playableCombatCards(state: GameState, side: Side): string[] {
 /** On-table cards whose text lets their owner discard them for their Combat effect. */
 const TABLE_COMBAT_CARDS = ['sh-char-17'];
 const hasPlayableCombatCard = (state: GameState, side: Side): boolean => playableCombatCards(state, side).length > 0;
+/** Ask `side` for a Combat card this round? When it holds one it can play; and every round
+ *  when that player chose to be asked anyway (⚙ Settings → state.prefs), as at the table,
+ *  where cards are chosen secretly and nobody can tell "none" from "none playable" (p.29). */
+const asksCombatCard = (state: GameState, side: Side): boolean =>
+  followOptions.askEveryCombatCard || !!state.prefs?.alwaysAskCombatCard?.[side] || hasPlayableCombatCard(state, side);
 
 /** Resolve the 'combatCard' PendingChoice: record the chosen card (or none) for
  *  the side whose step it is, discard it, and advance to the next card/round. */

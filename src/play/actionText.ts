@@ -132,7 +132,7 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     // must not promise "the whole Army forward" — that reads as a decision already
     // made, and the picker it opens then looked like a stray second pop-up.
     case 'advanceHoldBack': return a.back ? 'Keep some figures back' : 'Choose who stays forward…';
-    case 'nazgulStrike': return a.discard ? `Discard ${cardName(a.discard)} from the table` : 'Roll for the Hunt';
+    case 'nazgulStrike': return a.decline ? 'Neither (no discard, no Hunt roll)' : a.discard ? `Discard ${cardName(a.discard)} from the table` : 'Roll for the Hunt';
     case 'advanceChoice': return !a.advance ? 'Hold position (no capture)' : a.move ? 'Advance the chosen forces' : 'Advance… (choose forces)';
     case 'chooseCasualties': return a.plan === 'regularsFirst' ? 'Lose Regulars first' : 'Reduce Elites first';
     case 'casualtyStep': {
@@ -192,6 +192,7 @@ export function describeAction(a: WotrAction, view?: GameState): string {
     // The Ents Awake's decline had no label, so the button showed raw action data
     // (player reports xs3bbc2rum6kcaq4, 4p4m4x285o2c200m).
     case 'freeCharEvent': return 'Don’t play a Character Event card';
+    case 'setPreference': return a.alwaysAskCombatCard ? 'Always ask me about Combat cards' : 'Ask me about Combat cards only when I can play one';
     // Exhaustive: a new action kind without a label is a type error, not raw JSON on a button.
     default: { const unlabeled: never = a; return JSON.stringify(unlabeled); }
   }

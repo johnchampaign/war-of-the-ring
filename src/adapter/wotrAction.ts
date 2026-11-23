@@ -68,6 +68,9 @@ export type WotrAction =
   | { kind: 'forfeit'; days?: number } // the idle seat concedes (scheduled sweep only; never in legalActions)
   // Interactive combat sub-machine (resolving a PendingChoice).
   | { kind: 'playCombatCard'; cardId: string | null } // play a combat card (or none)
+  // A player's own flow preference (⚙ Settings), sent by their client on their move. Never in
+  // legalActions, so no AI or bot picks it; dispatch accepts it from the current actor.
+  | { kind: 'setPreference'; alwaysAskCombatCard: boolean }
   | { kind: 'chooseCasualties'; plan: 'regularsFirst' | 'elitesFirst' } // batch plan — Return to Valinor (multi-region), and legacy saves
   // One casualty at a time (p.30): remove a Regular, reduce an Elite to a Regular
   // (1 hit each), or spend TWO hits to remove an Elite outright.

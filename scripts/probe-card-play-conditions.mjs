@@ -83,14 +83,14 @@ function board(seed = 5) {
   check('the roster index follows him', s.characters.inPlay['witch-king'] === t.to, String(s.characters.inPlay['witch-king']));
 }
 
-// --- pure heals are not offered with no Corruption to remove ----------------------
+// --- pure heals are playable at zero Corruption (Almanac; the screen asks first) ----
 {
-  console.log('\n=== Athelas / Bilbo’s Song: not offered at zero Corruption ===');
+  console.log('\n=== Athelas / Bilbo’s Song: playable at zero Corruption ===');
   const s = board();
   s.cards.fp.hand = ['fp-char-09', 'fp-char-12'];
   s.fellowship.corruption = 0;
-  check('Athelas is not offered at 0 Corruption', !canPlayCard(s, 'fp-char-09', 'fp'));
-  check('Bilbo’s Song is not offered at 0 Corruption', !canPlayCard(s, 'fp-char-12', 'fp'));
+  check('Athelas is playable at 0 Corruption (no play condition)', canPlayCard(s, 'fp-char-09', 'fp'));
+  check('Bilbo’s Song is playable at 0 Corruption (Almanac)', canPlayCard(s, 'fp-char-12', 'fp'));
   s.fellowship.corruption = 1;
   check('Athelas is offered at 1 Corruption', canPlayCard(s, 'fp-char-09', 'fp'));
   check('Bilbo’s Song is offered at 1 Corruption', canPlayCard(s, 'fp-char-12', 'fp'));

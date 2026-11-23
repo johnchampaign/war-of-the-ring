@@ -499,10 +499,11 @@ const canEventRecruit = (state: GameState, nation: Nation, n = 1): boolean =>
 
 // --- Free Peoples: heal / Corruption -------------------------------------
 register('fp-char-09', { // Athelas
-  // Strengthened play condition: the card is nothing but a heal, so at zero Corruption
-  // it rolls three dice to remove nothing and burns a die and the card. Same reasoning
-  // as There Is Another Way (player report 0k6e6n2c6m6g153q).
-  canPlay: (state) => state.fellowship.corruption > 0,
+  // No play condition, so playable at zero Corruption (it heals nothing then). That was
+  // refused for a while (player report 0k6e6n2c6m6g153q), but the Almanac rules both
+  // sibling heals playable at 0 (Bilbo's Song, There Is Another Way), and a card that
+  // does nothing is a legal way to spend a die when you may not pass (p.20). The screen
+  // asks before playing it to no effect; the AI never does (HEAL_EVENTS).
   apply(state) {
     const guideIsStrider = state.fellowship.guide === 'strider';
     const need = guideIsStrider ? 3 : 5;
@@ -519,11 +520,8 @@ register('fp-char-09', { // Athelas
 // move triggers a Hunt, run via `finalize` so its follow-up choice survives), or
 // decline. A real player choice (RAW).
 register('fp-char-10', {
-  // Strengthened play condition: both halves must be dead before the card is refused.
-  // The heal is live whenever there is Corruption to remove; the Gollum half is live
-  // whenever he guides (revealed → hide, hidden → move). With neither, the card does
-  // literally nothing, so it is not offered (report 476n3s6q0c1i2c2w).
-  canPlay: (state) => state.fellowship.corruption > 0 || isGollumGuide(state),
+  // Almanac: "Can be played if on 0 Corruption but cannot heal to below 0." It was
+  // refused with neither half live (report 476n3s6q0c1i2c2w); the screen now asks first.
   apply: (state) => { heal(state, 1); },
   targets: (state) => {
     if (!isGollumGuide(state)) return [];
@@ -538,9 +536,8 @@ register('fp-char-10', {
   },
   finalize: (state, _side, applied) => { if (applied.some((t) => t.mode === 'move')) moveFellowship(state, true); },
 });
-// Bilbo's Song: a pure heal, so it is not offered with no Corruption to remove
-// (player report 0k6e6n2c6m6g153q).
-register('fp-char-12', { canPlay: (state) => state.fellowship.corruption > 0, apply(state) { heal(state, isGollumGuide(state) ? 2 : 1); } });
+// Bilbo's Song. Almanac: "Can be played if on 0 or 1 Corruption but can only heal to 0".
+register('fp-char-12', { apply(state) { heal(state, isGollumGuide(state) ? 2 : 1); } });
 
 // --- Free Peoples: political ---------------------------------------------
 register('fp-str-08', { // Wisdom of Elrond: activate + advance an FP Nation OF YOUR CHOICE
@@ -2609,21 +2606,17 @@ register('sh-char-09', {
 // The Nazgûl Strike! — move any/all Nazgûl; then, if one is with the Fellowship,
 // the card offers its printed CHOICE: "discard one Free Peoples Character Event
 // card from the table OR roll for the Hunt" (John's call D — the discard branch was
-// the last D13 residual). The choice is raised only when both branches are live: no
-// FP Character table card means the Hunt fires directly, exactly as before, so the
-// Shadow is never shown a one-answer question.
+// the last D13 residual). It is always asked, with "neither" as a third answer
+// (2026-11-23, John's call on the Almanac note below).
 register('sh-char-08b', {
   ...moveNazgulCard((state) => {
     if (nazgulWithFellowship(state)) {
       const tableFpChar = state.cards.fp.table.filter((id) => EVENT_BY_ID[id]?.deck === 'Character');
-      // "You may either discard … or roll for the Hunt": while following, asked also with no card to discard (the
-      // Hunt roll or nothing; followOptions.nazgulStrikeAsPrinted).
-      if (tableFpChar.length > 0 || followOptions.nazgulStrikeAsPrinted) {
-        state.pendingChoice = { owner: 'shadow', kind: 'nazgulStrike', data: { cards: tableFpChar } };
-        return;
-      }
-      log(state, null, 'event', 'The Nazgûl Strike! — Hunt roll');
-      nazgulStrikeHunt(state);
+      // "You MAY either discard … or roll for the Hunt": always a question, with "neither"
+      // among the answers. The Almanac: "it is almost always beneficial to the Shadow
+      // player to roll for the Hunt, but there can be situations where he may not want
+      // to (such as to avoid a reveal that would prevent his use of 'Cruel Weather' …)".
+      state.pendingChoice = { owner: 'shadow', kind: 'nazgulStrike', data: { cards: tableFpChar } };
     }
   }),
   canPlay: (state) => state.fellowship.mordor === null && state.fellowship.progress >= 1 && nazgulOnMap(state),

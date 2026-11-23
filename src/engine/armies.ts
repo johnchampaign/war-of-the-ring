@@ -178,11 +178,10 @@ export function recruit(state: GameState, nation: Nation, id: RegionId, regular:
   const pool = state.reinforcements[nation] as { regular: number; elite: number; leader?: number };
   const leader = opts.leader ?? 0;
   if (regular > pool.regular || elite > pool.elite || leader > (pool.leader ?? 0)) return false;
-  // A Muster die respects the limit up front; an Event card recruits in full and the
-  // excess is trimmed by the owner afterwards (p.26, Almanac — see placeUnits).
-  // (While following another rules engine's game, the stacking limit is checked after the action instead:
-  // followOptions.musterOverLimit; rulebook p.26 "at the end of any action (for example, after … mustering)".)
-  if (!opts.ignoreAtWar && !followOptions.musterOverLimit && forceUnitCount(into) + regular + elite > limit) return false;
+  // The stacking limit is checked after the action, for a Muster die as for an Event card:
+  // "If, at the end of any action (for example, after moving or mustering troops), more
+  // than 10 units are in the same region, the excess units must be removed" (p.26). The
+  // adapter's end-of-action sweep (enforceStackingLimit) has the owner pick them.
   // "Free Peoples Leaders can never be in a region without Free Peoples Army units"
   // (p.26). The movement paths enforce this (moveArmySplit, moveSelectedUnits) but
   // the MUSTER path did not, so a Leader could be recruited alone into an empty

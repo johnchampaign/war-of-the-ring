@@ -448,6 +448,11 @@ export interface GameState {
   /** An interactive battle in progress, or null. */
   pendingCombat: PendingCombat | null;
   /** Winner once decided. */
+  /** Per-player choices that change the flow (not display): set by the player's own client
+   *  with a `setPreference` action. `alwaysAskCombatCard`: that side is asked for a Combat
+   *  card every round, even holding none it can play, so the skip does not tell the
+   *  opponent about the hand (⚙ Settings; John's call 2026-11-23). */
+  prefs?: { alwaysAskCombatCard?: Partial<Record<Side, boolean>> };
   winner: Side | null;
   winReason: string | null;
   /** Structured turn log (public + side-tagged entries). */

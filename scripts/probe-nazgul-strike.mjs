@@ -2,7 +2,8 @@
 // probe-nazgul-strike.mjs — The Nazgûl Strike!'s printed CHOICE (John's call D, the
 // last D13 residual): "if at least one Nazgûl is in the region with the Fellowship,
 // you may either discard one Free Peoples Character Event card from the table or
-// roll for the Hunt." The choice is offered only when both branches are live.
+// roll for the Hunt." Always asked, with "neither" as an answer: "you MAY", and the Almanac notes
+// the Shadow can have reason not to roll (2026-11-23).
 import { createGame } from '../src/engine/setup.ts';
 import { startGame } from '../src/adapter/wotrAdapter.ts';
 import { getHandler } from '../src/engine/handlers/registry.ts';
@@ -51,10 +52,21 @@ function playIt(s) {
 }
 
 {
-  console.log('\n=== no FP Character table card -> auto-Hunt, no one-answer question ===');
+  console.log('\n=== no FP Character table card -> still asked: the Hunt or neither ===');
   const s = playIt(board(false));
-  check('no choice raised', s.pendingChoice?.kind !== 'nazgulStrike', s.pendingChoice?.kind ?? 'none');
-  check('the Hunt fired directly', (s.hunt.draws ?? []).length > 0 || s.pendingChoice != null);
+  check('the Shadow is asked', s.pendingChoice?.kind === 'nazgulStrike', s.pendingChoice?.kind ?? 'none');
+  check('no Hunt fired yet', (s.hunt.draws ?? []).length === 0);
+  resolveNazgulStrike(s, undefined);
+  check('the Hunt fires when chosen', (s.hunt.draws ?? []).length > 0 || s.pendingChoice != null);
+}
+
+{
+  console.log('\n=== "neither": no discard, no Hunt ===');
+  const s = playIt(board(true));
+  resolveNazgulStrike(s, undefined, true);
+  check('the table card survives', s.cards.fp.table.includes('fp-char-07'));
+  check('no Hunt', (s.hunt.draws ?? []).length === 0 && s.hunt.lastRoll == null, JSON.stringify(s.hunt.lastRoll));
+  check('nothing left pending', s.pendingChoice == null, s.pendingChoice?.kind ?? 'none');
 }
 
 {
@@ -78,6 +90,7 @@ function playIt(s) {
   s.hunt.pool = STANDARD_TILE_LIST.map((t, i) => (t.value === 'eye' ? i : -1)).filter((i) => i >= 0);
   s.hunt.drawn = [];
   playIt(s);
+  resolveNazgulStrike(s, undefined);
   const roll = s.hunt.lastRoll;
   check('the Hunt dice were rolled', roll?.dice?.length === 3, JSON.stringify(roll?.dice));
   const draw = (s.hunt.draws ?? []).at(-1);
@@ -92,6 +105,7 @@ function playIt(s) {
   const s = board(false);
   s.hunt.box = 0;
   playIt(s);
+  resolveNazgulStrike(s, undefined);
   check('no tile drawn', (s.hunt.draws ?? []).length === 0);
   check('no choice raised', s.pendingChoice == null, s.pendingChoice?.kind ?? 'none');
 }

@@ -36,12 +36,12 @@ const place = (s, who, where) => {
   s.fellowship.companions = s.fellowship.companions.filter((c) => c !== who);
 };
 
-console.log('\n=== There Is Another Way needs a heal or Gollum ===');
+console.log('\n=== There Is Another Way: playable at 0 Corruption too (Almanac) ===');
 {
   const s = board();
   s.fellowship.corruption = 0;
   s.fellowship.guide = 'gandalf-grey';
-  check('no Corruption and no Gollum: not playable', canPlayCard(s, 'fp-char-10', 'fp') === false);
+  check('no Corruption and no Gollum: still playable ("Can be played if on 0 Corruption")', canPlayCard(s, 'fp-char-10', 'fp') === true);
   s.fellowship.corruption = 1;
   check('one Corruption: playable for the heal', canPlayCard(s, 'fp-char-10', 'fp') === true);
   s.fellowship.corruption = 0;

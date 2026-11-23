@@ -1,7 +1,9 @@
 // Player display settings (⚙ in the status bar). Where players genuinely disagree about
 // presentation, John picks the default and the alternative becomes a setting (standing
 // decision 2026-10-11, docs/standing-decisions.md). Display only: no setting may change
-// what is legal, what is hidden from the opponent, or how the AI plays. Kept per browser
+// what is legal, what is hidden from the opponent, or how the AI plays — with ONE exception
+// John made on 2026-11-23, `combatCardAsk`, which reaches the engine through the player's own
+// `setPreference` action (online games; PlayPage syncs it on the player's move). Kept per browser
 // (localStorage); online, each player sees their own choices. A non-default choice rides
 // along on problem reports and uploaded logs, so triage can tell a setting from a bug.
 import { useSyncExternalStore } from 'react';
@@ -13,9 +15,12 @@ export interface Settings {
   sideLog: 'recent' | 'all';
   /** The "While you waited" catch-up when control comes back to you. */
   recap: 'show' | 'skip';
+  /** Be asked for a Combat card every round, even holding none you can play, so the
+   *  opponent cannot tell from a skipped question that your hand has none (online games). */
+  combatCardAsk: 'whenPlayable' | 'always';
 }
 
-export const DEFAULT_SETTINGS: Settings = { reachRings: 'on', sideLog: 'recent', recap: 'show' };
+export const DEFAULT_SETTINGS: Settings = { reachRings: 'on', sideLog: 'recent', recap: 'show', combatCardAsk: 'whenPlayable' };
 
 /** What the panel offers, in order: each setting's label, a line of explanation, and its
  *  choices (the first is always the default). */
@@ -43,6 +48,14 @@ export const SETTING_CHOICES: { [K in keyof Settings]: { label: string; hint: st
     options: [
       { value: 'show', label: 'Show it' },
       { value: 'skip', label: 'Skip it (the log still has everything)' },
+    ],
+  },
+  combatCardAsk: {
+    label: 'Combat card question',
+    hint: 'Online games. When you hold no Combat card you can play, the game normally skips the question, and your opponent can tell. Asking every round hides that, at the cost of a click. Takes effect from your next move.',
+    options: [
+      { value: 'whenPlayable', label: 'Only when I can play one' },
+      { value: 'always', label: 'Every round (hides whether I hold one)' },
     ],
   },
 };

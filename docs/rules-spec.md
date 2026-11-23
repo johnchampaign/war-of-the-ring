@@ -71,8 +71,10 @@ base game, 2-player (Free Peoples = **FP**, Shadow = **SH**). Expansions and
   p.26 enforces the limit as an **end-of-action** obligation: "If, at the end of any
   action (for example, after moving or mustering troops), more than 10 units are in
   the same region, the excess units must be removed from the game by the controlling
-  player" (they return to reinforcements and may re-enter later). Mustering and
-  voluntary Army moves ask up front (`recruit`, `afterMove`), but an Army can also be
+  player" (they return to reinforcements and may re-enter later). Voluntary Army
+  moves ask up front (`afterMove`). Since 2026-11-23 a Muster die may recruit into a full
+  region and the same prompt trims it (see "Rule differences found by following another
+  engine"). An Army can also be
   pushed over involuntarily — chiefly by **retreating** (p.31) into a region that
   already holds a friendly Army, and also by card-driven moves and a lifting siege
   returning its garrison to the field. `enforceStackingLimit` in the adapter is the
@@ -1512,16 +1514,32 @@ switch was checked against the card text and the Almanac.
 - `countedRecruits`, `revealStrongholds`, `playAsPlayed`, `sarumanRecruitIn`,
   `dreadfulFrom`: these replay the referee's own choices.
 
-**Open: John's call** (rules-legal readings our engine does not offer):
-- **Muster into a full region** (p.26: the stacking limit is checked "at the end of any
-  action (for example, after moving or mustering troops)"). That allows e.g. an Elite
-  mustered into a 10-stack with a Regular removed. Our engine refuses the muster up front.
-- **Athelas at 0 Corruption.** The card has no play condition. We refuse it (it would heal
-  nothing, but it plays the card).
-- **The Nazgûl Strike! / Worn with Sorrow and Toil "you may".** Declining both branches is
-  legal but never better, so it is not offered.
-- **Combat card question when you hold none.** We skip it, so the opponent learns the hand
-  holds no playable Combat card. The protocol asks every time to hide that.
+**John's calls (2026-11-23), official rulings used where they exist:**
+- **Muster into a full region: allowed.** p.26 checks the limit "at the end of any action
+  (for example, after moving or mustering troops)". No Almanac ruling covers Muster dice.
+  `recruit` no longer refuses up front. `enforceStackingLimit` raises `removeExcess`, and
+  the owner picks the unit that goes back to reinforcements (e.g. an Elite in, a Regular
+  out). The muster pop-up warns when the Army is full. The AI scores an over-limit muster
+  at −50, so its play is unchanged.
+- **Heals at 0 Corruption: allowed.** Almanac: *There Is Another Way* "Can be played if on
+  0 Corruption"; *Bilbo's Song* "Can be played if on 0 or 1 Corruption". *Athelas* has no
+  play condition and no ruling, so it is treated the same. This reverses the strengthened
+  conditions from reports 0k6e6n2c6m6g153q / 476n3s6q0c1i2c2w below. The screen asks "will
+  heal nothing — play it anyway?", and the AI scores them −5 at 0 Corruption.
+- **The Nazgûl Strike!: always asked, "neither" offered.** The Almanac's note on the card:
+  "almost always beneficial to the Shadow player to roll for the Hunt, but there can be
+  situations where he may not want to (such as to avoid a reveal that would prevent his
+  use of 'Cruel Weather' …)". The AI still discards a Hunt-defence card or rolls.
+- **Worn with Sorrow and Toil: unchanged.** There is no ruling, and declining a discard
+  of a Free Peoples card is never better for the Shadow.
+- **Combat card question with no playable card: a ⚙ setting, off by default.** The rulebook
+  (p.29) and the Almanac have cards "chosen secretly", so at the table nobody can tell "no
+  card" from "none playable". By default we still skip a side with nothing playable (one
+  fewer click and handoff per round). With "Every round" on, the player's client sends
+  `setPreference` on their move (online games only), `state.prefs.alwaysAskCombatCard[side]`
+  is set, and `asksCombatCard` (combat.ts) asks that side every round. `setPreference` is
+  never in `legalActions`, so no AI or bot sends it. This is John's explicit exception to
+  the display-only settings rule.
 
 ### Card clauses corrected from player reports (2026-09-23)
 
