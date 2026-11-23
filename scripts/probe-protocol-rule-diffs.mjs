@@ -118,5 +118,17 @@ console.log('\n=== ⚙ "Combat card question: every round" (state.prefs via setP
   check('...and "no card" is the answer on offer', JSON.stringify(wotrAdapter.legalActions(t, 'fp')) === JSON.stringify([{ kind: 'playCombatCard', cardId: null }]));
 }
 
+console.log('\n=== A Power too Great also bars the "move up to four Armies" card (sh-str-09) ===');
+{
+  const s = startGame(createGame({ seed: 12 }));
+  for (const n of ['sauron', 'isengard', 'southrons']) s.nations[n].step = 0;
+  s.regions['parth-celebrant'].units = { sauron: { regular: 3, elite: 0 } };
+  s.regions['lorien'].units = {};
+  s.cards.fp.table.push('fp-str-02');
+  const ts = getHandler('sh-str-09').targets(s, 'shadow', []);
+  check('Lórien is not offered from Parth Celebrant', !ts.some((t) => t.from === 'parth-celebrant' && t.to === 'lorien'));
+  check('...while other moves from there still are', ts.some((t) => t.from === 'parth-celebrant'));
+}
+
 if (failures) { console.log(`\n${failures} FAILED`); process.exit(1); }
 console.log('\nall ok');

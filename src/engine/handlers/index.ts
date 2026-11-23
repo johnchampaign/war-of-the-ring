@@ -1158,7 +1158,10 @@ function shadowMovingMoves(state: GameState, applied: EventTarget[] = []): Event
       // Adjacent-only, so `range: 1` tells the UI there is no route to walk: this card
       // is a plain one-region Army move (player report 6124175c5o6r2f1r). No stacking
       // pre-filter - see shadowsGatherMoves.
-      if (freeForMovement(state, to, 'shadow')) out.push({ from, to, range: 1, ...(movable ? { movable } : {}) });
+      // Not into a region a card bars to the Shadow (A Power too Great, Tom Bombadil): the move
+      // itself refuses it, so offering it was an offered-then-refused move (soak 2026-11-23:
+      // Parth Celebrant -> Lórien under A Power too Great).
+      if (freeForMovement(state, to, 'shadow') && !shadowBarredFromRegion(state, to as RegionId)) out.push({ from, to, range: 1, ...(movable ? { movable } : {}) });
     }
   }
   return out;
