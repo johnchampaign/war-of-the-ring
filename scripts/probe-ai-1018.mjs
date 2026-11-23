@@ -59,7 +59,13 @@ for (const seed of [1, 2, 3]) {
   check(`seed ${seed}: empty Angmar, Elves not At War — Saruman comes`, !elvesAtWar && a.kind === 'bringMinion' && a.minion === 'saruman', show(a));
 }
 
+// The reports' complaint was a single Isengard Regular in North Dunland or Orthanc where
+// the Voice places three. Since 2026-11-23 the Voice is weighed at half (measured, see
+// wotrAI.ts), so a Muster die may now go to the Political Track first while Sauron is not
+// At War; it must still never go to that lone Regular, and with every Shadow Nation At War
+// the Voice still wins.
 console.log('\n=== The Voice of Saruman ===');
+const loneIsengardRegular = (a) => a.kind === 'recruitUnit' && a.nation === 'isengard' && ['north-dunland', 'orthanc'].includes(a.region) && !a.elite;
 for (const seed of [1, 2, 3]) {
   const s = turn('shadow', seed);
   s.nations.isengard.step = 0;
@@ -67,8 +73,10 @@ for (const seed of [1, 2, 3]) {
   s.dice.shadow = ['muster']; s.dice.fp = [];
   const legal = wotrAdapter.legalActions(s, 'shadow');
   const a = decide(s, 'shadow');
-  const offered = legal.some((x) => x.kind === 'sarumanMuster');
-  check(`seed ${seed}: a Muster die with Saruman in play — the Voice of Saruman`, offered && a.kind === 'sarumanMuster', show(a));
+  check(`seed ${seed}: Voice offered, and the die is not spent on a lone Isengard Regular`, legal.some((x) => x.kind === 'sarumanMuster') && !loneIsengardRegular(a), show(a));
+  s.nations.sauron.step = 0; s.nations.southrons.step = 0;
+  const b = decide(s, 'shadow');
+  check(`seed ${seed}: every Shadow Nation At War — the Voice of Saruman`, b.kind === 'sarumanMuster', show(b));
 }
 
 console.log('\n=== One Nazgûl presses the Fellowship ===');
