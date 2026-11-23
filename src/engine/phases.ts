@@ -14,7 +14,7 @@ import { combatStep } from './combat';
 import { extraHunt, wornWithSorrowOptions, resolveWornWithSorrow, huntResolutionPending } from './hunt';
 import { pruneTableCards, palantirActive, wornWithSorrowActive } from './persistent';
 import { sweepStrandedUnits, sweepAbandonedSieges, reindexBoardCharacters, characterWithArmy } from './armies';
-import { REGIONS, sideOfNation, EVENT_BY_ID } from './data';
+import { REGIONS, sideOfNation, EVENT_BY_ID, followOptions } from './data';
 import { log, sideDoes, sufferCorruption } from './log';
 import { canPlayCard } from './handlers/registry';
 import { eligibleGuides } from './fellowship';
@@ -157,7 +157,8 @@ export function advance(state: GameState): void {
     if (state.flags.wornWithSorrowOwed) {
       if (--state.flags.wornWithSorrowOwed <= 0) delete state.flags.wornWithSorrowOwed;
       const opts = wornWithSorrowActive(state) ? wornWithSorrowOptions(state) : [];
-      if (opts.length > 1) { state.pendingChoice = { owner: 'shadow', kind: 'wornDiscard', data: {} }; return; }
+      // (While following, asked with one option too: the card's "you may" can be declined; followOptions.noEffectChoices.)
+      if (opts.length > 1 || (opts.length === 1 && followOptions.noEffectChoices)) { state.pendingChoice = { owner: 'shadow', kind: 'wornDiscard', data: {} }; return; }
       if (opts.length === 1) resolveWornWithSorrow(state, opts[0]!);
       continue;
     }

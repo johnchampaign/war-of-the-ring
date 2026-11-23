@@ -7,7 +7,7 @@
 // (a card's initiative only matters when both sides' effects collide — see D5)
 // and a few intricate per-effect cards (e.g. Mûmakil's two timings).
 import type { GameState, Nation, RegionId, Side, PendingCombat, CardRoll, BattleRecord } from './types';
-import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName } from './data';
+import { REGIONS, REGION_IDS, NATIONS_DEF, sideOfNation, EVENT_BY_ID, COMPANIONS, UPGRADES, levelOf, characterSide, characterDef, nationName, followOptions } from './data';
 import { withRng } from './rng';
 import { unitCount, captureIfEnemySettlement, armySide, freeForMovement, fellowshipRegion, armyForceOf, freeRegion, settlementController, forceUnitCount, forceLeadership, charDieLeaders, liftSiegeIfAbandoned, mergeForceInto, moveOwnLeaders, activateOnCompanionLand, type Force, type MoveSelection, armySelectionReason, type ArmyMoveRules } from './armies';
 import { onArmyAttacked, activateNation } from './politics';
@@ -73,6 +73,9 @@ const nationsWithUnits = (state: GameState, id: RegionId): Nation[] =>
  *  enemy's penalty mods. */
 /** A combat roll's faces, for the battle popup: the main dice, any leadership
  *  re-rolls, and the to-hit target so the UI can colour the hits. */
+// Following another rules engine (protocol/wotr-protocol-bot.mjs): the switches are in data.ts (followOptions).
+export { followOptions };
+
 export interface CombatRoll { dice: number[]; rerolls: number[]; target: number; rerollTarget?: number;
   /** Automatic hits granted by a card with no die behind them (Great Host's 2:1
    *  free hit, Shield Wall-style "+1 if you scored any"). */
@@ -144,7 +147,9 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
   // the ability off for the round, so his Leadership comes off here exactly once.)
   if (silenced) leadVal = Math.max(0, leadVal - (characterDef(silenced)?.leadership ?? 0));
   // The five-dice cap (p.28) bites only here, after every forfeit and penalty.
-  const lead = Math.min(5, Math.max(0, leadVal - (ownMods.ownLeadershipPenalty ?? 0)));
+  // While following (followOptions.forfeitedLeadership): Mighty Attack's forfeit is the chosen Companion's Leadership.
+  const forfeited = ownMods.guaranteedHits && followOptions.forfeitedLeadership?.side === side ? followOptions.forfeitedLeadership.n : null;
+  const lead = Math.min(5, Math.max(0, leadVal - (forfeited ?? ownMods.ownLeadershipPenalty ?? 0)));
   // Foul Stench cancels the FP Leader re-roll only "if the Nazgûl Leadership equals or
   // exceeds the total Free Peoples Leadership" (p. card text). `side` here is the side
   // ROLLING, so this fires while the FP rolls and the Shadow holds the card. NAZGÛL
@@ -181,12 +186,16 @@ function rollHits(state: GameState, ownRegion: RegionId, enemyRegion: RegionId, 
     // condition — `failed--` below mutates it, so a re-roll that HIT used to steal a
     // re-roll die from the ones still owed (player report: 3 misses with Leadership
     // 5 got only 2 re-rolls, because the first re-roll hit).
+    // Mighty Attack / Andúril's "before rolling the dice for your Leader re-roll … change one missed die roll to a
+    // hit": while following (followOptions.hitsBeforeReroll), that miss is a hit before the re-roll, not re-rolled.
+    const early = followOptions.hitsBeforeReroll ? Math.min(guaranteed, failed) : 0;
+    h += early; failed -= early;
     const rerollDice = allowReroll ? Math.min(lead, failed) : 0;
     let rh = 0;
     for (let i = 0; i < rerollDice; i++) { const d = rng.rollDie(6); roll?.rerolls.push(d); if (d === 6 || (d !== 1 && d >= rerollTarget)) { h++; rh++; failed--; } }
     if (roll) roll.rerollHits = rh;
     // Mighty Attack: turn up to N still-missed dice into hits.
-    h += Math.min(guaranteed, failed);
+    h += Math.min(guaranteed - early, failed);
     return h;
   });
   // AUTOMATIC hits, which no die shows. Record them, or the line reads "[5 6 1 1 6]
@@ -324,7 +333,8 @@ export function casualtyOptions(f: Force, hits: number, owner?: { state: GameSta
     // unit, so the reduction is strictly the worse buy and is not offered as a
     // separate — and mislabelled — option (player report 6q6h2i1o102a2m6k). With one
     // hit it stays: it is then the only way to take the hit on that Elite.
-    if (u.elite > 0 && !(hits >= 2 && owner && !eliteHasReplacement(owner.state, n, owner.side))) out.push({ step: 'reduceElite', nation: n, cost: 1 });
+    // (While following, offered whatever the hits: the followed game's player may take it so; followOptions.reduceAlways.)
+    if (u.elite > 0 && (followOptions.reduceAlways || !(hits >= 2 && owner && !eliteHasReplacement(owner.state, n, owner.side)))) out.push({ step: 'reduceElite', nation: n, cost: 1 });
     if (u.elite > 0 && hits >= 2) out.push({ step: 'removeElite', nation: n, cost: 2 });
   }
   return out;
@@ -378,7 +388,9 @@ export function fpRegularCasualties(state: GameState, nation: Nation): number {
     present += (r.units[nation]?.regular ?? 0) + (r.siegeBox?.units[nation]?.regular ?? 0);
   }
   present += state.pendingCombat?.rearguard?.units[nation]?.regular ?? 0;
-  return Math.max(0, total - present);
+  // While following another rules engine's game: less the Regulars that game does not count as casualties (its own
+  // count, at the last position taken from it: followOptions.fpCasualtyOffset).
+  return Math.max(0, total - present - (followOptions.fpCasualtyOffset?.[nation] ?? 0));
 }
 
 /** Apply ONE allocation. Returns the hits it consumed (0 if it was illegal).
@@ -871,7 +883,8 @@ const defCount = (state: GameState, pc: PendingCombat): number => forceUnitCount
 function costRange(state: GameState, pc: PendingCombat, side: Side, vc: VariableCost): { min: number; max: number } {
   const own = side === pc.attacker ? atkForce(state, pc) : defForce(state, pc);
   const have = vc.kind === 'selfHits'
-    ? Math.max(0, forceUnitCount(own) - 1)          // never self-annihilate
+    // never self-annihilate (while following, as the followed game allows: up to every unit; followOptions.selfHitsAll)
+    ? Math.max(0, forceUnitCount(own) - (followOptions.selfHitsAll ? 0 : 1))
     : nazgulLeadership(own, pc.whiteRiderForfeit);  // not the Mouth's or Saruman's
   const max = Math.min(vc.cap, have);
   return { min: Math.min(vc.min, max), max };
@@ -1698,11 +1711,11 @@ export function combatStep(state: GameState): void {
         if (pc.siegeWithdrawAsked !== pc.round && strongholdWithdrawAvailable(state, pc)) {
           pc.step = 'siegeWithdraw'; continue;
         }
-        if (hasPlayableCombatCard(state, pc.attacker)) { state.pendingChoice = { owner: pc.attacker, kind: 'combatCard' }; return; }
+        if (followOptions.askEveryCombatCard || hasPlayableCombatCard(state, pc.attacker)) { state.pendingChoice = { owner: pc.attacker, kind: 'combatCard' }; return; }
         pc.step = 'defenderCard'; continue;
       }
       case 'defenderCard': {
-        if (hasPlayableCombatCard(state, pc.defender)) { state.pendingChoice = { owner: pc.defender, kind: 'combatCard' }; return; }
+        if (followOptions.askEveryCombatCard || hasPlayableCombatCard(state, pc.defender)) { state.pendingChoice = { owner: pc.defender, kind: 'combatCard' }; return; }
         pc.step = 'cardCost'; continue;
       }
       case 'cardCost': {
@@ -1905,7 +1918,11 @@ export function combatStep(state: GameState): void {
         //    when the enemy DEFENDS — tied initiatives resolve the defender's card first;
         //  - Shield-wall / Heroic Death cancel at initiative 6, so they never matter here.
         // The bonus hit is then part of what the enemy's initiative-6 cards see.
-        const { atk: aMum, def: dMum } = outscoreBonusHits(aMods, dMods, atkHits, defHits, aRoll, dRoll);
+        // While following (followOptions.printedCardRolls): "more total hits than your opponent (including hits from any
+        // Free Peoples pre-Combat attack from a Combat card)", as Mûmakil's text counts them.
+        const preHits = (side: Side) => !followOptions.printedCardRolls ? 0
+          : (pc.cardRolls ?? []).filter((r) => r.side === side && r.when === 'before' && r.round === pc.round).reduce((n, r) => n + r.hits, 0);
+        const { atk: aMum, def: dMum } = outscoreBonusHits(aMods, dMods, atkHits + preHits(pc.attacker), defHits + preHits(pc.defender), aRoll, dRoll);
         const dCancel = cancelFor(dMods, atkHits + aMum);
         const aCancel = cancelFor(aMods, defHits + dMum);
         let atk = Math.max(0, atkHits + aMum - dCancel);

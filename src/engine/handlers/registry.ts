@@ -35,6 +35,9 @@ export interface EventHandler {
   /** Multi-target cards: the max number of targets to apply (the player may stop
    *  early with a "done" option). Default 1 (single target). */
   repeat?: number;
+  /** "Move any or all of the Nazgûl": while following another rules engine's game (followOptions.everyNazgul) the
+   *  targets have room for every figure moved one at a time (a pick and a destination each), not `repeat`. */
+  everyNazgul?: boolean;
   /** Suppress the "done" (stop-early) option for a multi-step card whose steps are
    *  all mandatory (e.g. separate a Companion → choose its destination). */
   noDone?: boolean | ((state: GameState) => boolean);

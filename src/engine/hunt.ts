@@ -9,7 +9,7 @@
 // Still deferred: "play on the table" damage-cancel cards (Axe & Bow, Mithril
 // Coat — they land with the on-table event-handler increment).
 import type { GameState, Nation } from './types';
-import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, characterDef, EVENT_BY_ID, sideOfNation, type HuntTileDef } from './data';
+import { STANDARD_TILE_LIST, SPECIAL_TILE_BY_CARD, REGIONS, levelOf, characterDef, EVENT_BY_ID, sideOfNation, followOptions, type HuntTileDef } from './data';
 import { fellowshipDieSkipsHuntBox, wornWithSorrowActive } from './persistent';
 import { withRng } from './rng';
 import { settlementController, armySide, heldShadowStronghold, fellowshipRegion } from './armies';
@@ -869,8 +869,9 @@ export function wornWithSorrowOptions(state: GameState): Array<'hand' | string> 
  *  otherwise owe the Shadow the pick once the Hunt has resolved (`advance`). */
 function oweWornWithSorrow(state: GameState): void {
   const opts = wornWithSorrowOptions(state);
-  if (opts.length === 1) resolveWornWithSorrow(state, opts[0]!);
-  else if (opts.length > 1) state.flags.wornWithSorrowOwed = (state.flags.wornWithSorrowOwed ?? 0) + 1;
+  // (While following, owed with one option too: the card's "you may" is asked; followOptions.noEffectChoices.)
+  if (opts.length === 1 && !followOptions.noEffectChoices) resolveWornWithSorrow(state, opts[0]!);
+  else if (opts.length >= 1) state.flags.wornWithSorrowOwed = (state.flags.wornWithSorrowOwed ?? 0) + 1;
 }
 
 /** Carry out a Worn with Sorrow and Toil discard: `pick` is 'hand' or a tabled card id. */

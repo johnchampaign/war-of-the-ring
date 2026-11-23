@@ -30,6 +30,19 @@ Games** by purchasing it.
 Early development. See the implementation plan and the framework playbook for the
 build sequence (pure engine + headless soak → server → UI → AI → live play).
 
+## The AI against other bots (WotR Bot Protocol)
+
+`protocol/wotr-protocol-bot.mjs` lets the AI (`src/ai/wotrAI.ts`) play through any referee that speaks the
+[WotR Bot Protocol](https://github.com/behindmedia/wotr-protocol): the referee runs the game and asks at each decision,
+with its view and the list of legal options; the AI answers with one of them. Node 22.18 or later, after `npm ci`:
+
+```
+node protocol/wotr-protocol-bot.mjs                                  # as a referee's child process (stdin/stdout)
+node protocol/wotr-protocol-bot.mjs --connect wss://wotr.behindmedia.com/referee --token-file KEY [--reconnect]
+```
+
+`vite-node scripts/probe-protocol-bot.mjs` checks it without a referee.
+
 ## License
 
 Code is MIT (see `LICENSE`). This license covers **only the original code in
