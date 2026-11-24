@@ -85,6 +85,21 @@ export function resolveLureChoice(state: GameState, mode: 'corruption' | 'elimin
 
 export const MORDOR_ENTRANCES: RegionId[] = ['morannon', 'minas-morgul'];
 
+/** Does the Free Peoples player have anything to decide in the Fellowship phase?
+ *  Mirrors the phase's legal actions (wotrAdapter): declare (hidden, off the Mordor
+ *  Track, not yet this turn), enter Mordor (at an entrance), or name another Guide
+ *  (a Level tie). With none of these the only action is to end the phase, so the
+ *  engine ends it (phases.ts) — typical on the Mordor Track (player report
+ *  aihekly5hgvi5czw). Everything read here is public, so the skip tells nobody anything. */
+export function fellowshipPhaseHasChoice(state: GameState): boolean {
+  const fs = state.fellowship;
+  if (fs.mordor === null) {
+    if (fs.hidden && !state.flags.fellowshipDeclaredThisTurn) return true;
+    if (MORDOR_ENTRANCES.includes(fs.location)) return true;
+  }
+  return eligibleGuides(state).some((c) => c !== fs.guide);
+}
+
 // Gorgoroth, Barad-dûr and Nurn are ORDINARY REGIONS for the Ring-bearers' figure.
 // We used to bar the figure from all three, on the theory that a figure inside Mordor
 // was stranded off the Mordor Track (report 681l). It is not: the Mordor Track "is not

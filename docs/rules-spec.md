@@ -1215,6 +1215,14 @@ resolver survives only for in-flight saves carrying an `advanceHoldBack` choice.
   either would end the phase without it (player reports kq8go7sm01b05hqx,
   1a71ivyoeg7in1t4: a Guide change first cost a turn). Display only; the rules are
   unchanged.
+  **Deviation:** when the Free Peoples have nothing to decide in the phase — no
+  declaration open (revealed, already declared this turn, or on the Mordor Track), not
+  at a Mordor entrance, and no other Companion tied for the highest Level to name as
+  Guide — the phase ends itself instead of waiting for "End the Fellowship phase" (a
+  forced single option; `fellowshipPhaseHasChoice`). This is every turn on the Mordor
+  Track unless a Level tie leaves a Guide to name. All of it is public information, so
+  the skip reveals nothing. *(Player report aihekly5hgvi5czw;
+  `scripts/probe-fellowship-phase-skip.mjs`.)*
 - **Balrog of Moria as a Combat card.** It may be discarded from the table to use its **Durin's Bane** Combat
   effect "as if you were playing the card from your hand" (Card Text Reference; player report
   221x631w3b3i4b1j) — offered in the Combat-card step whenever Durin's Bane's precondition holds.

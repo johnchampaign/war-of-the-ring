@@ -105,7 +105,9 @@ function opponentPick(sim: GameState, who: Side, legal: WotrAction[], rng: Rng, 
 function playout(sim: GameState, stopTurn: number, rng: Rng, m: OppModel): boolean {
   let n = 0;
   while (!sim.winner && n++ < PLAYOUT_GUARD) {
-    if (sim.turn >= stopTurn && sim.phase === 'fellowship' && !sim.pendingChoice) return true;
+    // The turn's first resting point: the Fellowship phase, or whatever follows it when
+    // the engine closed that phase itself (nothing to decide there, e.g. on the Mordor Track).
+    if (sim.turn >= stopTurn && sim.phase !== 'recover' && !sim.pendingChoice) return true;
     const who = wotrAdapter.currentActor(sim);
     if (!who) return false;
     const legal = wotrAdapter.legalActions(sim, who);
