@@ -32,7 +32,20 @@ const nationObject = (n: Nation): string => (n === 'north' ? 'the North' : theNa
  *  not At War (step 0), and the popup no longer blurs them (player reports
  *  11153d5u314b0h27, 5e0u6l4h341n6g5q). */
 export function activateNation(state: GameState, n: Nation, trigger: { region?: RegionId; viaCompanion?: boolean; viaAttack?: boolean; viaDeclare?: boolean; by?: string; quiet?: boolean } = {}): void {
-  if (!wormtongueAllowsActivation(state, n, trigger)) return; // Wormtongue: Rohan stays passive
+  if (!wormtongueAllowsActivation(state, n, trigger)) {
+    // Wormtongue: Rohan stays passive. Say so — a silent veto reads as a bug when the
+    // Witch-king "activates all Free Peoples Nations" and Rohan alone stays put
+    // (player report 441a4f2t1o0y3d1q).
+    if (!state.nations[n].active) {
+      log(state, null, 'politics', 'Rohan is not activated (Wormtongue)');
+      // The popup is for a named source only (the Witch-king, a card, a declaration);
+      // an Army marching through Rohan would otherwise pop it on every step.
+      if (trigger.by && !trigger.quiet) {
+        notify(state, `${trigger.by} cannot activate Rohan: Wormtongue is in play. Only a Companion, the Fellowship declared in Edoras or Helm's Deep, or an attack on Edoras or Helm's Deep can activate Rohan.`, 'Wormtongue Holds Rohan');
+      }
+    }
+    return;
+  }
   if (!state.nations[n].active) {
     state.nations[n].active = true;
     const s = nationSubject(n);
