@@ -109,7 +109,9 @@ export async function loadEngine(rootDir, chooser = 'standard') {
       },
     });
   }
-  const mod = (p) => import(pathToFileURL(`${root}/${p}`).href);
+  // Under vite-node a plain path: it does not decode a file URL, so a checkout whose path holds a space ("%20") fails
+  // to load there. Plain Node gets the URL.
+  const mod = (p) => import(/* @vite-ignore */ import.meta.env ? `${root}/${p}` : pathToFileURL(`${root}/${p}`).href);
   const [adapter, redact, ai, data, dice, phases, setup, types, framework, combat] = await Promise.all([
     mod('src/adapter/wotrAdapter.ts'), mod('src/adapter/redact.ts'), mod('src/ai/wotrAI.ts'), mod('src/engine/data.ts'),
     mod('src/engine/dice.ts'), mod('src/engine/phases.ts'), mod('src/engine/setup.ts'), mod('src/engine/types.ts'),

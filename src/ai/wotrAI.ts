@@ -1958,6 +1958,17 @@ function resolveChoice(state: GameState, legal: WotrAction[]): WotrAction {
         && !state.regions[pc.to]!.besieged && !state.regions[pc.to]!.siegeBox) {
         return legal.find((a) => a.kind === 'combatRetreat' && !a.retreat) ?? legal[0]!;
       }
+      // Never walk out of a Settlement whose capture gives the attacker the game:
+      // retreating is then a certain loss, and standing keeps whatever chance the dice
+      // leave (report bo4wlikxvrrttazl: the Shadow sat on 9 VP, attacked Dale, and the
+      // Free Peoples retreated to Erebor after one round, handing over the tenth).
+      if (pc && !pc.boxed && !pc.siege && settlementCtrl(state, pc.to) === me) {
+        const enemy: Side = me === 'fp' ? 'shadow' : 'fp';
+        const vp = REGIONS[pc.to]!.vp ?? 0;
+        if (vp > 0 && (state.victoryPoints?.[enemy] ?? 0) + vp >= (enemy === 'fp' ? 4 : 10)) {
+          return legal.find((a) => a.kind === 'combatRetreat' && !a.retreat) ?? legal[0]!;
+        }
+      }
       const losing = !!pc && unitCount(state, pc.to) < unitCount(state, pc.from);
       const want = legal.find((a) => a.kind === 'combatRetreat' && a.retreat === losing);
       return want ?? legal[0]!;
